@@ -2,58 +2,99 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Pulso Visualizador</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pulso</title>
+<meta name="description" content="Visualizador que reacciona a la música que suena en tu PC.">
 <style>
+  /* Pantalla única: lienzo a sangre y una barra de cristal flotante abajo. */
   :root {
-    --bg: #07060d;
-    --fg: #ecebf5;
-    --muted: #8e8aa8;
-    --panel: rgba(18, 16, 30, .72);
-    --line: rgba(255, 255, 255, .1);
-    --accent: #ff4fa3;
-    --font: "Segoe UI", system-ui, -apple-system, sans-serif;
+    --bg: #ffffff;
+    --fg: #14141a;
+    --muted: #6d6d7a;
+    --glass: rgba(255, 255, 255, .62);
+    --glass-line: rgba(20, 20, 30, .08);
+    --chip: rgba(20, 20, 30, .05);
+    --chip-on: #14141a;
+    --chip-on-fg: #ffffff;
+    --shadow: 0 10px 40px rgba(20, 20, 40, .12);
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  }
+  :root[data-theme="dark"] {
+    --bg: #000000;
+    --fg: #f2f2f7;
+    --muted: #8a8a98;
+    --glass: rgba(28, 28, 34, .55);
+    --glass-line: rgba(255, 255, 255, .09);
+    --chip: rgba(255, 255, 255, .07);
+    --chip-on: #f2f2f7;
+    --chip-on-fg: #000000;
+    --shadow: 0 10px 40px rgba(0, 0, 0, .5);
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); overflow: hidden; }
+  html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
+  body { transition: background-color .5s; }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
-  .panel {
-    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-    display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center;
-    padding: 10px 12px; max-width: calc(100% - 32px);
-    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
-    backdrop-filter: blur(12px); transition: opacity .4s;
+  .dock {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    width: max-content; max-width: calc(100% - 32px);
+    display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center;
+    padding: 10px 14px;
+    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 22px;
+    box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+    transition: opacity .5s, transform .5s;
   }
-  body.idle .panel, body.idle .status { opacity: 0; pointer-events: none; }
+  body.idle .dock, body.idle .status { opacity: 0; pointer-events: none; }
+  body.idle .dock { transform: translateX(-50%) translateY(12px); }
   body.idle { cursor: none; }
 
-  button, select {
-    font: inherit; font-size: 14px; color: var(--fg);
-    background: rgba(255,255,255,.06); border: 1px solid var(--line);
-    border-radius: 9px; padding: 8px 12px; cursor: pointer;
+  .group { display: flex; gap: 6px; align-items: center; }
+  .sep { width: 1px; height: 26px; background: var(--glass-line); }
+
+  button {
+    font: inherit; font-size: 14px; font-weight: 500; color: var(--fg);
+    background: var(--chip); border: 0; border-radius: 12px; padding: 8px 13px;
+    cursor: pointer; transition: background .2s, color .2s, transform .1s;
+    display: inline-flex; align-items: center; gap: 6px;
   }
-  button:hover, select:hover { background: rgba(255,255,255,.12); }
-  button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-  button.primary { background: var(--accent); border-color: transparent; color: #12000a; font-weight: 600; }
-  label.file { position: relative; }
-  label.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .sep { width: 1px; height: 24px; background: var(--line); }
+  button:hover { filter: brightness(1.08); }
+  button:active { transform: scale(.96); }
+  button:focus-visible, input:focus-visible + .swatch { outline: 2px solid var(--fg); outline-offset: 2px; }
+  button[aria-pressed="true"] { background: var(--chip-on); color: var(--chip-on-fg); }
+  button.icon { padding: 8px; }
+  button svg { width: 18px; height: 18px; display: block; }
+
+  .swatch {
+    width: 26px; height: 26px; padding: 0; border-radius: 50%;
+    box-shadow: inset 0 0 0 1px var(--glass-line);
+  }
+  .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
+  .custom { position: relative; width: 26px; height: 26px; }
+  .custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .custom .swatch {
+    pointer-events: none; width: 26px; height: 26px; display: block;
+    background: conic-gradient(#ff5e5e, #ffd25e, #5eff8f, #5ed8ff, #8f5eff, #ff5ec8, #ff5e5e);
+  }
 
   .status {
-    position: fixed; top: 20px; left: 20px; font-size: 13px; color: var(--muted);
-    letter-spacing: .04em; transition: opacity .4s;
+    position: fixed; top: calc(18px + env(safe-area-inset-top, 0px)); left: max(18px, env(safe-area-inset-left, 0px));
+    font-size: 13px; color: var(--muted); transition: opacity .5s;
+    display: flex; align-items: center; gap: 8px;
   }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .status.live .dot { background: #34c759; box-shadow: 0 0 10px #34c759; }
 
   .intro {
-    position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; text-align: center;
-    pointer-events: none;
+    position: fixed; inset: 0 0 auto; text-align: center; pointer-events: none;
+    padding: calc(56px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
   }
-  .intro h1 { margin: 0 0 10px; font-size: clamp(36px, 7vw, 72px); font-weight: 800; letter-spacing: -.03em; }
-  .intro p { margin: 0 auto; max-width: 52ch; color: var(--muted); line-height: 1.55; }
-  .intro[hidden] { display: none; }
-  @media (prefers-reduced-motion: reduce) { .panel, .status { transition: none; } }
+  .intro h1 { margin: 0 0 8px; font-size: clamp(36px, 6vw, 64px); font-weight: 700; letter-spacing: -.04em; }
+  .intro p { margin: 0 auto; max-width: 46ch; color: var(--muted); font-size: 16px; line-height: 1.55; text-wrap: balance; }
+
+  @media (max-width: 560px) { .sep { display: none; } .dock { gap: 8px; } }
 </style>
 </head>
 <body>
@@ -62,44 +103,205 @@
 <div class="intro" id="intro">
   <div>
     <h1>Pulso</h1>
-    <p>Pulsa <b>Capturar audio del PC</b>, elige <b>Pantalla completa</b> (o la pestaña donde suena la música) y activa <b>Compartir audio del sistema</b>. Las animaciones seguirán lo que escuches.</p>
+    <p>Pulsa <b>Audio del PC</b>, elige <b>Pantalla completa</b> o la pestaña donde suena la música, y activa <b>Compartir audio del sistema</b>.</p>
   </div>
 </div>
 
-<div class="status" id="status">Sin audio</div>
+<div class="status" id="status"><span class="dot"></span><span id="statusText">Sin audio · vista de demostración</span></div>
 
-<div class="panel" id="panel">
-  <button class="primary" id="btnSystem">Capturar audio del PC</button>
-  <button id="btnMic">Micrófono</button>
-  <label class="file"><button type="button" tabindex="-1">Abrir archivo</button><input id="file" type="file" accept="audio/*"></label>
+<div class="dock" id="dock">
+  <div class="group" role="group" aria-label="Fuente de audio">
+    <button id="btnSystem">Audio del PC</button>
+    <button id="btnMic">Micrófono</button>
+    <button id="btnFile" type="button">Archivo</button>
+    <input id="file" type="file" accept="audio/*" hidden>
+  </div>
   <span class="sep"></span>
-  <select id="mode" aria-label="Animación">
-    <option value="ring">Anillo</option>
-    <option value="bars">Barras</option>
-    <option value="wave">Onda</option>
-    <option value="particles">Partículas</option>
-    <option value="tunnel">Túnel</option>
-  </select>
-  <button id="btnFull">Pantalla completa</button>
+  <div class="group" role="group" aria-label="Animación" id="modes">
+    <button data-mode="bars">Barras</button>
+    <button data-mode="mountains">Montañas</button>
+    <button data-mode="ink">Tinta</button>
+  </div>
+  <span class="sep"></span>
+  <div class="group" role="group" aria-label="Color" id="swatches"></div>
+  <span class="sep"></span>
+  <div class="group">
+    <button class="icon" id="btnTheme" aria-label="Cambiar a modo día o noche" title="Día / Noche"></button>
+    <button class="icon" id="btnFull" aria-label="Pantalla completa" title="Pantalla completa (F)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+    </button>
+  </div>
 </div>
 
 <script>
+// ================= Ajustes guardados =================
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('pulso.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('pulso.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+
+const PALETTES = [
+  { id: 'aurora',   night: ['#5ee7ff', '#7b6cff', '#ff6ad5'], day: ['#00a6d6', '#5b4dff', '#e0389f'] },
+  { id: 'sunset',   night: ['#ffb057', '#ff5f6d', '#c86bff'], day: ['#ff8a00', '#f0364a', '#9b3dff'] },
+  { id: 'ocean',    night: ['#4facfe', '#00f2fe', '#43e97b'], day: ['#1877f2', '#00b4c8', '#16b364'] },
+  { id: 'lava',     night: ['#ff3d3d', '#ff9a3d', '#ffe14d'], day: ['#e01e1e', '#f06a00', '#e0a800'] },
+  { id: 'mono',     night: ['#ffffff', '#d9dcff', '#aab2ff'], day: ['#0a0a0f', '#22232c', '#3a3c48'] },
+];
+
+const state = {
+  mode: store.get('mode', 'bars'),
+  palette: store.get('palette', 'aurora'),
+  custom: store.get('custom', '#ff6ad5'),
+  theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+};
+
+// ================= Lienzos =================
 const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
-const statusEl = document.getElementById('status');
-const intro = document.getElementById('intro');
-const modeSel = document.getElementById('mode');
+const layer = document.createElement('canvas');      // escena nítida
+const lctx = layer.getContext('2d');
+const inkLayer = document.createElement('canvas');   // tinta persistente
+const ictx = inkLayer.getContext('2d');
+const g1 = document.createElement('canvas'), g1c = g1.getContext('2d');   // resplandor 1/4
+const g2 = document.createElement('canvas'), g2c = g2.getContext('2d');   // resplandor 1/16
 
-let W, H, DPR;
+let W, H, DPR, MIN;
 function resize() {
   DPR = Math.min(window.devicePixelRatio || 1, 2);
-  W = canvas.width = innerWidth * DPR;
-  H = canvas.height = innerHeight * DPR;
+  W = Math.round(innerWidth * DPR); H = Math.round(innerHeight * DPR); MIN = Math.min(W, H);
+  for (const c of [canvas, layer, inkLayer]) { c.width = W; c.height = H; }
+  g1.width = Math.max(1, W >> 2); g1.height = Math.max(1, H >> 2);
+  g2.width = Math.max(1, W >> 4); g2.height = Math.max(1, H >> 4);
 }
 addEventListener('resize', resize); resize();
 
-// ---------- Audio ----------
-let audioCtx, analyser, freq, wave, source, currentStream, audioEl;
+// ================= Colores =================
+function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+function rgbToHex(r, g, b) { return '#' + [r, g, b].map(v => Math.round(v).toString(16).padStart(2, '0')).join(''); }
+function hexToHsl(hex) {
+  let [r, g, b] = hexToRgb(hex).map(v => v / 255);
+  const max = Math.max(r, g, b), min = Math.min(r, g, b); let h = 0, s = 0; const l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min; s = l > .5 ? d / (2 - max - min) : d / (max + min);
+    h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60;
+  }
+  return [h, s * 100, l * 100];
+}
+function hsl(h, s, l) { h = ((h % 360) + 360) % 360; s /= 100; l /= 100;
+  const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l);
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+  return rgbToHex(f(0) * 255, f(8) * 255, f(4) * 255);
+}
+function paletteColors() {
+  const night = state.theme === 'dark';
+  if (state.palette === 'custom') {
+    const [h, s, l] = hexToHsl(state.custom);
+    const L = night ? Math.max(l, 58) : Math.min(l, 50);
+    return [hsl(h - 28, s, L), hsl(h, s, L), hsl(h + 28, s, L)];
+  }
+  const p = PALETTES.find(p => p.id === state.palette) || PALETTES[0];
+  return night ? p.night : p.day;
+}
+let COLORS = [], RGB = [], SPRITES = [];
+function makeSprite(hex) {
+  const s = document.createElement('canvas'); s.width = s.height = 64;
+  const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex);
+  const gr = c.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, `rgba(${r},${g},${b},1)`);
+  gr.addColorStop(.4, `rgba(${r},${g},${b},.55)`);
+  gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  c.fillStyle = gr; c.fillRect(0, 0, 64, 64);
+  return s;
+}
+function refreshColors() {
+  COLORS = paletteColors(); RGB = COLORS.map(hexToRgb); SPRITES = COLORS.map(makeSprite);
+}
+function mix(t) { // color a lo largo de la paleta, t en [0,1]
+  const x = Math.max(0, Math.min(1, t)) * (RGB.length - 1), i = Math.min(RGB.length - 2, Math.floor(x)), f = x - i;
+  const a = RGB[i], b = RGB[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
+const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+
+// ================= Interfaz =================
+const statusEl = document.getElementById('status'), statusText = document.getElementById('statusText');
+const intro = document.getElementById('intro');
+function setStatus(t, live) { statusText.textContent = t; statusEl.classList.toggle('live', !!live); }
+
+const swatchBox = document.getElementById('swatches');
+function buildSwatches() {
+  swatchBox.innerHTML = '';
+  const night = state.theme === 'dark';
+  for (const p of PALETTES) {
+    const b = document.createElement('button');
+    const c = night ? p.night : p.day;
+    b.className = 'swatch'; b.dataset.palette = p.id; b.setAttribute('aria-label', 'Color ' + p.id);
+    b.style.background = `linear-gradient(135deg, ${c[0]}, ${c[1]} 55%, ${c[2]})`;
+    b.onclick = () => { state.palette = p.id; store.set('palette', p.id); applyAll(); };
+    swatchBox.appendChild(b);
+  }
+  const wrap = document.createElement('label');
+  wrap.className = 'custom'; wrap.title = 'Elegir otro color';
+  wrap.innerHTML = '<input type="color" id="customColor" aria-label="Elegir otro color"><span class="swatch" data-palette="custom"></span>';
+  swatchBox.appendChild(wrap);
+  const input = wrap.querySelector('input'); input.value = state.custom;
+  input.oninput = () => { state.custom = input.value; state.palette = 'custom'; store.set('custom', state.custom); store.set('palette', 'custom'); applyAll(false); };
+}
+
+const SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+
+function applyAll(rebuild = true) {
+  document.documentElement.dataset.theme = state.theme;
+  document.getElementById('btnTheme').innerHTML = state.theme === 'dark' ? SUN : MOON;
+  if (rebuild) buildSwatches();
+  swatchBox.querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed', s.dataset.palette === state.palette));
+  document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode));
+  refreshColors();
+}
+
+document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+function setMode(m) {
+  state.mode = m; store.set('mode', m);
+  ictx.clearRect(0, 0, W, H); blobs.length = 0;
+  applyAll(false);
+}
+document.getElementById('btnTheme').onclick = () => {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark'; store.set('theme', state.theme);
+  ictx.clearRect(0, 0, W, H);
+  applyAll();
+};
+function toggleFull() {
+  if (document.fullscreenElement) document.exitFullscreen?.();
+  else document.documentElement.requestFullscreen?.().catch(() => setStatus('Este navegador no permite pantalla completa'));
+}
+document.getElementById('btnFull').onclick = toggleFull;
+canvas.addEventListener('dblclick', toggleFull);
+
+let idleTimer;
+function wake() {
+  document.body.classList.remove('idle'); clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => { if (analyser) document.body.classList.add('idle'); }, 3000);
+}
+addEventListener('pointermove', wake); addEventListener('pointerdown', wake);
+addEventListener('keydown', e => {
+  wake();
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'f' || e.key === 'F') toggleFull();
+  if (e.key === '1') setMode('bars');
+  if (e.key === '2') setMode('mountains');
+  if (e.key === '3') setMode('ink');
+  if (e.key === 'd' || e.key === 'D') document.getElementById('btnTheme').click();
+});
+
+applyAll();
+
+// ================= Audio =================
+let audioCtx, analyser, freqData, source, currentStream, audioEl;
+const BANDS = 64;
+const spec = new Float32Array(BANDS);      // espectro suavizado 0..1
+const raw = new Float32Array(BANDS);       // espectro sin suavizar
+let bandEdges = null, peak = 0.4;
 
 function setupAnalyser() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -108,239 +310,292 @@ function setupAnalyser() {
   if (currentStream) currentStream.getTracks().forEach(t => t.stop());
   if (audioEl) { audioEl.pause(); audioEl = null; }
   analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 2048;
-  analyser.smoothingTimeConstant = 0.8;
-  freq = new Uint8Array(analyser.frequencyBinCount);
-  wave = new Uint8Array(analyser.fftSize);
+  analyser.fftSize = 4096;
+  analyser.smoothingTimeConstant = 0.6;
+  analyser.minDecibels = -88; analyser.maxDecibels = -22;
+  freqData = new Uint8Array(analyser.frequencyBinCount);
+  // Bandas logarítmicas de 35 Hz a 14 kHz
+  const binHz = audioCtx.sampleRate / analyser.fftSize;
+  bandEdges = [];
+  for (let i = 0; i <= BANDS; i++) bandEdges.push(Math.max(1, Math.round(35 * Math.pow(14000 / 35, i / BANDS) / binHz)));
+  for (let i = 1; i <= BANDS; i++) if (bandEdges[i] <= bandEdges[i - 1]) bandEdges[i] = bandEdges[i - 1] + 1;
 }
 
 function useStream(stream, label) {
   setupAnalyser();
   currentStream = stream;
   source = audioCtx.createMediaStreamSource(stream);
-  source.connect(analyser); // no se conecta a la salida: evita eco
-  stream.getAudioTracks()[0].addEventListener('ended', () => setStatus('Captura detenida'));
-  setStatus(label);
-  intro.hidden = true;
+  source.connect(analyser); // sin conectar a los altavoces: evita eco
+  stream.getAudioTracks()[0].addEventListener('ended', () => { setStatus('Captura detenida'); analyser = null; });
+  setStatus(label, true);
+  intro.hidden = true; wake();
 }
 
 document.getElementById('btnSystem').onclick = async () => {
+  if (!navigator.mediaDevices?.getDisplayMedia) { setStatus('Este navegador no puede capturar el audio del PC. Usa Chrome o Edge en un ordenador.'); return; }
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       systemAudio: 'include'
     });
-    stream.getVideoTracks().forEach(t => t.stop()); // solo queremos el audio
-    if (!stream.getAudioTracks().length) {
-      setStatus('No llegó audio: marca "Compartir audio del sistema" al compartir');
-      return;
-    }
+    stream.getVideoTracks().forEach(t => t.stop());
+    if (!stream.getAudioTracks().length) { setStatus('No llegó audio. Vuelve a intentarlo y marca "Compartir audio del sistema".'); return; }
     useStream(new MediaStream(stream.getAudioTracks()), 'Escuchando el audio del PC');
-  } catch (e) {
-    setStatus('Captura cancelada o no permitida (' + e.name + ')');
-  }
+  } catch (e) { setStatus('Captura cancelada'); }
 };
 
 document.getElementById('btnMic').onclick = async () => {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     useStream(stream, 'Escuchando el micrófono');
-  } catch (e) {
-    setStatus('Micrófono no permitido (' + e.name + ')');
-  }
+  } catch (e) { setStatus('Permiso de micrófono denegado'); }
 };
 
-document.getElementById('file').onchange = (ev) => {
-  const f = ev.target.files[0];
-  if (!f) return;
-  setupAnalyser();
-  currentStream = null;
-  audioEl = new Audio(URL.createObjectURL(f));
-  audioEl.loop = true;
+const fileInput = document.getElementById('file');
+document.getElementById('btnFile').onclick = () => fileInput.click();
+fileInput.onchange = () => {
+  const f = fileInput.files[0]; if (!f) return;
+  setupAnalyser(); currentStream = null;
+  audioEl = new Audio(URL.createObjectURL(f)); audioEl.loop = true;
   source = audioCtx.createMediaElementSource(audioEl);
-  source.connect(analyser);
-  analyser.connect(audioCtx.destination);
+  source.connect(analyser); analyser.connect(audioCtx.destination);
   audioEl.play();
-  setStatus('Reproduciendo: ' + f.name);
-  intro.hidden = true;
+  setStatus('Reproduciendo ' + f.name, true);
+  intro.hidden = true; wake();
 };
 
-document.getElementById('btnFull').onclick = () => {
-  if (document.fullscreenElement) document.exitFullscreen();
-  else document.documentElement.requestFullscreen?.().catch(() => {});
-};
+// ================= Análisis =================
+let bass = 0, mid = 0, high = 0, energy = 0, time = 0;
+const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, cd: 0 }, high: { prev: 0, avg: 0.02, cd: 0 } };
 
-function setStatus(t) { statusEl.textContent = t; }
+function avg(arr, a, b) { let s = 0; for (let i = a; i < b; i++) s += arr[i]; return s / (b - a); }
 
-// Ocultar controles cuando el ratón no se mueve
-let idleTimer;
-function wake() {
-  document.body.classList.remove('idle');
-  clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (analyser) document.body.classList.add('idle'); }, 3000);
-}
-addEventListener('mousemove', wake); addEventListener('keydown', e => {
-  wake();
-  if (e.key === 'f') document.getElementById('btnFull').click();
-  if (e.key >= '1' && e.key <= '5') { modeSel.selectedIndex = +e.key - 1; }
-});
-
-// ---------- Análisis: graves, medios, agudos y golpes ----------
-let bass = 0, mid = 0, treble = 0, energy = 0, beat = 0, bassAvg = 0, hue = 300, t = 0;
-
-function band(from, to) {
-  const n = freq.length, sr = audioCtx.sampleRate;
-  const a = Math.floor(from / (sr / 2) * n), b = Math.max(a + 1, Math.floor(to / (sr / 2) * n));
-  let s = 0; for (let i = a; i < b; i++) s += freq[i];
-  return s / (b - a) / 255;
-}
-
-function analyse() {
-  if (!analyser) {
-    // Demo suave mientras no hay audio
-    t += 0.016;
-    bass = 0.25 + 0.15 * Math.sin(t * 2); mid = 0.2 + 0.1 * Math.sin(t * 1.3); treble = 0.15;
-    energy = (bass + mid + treble) / 3; beat *= 0.9;
-    if (!freq) { freq = new Uint8Array(1024); wave = new Uint8Array(2048); }
-    for (let i = 0; i < freq.length; i++) freq[i] = Math.max(0, 140 * Math.exp(-i / 180) * (0.7 + 0.3 * Math.sin(i * 0.05 + t * 3)));
-    for (let i = 0; i < wave.length; i++) wave[i] = 128 + 30 * Math.sin(i * 0.02 + t * 4) * Math.sin(t);
-    return;
-  }
-  analyser.getByteFrequencyData(freq);
-  analyser.getByteTimeDomainData(wave);
-  bass = band(20, 150); mid = band(150, 2000); treble = band(2000, 12000);
-  energy = (bass * 2 + mid + treble) / 4;
-  bassAvg = bassAvg * 0.95 + bass * 0.05;
-  if (bass > bassAvg * 1.25 && bass > 0.35 && beat < 0.3) beat = 1;
-  else beat *= 0.9;
-}
-
-// ---------- Escenas ----------
-const particles = [];
-function spawnParticles(n) {
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, s = (2 + Math.random() * 8) * DPR * (0.5 + bass);
-    particles.push({ x: W / 2, y: H / 2, vx: Math.cos(a) * s, vy: Math.sin(a) * s, life: 1, h: hue + Math.random() * 60 });
-  }
-}
-
-function fade(alpha) {
-  ctx.globalCompositeOperation = 'source-over';
-  ctx.fillStyle = `rgba(7,6,13,${alpha})`;
-  ctx.fillRect(0, 0, W, H);
-  ctx.globalCompositeOperation = 'lighter';
-}
-
-function drawRing() {
-  fade(0.22);
-  const cx = W / 2, cy = H / 2, R = Math.min(W, H) * (0.18 + bass * 0.08 + beat * 0.04);
-  const N = 180;
-  ctx.lineWidth = 2.5 * DPR;
-  for (let i = 0; i < N; i++) {
-    const v = freq[Math.floor(i / N * 400)] / 255;
-    const a = i / N * Math.PI * 2 + t * 0.2;
-    const len = v * Math.min(W, H) * 0.25;
-    ctx.strokeStyle = `hsla(${hue + i / N * 120},90%,${50 + v * 20}%,${0.4 + v * 0.6})`;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * R, cy + Math.sin(a) * R);
-    ctx.lineTo(cx + Math.cos(a) * (R + len), cy + Math.sin(a) * (R + len));
-    ctx.stroke();
-  }
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
-  g.addColorStop(0, `hsla(${hue},100%,65%,${0.25 + beat * 0.5})`);
-  g.addColorStop(1, 'hsla(0,0%,0%,0)');
-  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
-}
-
-function drawBars() {
-  fade(0.35);
-  const N = 96, gap = 3 * DPR, bw = (W - gap * (N - 1)) / N;
-  for (let i = 0; i < N; i++) {
-    // escala logarítmica: más detalle en graves
-    const idx = Math.floor(Math.pow(i / N, 2) * 700) + 1;
-    const v = freq[idx] / 255;
-    const h = v * H * 0.75;
-    const x = i * (bw + gap);
-    const g = ctx.createLinearGradient(0, H, 0, H - h);
-    g.addColorStop(0, `hsla(${hue + i},90%,45%,0.9)`);
-    g.addColorStop(1, `hsla(${hue + i + 60},100%,70%,0.9)`);
-    ctx.fillStyle = g;
-    ctx.fillRect(x, H - h, bw, h);
-    ctx.fillStyle = `hsla(${hue + i + 60},100%,70%,0.25)`;
-    ctx.fillRect(x, 0, bw, h * 0.25); // reflejo superior
-  }
-}
-
-function drawWave() {
-  fade(0.15);
-  for (let k = 0; k < 3; k++) {
-    ctx.beginPath();
-    ctx.lineWidth = (2 + k * 2 + beat * 4) * DPR;
-    ctx.strokeStyle = `hsla(${hue + k * 40},100%,60%,${0.7 - k * 0.2})`;
-    const amp = H * (0.35 + k * 0.1);
-    for (let i = 0; i < wave.length; i += 4) {
-      const x = i / wave.length * W;
-      const y = H / 2 + (wave[i] - 128) / 128 * amp + Math.sin(i * 0.01 + t * 2 + k) * mid * 40 * DPR;
-      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+function analyse(dt) {
+  if (analyser) {
+    analyser.getByteFrequencyData(freqData);
+    let mx = 0;
+    for (let i = 0; i < BANDS; i++) {
+      let s = 0; const a = bandEdges[i], b = bandEdges[i + 1];
+      for (let j = a; j < b; j++) s += freqData[j];
+      let v = s / (b - a) / 255;
+      v *= 0.85 + 0.5 * (i / BANDS);   // compensa que los agudos suenan más débiles
+      raw[i] = v; if (v > mx) mx = v;
     }
-    ctx.stroke();
-  }
-}
-
-function drawParticles() {
-  fade(0.18);
-  spawnParticles(Math.floor(energy * 12) + (beat > 0.95 ? 120 : 0));
-  for (let i = particles.length - 1; i >= 0; i--) {
-    const p = particles[i];
-    p.x += p.vx * (1 + treble); p.y += p.vy * (1 + treble);
-    p.vx *= 0.99; p.vy *= 0.99; p.life -= 0.008;
-    if (p.life <= 0 || p.x < 0 || p.x > W || p.y < 0 || p.y > H) { particles.splice(i, 1); continue; }
-    ctx.fillStyle = `hsla(${p.h},100%,60%,${p.life})`;
-    ctx.beginPath(); ctx.arc(p.x, p.y, (1.5 + p.life * 3) * DPR, 0, Math.PI * 2); ctx.fill();
-  }
-  if (particles.length > 4000) particles.splice(0, particles.length - 4000);
-}
-
-function drawTunnel() {
-  fade(0.25);
-  const cx = W / 2, cy = H / 2, max = Math.hypot(W, H) / 2;
-  const rings = 22;
-  for (let i = 0; i < rings; i++) {
-    const p = ((i / rings) + t * (0.15 + energy * 0.6)) % 1;
-    const r = Math.pow(p, 2) * max;
-    const v = freq[Math.floor(i / rings * 300)] / 255;
-    const sides = 6;
-    ctx.lineWidth = (1 + p * 6 + v * 4) * DPR;
-    ctx.strokeStyle = `hsla(${hue + i * 12},100%,${45 + v * 25}%,${p})`;
-    ctx.beginPath();
-    for (let s = 0; s <= sides; s++) {
-      const a = s / sides * Math.PI * 2 + t * 0.3 + i * 0.05;
-      const rr = r * (1 + v * 0.15);
-      s ? ctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : ctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    peak = Math.max(peak * Math.pow(0.6, dt), mx, 0.25);  // ganancia automática
+    for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak);
+  } else {
+    // Demo: espectro sintético con un "bombo" cada medio segundo
+    const kick = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2)), 12);
+    for (let i = 0; i < BANDS; i++) {
+      const x = i / BANDS;
+      raw[i] = Math.max(0, (0.55 - x * 0.35) * (0.55 + 0.45 * Math.sin(time * 1.7 + i * 0.35) * Math.sin(time * 0.6 + i * 0.12)) + kick * (1 - x) * 0.5);
     }
-    ctx.stroke();
   }
+  for (let i = 0; i < BANDS; i++) {
+    const k = raw[i] > spec[i] ? 1 - Math.pow(0.0005, dt) : 1 - Math.pow(0.04, dt); // sube rápido, baja suave
+    spec[i] += (raw[i] - spec[i]) * k;
+  }
+  bass = avg(raw, 0, 10); mid = avg(raw, 10, 38); high = avg(raw, 38, BANDS);
+  energy = bass * 0.5 + mid * 0.3 + high * 0.2;
 }
 
-const scenes = { ring: drawRing, bars: drawBars, wave: drawWave, particles: drawParticles, tunnel: drawTunnel };
+// Golpes detectados por subida brusca de energía en cada zona
+function onset(name, value, dt) {
+  const f = flux[name]; const d = Math.max(0, value - f.prev); f.prev = value;
+  f.avg += (d - f.avg) * Math.min(1, dt * 2);
+  f.cd -= dt;
+  if (d > f.avg * 2.4 + 0.035 && f.cd <= 0) { f.cd = name === 'bass' ? 0.18 : name === 'mid' ? 0.12 : 0.08; return Math.min(1, d * 4); }
+  return 0;
+}
 
-function loop() {
-  analyse();
-  t += 0.016;
-  hue = (hue + 0.15 + treble * 1.5 + beat * 3) % 360;
+// ================= Resplandor =================
+function bloom(src, strength) {
+  g1c.clearRect(0, 0, g1.width, g1.height); g1c.drawImage(src, 0, 0, g1.width, g1.height);
+  g2c.clearRect(0, 0, g2.width, g2.height); g2c.drawImage(g1, 0, 0, g2.width, g2.height);
   ctx.save();
-  if (beat > 0.6 && modeSel.value !== 'bars') {
-    const s = 1 + beat * 0.015;
-    ctx.translate(W / 2, H / 2); ctx.scale(s, s); ctx.translate(-W / 2, -H / 2);
-  }
-  scenes[modeSel.value]();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.globalCompositeOperation = state.theme === 'dark' ? 'lighter' : 'source-over';
+  ctx.globalAlpha = strength; ctx.drawImage(g2, 0, 0, W, H);
+  ctx.globalAlpha = strength * 0.7; ctx.drawImage(g1, 0, 0, W, H);
   ctx.restore();
-  requestAnimationFrame(loop);
 }
-loop();
+
+function ambient() {
+  const night = state.theme === 'dark';
+  const c = mix(0.5), r = Math.max(W, H) * 0.7;
+  const g = ctx.createRadialGradient(W / 2, H * 0.6, 0, W / 2, H * 0.6, r);
+  g.addColorStop(0, rgba(c, (night ? 0.10 : 0.06) + bass * (night ? 0.18 : 0.10)));
+  g.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+}
+
+// Espectro simétrico: graves en el centro, agudos en los extremos
+function specAt(x) {
+  const d = Math.abs(x - 0.5) * 2 * (BANDS - 1), i = Math.floor(d), f = d - i;
+  return spec[i] * (1 - f) + spec[Math.min(BANDS - 1, i + 1)] * f;
+}
+
+// ================= Escena: Barras =================
+function drawBars() {
+  const night = state.theme === 'dark';
+  lctx.clearRect(0, 0, W, H);
+  const n = Math.max(24, Math.min(72, Math.round(W / DPR / 24)));
+  const slot = W * 0.86 / n, bw = slot * 0.5, x0 = W * 0.07 + (slot - bw) / 2;
+  const cy = H * 0.5, maxH = H * 0.36;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, v = specAt(t);
+    const h = bw + Math.pow(v, 1.15) * maxH;
+    const x = x0 + i * slot, c = mix(t);
+    const g = lctx.createLinearGradient(0, cy - h, 0, cy + h);
+    g.addColorStop(0, rgba(c, 0));
+    g.addColorStop(0.3, rgba(c, night ? 0.85 : 0.9));
+    g.addColorStop(0.5, rgba(c, 1));
+    g.addColorStop(0.7, rgba(c, night ? 0.85 : 0.9));
+    g.addColorStop(1, rgba(c, 0));
+    lctx.fillStyle = g;
+    lctx.beginPath(); lctx.roundRect(x, cy - h, bw, h * 2, bw / 2); lctx.fill();
+  }
+  ambient();
+  bloom(layer, night ? 0.9 : 0.55);
+  ctx.globalAlpha = night ? 0.9 : 0.85; ctx.drawImage(layer, 0, 0); ctx.globalAlpha = 1;
+}
+
+// ================= Escena: Montañas =================
+const ridges = [0, 1, 2, 3].map(() => new Float32Array(64));
+function drawMountains() {
+  const night = state.theme === 'dark';
+  lctx.clearRect(0, 0, W, H);
+  const P = ridges[0].length;
+  const cfg = [ // de atrás hacia delante
+    { hMax: 0.62, base: 0.28, alpha: 0.35, color: 0.85, lag: 0.12, shift: 0.07 },
+    { hMax: 0.50, base: 0.22, alpha: 0.5,  color: 0.6,  lag: 0.2,  shift: -0.05 },
+    { hMax: 0.40, base: 0.16, alpha: 0.7,  color: 0.35, lag: 0.35, shift: 0.03 },
+    { hMax: 0.30, base: 0.10, alpha: 0.95, color: 0.1,  lag: 0.6,  shift: 0 },
+  ];
+  cfg.forEach((L, li) => {
+    const r = ridges[li], pts = [];
+    for (let p = 0; p < P; p++) {
+      const x = p / (P - 1);
+      const target = specAt(((x + L.shift) % 1 + 1) % 1);
+      r[p] += (target - r[p]) * L.lag;
+      const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.02;
+      pts.push([x * W, H - H * (L.base + wob + Math.pow(r[p], 1.2) * (L.hMax - L.base))]);
+    }
+    const c = mix(L.color);
+    const top = Math.min(...pts.map(p => p[1]));
+    const g = lctx.createLinearGradient(0, top, 0, H);
+    g.addColorStop(0, rgba(c, L.alpha));
+    g.addColorStop(0.55, rgba(c, L.alpha * 0.35));
+    g.addColorStop(1, rgba(c, 0));
+    lctx.beginPath(); lctx.moveTo(0, H); lctx.lineTo(pts[0][0], pts[0][1]);
+    for (let p = 1; p < P - 1; p++) {
+      const mx = (pts[p][0] + pts[p + 1][0]) / 2, my = (pts[p][1] + pts[p + 1][1]) / 2;
+      lctx.quadraticCurveTo(pts[p][0], pts[p][1], mx, my);
+    }
+    lctx.lineTo(pts[P - 1][0], pts[P - 1][1]); lctx.lineTo(W, H); lctx.closePath();
+    lctx.fillStyle = g; lctx.fill();
+    // Filo luminoso de la cresta
+    lctx.strokeStyle = rgba(c, Math.min(1, L.alpha + 0.2)); lctx.lineWidth = (1 + li * 0.5) * DPR;
+    lctx.beginPath(); lctx.moveTo(pts[0][0], pts[0][1]);
+    for (let p = 1; p < P - 1; p++) {
+      const mx = (pts[p][0] + pts[p + 1][0]) / 2, my = (pts[p][1] + pts[p + 1][1]) / 2;
+      lctx.quadraticCurveTo(pts[p][0], pts[p][1], mx, my);
+    }
+    lctx.stroke();
+  });
+  ambient();
+  bloom(layer, night ? 0.8 : 0.45);
+  ctx.drawImage(layer, 0, 0);
+}
+
+// ================= Escena: Tinta (estilo "La llegada") =================
+const blobs = [];
+function spawnBlob(size, strength) {
+  const big = size === 'big', medium = size === 'mid';
+  const maxR = MIN * (big ? 0.14 + Math.random() * 0.2 : medium ? 0.06 + Math.random() * 0.08 : 0.02 + Math.random() * 0.04) * (0.7 + strength * 0.6);
+  const m = maxR * 1.1;
+  const harm = [];
+  for (let k = 0; k < 5; k++) harm.push({ k: 2 + Math.floor(Math.random() * 7), a: (Math.random() * 0.06) / (1 + k * 0.4), p: Math.random() * 6.28, s: (Math.random() - 0.5) * 0.8 });
+  const tendrils = [];
+  const nt = big ? 5 + Math.floor(Math.random() * 6) : medium ? 2 + Math.floor(Math.random() * 3) : 0;
+  for (let k = 0; k < nt; k++) tendrils.push({ a: Math.random() * 6.28, curl: (Math.random() - 0.5) * 1.6, ext: 0, speed: 0.25 + Math.random() * 0.5, w: 0.5 + Math.random() });
+  blobs.push({
+    x: m + Math.random() * (W - 2 * m), y: m + Math.random() * (H - 2 * m),
+    maxR, age: 0, life: big ? 4 + Math.random() * 3 : medium ? 2.5 + Math.random() * 2 : 1.4 + Math.random() * 1.2,
+    harm, tendrils, gap: Math.random() * 6.28, gapK: 1 + Math.floor(Math.random() * 3),
+    sprite: Math.floor(Math.random() * 3), strength
+  });
+  if (blobs.length > 60) blobs.shift();
+}
+
+function drawInk(dt) {
+  const night = state.theme === 'dark';
+  // Detecta golpes y decide cuántos círculos aparecen
+  const ob = onset('bass', bass, dt), om = onset('mid', mid, dt), oh = onset('high', high, dt);
+  if (ob) spawnBlob('big', ob);
+  if (om) for (let k = 0; k < 1 + Math.floor(om * 2); k++) spawnBlob('mid', om);
+  if (oh) for (let k = 0; k < 1 + Math.floor(oh * 3); k++) spawnBlob('small', oh);
+  if (Math.random() < energy * dt * 3) spawnBlob(Math.random() < 0.7 ? 'small' : 'mid', energy);
+
+  // La tinta se disipa poco a poco
+  ictx.globalCompositeOperation = 'destination-out';
+  ictx.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 1.0)})`; ictx.fillRect(0, 0, W, H);
+  ictx.globalCompositeOperation = 'source-over';
+
+  for (let bi = blobs.length - 1; bi >= 0; bi--) {
+    const b = blobs[bi];
+    b.age += dt * (0.8 + energy * 0.8);
+    const p = b.age / b.life;
+    if (p >= 1) { blobs.splice(bi, 1); continue; }
+    const grow = 1 - Math.pow(1 - p, 3);                 // se expande rápido y frena
+    const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06);
+    const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5);
+    const th = r * 0.14 + 3 * DPR;
+    const spr = SPRITES[b.sprite];
+    const M = Math.max(28, Math.min(150, Math.round(r / DPR * 0.9)));
+    for (let i = 0; i < M; i++) {
+      const a = (i / M) * 6.283 + Math.random() * 0.05;
+      let n = 0; for (const h of b.harm) n += h.a * Math.sin(h.k * a + h.p + b.age * h.s);
+      const gapMask = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(a * b.gapK + b.gap), 0.6);
+      const rr = r * (1 + n) + (Math.random() - 0.5) * th * 0.8;
+      const s = th * (0.7 + Math.random() * 0.9);
+      ictx.globalAlpha = fadeA * gapMask * (night ? 0.16 : 0.2);
+      ictx.drawImage(spr, b.x + Math.cos(a) * rr - s, b.y + Math.sin(a) * rr - s, s * 2, s * 2);
+    }
+    // Zarcillos que se escapan del anillo
+    for (const t of b.tendrils) {
+      t.ext += dt * t.speed * (1 - p); t.a += t.curl * dt * 0.6;
+      const rr = r * (1 + t.ext), s = th * 0.5 * t.w * (1 - p);
+      ictx.globalAlpha = fadeA * 0.35;
+      ictx.drawImage(spr, b.x + Math.cos(t.a) * rr - s, b.y + Math.sin(t.a) * rr - s, s * 2, s * 2);
+    }
+    // Núcleo inicial que se abre como una gota
+    if (p < 0.12) {
+      const s = r * 0.9;
+      ictx.globalAlpha = (1 - p / 0.12) * 0.12;
+      ictx.drawImage(spr, b.x - s, b.y - s, s * 2, s * 2);
+    }
+  }
+  ictx.globalAlpha = 1;
+  ambient();
+  if (night) bloom(inkLayer, 0.7);
+  ctx.drawImage(inkLayer, 0, 0);
+}
+
+// ================= Bucle principal =================
+const scenes = { bars: drawBars, mountains: drawMountains, ink: drawInk };
+let last = performance.now();
+function frame(now) {
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; time += dt;
+  analyse(dt);
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = state.theme === 'dark' ? '#000000' : '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+  (scenes[state.mode] || drawBars)(dt);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
 </script>
 </body>
 </html>
