@@ -53,6 +53,15 @@
   body.idle { cursor: none; }
 
   .group { display: flex; gap: 3px; align-items: center; }
+  .pop-wrap { position: relative; display: flex; }
+  .pop {
+    position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); z-index: 5;
+    display: flex; gap: 4px; padding: 8px; white-space: nowrap;
+    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 16px; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+  }
+  #popColor .group { gap: 8px; padding: 2px 4px; }
+  #btnColor { width: 26px; height: 26px; margin: 0 2px; }
   .sep { width: 1px; height: 26px; background: var(--glass-line); }
 
   button {
@@ -129,9 +138,9 @@
   }
   .corner .tx { display: grid; gap: 2px; min-width: 0; }
   .av { width: 2.6em; height: 2.6em; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--glass-line), 0 6px 24px rgba(0,0,0,.25); }
-  body.mode-lyrics .corner { display: none; }
-  body.mode-lyrics .status { display: none; }
-  body.mode-lyrics .song:not(.force) { display: none; }
+  body.mode-info .corner { display: none; }
+  body.mode-info .status { display: none; }
+  body.mode-info .song:not(.force) { display: none; }
   body.idle .corner { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
   .corner .t { font-size: 1em; font-weight: 600; color: var(--fg); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .corner .a { font-size: .8em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -193,6 +202,40 @@
   .lv-meta .a { color: color-mix(in srgb, var(--fg) 65%, transparent); font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { .lv-cur.enter .w, .lv-out { animation: none; } .lv-out { display: none; } }
 
+  /* Sección Artista: foto que late con la música, nombre grande y datos que rotan al ritmo */
+  .artistView {
+    position: fixed; inset: 0; pointer-events: none; display: grid; align-items: center; justify-content: center;
+    grid-template-columns: auto minmax(0, 46rem); gap: clamp(28px, 6vw, 360px);
+    padding: 0 max(24px, 7vw) calc(var(--dock-h, 70px) + 40px);
+  }
+  .ar-photo {
+    width: clamp(160px, 32vmin, 1500px); aspect-ratio: 1; border-radius: 50%; overflow: hidden;
+    transform: scale(var(--pulse, 1)); box-shadow: 0 2em 6em rgba(0,0,0,.35); background: var(--chip);
+  }
+  .ar-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .ar-info { min-width: 0; display: grid; gap: .5em; font-size: clamp(14px, 1.1vw, 54px); text-shadow: 0 0 1em var(--bg); }
+  .ar-kicker { font-size: .8em; letter-spacing: .22em; text-transform: uppercase; color: var(--muted); }
+  .ar-name { margin: 0; font-size: clamp(38px, 5.6vw, 300px); font-weight: 800; line-height: .95; letter-spacing: -.035em; text-wrap: balance; }
+  .ar-meta { color: color-mix(in srgb, var(--fg) 70%, transparent); font-weight: 500; }
+  .ar-tags { display: flex; flex-wrap: wrap; gap: .45em; }
+  .ar-tags span { font-size: .85em; padding: .35em .85em; border-radius: 999px; background: var(--chip); border: 1px solid var(--glass-line); text-shadow: none; }
+  .ar-fact {
+    margin-top: 1.2em; padding: 1.1em 1.3em; border-radius: 1em; max-width: 40ch;
+    background: var(--glass); border: 1px solid var(--glass-line); text-shadow: none;
+    -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  }
+  .ar-fact-k { font-size: .75em; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  .ar-fact p { margin: .45em 0 0; font-size: 1.15em; line-height: 1.45; transition: opacity .35s, transform .35s, filter .35s; }
+  .ar-fact p.out { opacity: 0; transform: translateY(-.4em); filter: blur(4px); }
+  .ar-now { color: var(--muted); font-size: .9em; margin-top: .4em; }
+  .ar-msg { position: absolute; inset: 0; }
+  @media (max-width: 700px) {
+    .artistView { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: calc(14vw + 12px); align-content: center; }
+    .ar-photo { width: 42vw; }
+    .ar-tags { justify-content: center; }
+    .ar-fact { margin-inline: auto; }
+  }
+
   @media (max-width: 700px) {
     .sep { display: none; }
     .dock { width: calc(100% - 24px); gap: 6px; padding: 8px; border-radius: 20px; }
@@ -221,6 +264,18 @@
   <div class="lv-stage" id="lvStage"><span class="lv-cur" id="lvCur"></span><div class="lv-next" id="lvNext"></div></div>
   <div class="lv-msg" id="lvMsg"></div>
 </div>
+<div class="artistView" id="artistView" hidden>
+  <div class="ar-photo" id="arPhoto"><img id="arImg" alt=""></div>
+  <div class="ar-info">
+    <div class="ar-kicker">Estás escuchando a</div>
+    <h2 class="ar-name" id="arName"></h2>
+    <div class="ar-meta" id="arMeta"></div>
+    <div class="ar-tags" id="arTags"></div>
+    <div class="ar-fact" id="arFact"><span class="ar-fact-k" id="arFactK">¿Sabías que…?</span><p id="arFactP"></p></div>
+    <div class="ar-now" id="arNow"></div>
+  </div>
+  <div class="lv-msg ar-msg" id="arMsg" hidden></div>
+</div>
 <div class="lv-meta" id="lvMeta" hidden><div class="art"><img class="cv" alt=""><img class="av" alt="" hidden></div><div class="tx"><span class="t"></span><span class="a"></span></div></div>
 <div class="corner" id="corner" hidden><img class="av" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span></div></div>
 <div class="lyrics" id="lyrics" hidden><p class="prev"></p><p class="cur"></p><p class="next"></p></div>
@@ -228,14 +283,16 @@
 <div class="status" id="status"><span class="dot"></span><span id="statusText">Sin audio · vista de demostración</span></div>
 
 <div class="dock" id="dock">
-  <div class="group" role="group" aria-label="Fuente de audio">
-    <button id="btnSystem">Audio del PC</button>
-    <button id="btnMic">Micrófono</button>
-    <button id="btnFile" type="button">Archivo</button>
-    <button id="btnSpotify" type="button">Spotify</button>
-    <input id="file" type="file" accept="audio/*" hidden>
+  <div class="pop-wrap">
+    <button id="btnSource" aria-haspopup="true" aria-expanded="false" title="Elegir de dónde viene el audio">Conectar audio</button>
+    <div class="pop" id="popSource" hidden>
+      <button id="btnSystem">Audio del PC</button>
+      <button id="btnMic">Micrófono</button>
+      <button id="btnFile" type="button">Archivo</button>
+      <input id="file" type="file" accept="audio/*" hidden>
+    </div>
   </div>
-  <span class="sep"></span>
+  <button id="btnSpotify" type="button">Spotify</button>
   <button id="btnId" hidden>¿Qué suena?</button>
   <button id="btnLyrics" type="button" title="Letra sobre las animaciones">Subtítulos</button>
   <span class="sep"></span>
@@ -243,14 +300,19 @@
     <button data-mode="bars">Barras</button>
     <button data-mode="mountains">Montañas</button>
     <button data-mode="ink">Tinta</button>
+    <button data-mode="flowers">Flores</button>
     <button data-mode="bokeh">Focos</button>
+    <button data-mode="clouds">Nubes</button>
     <button data-mode="aura">Aura</button>
     <button data-mode="infinity">Infinito</button>
     <button data-mode="lyrics">Letra</button>
+    <button data-mode="artist">Artista</button>
   </div>
   <span class="sep"></span>
-  <div class="group" role="group" aria-label="Color" id="swatches"></div>
-  <span class="sep"></span>
+  <div class="pop-wrap">
+    <button class="swatch" id="btnColor" aria-haspopup="true" aria-expanded="false" aria-label="Colores" title="Colores"></button>
+    <div class="pop" id="popColor" hidden><div class="group" role="group" aria-label="Color" id="swatches"></div></div>
+  </div>
   <div class="group">
     <button class="icon" id="btnTheme" aria-label="Cambiar a modo día o noche" title="Día / Noche"></button>
     <button class="icon" id="btnFull" aria-label="Pantalla completa" title="Pantalla completa (F)">
@@ -328,6 +390,8 @@ function resize() {
     const kx = W / oldW, ky = H / oldH, km = Math.min(kx, ky);
     if (typeof lights !== 'undefined') for (const l of lights) { l.x *= kx; l.y *= ky; l.r *= km; l.vx *= kx; l.vy *= ky; }
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
+    if (typeof flowers !== 'undefined') for (const f of flowers) { f.x *= kx; f.y *= ky; f.R *= km; }
+    if (typeof fallen !== 'undefined') for (const q of fallen) { q.x *= kx; q.y *= ky; q.s *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
   }
 }
@@ -433,12 +497,32 @@ function applyAll(rebuild = true) {
   swatchBox.querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed', s.dataset.palette === state.palette));
   document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode));
   refreshColors();
+  const bc = document.getElementById('btnColor');
+  if (state.palette === 'cover' && coverUrl) { bc.style.background = `center / cover url("${coverUrl}")`; }
+  else bc.style.background = `linear-gradient(135deg, ${COLORS[0]}, ${COLORS[1]} 55%, ${COLORS[2]})`;
+}
+
+// Menús emergentes de la barra
+function closePops() { document.querySelectorAll('.pop').forEach(p => p.hidden = true); document.querySelectorAll('[aria-haspopup]').forEach(b => b.setAttribute('aria-expanded', 'false')); }
+function bindPop(btnId, popId) {
+  const b = document.getElementById(btnId), p = document.getElementById(popId);
+  b.addEventListener('click', e => { e.stopPropagation(); const open = p.hidden; closePops(); p.hidden = !open; b.setAttribute('aria-expanded', open); });
+  p.addEventListener('click', e => { e.stopPropagation(); if (e.target.closest('button')) setTimeout(closePops, 120); });
+}
+addEventListener('click', closePops);
+bindPop('btnSource', 'popSource'); bindPop('btnColor', 'popColor');
+function setSource(label) {
+  const b = document.getElementById('btnSource');
+  b.textContent = label ? label + ' ✓' : 'Conectar audio'; b.setAttribute('aria-pressed', !!label);
 }
 
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 function setMode(m) {
   state.mode = m; store.set('mode', m);
   document.body.classList.toggle('mode-lyrics', m === 'lyrics');
+  document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist');
+  if (m === 'artist' && sp.item) arLoad(sp.item);
+  flowers.length = 0; fallen.length = 0;
   if (m === 'lyrics' && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
   refreshChrome();
   songEl.classList.remove('force');
@@ -467,18 +551,15 @@ addEventListener('keydown', e => {
   wake();
   if (e.target.tagName === 'INPUT') return;
   if (e.key === 'f' || e.key === 'F') toggleFull();
-  if (e.key === '1') setMode('bars');
-  if (e.key === '2') setMode('mountains');
-  if (e.key === '3') setMode('ink');
-  if (e.key === '4') setMode('bokeh');
-  if (e.key === '5') setMode('aura');
-  if (e.key === '6') setMode('infinity');
-  if (e.key === '7') setMode('lyrics');
+  const order = [...document.querySelectorAll('#modes button')].map(b => b.dataset.mode);
+  const k = '1234567890'.indexOf(e.key);
+  if (k >= 0 && order[k]) setMode(order[k]);
+  if (e.key === 'Escape') closePops();
   if (e.key === 'd' || e.key === 'D') document.getElementById('btnTheme').click();
 });
 
 applyAll();
-if (state.mode === 'lyrics') { intro.hidden = true; document.body.classList.add('mode-lyrics'); }
+if (state.mode === 'lyrics' || state.mode === 'artist') { intro.hidden = true; document.body.classList.add('mode-info'); if (state.mode === 'lyrics') document.body.classList.add('mode-lyrics'); }
 
 // ================= Audio =================
 let audioCtx, analyser, freqData, source, currentStream, audioEl, recDest;
@@ -512,7 +593,7 @@ function useStream(stream, label) {
   source = audioCtx.createMediaStreamSource(stream);
   source.connect(analyser); source.connect(recDest); // sin conectar a los altavoces: evita eco
   const track = stream.getAudioTracks()[0];
-  track.addEventListener('ended', () => { setStatus('Captura detenida. Pulsa Audio del PC para volver a conectar.'); analyser = null; document.body.classList.remove('idle'); });
+  track.addEventListener('ended', () => { setStatus('Captura detenida. Pulsa Conectar audio para volver a empezar.'); analyser = null; setSource(''); document.body.classList.remove('idle'); });
   track.addEventListener('mute', () => setStatus('Sin señal de audio por ahora', true));
   track.addEventListener('unmute', () => setStatus(label, true));
   setStatus(label, true);
@@ -529,14 +610,14 @@ document.getElementById('btnSystem').onclick = async () => {
     });
     stream.getVideoTracks().forEach(t => t.stop());
     if (!stream.getAudioTracks().length) { setStatus('No llegó audio. Vuelve a intentarlo y marca "Compartir audio del sistema".'); return; }
-    useStream(new MediaStream(stream.getAudioTracks()), 'Escuchando el audio del PC');
+    useStream(new MediaStream(stream.getAudioTracks()), 'Escuchando el audio del PC'); setSource('Audio del PC');
   } catch (e) { setStatus('Captura cancelada'); }
 };
 
 document.getElementById('btnMic').onclick = async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
-    useStream(stream, 'Escuchando el micrófono');
+    useStream(stream, 'Escuchando el micrófono'); setSource('Micrófono');
   } catch (e) { setStatus('Permiso de micrófono denegado'); }
 };
 
@@ -551,7 +632,7 @@ fileInput.onchange = () => {
   source = audioCtx.createMediaElementSource(audioEl);
   source.connect(analyser); source.connect(recDest); analyser.connect(audioCtx.destination);
   audioEl.play();
-  setStatus('Reproduciendo ' + f.name, true);
+  setStatus('Reproduciendo ' + f.name, true); setSource('Archivo');
   intro.hidden = true; wake();
 };
 
@@ -600,11 +681,11 @@ function analyse(dt) {
   energy = bass * 0.5 + mid * 0.3 + high * 0.2;
   // Golpes de este fotograma (todas las animaciones leen los mismos) y un "latido" que decae rápido
   hits.bass = onset('bass', bass, dt); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
-  if (hits.bass) beat = Math.max(beat, 0.55 + hits.bass * 0.45);
+  if (hits.bass) { beat = Math.max(beat, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
   beat *= Math.pow(0.004, dt);
 }
 const hits = { bass: 0, mid: 0, high: 0 };
-let beat = 0;
+let beat = 0, lastBassHit = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
 function onset(name, value, dt) {
@@ -876,7 +957,7 @@ function spButton() {
 }
 // Ajusta los textos de ayuda a lo que haya conectado
 function refreshChrome() {
-  intro.hidden = !!analyser || spConnected() || state.mode === 'lyrics';
+  intro.hidden = !!analyser || spConnected() || state.mode === 'lyrics' || state.mode === 'artist';
   if (!analyser) setStatus(spConnected() ? 'Muestra · pulsa Audio del PC para que las animaciones sigan tu música' : 'Sin audio · vista de demostración');
   try { lyricsButton(); } catch (e) {}   // aún no existe durante la carga inicial
 }
@@ -966,24 +1047,32 @@ function spUpdate(d) {
     setCover(item ? (item.album?.images?.[0]?.url || item.images?.[0]?.url || '') : '');
     loadLyrics(item);
     loadArtistImage(item);
+    if (state.mode === 'artist') arLoad(item);
   }
   spRender();
 }
 const fmt = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 const cornerEl = document.getElementById('corner');
-const artistImages = new Map();
+const artistImages = new Map(), artistInfo = new Map();
+async function spArtistData(id) {
+  if (!artistInfo.has(id)) {
+    artistInfo.set(id, (async () => {
+      try {
+        const r = await fetch('https://api.spotify.com/v1/artists/' + id, { headers: { Authorization: 'Bearer ' + sp.token } });
+        return r.ok ? await r.json() : null;
+      } catch (e) { return null; }
+    })());
+  }
+  return artistInfo.get(id);
+}
 async function loadArtistImage(item) {
   const id = item && item.artists && item.artists[0] && item.artists[0].id;
   if (!id) return;
   if (!artistImages.has(id)) {
-    let url = '';
-    try {
-      const r = await fetch('https://api.spotify.com/v1/artists/' + id, { headers: { Authorization: 'Bearer ' + sp.token } });
-      if (r.ok) { const d = await r.json(); const im = d.images || []; url = (im[1] || im[0] || {}).url || ''; }
-    } catch (e) {}
-    artistImages.set(id, url);
+    const d = await spArtistData(id), im = (d && d.images) || [];
+    artistImages.set(id, (im[0] || {}).url || '');   // la más grande: también se usa en grande en la sección Artista
   }
-  if (sp.item && sp.item.id === item.id) spRender();
+  if (sp.item && sp.item.id === item.id) { spRender(); if (state.mode === 'artist') arApply(sp.item); }
 }
 function artistImageOf(it) { const id = it && it.artists && it.artists[0] && it.artists[0].id; return (id && artistImages.get(id)) || ''; }
 function setImg(el, url) { if (!url) { el.hidden = true; el.removeAttribute('src'); return; } if (el.getAttribute('src') !== url) el.src = url; el.hidden = false; }
@@ -1163,7 +1252,7 @@ function showLyricNote(text) {
   lyricsEl.hidden = !text;
 }
 function subtitlesTick() {
-  if (!lyricsOn || state.mode === 'lyrics' || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
+  if (!lyricsOn || state.mode === 'lyrics' || state.mode === 'artist' || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
   const msg = lyricsMessage() || (lyrics.plain ? 'Esta canción tiene letra, pero sin tiempos para seguirla' : '');
   if (msg) { if (lyCur.textContent !== msg) showLyricNote(msg); lyricIndex = -3; return; }
   const L = lyrics.lines, pos = lyricPos();
@@ -1453,6 +1542,343 @@ function drawInfinity(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 
+// ================= Sección Artista =================
+const arEl = document.getElementById('artistView'), arPhoto = document.getElementById('arPhoto'), arImg = document.getElementById('arImg');
+const arName = document.getElementById('arName'), arMeta = document.getElementById('arMeta'), arTags = document.getElementById('arTags');
+const arFactP = document.getElementById('arFactP'), arFactK = document.getElementById('arFactK'), arNow = document.getElementById('arNow'), arMsg = document.getElementById('arMsg');
+const arCache = new Map();
+let arFacts = [], arFactIdx = -1, arFactAt = 0, arShownFor = null;
+const norm = t => (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, '');
+const MUSIC_WORDS = /m[uú]sic|cantante|banda|grupo|rapero|dj|productor|compositor|d[uú]o|singer|band|musician|rapper|producer|songwriter|duo|group/i;
+
+async function mbArtist(name) {
+  try {
+    const r = await fetch('https://musicbrainz.org/ws/2/artist/?fmt=json&limit=5&query=' + encodeURIComponent(`artist:"${name}"`));
+    if (!r.ok) return null;
+    const a = ((await r.json()).artists || []).find(x => x.score >= 90 && norm(x.name) === norm(name));
+    if (!a) return null;
+    return { type: a.type, area: a.area?.name, beginArea: a['begin-area']?.name, begin: a['life-span']?.begin, ended: a['life-span']?.ended,
+             tags: (a.tags || []).sort((x, y) => y.count - x.count).slice(0, 4).map(t => t.name) };
+  } catch (e) { return null; }
+}
+async function wikiArtist(name) {
+  for (const lang of ['es', 'en']) {
+    try {
+      const q = `https://${lang}.wikipedia.org/w/api.php?action=query&list=search&format=json&origin=*&srlimit=5&srsearch=` + encodeURIComponent(name + (lang === 'es' ? ' música' : ' music'));
+      const r = await fetch(q); if (!r.ok) continue;
+      const hits_ = ((await r.json()).query?.search || []).filter(h => norm(h.title).startsWith(norm(name)));
+      for (const h of hits_.slice(0, 3)) {
+        const sr = await fetch(`https://${lang}.wikipedia.org/api/rest_v1/page/summary/` + encodeURIComponent(h.title.replace(/ /g, '_')));
+        if (!sr.ok) continue;
+        const d = await sr.json();
+        if (d.type === 'disambiguation' || !d.extract || !MUSIC_WORDS.test(d.extract)) continue;
+        return { lang, extract: d.extract };
+      }
+    } catch (e) {}
+  }
+  return null;
+}
+const fmtNum = n => new Intl.NumberFormat('es', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+function fmtDate(d) {
+  if (!d) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return new Date(d + 'T12:00:00').toLocaleDateString('es', { day: 'numeric', month: 'long', year: 'numeric' });
+  return d.slice(0, 4);
+}
+async function arLoad(item) {
+  const a = item && item.artists && item.artists[0];
+  if (!a) return;
+  if (!arCache.has(a.id)) {
+    arCache.set(a.id, { loading: true });
+    const [spd, mb, wk] = await Promise.all([spArtistData(a.id), mbArtist(a.name), wikiArtist(a.name)]);
+    const facts = [], tags = [], meta = [];
+    if (mb) {
+      const group = mb.type === 'Group';
+      meta.push(group ? 'Grupo' : mb.type === 'Person' ? 'Artista' : '');
+      if (mb.area || mb.beginArea) meta.push(mb.beginArea || mb.area);
+      if (mb.begin) {
+        meta.push((group ? 'desde ' : 'nacimiento: ') + mb.begin.slice(0, 4));
+        facts.push(group ? `Se formó en ${fmtDate(mb.begin)}${mb.beginArea ? `, en ${mb.beginArea}` : ''}.` : `Nació el ${fmtDate(mb.begin)}${mb.beginArea ? ` en ${mb.beginArea}` : ''}.`);
+      }
+      if (group && mb.ended) facts.push('Ya no está en activo como grupo.');
+    }
+    if (wk) {
+      const sentences = wk.extract.split(/(?<=[.!?])\s+(?=[A-ZÁÉÍÓÚÑ¿¡"«(])/).map(t => t.trim()).filter(t => t.length >= 30 && t.length <= 280);
+      sentences.slice(0, 4).forEach(t => facts.push({ text: t, en: wk.lang === 'en' }));
+    }
+    if (spd) {
+      if (spd.followers && spd.followers.total) facts.push(`Tiene ${fmtNum(spd.followers.total)} seguidores en Spotify.`);
+      if (typeof spd.popularity === 'number' && spd.popularity > 0) facts.push(`Su popularidad en Spotify ahora mismo es de ${spd.popularity} sobre 100.`);
+      (spd.genres || []).slice(0, 4).forEach(g => tags.push(g));
+    }
+    if (!tags.length && mb) mb.tags.forEach(t => tags.push(t));
+    arCache.set(a.id, { facts, tags, meta: meta.filter(Boolean).join(' · ') });
+  }
+  if (sp.item && sp.item.artists?.[0]?.id === a.id) arApply(sp.item);
+}
+// Datos de la canción que suena, que cambian con cada tema
+function songFacts(it) {
+  const f = [], al = it.album || {};
+  const year = (al.release_date || '').slice(0, 4);
+  if (year) f.push(`«${it.name}» salió en ${year}.`);
+  if (al.album_type === 'single') f.push('Esta canción salió como sencillo.');
+  else if (al.total_tracks > 1 && it.track_number) f.push(`Es la canción ${it.track_number} de ${al.total_tracks} del álbum «${al.name}».`);
+  if (it.artists.length > 1) f.push(`En esta canción también participa ${it.artists.slice(1).map(x => x.name).join(' y ')}.`);
+  if (it.explicit) f.push('Esta versión tiene letra explícita.');
+  return f;
+}
+function arApply(it) {
+  const a = it.artists[0], data = arCache.get(a.id) || {};
+  const img = artistImageOf(it) || it.album?.images?.[0]?.url || '';
+  if (arImg.getAttribute('src') !== img && img) arImg.src = img;
+  arName.textContent = a.name;
+  arMeta.textContent = data.meta || '';
+  arTags.innerHTML = ''; (data.tags || []).forEach(t => { const s_ = document.createElement('span'); s_.textContent = t; arTags.appendChild(s_); });
+  arNow.textContent = `Sonando: ${it.name}${it.album?.name ? ' · ' + it.album.name : ''}`;
+  const list = [...songFacts(it), ...((data.facts) || [])].map(f => typeof f === 'string' ? { text: f } : f);
+  // Se intercalan datos de la canción y del artista para que no se repitan seguidos
+  arFacts = list.sort(() => Math.random() - 0.5);
+  if (arShownFor !== it.id) { arShownFor = it.id; arFactIdx = -1; arFactAt = 0; }
+}
+function arShowNext() {
+  if (!arFacts.length) { arFactP.textContent = arCache.get(sp.item?.artists?.[0]?.id)?.loading ? 'Buscando datos curiosos…' : 'No encontré datos sobre este artista.'; return; }
+  arFactIdx = (arFactIdx + 1) % arFacts.length;
+  const f = arFacts[arFactIdx];
+  arFactP.classList.add('out');
+  setTimeout(() => {
+    arFactP.textContent = f.text;
+    arFactK.textContent = f.en ? '¿Sabías que…? · Wikipedia en inglés' : '¿Sabías que…?';
+    arFactP.classList.remove('out');
+  }, 350);
+  arFactAt = performance.now();
+}
+function arTick() {
+  const on = state.mode === 'artist';
+  arEl.hidden = !on;
+  if (!on) return;
+  const ok = spConnected() && sp.item && sp.item.artists;
+  for (const el of [arPhoto, arEl.querySelector('.ar-info')]) el.hidden = !ok;
+  arMsg.hidden = !!ok;
+  if (!ok) {
+    const msg = !spConnected() ? 'Conecta Spotify para conocer al artista que escuchas' : !sp.item ? 'Pon algo en tu Spotify' : 'Los podcasts no tienen artista';
+    if (arMsg.dataset.msg !== msg) {
+      arMsg.dataset.msg = msg; arMsg.textContent = msg;
+      if (!spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar Spotify'; b.onclick = spLogin; arMsg.appendChild(b); }
+    }
+    return;
+  }
+  if (arShownFor !== sp.item.id) { arLoad(sp.item); arApply(sp.item); }
+  // Cambia de dato al ritmo: con un golpe de bajo pasados 7 s, o a los 12 s como mucho
+  const now = performance.now();
+  if (arFactIdx < 0 || now - arFactAt > 12000 || (now - arFactAt > 7000 && lastBassHit > arFactAt + 7000)) arShowNext();
+}
+const arWaves = [];
+function drawArtistScene(dt) {
+  const night = state.theme === 'dark';
+  ambient();
+  if (arPhoto.hidden || arEl.hidden) return;
+  const rect = arPhoto.getBoundingClientRect(), k = W / innerWidth;
+  const cx = (rect.left + rect.width / 2) * k, cy = (rect.top + rect.height / 2) * k, R = rect.width / 2 * k;
+  if (hits.bass) arWaves.push({ r: R, a: 0.5 + hits.bass * 0.5 });
+  lctx.clearRect(0, 0, W, H);
+  lctx.lineCap = 'round';
+  // Anillo de frecuencias alrededor de la foto
+  const N = 120, gap = R * 0.08;
+  for (let i = 0; i < N; i++) {
+    const t = i / N, v = specAt(t), a = t * Math.PI * 2 - Math.PI / 2;
+    const r0 = R + gap, r1 = r0 + R * 0.04 + v * R * 0.45;
+    lctx.strokeStyle = rgba(mix(t < 0.5 ? t * 2 : 2 - t * 2), 0.55 + v * 0.45);
+    lctx.lineWidth = Math.max(DPR, (Math.PI * 2 * r0 / N) * 0.45);
+    lctx.beginPath(); lctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); lctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); lctx.stroke();
+  }
+  // Ondas que salen de la foto con cada golpe
+  for (let i = arWaves.length - 1; i >= 0; i--) {
+    const w = arWaves[i]; w.r += dt * R * 1.6; w.a *= Math.pow(0.15, dt);
+    if (w.a < 0.02) { arWaves.splice(i, 1); continue; }
+    lctx.strokeStyle = rgba(mix(0.5), w.a); lctx.lineWidth = Math.max(DPR, R * 0.02);
+    lctx.beginPath(); lctx.arc(cx, cy, w.r + gap, 0, Math.PI * 2); lctx.stroke();
+  }
+  glowSpot(cx, cy, R * (1.6 + beat * 0.25), mix(0.5), (night ? 0.25 : 0.18) + beat * 0.25);
+  bloom(layer, (night ? 0.8 : 0.45) + beat * 0.4);
+  ctx.drawImage(layer, 0, 0);
+}
+function arFrame() {
+  if (state.mode !== 'artist' || arEl.hidden) return;
+  arPhoto.style.setProperty('--pulse', (1 + bass * 0.025 + beat * 0.035).toFixed(4));
+}
+setInterval(arTick, 150);
+
+// ================= Escena: Flores =================
+// Brotan con los golpes: graves → flores grandes, medios → medianas, agudos → pequeñas.
+// Se abren con un pequeño rebote, respiran con su banda y sueltan pétalos con los platillos.
+const flowers = [], fallen = [];
+const easeOutBack = t => 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2);
+function spawnFlower(size, strength) {
+  const k = size === 'big' ? [0.06, 0.06] : size === 'mid' ? [0.032, 0.026] : [0.014, 0.012];
+  const R = MIN * (k[0] + Math.random() * k[1]) * (0.75 + strength * 0.5), m = R * 1.2;
+  const kind = Math.floor(Math.random() * 3);
+  const c1 = Math.floor(Math.random() * 3);
+  flowers.push({
+    x: m + Math.random() * (W - 2 * m), y: m + Math.random() * (H - 2 * m), R, kind,
+    n: kind === 1 ? 9 + Math.floor(Math.random() * 6) : 5 + Math.floor(Math.random() * 3),
+    rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 0.3, age: 0,
+    life: (size === 'big' ? 6 : size === 'mid' ? 4.5 : 3) + Math.random() * 2.5,
+    c1, c2: (c1 + 1 + Math.floor(Math.random() * 2)) % 3, band: size === 'big' ? 'bass' : size === 'mid' ? 'mid' : 'high', strength
+  });
+  if (flowers.length > 45) flowers.shift();
+}
+function petalPath(c, L, w) {
+  c.beginPath(); c.moveTo(0, 0);
+  c.bezierCurveTo(w, -L * 0.3, w * 0.85, -L * 0.85, 0, -L);
+  c.bezierCurveTo(-w * 0.85, -L * 0.85, -w, -L * 0.3, 0, 0);
+}
+function drawFlowers(dt) {
+  const night = state.theme === 'dark';
+  if (hits.bass) spawnFlower('big', hits.bass);
+  if (hits.mid) for (let i = 0; i < 1 + Math.floor(hits.mid * 2); i++) spawnFlower('mid', hits.mid);
+  if (hits.high) {
+    for (let i = 0; i < 1 + Math.floor(hits.high * 2); i++) spawnFlower('small', hits.high);
+    // Algunas flores sueltan pétalos que caen girando
+    const open = flowers.filter(f => f.age / f.life > 0.3);
+    for (let i = 0; i < 3 && open.length; i++) {
+      const f = open[Math.floor(Math.random() * open.length)];
+      fallen.push({ x: f.x, y: f.y, s: f.R * 0.45, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 3, vx: (Math.random() - 0.5) * 40 * DPR, vy: (20 + Math.random() * 40) * DPR, c: f.c1, a: 1 });
+    }
+    if (fallen.length > 140) fallen.splice(0, fallen.length - 140);
+  }
+  if (Math.random() < (0.25 + energy * 2.5) * dt) spawnFlower(Math.random() < 0.65 ? 'small' : 'mid', energy);
+
+  lctx.clearRect(0, 0, W, H);
+  const level = { bass, mid, high };
+  for (let i = flowers.length - 1; i >= 0; i--) {
+    const f = flowers[i];
+    f.age += dt; const p = f.age / f.life;
+    if (p >= 1) { flowers.splice(i, 1); continue; }
+    f.rot += f.spin * dt;
+    const open = p < 0.22 ? easeOutBack(p / 0.22) : 1;
+    const fade = p > 0.72 ? 1 - (p - 0.72) / 0.28 : 1;
+    const L = f.R * open * (1 + level[f.band] * 0.18 + beat * 0.08);
+    if (L <= 0) continue;
+    const C1 = RGB[f.c1], C2 = RGB[f.c2];
+    lctx.save(); lctx.translate(f.x, f.y); lctx.rotate(f.rot);
+    lctx.globalAlpha = fade * (night ? 0.92 : 0.88);
+    const g = lctx.createRadialGradient(0, 0, L * 0.05, 0, 0, L);
+    g.addColorStop(0, rgba(C2, 0.95)); g.addColorStop(0.55, rgba(C1, 0.85)); g.addColorStop(1, rgba(C1, night ? 0.3 : 0.55));
+    lctx.fillStyle = g;
+    const w = L * (f.kind === 1 ? 0.22 : 0.42);
+    for (let k = 0; k < f.n; k++) { lctx.rotate(Math.PI * 2 / f.n); petalPath(lctx, L, w); lctx.fill(); }
+    if (f.kind === 2) {   // segunda corona de pétalos, más pequeña y con los colores invertidos
+      const g2 = lctx.createRadialGradient(0, 0, 0, 0, 0, L * 0.62);
+      g2.addColorStop(0, rgba(C1, 0.95)); g2.addColorStop(1, rgba(C2, 0.7));
+      lctx.fillStyle = g2; lctx.rotate(Math.PI / f.n);
+      for (let k = 0; k < f.n; k++) { lctx.rotate(Math.PI * 2 / f.n); petalPath(lctx, L * 0.62, w * 0.8); lctx.fill(); }
+    }
+    // Centro con estambres
+    const cg = lctx.createRadialGradient(0, 0, 0, 0, 0, L * 0.2);
+    cg.addColorStop(0, `rgba(255,240,200,${0.95})`); cg.addColorStop(1, rgba(C2, 0.9));
+    lctx.fillStyle = cg; lctx.beginPath(); lctx.arc(0, 0, L * (0.16 + beat * 0.03), 0, Math.PI * 2); lctx.fill();
+    lctx.fillStyle = 'rgba(255,245,215,.9)';
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; lctx.beginPath(); lctx.arc(Math.cos(a) * L * 0.24, Math.sin(a) * L * 0.24, Math.max(DPR, L * 0.025), 0, Math.PI * 2); lctx.fill(); }
+    lctx.restore();
+  }
+  // Pétalos que caen
+  for (let i = fallen.length - 1; i >= 0; i--) {
+    const q = fallen[i];
+    q.x += (q.vx + Math.sin(time * 1.5 + i) * 25 * DPR) * dt; q.y += q.vy * dt; q.rot += q.vr * dt; q.a -= dt * 0.25;
+    if (q.a <= 0 || q.y > H + q.s) { fallen.splice(i, 1); continue; }
+    lctx.save(); lctx.translate(q.x, q.y); lctx.rotate(q.rot); lctx.globalAlpha = q.a * 0.85;
+    lctx.fillStyle = rgba(RGB[q.c], 0.9); petalPath(lctx, q.s, q.s * 0.45); lctx.fill(); lctx.restore();
+  }
+  lctx.globalAlpha = 1;
+  ambient();
+  bloom(layer, (night ? 0.55 : 0.3) + beat * 0.35);
+  ctx.drawImage(layer, 0, 0);
+}
+
+// ================= Escena: Nubes =================
+// Siempre las mismas nubes, desfilando de lado y reapareciendo por el otro, como un salvapantallas.
+// Se iluminan por dentro con su banda de la música y destellan como relámpagos con los golpes.
+function seeded(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const CLOUDS = (() => {
+  const rnd = seeded(2000), list = [];
+  [[0, 5, 0.22], [1, 4, 0.36], [2, 3, 0.55]].forEach(([layer, count, size]) => {
+    for (let i = 0; i < count; i++) list.push({
+      layer, u: (i + rnd() * 0.6) / count, v: layer === 0 ? 0.08 + rnd() * 0.3 : layer === 1 ? 0.2 + rnd() * 0.4 : 0.35 + rnd() * 0.45,
+      size: size * (0.8 + rnd() * 0.45), seed: Math.floor(rnd() * 1e9),
+      speed: [1 / 140, 1 / 85, 1 / 50][layer] * (0.85 + rnd() * 0.3),
+      band: layer === 0 ? [34, 64] : layer === 1 ? [10, 34] : [0, 10], c: i % 3, level: 0, flash: 0, phase: 0
+    });
+  });
+  return list;
+})();
+let cloudSprites = null, cloudKey = '';
+function buildCloud(cl) {
+  const cw = MIN * cl.size, ch = cw * 0.5;
+  const rnd = seeded(cl.seed), raw_ = [];
+  // Bolitas en coordenadas de la nube: más altas en el centro y con la base casi plana
+  for (let i = 0; i < 22; i++) {
+    const px = 0.1 + rnd() * 0.8, bump = Math.sin(Math.PI * px);
+    const r = ch * (0.14 + rnd() * 0.16) * (0.55 + 0.75 * bump);
+    raw_.push([px * cw, ch * 0.72 - rnd() * ch * 0.45 * bump, r]);
+  }
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [px, py, r] of raw_) { x0 = Math.min(x0, px - r); y0 = Math.min(y0, py - r); x1 = Math.max(x1, px + r); y1 = Math.max(y1, py + r); }
+  const sc = Math.min(1, 1024 / (x1 - x0));
+  const w = Math.ceil((x1 - x0) * sc) + 4, h = Math.ceil((y1 - y0) * sc) + 4;
+  const puffs = raw_.map(([px, py, r]) => [(px - x0) * sc + 2, (py - y0) * sc + 2, r * sc]);
+  const paint = (color, shade) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const x = c.getContext('2d');
+    for (const [px, py, r] of puffs) {
+      const g = x.createRadialGradient(px, py, 0, px, py, r);
+      g.addColorStop(0, rgba(color, 1)); g.addColorStop(0.55, rgba(color, 0.9)); g.addColorStop(1, rgba(color, 0));
+      x.fillStyle = g; x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
+    }
+    if (shade) {   // la parte de abajo un poco más oscura, como una nube de verdad
+      x.globalCompositeOperation = 'source-atop';
+      const g = x.createLinearGradient(0, h * 0.3, 0, h);
+      g.addColorStop(0, 'rgba(120,130,160,0)'); g.addColorStop(1, 'rgba(120,130,160,.45)');
+      x.fillStyle = g; x.fillRect(0, 0, w, h);
+    }
+    return c;
+  };
+  return { base: paint([255, 255, 255], true), glow: paint(RGB[cl.c], false), w: w / sc, h: h / sc };
+}
+function drawClouds(dt) {
+  const night = state.theme === 'dark';
+  const key = COLORS.join() + MIN;
+  if (cloudKey !== key) { cloudKey = key; cloudSprites = CLOUDS.map(buildCloud); }
+  // Cielo: un leve tono de la paleta arriba
+  const sky = ctx.createLinearGradient(0, 0, 0, H), c = mix(0.5);
+  sky.addColorStop(0, rgba(c, night ? 0.16 + energy * 0.1 : 0.2 + energy * 0.08)); sky.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  // Relámpagos: los golpes encienden una nube cercana; los agudos, una lejana
+  const pick = layer => { const cs = CLOUDS.filter(x => x.layer === layer); return cs[Math.floor(Math.random() * cs.length)]; };
+  if (hits.bass) { pick(2).flash = 1; if (hits.bass > 0.6) pick(1).flash = 0.8; }
+  if (hits.mid) pick(1).flash = Math.max(0.6, hits.mid);
+  if (hits.high) pick(0).flash = 0.7;
+  ctx.save();
+  for (let layer = 0; layer < 3; layer++) {
+    CLOUDS.forEach((cl, i) => {
+      if (cl.layer !== layer) return;
+      const sp_ = cloudSprites[i];
+      const v = avg(spec, cl.band[0], cl.band[1]);
+      cl.level += (v - cl.level) * (1 - Math.pow(v > cl.level ? 0.0001 : 0.02, dt));
+      cl.flash *= Math.pow(0.02, dt);
+      cl.phase += dt * cl.speed;
+      const span = W + sp_.w * 2;
+      const x = (((cl.u + cl.phase) % 1 + 1) % 1) * span - sp_.w;
+      const y = cl.v * H + Math.sin(time * 0.3 + i) * MIN * 0.006 - sp_.h / 2;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.globalAlpha = night ? [0.16, 0.24, 0.32][layer] : [0.75, 0.88, 0.97][layer];
+      ctx.drawImage(sp_.base, x, y, sp_.w, sp_.h);
+      ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+      ctx.globalAlpha = Math.min(1, (night ? 0.08 + cl.level * 0.75 : 0.04 + cl.level * 0.5) + cl.flash * (night ? 0.8 : 0.55));
+      ctx.drawImage(sp_.glow, x, y, sp_.w, sp_.h);
+    });
+  }
+  ctx.restore();
+}
+
 function drawLyricsScene(dt) {
   drawBackdrop(0, 0.5);        // la portada se ve algo más en este modo (suma a la del fondo)
   drawAura(dt);
@@ -1463,7 +1889,7 @@ function drawLyricsScene(dt) {
   for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
-const scenes = { lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
@@ -1504,7 +1930,7 @@ function render(now) {
   ctx.fillRect(0, 0, W, H);
   drawBackdrop(dt);
   (scenes[state.mode] || drawBars)(dt);
-  lvFrame();
+  lvFrame(); arFrame();
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = state.theme === 'dark' ? 0.022 : 0.03;
   ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H);
