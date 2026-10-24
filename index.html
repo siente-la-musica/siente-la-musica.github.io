@@ -40,8 +40,8 @@
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     width: max-content; max-width: calc(100% - 32px);
-    display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; justify-content: center;
-    padding: 10px 14px;
+    display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; justify-content: center;
+    padding: 8px 10px;
     background: var(--glass); border: 1px solid var(--glass-line); border-radius: 22px;
     box-shadow: var(--shadow);
     -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
@@ -51,12 +51,12 @@
   body.idle .dock { transform: translateX(-50%) translateY(12px); }
   body.idle { cursor: none; }
 
-  .group { display: flex; gap: 6px; align-items: center; }
+  .group { display: flex; gap: 4px; align-items: center; }
   .sep { width: 1px; height: 26px; background: var(--glass-line); }
 
   button {
-    font: inherit; font-size: 14px; font-weight: 500; color: var(--fg);
-    background: var(--chip); border: 0; border-radius: 12px; padding: 8px 13px;
+    font: inherit; font-size: 13.5px; font-weight: 500; color: var(--fg);
+    background: var(--chip); border: 0; border-radius: 12px; padding: 7px 10px;
     cursor: pointer; transition: background .2s, color .2s, transform .1s;
     display: inline-flex; align-items: center; gap: 6px;
   }
@@ -94,6 +94,24 @@
   .intro h1 { margin: 0 0 8px; font-size: clamp(36px, 6vw, 64px); font-weight: 700; letter-spacing: -.04em; }
   .intro p { margin: 0 auto; max-width: 46ch; color: var(--muted); font-size: 16px; line-height: 1.55; text-wrap: balance; }
 
+  .song {
+    position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
+    width: min(340px, calc(100% - 32px));
+    display: flex; gap: 12px; align-items: center; padding: 10px 12px 10px 10px;
+    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 18px; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+  }
+  .song[hidden] { display: none; }
+  .song .cover { width: 56px; height: 56px; border-radius: 10px; flex: none; object-fit: cover; background: var(--chip); }
+  .song .meta { min-width: 0; flex: 1; display: grid; gap: 2px; }
+  .song .title { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .song .artist, .song .note { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .song .note { white-space: normal; }
+  .song a { color: inherit; font-size: 13px; font-weight: 600; }
+  .song .close { padding: 4px 8px; font-size: 16px; line-height: 1; align-self: flex-start; }
+  .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
+  .song .bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width .2s linear; }
+
   @media (max-width: 560px) { .sep { display: none; } .dock { gap: 8px; } }
 </style>
 </head>
@@ -107,6 +125,8 @@
   </div>
 </div>
 
+<div class="song" id="song" hidden aria-live="polite"></div>
+
 <div class="status" id="status"><span class="dot"></span><span id="statusText">Sin audio · vista de demostración</span></div>
 
 <div class="dock" id="dock">
@@ -117,10 +137,15 @@
     <input id="file" type="file" accept="audio/*" hidden>
   </div>
   <span class="sep"></span>
+  <button id="btnId">¿Qué suena?</button>
+  <span class="sep"></span>
   <div class="group" role="group" aria-label="Animación" id="modes">
     <button data-mode="bars">Barras</button>
     <button data-mode="mountains">Montañas</button>
     <button data-mode="ink">Tinta</button>
+    <button data-mode="bokeh">Focos</button>
+    <button data-mode="aura">Aura</button>
+    <button data-mode="infinity">Infinito</button>
   </div>
   <span class="sep"></span>
   <div class="group" role="group" aria-label="Color" id="swatches"></div>
@@ -134,6 +159,10 @@
 </div>
 
 <script>
+// Dirección del servicio que reconoce canciones (ver RECONOCER-CANCIONES.md).
+// Mientras esté vacía, el botón "¿Qué suena?" explica que falta configurarlo.
+const RECOGNIZE_URL = '';
+
 // ================= Ajustes guardados =================
 const store = {
   get(k, d) { try { const v = localStorage.getItem('pulso.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
@@ -205,7 +234,7 @@ function paletteColors() {
   const p = PALETTES.find(p => p.id === state.palette) || PALETTES[0];
   return night ? p.night : p.day;
 }
-let COLORS = [], RGB = [], SPRITES = [];
+let COLORS = [], RGB = [], SPRITES = [], BOKEH = [];
 function makeSprite(hex) {
   const s = document.createElement('canvas'); s.width = s.height = 256;
   const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex);
@@ -217,7 +246,7 @@ function makeSprite(hex) {
   return s;
 }
 function refreshColors() {
-  COLORS = paletteColors(); RGB = COLORS.map(hexToRgb); SPRITES = COLORS.map(makeSprite);
+  COLORS = paletteColors(); RGB = COLORS.map(hexToRgb); SPRITES = COLORS.map(makeSprite); BOKEH = COLORS.map(makeBokeh);
 }
 function mix(t) { // color a lo largo de la paleta, t en [0,1]
   const x = Math.max(0, Math.min(1, t)) * (RGB.length - 1), i = Math.min(RGB.length - 2, Math.floor(x)), f = x - i;
@@ -266,7 +295,7 @@ function applyAll(rebuild = true) {
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 function setMode(m) {
   state.mode = m; store.set('mode', m);
-  ictx.clearRect(0, 0, W, H); blobs.length = 0;
+  ictx.clearRect(0, 0, W, H); blobs.length = 0; lights.length = 0;
   applyAll(false);
 }
 document.getElementById('btnTheme').onclick = () => {
@@ -294,13 +323,16 @@ addEventListener('keydown', e => {
   if (e.key === '1') setMode('bars');
   if (e.key === '2') setMode('mountains');
   if (e.key === '3') setMode('ink');
+  if (e.key === '4') setMode('bokeh');
+  if (e.key === '5') setMode('aura');
+  if (e.key === '6') setMode('infinity');
   if (e.key === 'd' || e.key === 'D') document.getElementById('btnTheme').click();
 });
 
 applyAll();
 
 // ================= Audio =================
-let audioCtx, analyser, freqData, source, currentStream, audioEl;
+let audioCtx, analyser, freqData, source, currentStream, audioEl, recDest;
 const BANDS = 64;
 const spec = new Float32Array(BANDS);      // espectro suavizado 0..1
 const raw = new Float32Array(BANDS);       // espectro sin suavizar
@@ -313,6 +345,7 @@ function setupAnalyser() {
   if (currentStream) currentStream.getTracks().forEach(t => t.stop());
   if (audioEl) { audioEl.pause(); audioEl = null; }
   analyser = audioCtx.createAnalyser();
+  recDest = audioCtx.createMediaStreamDestination(); // copia del audio para reconocer canciones
   analyser.fftSize = 4096;
   analyser.smoothingTimeConstant = 0.6;
   analyser.minDecibels = -88; analyser.maxDecibels = -22;
@@ -328,7 +361,7 @@ function useStream(stream, label) {
   setupAnalyser();
   currentStream = stream;
   source = audioCtx.createMediaStreamSource(stream);
-  source.connect(analyser); // sin conectar a los altavoces: evita eco
+  source.connect(analyser); source.connect(recDest); // sin conectar a los altavoces: evita eco
   stream.getAudioTracks()[0].addEventListener('ended', () => { setStatus('Captura detenida'); analyser = null; });
   setStatus(label, true);
   intro.hidden = true; wake();
@@ -362,7 +395,7 @@ fileInput.onchange = () => {
   setupAnalyser(); currentStream = null;
   audioEl = new Audio(URL.createObjectURL(f)); audioEl.loop = true;
   source = audioCtx.createMediaElementSource(audioEl);
-  source.connect(analyser); analyser.connect(audioCtx.destination);
+  source.connect(analyser); source.connect(recDest); analyser.connect(audioCtx.destination);
   audioEl.play();
   setStatus('Reproduciendo ' + f.name, true);
   intro.hidden = true; wake();
@@ -601,8 +634,181 @@ function drawInk(dt) {
   ctx.drawImage(inkLayer, 0, 0);
 }
 
+// ================= Reconocer la canción =================
+const songEl = document.getElementById('song');
+const CLIP_SECONDS = 8;
+let identifying = false;
+
+function showSong(html) {
+  songEl.innerHTML = html + '<button class="close" aria-label="Cerrar">×</button>';
+  songEl.querySelector('.close').onclick = () => { songEl.hidden = true; };
+  songEl.hidden = false;
+}
+function esc(t) { const d = document.createElement('div'); d.textContent = t ?? ''; return d.innerHTML; }
+
+document.getElementById('btnId').onclick = async () => {
+  if (identifying) return;
+  if (!analyser || !recDest) { showSong('<div class="meta"><div class="title">Conecta primero el audio</div><div class="note">Pulsa Audio del PC, Micrófono o Archivo y vuelve a intentarlo.</div></div>'); return; }
+  if (!RECOGNIZE_URL) { showSong('<div class="meta"><div class="title">Reconocimiento sin configurar</div><div class="note">Falta conectar el servicio que identifica canciones.</div></div>'); return; }
+  if (!window.MediaRecorder) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar audio</div></div>'); return; }
+
+  identifying = true;
+  showSong('<div class="meta"><div class="title">Escuchando…</div><div class="artist">Unos segundos y te digo qué suena</div><div class="bar"><i id="idProgress"></i></div></div>');
+  const prog = document.getElementById('idProgress');
+  try {
+    const type = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg'].find(t => MediaRecorder.isTypeSupported(t)) || '';
+    const rec = new MediaRecorder(recDest.stream, type ? { mimeType: type } : undefined);
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const done = new Promise(r => rec.onstop = r);
+    rec.start();
+    const t0 = performance.now();
+    const tick = setInterval(() => { if (prog) prog.style.width = Math.min(100, (performance.now() - t0) / (CLIP_SECONDS * 10)) + '%'; }, 100);
+    await new Promise(r => setTimeout(r, CLIP_SECONDS * 1000));
+    rec.stop(); await done; clearInterval(tick);
+
+    showSong('<div class="meta"><div class="title">Buscando la canción…</div></div>');
+    const ext = (rec.mimeType || type).includes('mp4') ? 'm4a' : (rec.mimeType || type).includes('ogg') ? 'ogg' : 'webm';
+    const form = new FormData();
+    form.append('file', new Blob(chunks, { type: rec.mimeType || type }), 'clip.' + ext);
+    const res = await fetch(RECOGNIZE_URL, { method: 'POST', body: form });
+    const data = await res.json();
+    const r = data && data.result;
+    if (data.status !== 'success') throw new Error(data.error?.error_message || 'Error del servicio');
+    if (!r) { showSong('<div class="meta"><div class="title">No la reconozco</div><div class="note">Prueba otra vez en una parte con más música y menos voz hablada.</div></div>'); return; }
+    const cover = r.spotify?.album?.images?.[0]?.url || r.apple_music?.artwork?.url?.replace('{w}x{h}', '300x300') || '';
+    const link = r.song_link || r.spotify?.external_urls?.spotify || '';
+    showSong(
+      (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
+      `<div class="meta"><div class="title">${esc(r.title)}</div><div class="artist">${esc(r.artist)}</div>` +
+      (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Escuchar</a>` : '') + '</div>'
+    );
+  } catch (e) {
+    showSong(`<div class="meta"><div class="title">No se pudo identificar</div><div class="note">${esc(e.message)}</div></div>`);
+  } finally { identifying = false; }
+};
+
 // ================= Bucle principal =================
-const scenes = { bars: drawBars, mountains: drawMountains, ink: drawInk };
+// ================= Escena: Focos (luces desenfocadas a lo lejos) =================
+const lights = [];
+function makeBokeh(hex) {
+  const s = document.createElement('canvas'); s.width = s.height = 256;
+  const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex);
+  const gr = c.createRadialGradient(128, 128, 0, 128, 128, 128);
+  gr.addColorStop(0, `rgba(${r},${g},${b},.42)`);
+  gr.addColorStop(.72, `rgba(${r},${g},${b},.5)`);
+  gr.addColorStop(.86, `rgba(${r},${g},${b},.62)`);   // borde un poco más brillante, como un foco real
+  gr.addColorStop(.95, `rgba(${r},${g},${b},.22)`);
+  gr.addColorStop(1, `rgba(${r},${g},${b},0)`);
+  c.fillStyle = gr; c.fillRect(0, 0, 256, 256);
+  return s;
+}
+function spawnLight(size, strength) {
+  const k = size === 'big' ? [0.07, 0.12] : size === 'mid' ? [0.035, 0.05] : [0.012, 0.025];
+  const r = MIN * (k[0] + Math.random() * k[1]) * (0.7 + strength * 0.6);
+  lights.push({
+    x: Math.random() * W, y: Math.random() * H, r,
+    vx: (Math.random() - 0.5) * 12 * DPR, vy: (-0.2 - Math.random() * 0.6) * 10 * DPR,
+    age: 0, life: (size === 'big' ? 3.5 : size === 'mid' ? 2.8 : 2) + Math.random() * 2.5,
+    band: size === 'big' ? 'bass' : size === 'mid' ? 'mid' : 'high',
+    c: Math.floor(Math.random() * 3), strength
+  });
+  if (lights.length > 90) lights.shift();
+}
+function drawBokeh(dt) {
+  const night = state.theme === 'dark';
+  const ob = onset('bass', bass, dt), om = onset('mid', mid, dt), oh = onset('high', high, dt);
+  if (ob) for (let k = 0; k < 1 + Math.floor(ob * 2); k++) spawnLight('big', ob);
+  if (om) for (let k = 0; k < 1 + Math.floor(om * 3); k++) spawnLight('mid', om);
+  if (oh) for (let k = 0; k < 2 + Math.floor(oh * 4); k++) spawnLight('small', oh);
+  if (Math.random() < (0.3 + energy * 4) * dt) spawnLight(Math.random() < 0.6 ? 'small' : 'mid', energy);
+
+  lctx.clearRect(0, 0, W, H);
+  lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  const level = { bass, mid, high };
+  for (let i = lights.length - 1; i >= 0; i--) {
+    const L = lights[i];
+    L.age += dt; const p = L.age / L.life;
+    if (p >= 1) { lights.splice(i, 1); continue; }
+    L.x += L.vx * dt; L.y += L.vy * dt;
+    const env = Math.min(1, p / 0.12) * Math.pow(1 - p, 1.2);      // aparece rápido, se apaga lento
+    const r = L.r * (1 + level[L.band] * 0.35) * (0.85 + 0.15 * env);
+    lctx.globalAlpha = env * (0.55 + L.strength * 0.45) * (night ? 0.9 : 0.75);
+    lctx.drawImage(BOKEH[L.c], L.x - r, L.y - r, r * 2, r * 2);
+  }
+  lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
+  ambient();
+  bloom(layer, night ? 0.55 : 0.35);
+  ctx.drawImage(layer, 0, 0);
+}
+
+// ================= Escena: Aura (resplandor en los bordes) =================
+function drawAura() {
+  const night = state.theme === 'dark';
+  lctx.clearRect(0, 0, W, H);
+  lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  const N = 110, per = 2 * (W + H), breath = 0.9 + 0.1 * Math.sin(time * 0.8);
+  for (let k = 0; k < N; k++) {
+    const t = k / N;
+    // Recorre el borde empezando arriba al centro: graves abajo, agudos arriba
+    let d = ((t * per) + W / 2) % per, x, y;
+    if (d < W) { x = d; y = 0; }
+    else if (d < W + H) { x = W; y = d - W; }
+    else if (d < 2 * W + H) { x = W - (d - W - H); y = H; }
+    else { x = 0; y = H - (d - 2 * W - H); }
+    const v = specAt(t);
+    const s = MIN * (0.12 + v * 0.22) * breath;
+    lctx.globalAlpha = (night ? 0.06 : 0.05) + v * (night ? 0.2 : 0.15);
+    lctx.drawImage(SPRITES[k % 3], x - s, y - s, s * 2, s * 2);
+  }
+  lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
+  // Luz suave en el centro
+  const c = mix(0.5), R = Math.max(W, H) * 0.55;
+  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R);
+  g.addColorStop(0, rgba(c, (night ? 0.05 : 0.035) + energy * (night ? 0.16 : 0.1)));
+  g.addColorStop(1, rgba(c, 0));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  bloom(layer, night ? 0.7 : 0.5);
+  ctx.globalAlpha = 0.6; ctx.drawImage(layer, 0, 0); ctx.globalAlpha = 1;
+}
+
+// ================= Escena: Infinito (túnel hipnótico de lemniscatas) =================
+let infPhase = 0;
+function drawInfinity(dt) {
+  const night = state.theme === 'dark';
+  infPhase += dt * (0.12 + energy * 0.5 + bass * 0.3);
+  const K = 46, G = 1.13, base = MIN * 0.01, frac = infPhase % 1, whole = Math.floor(infPhase);
+  const STEPS = 140;
+  lctx.clearRect(0, 0, W, H);
+  lctx.lineCap = 'round'; lctx.lineJoin = 'round';
+  for (let i = K - 1; i >= 0; i--) {
+    const z = i + frac, s = base * Math.pow(G, z);
+    const id = i - whole;                                   // identidad estable del anillo
+    const fadeIn = Math.min(1, z / 5), fadeOut = Math.min(1, Math.max(0, (Math.max(W, H) * 0.9 - s) / (Math.max(W, H) * 0.5)));
+    const alpha = fadeIn * fadeOut;
+    if (alpha <= 0.01) continue;
+    const v = spec[((id % BANDS) + BANDS) % BANDS];
+    const rot = time * 0.12 + z * 0.07;
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const tri = 1 - Math.abs(((id * 0.09) % 2 + 2) % 2 - 1);
+    lctx.strokeStyle = rgba(mix(tri), alpha * (night ? 0.85 : 0.9));
+    lctx.lineWidth = Math.max(1.2 * DPR, s * (0.004 + v * 0.012));
+    lctx.beginPath();
+    for (let j = 0; j <= STEPS; j++) {
+      const t = j / STEPS * Math.PI * 2, sn = Math.sin(t), den = 1 + sn * sn;
+      const wob = 1 + v * 0.12 * Math.sin(t * 4 + time * 2 + id);
+      const x = Math.cos(t) / den * s * 1.6 * wob, y = sn * Math.cos(t) / den * s * 1.6 * wob;
+      const X = W / 2 + x * cr - y * sr, Y = H / 2 + x * sr + y * cr;
+      j ? lctx.lineTo(X, Y) : lctx.moveTo(X, Y);
+    }
+    lctx.stroke();
+  }
+  ambient();
+  bloom(layer, night ? 0.75 : 0.4);
+  ctx.drawImage(layer, 0, 0);
+}
+
+const scenes = { bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 function frame(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; time += dt;
