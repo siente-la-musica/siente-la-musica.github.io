@@ -50,7 +50,7 @@
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 
   .dock {
-    position: fixed; left: 50%; transform: translateX(-50%);
+    position: fixed; left: calc(50% + var(--bar-shift, 0px)); transform: translateX(-50%); transition: left .4s cubic-bezier(.2,.8,.2,1), opacity .5s, transform .5s;
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     width: max-content; max-width: calc(100% - 32px); z-index: 10;
     display: flex; flex-wrap: wrap; gap: 8px 8px; align-items: center; justify-content: center;
@@ -184,55 +184,66 @@
   .song .time { font-variant-numeric: tabular-nums; }
   .swatch.cover-swatch { background-size: cover; background-position: center; }
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
-  /* Reproductor: la portada desenfocada hace de fondo; portada, título y controles en una fila
-     y debajo una línea de progreso fina. Las demás opciones quedan tras «⋯». */
+  /* Reproductor abajo, junto a la barra: una píldora con la portada desenfocada de fondo.
+     En pantallas anchas va a la izquierda de la barra; si no cabe, justo encima. */
   .song.player {
-    display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; grid-template-areas: "cv meta ctl" "prog prog prog" "more more more";
-    gap: 8px 12px; padding: 12px 14px 10px 12px; overflow: hidden; isolation: isolate;
-    width: min(420px, calc(100% - 32px)); border-radius: 22px;
-    background: color-mix(in srgb, var(--bg) 55%, transparent);
+    top: auto; right: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: var(--pl-x, 16px);
+    width: var(--pl-w, 360px); z-index: 10; overflow: visible; isolation: isolate;
+    display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "cv meta ctl";
+    gap: 10px; align-items: center; padding: 6px 8px 8px 6px; border-radius: 20px;
+    background: color-mix(in srgb, var(--bg) 45%, transparent);
+    transition: opacity .5s, transform .5s;
   }
-  .song.player::before {   /* portada desenfocada */
-    content: ''; position: absolute; inset: -30%; z-index: -2; background: var(--cv, none) center / cover, linear-gradient(135deg, var(--c1, #555), var(--c2, #555));
-    filter: blur(36px) saturate(1.5); opacity: .75; transform: scale(1.1);
-  }
-  .song.player::after { content: ''; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--bg) 52%, transparent); }
-  .song.player .cover { grid-area: cv; width: 52px; height: 52px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
-  .song.player .meta { grid-area: meta; align-self: center; gap: 1px; }
-  .song.player .title { font-size: 15px; letter-spacing: -.01em; }
-  .song.player .artist { font-size: 13px; }
-  .song.player .artist[data-paused="true"]::after { content: ' · en pausa'; }
-  .song.player .meta, .song.player .cover { transition: opacity .25s, filter .25s; }
-  .song.player.switching .meta, .song.player.switching .cover { opacity: .45; filter: blur(1px); }
-  .song .toast { grid-column: 1 / -1; font-size: 12px; line-height: 1.4; color: var(--fg); background: color-mix(in srgb, var(--fg) 10%, transparent); border-radius: 10px; padding: 7px 10px; }
-  .song .prog .bar.drag i { transition: none; }
+  body.idle .song.player { transform: translateY(12px); }
+  .song.player .pbg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; }
+  .song.player .pbg::before { content: ''; position: absolute; inset: -40%; background: var(--cv, none) center / cover, linear-gradient(135deg, var(--c1, #555), var(--c2, #555)); filter: blur(30px) saturate(1.5); opacity: .7; }
+  .song.player .pbg::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+  .song.player .cover { grid-area: cv; width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  .song.player .meta { grid-area: meta; gap: 0; min-width: 0; }
+  .song.player .title { font-size: 14px; letter-spacing: -.01em; }
+  .song.player .sub { display: flex; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
+  .song.player .sub .artist { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .song.player .sub .time { flex: none; font-variant-numeric: tabular-nums; opacity: .8; }
   .song.player > .close { display: none; }
-  .song .ctl { grid-area: ctl; display: flex; gap: 2px; align-items: center; }
-  .song .ctl button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50%; background: none; color: var(--fg); transition: transform .15s, background .2s; }
+  .song .ctl { grid-area: ctl; display: flex; gap: 0; align-items: center; }
+  .song .ctl button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: none; color: var(--fg); transition: transform .15s, background .2s; }
   .song .ctl button:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); filter: none; }
-  .song .ctl button:active { transform: scale(.9); }
-  .song .ctl button.main { width: 42px; height: 42px; background: var(--fg); color: var(--bg); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
+  .song .ctl button:active { transform: scale(.88); }
+  .song .ctl button.main { width: 38px; height: 38px; margin: 0 2px; background: var(--fg); color: var(--bg); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
   .song .ctl button.main:hover { background: var(--fg); transform: scale(1.06); }
-  .song .ctl button.dots { width: 30px; color: var(--muted); }
+  .song .ctl button.dots { width: 28px; color: var(--muted); }
   .song svg { width: 18px; height: 18px; fill: currentColor; }
-  .song .ctl .main svg { width: 20px; height: 20px; }
-  .song .prog { grid-area: prog; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 11px; color: var(--muted); }
-  .song .prog .bar { margin: 0; height: 3px; border-radius: 3px; position: relative; overflow: visible; background: color-mix(in srgb, var(--fg) 16%, transparent); transition: height .15s; }
+  .song .ctl .main svg { width: 18px; height: 18px; }
+  /* Progreso: una línea fina en el borde de abajo, con zona de toque generosa */
+  .song .prog { position: absolute; left: 14px; right: 14px; bottom: 3px; height: 3px; }
+  .song .prog .bar { margin: 0; height: 3px; border-radius: 3px; position: relative; overflow: visible; background: color-mix(in srgb, var(--fg) 14%, transparent); transition: height .15s, transform .15s; }
   .song .prog .bar i { display: block; height: 100%; border-radius: 3px; background: var(--fg); position: relative; }
-  .song .prog .bar i::after { content: ''; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: var(--fg); transform: scale(0); transition: transform .15s; }
+  .song .prog .bar i::after { content: ''; position: absolute; right: -5px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--fg); transform: scale(0); transition: transform .15s; }
   .song .prog .bar.seek { cursor: pointer; }
-  .song .prog .bar.seek:hover { height: 5px; }
-  .song .prog .bar.seek:hover i::after { transform: scale(1); }
-  .song .prog .bar.seek::before { content: ''; position: absolute; inset: -10px 0; }
-  .song .more { grid-area: more; display: none; flex-wrap: wrap; gap: 6px; }
+  .song .prog .bar.seek:hover, .song .prog .bar.drag { transform: scaleY(1.6); }
+  .song .prog .bar.seek:hover i::after, .song .prog .bar.drag i::after { transform: scale(1) scaleY(.625); }
+  .song .prog .bar.seek::before { content: ''; position: absolute; inset: -9px 0 -4px; }
+  /* Menú «⋯»: sale hacia arriba */
+  .song .more {
+    position: absolute; right: 0; bottom: calc(100% + 10px); z-index: 2; width: 260px;
+    display: none; flex-direction: column; align-items: stretch; gap: 4px; padding: 8px;
+    background: var(--pop-bg); border: 1px solid var(--glass-line); border-radius: 16px; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
+  }
   .song.open-more .more { display: flex; }
-  .song .more button, .song .more a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 10px; border-radius: 99px; background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); text-decoration: none; }
-  .song .more svg { width: 14px; height: 14px; }
-  .song .more button:hover, .song .more a:hover { background: color-mix(in srgb, var(--fg) 18%, transparent); filter: none; }
+  .song .more button, .song .more a { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 500; padding: 8px 10px; border-radius: 10px; background: none; color: var(--fg); text-decoration: none; text-align: left; }
+  .song .more button:hover, .song .more a:hover { background: var(--chip); filter: none; }
+  .song .more svg { width: 16px; height: 16px; flex: none; }
+  .song .vol { display: flex; align-items: center; gap: 10px; padding: 6px 10px 10px; border-bottom: 1px solid var(--glass-line); margin-bottom: 4px; color: var(--muted); }
+  .song .vol input { flex: 1; accent-color: var(--fg); }
+  .song .toast { position: absolute; left: 0; right: 0; bottom: calc(100% + 10px); font-size: 12px; line-height: 1.4; color: var(--fg); background: var(--pop-bg); border: 1px solid var(--glass-line); box-shadow: var(--shadow); border-radius: 12px; padding: 8px 12px; }
+  .song.player .artist[data-paused="true"]::after { content: ' · en pausa'; }
+  .song.player.switching .meta, .song.player.switching .cover { opacity: .45; filter: blur(1px); }
+  .song .prog .bar.drag i { transition: none; }
   /* Biblioteca de Spotify: panel lateral de cristal */
   .lib {
     position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
-    bottom: calc(var(--dock-h, 70px) + 28px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--stack-h, var(--dock-h, 70px)) + 28px + env(safe-area-inset-bottom, 0px));
     width: min(400px, calc(100% - 24px)); z-index: 6; display: flex; flex-direction: column; gap: 10px; padding: 12px;
     background:
       radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--c1, #888) 18%, transparent), transparent 70%),
@@ -291,7 +302,7 @@
   /* Canción en una esquina: discreta, siempre visible cuando la tarjeta no está */
   .corner {
     position: fixed; left: max(20px, env(safe-area-inset-left, 0px));
-    bottom: calc(var(--dock-h, 70px) + 34px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--stack-h, var(--dock-h, 70px)) + 34px + env(safe-area-inset-bottom, 0px));
     max-width: min(46vw, 560px); display: flex; gap: .8em; align-items: center; pointer-events: none;
     font-size: clamp(14px, 1.05vw, 48px);
     transition: opacity .6s, bottom .5s; text-shadow: 0 0 1em var(--bg);
@@ -312,7 +323,7 @@
   /* Letra: línea actual grande, anterior y siguiente atenuadas */
   .lyrics {
     position: fixed; left: 50%; transform: translateX(-50%);
-    bottom: calc(var(--dock-h, 70px) + 48px + env(safe-area-inset-bottom, 0px));
+    bottom: calc(var(--stack-h, var(--dock-h, 70px)) + 48px + env(safe-area-inset-bottom, 0px));
     width: min(92vw, 70ch); text-align: center; pointer-events: none;
     display: grid; gap: .35em; transition: bottom .5s;
   }
@@ -403,7 +414,6 @@
     .dock > .group { max-width: 100%; }
     .pop { position: fixed; left: 12px; right: 12px; bottom: calc(var(--dock-h, 70px) + 28px); transform: none; }
     .pop.grid #modes { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 60vh; overflow-y: auto; }
-    .song { left: 12px; right: 12px; width: auto; }
     body:has(.song:not([hidden])) .status { display: none; }
     .corner { max-width: calc(100% - 40px); }
   }
@@ -1637,6 +1647,7 @@ async function spPoll() {
   if (!r.ok) return 15000;
   const d = await r.json();
   sp.deviceId = d?.device?.id || null;
+  if (d?.device && d.device.volume_percent != null && !(performance.now() < (sp.volLock || 0))) sp.volume = d.device.volume_percent;
   spUpdate(d);
   if (fast) return 600;
   if (document.hidden) return 15000;
@@ -1732,6 +1743,7 @@ const ICON = {
   open: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14V4zM5 6h6v2H6v10h10v-5h2v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/></svg>',
   lib: '<svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 0 1 4.8 9.6l5.3 5.3-1.4 1.4-5.3-5.3A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>',
   dots: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+  vol: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>',
   power: '<svg viewBox="0 0 24 24"><path d="M11 3h2v9h-2zM7.05 6.05l1.41 1.41A6 6 0 1 0 15.54 7.46l1.41-1.41A8 8 0 1 1 7.05 6.05z"/></svg>',
 };
 function spRender() {
@@ -1750,24 +1762,28 @@ function spRender() {
     const ctl = src === 'spotify'
       ? `<button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button>`
       : src === 'file' && audioEl ? `<button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button>` : '';
+    const canVol = src === 'spotify' || (src === 'file' && audioEl);
     showSong(
+      `<div class="pbg"></div>` +
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
-      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist" data-paused="${!play}">${esc(artist)}</div></div>` +
+      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="sub"><span class="artist" data-paused="${!play}">${esc(artist)}</span>${sp.duration ? '<span class="time"><span id="spTimeA">0:00</span> · <span id="spTimeB"></span></span>' : ''}</div></div>` +
       `<div class="ctl">${ctl}<button class="dots" id="spMore" aria-label="Más opciones" aria-expanded="${!!sp.more}">${ICON.dots}</button></div>` +
-      `<div class="prog"><span class="time" id="spTimeA">0:00</span><div class="bar"><i id="spBar"></i></div><span class="time" id="spTimeB">${sp.duration ? fmt(sp.duration) : ''}</span></div>` +
+      `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
+        (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
         (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
         (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
-        `<button id="spHide">Ocultar</button><button id="spOut">${ICON.power}Desconectar</button>` +
+        `<button id="spOut">${ICON.power}Desconectar</button>` +
       `</div>`,
       true
     );
+    const vol = document.getElementById('spVol');
+    if (vol) vol.oninput = () => spSetVolume(+vol.value);
     songEl.classList.toggle('open-more', !!sp.more);
     if (typeof libLayout === 'function') requestAnimationFrame(libLayout);
     songEl.style.setProperty('--cv', cover ? `url("${cover.replace(/"/g, '%22')}")` : 'none');
     document.getElementById('spMore').onclick = e => { e.stopPropagation(); sp.more = !sp.more; songEl.classList.toggle('open-more', sp.more); e.currentTarget.setAttribute('aria-expanded', sp.more); libLayout(); };
-    document.getElementById('spHide').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   }
   songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   const out = document.getElementById('spOut');
@@ -1949,8 +1965,7 @@ function libClose() { libEl.hidden = true; }
 // El panel se abre debajo del reproductor, que sigue a la vista
 function libLayout() {
   if (libEl.hidden) return;
-  const r = songEl.hidden || !songEl.classList.contains('player') ? null : songEl.getBoundingClientRect();
-  libEl.style.top = r && r.height ? Math.round(r.bottom + 10) + 'px' : '';
+  libEl.style.top = '';   // el reproductor está abajo: el panel ocupa el lado derecho
 }
 addEventListener('resize', libLayout);
 document.getElementById('libClose').onclick = libClose;
@@ -2145,6 +2160,53 @@ libQ.oninput = () => {
   }, 350);
 };
 
+
+// ================= Volumen =================
+// Spotify: se manda con un pequeño retraso para no saturar mientras se arrastra el control.
+// Archivo: el volumen del propio audio. También con la rueda del ratón sobre el reproductor.
+let volTimer = 0;
+function spVolume() { return nowSource() === 'file' && audioEl ? audioEl.volume * 100 : (sp.volume ?? 70); }
+function spSetVolume(v) {
+  v = Math.max(0, Math.min(100, v));
+  if (nowSource() === 'file' && audioEl) { audioEl.volume = v / 100; return; }
+  sp.volume = v; sp.volLock = performance.now() + 3000;
+  clearTimeout(volTimer);
+  volTimer = setTimeout(() => {
+    if (lib.web && sp.deviceId && sp.deviceId === lib.webId) { lib.web.setVolume(v / 100).catch(() => {}); return; }
+    spApi('/me/player/volume?volume_percent=' + Math.round(v) + (sp.deviceId ? '&device_id=' + encodeURIComponent(sp.deviceId) : ''), { method: 'PUT' })
+      .catch(e => spToast(e.status === 403 ? 'Este dispositivo no deja cambiar el volumen desde aquí (los móviles a veces no lo permiten).' : spErrorText(e)));
+  }, 220);
+}
+songEl.addEventListener('wheel', e => {
+  if (!songEl.classList.contains('player') || !['spotify', 'file'].includes(nowSource())) return;
+  e.preventDefault();
+  const v = spVolume() - Math.sign(e.deltaY) * 5;
+  spSetVolume(v);
+  const r = document.getElementById('spVol'); if (r) r.value = Math.round(v);
+  spToast('Volumen ' + Math.round(Math.max(0, Math.min(100, v))) + ' %');
+}, { passive: false });
+
+// ================= Colocación del reproductor junto a la barra =================
+function layoutBottom() {
+  const dock = document.getElementById('dock'), show = !songEl.hidden && songEl.classList.contains('player');
+  const root = document.documentElement.style, dw = dock.offsetWidth, dh = dock.offsetHeight, gap = 10;
+  const pw = Math.min(380, innerWidth - 24);
+  if (!show) { root.setProperty('--bar-shift', '0px'); root.setProperty('--stack-h', dh + 'px'); return; }
+  if (innerWidth >= dw + pw + gap + 40) {   // al lado: el conjunto queda centrado
+    const shift = (pw + gap) / 2, left = innerWidth / 2 + shift - dw / 2 - gap - pw;
+    root.setProperty('--bar-shift', shift + 'px'); root.setProperty('--pl-x', left + 'px'); root.setProperty('--pl-w', pw + 'px');
+    root.setProperty('--stack-h', dh + 'px');
+    songEl.style.bottom = '';
+  } else {   // encima de la barra
+    root.setProperty('--bar-shift', '0px'); root.setProperty('--pl-x', (innerWidth - pw) / 2 + 'px'); root.setProperty('--pl-w', pw + 'px');
+    songEl.style.bottom = `calc(${dh + 20 + gap}px + env(safe-area-inset-bottom, 0px))`;
+    root.setProperty('--stack-h', (dh + songEl.offsetHeight + gap) + 'px');
+  }
+}
+addEventListener('resize', layoutBottom);
+addEventListener('pointerdown', e => { if (sp.more && !e.target.closest('#song')) { sp.more = false; songEl.classList.remove('open-more'); const m = document.getElementById('spMore'); if (m) m.setAttribute('aria-expanded', false); } });
+new ResizeObserver(layoutBottom).observe(document.getElementById('dock'));
+new MutationObserver(layoutBottom).observe(songEl, { attributes: true, attributeFilter: ['hidden', 'class'] });
 function openMusic() { document.getElementById('btnSpotify').click(); }
 document.getElementById('btnLib').onclick = e => { e.stopPropagation(); libOpen(); };
 document.getElementById('btnSpConnect').onclick = () => {
