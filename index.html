@@ -32,6 +32,7 @@
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
   body { transition: background-color .5s; }
   canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
@@ -40,8 +41,8 @@
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
     width: max-content; max-width: calc(100% - 32px);
-    display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; justify-content: center;
-    padding: 8px 10px;
+    display: flex; flex-wrap: wrap; gap: 8px 8px; align-items: center; justify-content: center;
+    padding: 7px 8px;
     background: var(--glass); border: 1px solid var(--glass-line); border-radius: 22px;
     box-shadow: var(--shadow);
     -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
@@ -51,12 +52,12 @@
   body.idle .dock { transform: translateX(-50%) translateY(12px); }
   body.idle { cursor: none; }
 
-  .group { display: flex; gap: 4px; align-items: center; }
+  .group { display: flex; gap: 3px; align-items: center; }
   .sep { width: 1px; height: 26px; background: var(--glass-line); }
 
   button {
-    font: inherit; font-size: 13.5px; font-weight: 500; color: var(--fg);
-    background: var(--chip); border: 0; border-radius: 12px; padding: 7px 10px;
+    font: inherit; font-size: 13px; font-weight: 500; color: var(--fg);
+    background: var(--chip); border: 0; border-radius: 11px; padding: 7px 9px;
     cursor: pointer; transition: background .2s, color .2s, transform .1s;
     display: inline-flex; align-items: center; gap: 6px;
   }
@@ -68,14 +69,14 @@
   button svg { width: 18px; height: 18px; display: block; }
 
   .swatch {
-    width: 26px; height: 26px; padding: 0; border-radius: 50%;
+    width: 24px; height: 24px; padding: 0; border-radius: 50%;
     box-shadow: inset 0 0 0 1px var(--glass-line);
   }
   .swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--fg); }
-  .custom { position: relative; width: 26px; height: 26px; }
+  .custom { position: relative; width: 24px; height: 24px; }
   .custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
   .custom .swatch {
-    pointer-events: none; width: 26px; height: 26px; display: block;
+    pointer-events: none; width: 24px; height: 24px; display: block;
     background: conic-gradient(#ff5e5e, #ffd25e, #5eff8f, #5ed8ff, #8f5eff, #ff5ec8, #ff5e5e);
   }
 
@@ -116,6 +117,57 @@
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
   .song .bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width .2s linear; }
 
+  /* Canción en una esquina: discreta, siempre visible cuando la tarjeta no está */
+  .corner {
+    position: fixed; left: max(20px, env(safe-area-inset-left, 0px));
+    bottom: calc(var(--dock-h, 70px) + 34px + env(safe-area-inset-bottom, 0px));
+    max-width: min(46vw, 520px); display: grid; gap: 2px; pointer-events: none;
+    transition: opacity .6s, bottom .5s; text-shadow: 0 0 1em var(--bg);
+  }
+  body.idle .corner { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
+  .corner .t { font-size: clamp(14px, 1.05vw, 48px); font-weight: 600; color: var(--fg); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .corner .a { font-size: clamp(12px, .85vw, 40px); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  body:not(.idle) .song:not([hidden]) ~ .corner { opacity: 0; }
+  body.idle .song { opacity: 0; pointer-events: none; }
+  .song { transition: opacity .5s; }
+
+  /* Letra: línea actual grande, anterior y siguiente atenuadas */
+  .lyrics {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(var(--dock-h, 70px) + 48px + env(safe-area-inset-bottom, 0px));
+    width: min(92vw, 70ch); text-align: center; pointer-events: none;
+    display: grid; gap: .35em; transition: bottom .5s;
+  }
+  body.idle .lyrics { bottom: calc(48px + env(safe-area-inset-bottom, 0px)); }
+  .lyrics p { margin: 0; text-wrap: balance; text-shadow: 0 0 .6em var(--bg), 0 0 1.4em var(--bg); }
+  .lyrics .cur { font-size: clamp(22px, 2.6vw, 120px); font-weight: 700; letter-spacing: -.02em; line-height: 1.2; color: var(--fg); }
+  .lyrics .prev, .lyrics .next { font-size: clamp(14px, 1.3vw, 60px); font-weight: 500; color: var(--muted); }
+  .lyrics .prev { opacity: .55; }
+  .lyrics .note { font-size: clamp(13px, 1vw, 40px); color: var(--muted); }
+  .lyrics .swap { animation: lyricIn .45s cubic-bezier(.2,.7,.2,1); }
+  @keyframes lyricIn { from { opacity: 0; transform: translateY(.5em); filter: blur(4px); } }
+  @media (prefers-reduced-motion: reduce) { .lyrics .swap { animation: none; } }
+
+  /* Modo Letra: lista completa, la línea actual grande y nítida, las demás pequeñas y desenfocadas */
+  .lyricsView {
+    position: fixed; inset: 0; overflow: hidden; pointer-events: none;
+    -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent);
+            mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent);
+  }
+  .lv-col {
+    position: absolute; left: 50%; top: 0; width: min(88vw, 26ch);
+    font-size: clamp(28px, 4.4vw, 220px); font-weight: 800; letter-spacing: -.025em; line-height: 1.15;
+    transform: translateX(-50%); transition: transform .8s cubic-bezier(.22,.8,.24,1);
+  }
+  .lv-col p {
+    margin: 0 0 .55em; color: var(--fg); transform-origin: left center; text-wrap: balance;
+    transition: opacity .6s, filter .6s, transform .6s cubic-bezier(.22,.8,.24,1);
+  }
+  .lv-col.plain p { opacity: .8; }
+  .lv-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 24px;
+    font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .lv-col, .lv-col p { transition: none; } }
+
   @media (max-width: 560px) { .sep { display: none; } .dock { gap: 8px; } }
 </style>
 </head>
@@ -130,6 +182,9 @@
 </div>
 
 <div class="song" id="song" hidden aria-live="polite"></div>
+<div class="lyricsView" id="lyricsView" hidden><div class="lv-col" id="lvCol"></div><div class="lv-msg" id="lvMsg"></div></div>
+<div class="corner" id="corner" hidden><span class="t"></span><span class="a"></span></div>
+<div class="lyrics" id="lyrics" hidden><p class="prev"></p><p class="cur"></p><p class="next"></p></div>
 
 <div class="status" id="status"><span class="dot"></span><span id="statusText">Sin audio · vista de demostración</span></div>
 
@@ -142,7 +197,8 @@
     <input id="file" type="file" accept="audio/*" hidden>
   </div>
   <span class="sep"></span>
-  <button id="btnId">¿Qué suena?</button>
+  <button id="btnId" hidden>¿Qué suena?</button>
+  <button id="btnLyrics" type="button" title="Letra sobre las animaciones">Subtítulos</button>
   <span class="sep"></span>
   <div class="group" role="group" aria-label="Animación" id="modes">
     <button data-mode="bars">Barras</button>
@@ -151,6 +207,7 @@
     <button data-mode="bokeh">Focos</button>
     <button data-mode="aura">Aura</button>
     <button data-mode="infinity">Infinito</button>
+    <button data-mode="lyrics">Letra</button>
   </div>
   <span class="sep"></span>
   <div class="group" role="group" aria-label="Color" id="swatches"></div>
@@ -329,6 +386,8 @@ function applyAll(rebuild = true) {
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 function setMode(m) {
   state.mode = m; store.set('mode', m);
+  if (m === 'lyrics' && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
+  intro.hidden = m === 'lyrics' || !!analyser;
   ictx.clearRect(0, 0, W, H); blobs.length = 0; lights.length = 0;
   applyAll(false);
 }
@@ -347,7 +406,7 @@ canvas.addEventListener('dblclick', toggleFull);
 let idleTimer;
 function wake() {
   document.body.classList.remove('idle'); clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (analyser) document.body.classList.add('idle'); }, 3000);
+  idleTimer = setTimeout(() => { if (analyser || spConnected()) document.body.classList.add('idle'); }, 3000);
 }
 addEventListener('pointermove', wake); addEventListener('pointerdown', wake);
 addEventListener('keydown', e => {
@@ -360,10 +419,12 @@ addEventListener('keydown', e => {
   if (e.key === '4') setMode('bokeh');
   if (e.key === '5') setMode('aura');
   if (e.key === '6') setMode('infinity');
+  if (e.key === '7') setMode('lyrics');
   if (e.key === 'd' || e.key === 'D') document.getElementById('btnTheme').click();
 });
 
 applyAll();
+if (state.mode === 'lyrics') intro.hidden = true;
 
 // ================= Audio =================
 let audioCtx, analyser, freqData, source, currentStream, audioEl, recDest;
@@ -683,6 +744,7 @@ function drawInk(dt) {
 
 // ================= Reconocer la canción =================
 const songEl = document.getElementById('song');
+document.getElementById('btnId').hidden = !RECOGNIZE_URL;   // sin servicio de reconocimiento, Spotify hace este papel
 const CLIP_SECONDS = 8;
 let identifying = false;
 
@@ -765,7 +827,8 @@ async function spLogin() {
 function spLogout(message) {
   clearTimeout(sp.timer);
   Object.assign(sp, { token: null, refresh: null, expires: 0, item: null });
-  spSave(); spButton(); setCover('');
+  loadLyrics(null);
+  spSave(); spButton(); setCover(''); spCorner();
   if (message) showSong(message); else songEl.hidden = true;
 }
 async function spToken(params) {
@@ -832,11 +895,21 @@ function spUpdate(d) {
   if (changed) {
     sp.dismissed = false;
     setCover(item ? (item.album?.images?.[0]?.url || item.images?.[0]?.url || '') : '');
+    loadLyrics(item);
   }
   spRender();
 }
 const fmt = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+const cornerEl = document.getElementById('corner');
+function spCorner() {
+  const it = spConnected() && sp.item;
+  cornerEl.hidden = !it;
+  if (!it) return;
+  cornerEl.querySelector('.t').textContent = it.name;
+  cornerEl.querySelector('.a').textContent = it.artists ? it.artists.map(a => a.name).join(', ') : (it.show?.name || '');
+}
 function spRender() {
+  spCorner();
   if (!spConnected() || sp.dismissed) return;
   if (!sp.item) {
     showSong('<div class="meta"><div class="title">Spotify conectado</div><div class="note">Ahora mismo no suena nada en tu Spotify.</div><div class="row"><button id="spOut">Desconectar</button></div></div>');
@@ -867,11 +940,38 @@ function spTick() {   // avanza la barra entre consultas, sin preguntar a Spotif
 setInterval(spTick, 500);
 
 // Colores de la portada: los tonos más vivos y abundantes del disco
+// Portada de fondo: muy desenfocada, tenue y con un vaivén lento; se funde al cambiar
+let bgCur = null, bgPrev = null, bgFade = 1;
+function makeCoverBg(img) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  if (CAN_BLUR) x.filter = 'blur(14px)';
+  x.drawImage(img, -24, -24, 304, 304);   // un poco más grande para que el desenfoque no deje bordes
+  return c;
+}
+function setBackdrop(canvasOrNull) { bgPrev = bgCur; bgCur = canvasOrNull; bgFade = 0; }
+function drawBackdrop(dt) {
+  if (!bgCur && !bgPrev) return;
+  bgFade = Math.min(1, bgFade + dt / 1.6);
+  const night = state.theme === 'dark', base = night ? 0.2 : 0.16;
+  const S = Math.max(W, H) * (1.18 + 0.04 * Math.sin(time * 0.05));
+  const ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
+  ctx.save();
+  for (const [img, a] of [[bgPrev, 1 - bgFade], [bgCur, bgFade]]) {
+    if (!img || a <= 0) continue;
+    ctx.globalAlpha = base * a;
+    ctx.drawImage(img, (W - S) / 2 + ox, (H - S) / 2 + oy, S, S);
+  }
+  ctx.restore();
+  if (bgFade >= 1) bgPrev = null;
+}
+
 function setCover(url) {
   coverUrl = url; coverColors = null;
-  if (!url) { if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
+  if (!url) { setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
   const img = new Image(); img.crossOrigin = 'anonymous';
   img.onload = () => {
+    if (coverUrl === url) setBackdrop(makeCoverBg(img));
     try {
       const c = document.createElement('canvas'); c.width = c.height = 40;
       const x = c.getContext('2d'); x.drawImage(img, 0, 0, 40, 40);
@@ -901,6 +1001,133 @@ btnSpotify.onclick = () => {
 document.addEventListener('visibilitychange', () => { if (!document.hidden && spConnected()) spLoop(); });
 spButton();
 spHandleRedirect().then(() => { spButton(); spLoop(); });
+
+// ================= Letra sincronizada (LRCLIB, gratis y abierto) =================
+const lyricsEl = document.getElementById('lyrics'), btnLyrics = document.getElementById('btnLyrics');
+const [lyPrev, lyCur, lyNext] = lyricsEl.querySelectorAll('p');
+const lyricsCache = new Map();
+let lyricsOn = store.get('lyrics', true), lyrics = null, lyricIndex = -2, lyricsFor = null;
+
+function parseLRC(text) {
+  const out = [];
+  for (const line of text.split(/\r?\n/)) {
+    const stamps = [...line.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)];
+    const words = line.replace(/\[[^\]]*\]/g, '').trim();
+    for (const m of stamps) out.push({ t: (+m[1] * 60 + +m[2]) * 1000, text: words });
+  }
+  return out.sort((a, b) => a.t - b.t);
+}
+async function fetchLyrics(item) {
+  const artist = item.artists?.[0]?.name || '', title = item.name || '', dur = Math.round((item.duration_ms || 0) / 1000);
+  const q = new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur });
+  let r = await fetch('https://lrclib.net/api/get?' + q);
+  if (r.ok) return r.json();
+  // Si no hay coincidencia exacta, se busca y se elige la de duración más parecida
+  r = await fetch('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist }));
+  if (!r.ok) return null;
+  const list = (await r.json()).filter(x => x.syncedLyrics || x.plainLyrics);
+  list.sort((a, b) => (!!b.syncedLyrics - !!a.syncedLyrics) || Math.abs(a.duration - dur) - Math.abs(b.duration - dur));
+  return list.find(x => Math.abs(x.duration - dur) <= 5) || null;
+}
+async function loadLyrics(item) {
+  lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null; lvBuilt = null;
+  if (!item || !item.artists) return;   // sin canción, o es un podcast
+  if (!lyricsOn && state.mode !== 'lyrics') return;
+  if (lyricsCache.has(item.id)) { lyrics = lyricsCache.get(item.id); return; }
+  lyrics = { loading: true };
+  let data = null;
+  try { data = await fetchLyrics(item); } catch (e) { data = undefined; }
+  if (lyricsFor !== item.id) return;   // ya cambió la canción
+  lyrics = data === undefined ? { error: true }
+    : !data ? { none: true }
+    : data.instrumental ? { instrumental: true }
+    : data.syncedLyrics ? { lines: parseLRC(data.syncedLyrics) }
+    : { plain: data.plainLyrics.split(/\r?\n/).filter(l => l.trim()) };
+  if (!lyrics.error) lyricsCache.set(item.id, lyrics);
+  lyricIndex = -2;
+}
+function lyricsMessage() {
+  if (!spConnected()) return 'Conecta Spotify para ver aquí la letra de lo que escuchas';
+  if (!sp.item) return 'Pon algo en tu Spotify';
+  if (!sp.item.artists) return 'Los podcasts no tienen letra';
+  if (!lyrics || lyrics.loading) return 'Buscando la letra…';
+  if (lyrics.error) return 'No se pudo conectar con el servicio de letras';
+  if (lyrics.none) return 'No encontré la letra de esta canción';
+  if (lyrics.instrumental) return '♪ Instrumental';
+  return '';
+}
+function lyricPos() { return sp.progress + (sp.playing ? performance.now() - sp.at : 0) + 250; }   // un pelín adelantada se lee mejor
+
+// --- Subtítulos sobre las animaciones ---
+function showLyricNote(text) {
+  lyPrev.textContent = ''; lyNext.textContent = '';
+  lyCur.className = 'note'; lyCur.textContent = text;
+  lyricsEl.hidden = !text;
+}
+function subtitlesTick() {
+  if (!lyricsOn || state.mode === 'lyrics' || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
+  const msg = lyricsMessage() || (lyrics.plain ? 'Esta canción tiene letra, pero sin tiempos para seguirla' : '');
+  if (msg) { if (lyCur.textContent !== msg) showLyricNote(msg); lyricIndex = -3; return; }
+  const L = lyrics.lines, pos = lyricPos();
+  let i = -1; while (i + 1 < L.length && L[i + 1].t <= pos) i++;
+  if (i === lyricIndex) return;
+  lyricIndex = i;
+  const txt = k => (k >= 0 && k < L.length) ? (L[k].text || '♪') : '';
+  lyPrev.textContent = txt(i - 1);
+  lyCur.textContent = i < 0 ? '♪' : txt(i);
+  lyNext.textContent = txt(i + 1);
+  lyCur.className = 'cur'; void lyCur.offsetWidth; lyCur.className = 'cur swap';   // reinicia la animación
+  lyPrev.className = 'prev'; lyNext.className = 'next';
+  lyricsEl.hidden = false;
+}
+
+// --- Modo Letra a pantalla completa ---
+const lvEl = document.getElementById('lyricsView'), lvCol = document.getElementById('lvCol'), lvMsg = document.getElementById('lvMsg');
+let lvBuilt = null, lvIndex = -2;
+function lvBuild() {
+  const lines = lyrics.lines ? lyrics.lines.map(l => l.text || '♪') : lyrics.plain;
+  lvCol.className = 'lv-col' + (lyrics.plain ? ' plain' : '');
+  lvCol.innerHTML = '';
+  for (const t of lines) { const p = document.createElement('p'); p.textContent = t; lvCol.appendChild(p); }
+  lvBuilt = lyrics; lvIndex = -2;
+}
+function lvTick() {
+  if (state.mode !== 'lyrics') { lvEl.hidden = true; return; }
+  lvEl.hidden = false;
+  const msg = lyricsMessage();
+  lvMsg.textContent = msg; lvCol.hidden = !!msg;
+  if (msg) return;
+  if (lvBuilt !== lyrics) lvBuild();
+  const ps = lvCol.children, n = ps.length;
+  let i;
+  if (lyrics.lines) { const L = lyrics.lines, pos = lyricPos(); i = -1; while (i + 1 < L.length && L[i + 1].t <= pos) i++; i = Math.max(0, i); }
+  else i = Math.min(n - 1, Math.floor(lyricPos() / Math.max(1, sp.duration) * n));   // sin tiempos: avanza según la canción
+  if (i === lvIndex) return;
+  lvIndex = i;
+  for (let k = 0; k < n; k++) {
+    const d = Math.abs(k - i), p = ps[k];
+    if (d > 9) { p.style.opacity = 0; continue; }
+    p.style.opacity = d === 0 ? 1 : Math.max(0.14, 0.5 - d * 0.06);
+    p.style.filter = d === 0 ? 'none' : `blur(${Math.min(0.11, 0.025 + d * 0.022).toFixed(3)}em)`;
+    p.style.transform = d === 0 ? 'scale(1)' : 'scale(.8)';
+  }
+  const cur = ps[i];
+  if (cur) lvCol.style.transform = `translateX(-50%) translateY(${(innerHeight * 0.42 - cur.offsetTop - cur.offsetHeight / 2).toFixed(1)}px)`;
+}
+addEventListener('resize', () => { lvIndex = -2; });
+
+function lyricsTick() { subtitlesTick(); lvTick(); }
+setInterval(lyricsTick, 100);
+
+function lyricsButton() { btnLyrics.setAttribute('aria-pressed', lyricsOn); }
+btnLyrics.onclick = () => {
+  if (!spConnected()) { showSong('<div class="meta"><div class="title">Conecta Spotify</div><div class="note">La letra sigue la canción que suena en tu Spotify. Pulsa el botón Spotify para conectarlo.</div></div>'); return; }
+  lyricsOn = !lyricsOn; store.set('lyrics', lyricsOn); lyricsButton();
+  if (lyricsOn && !lyrics) loadLyrics(sp.item);
+};
+lyricsButton();
+// La letra se coloca siempre por encima de la barra de controles, mida lo que mida
+new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', document.getElementById('dock').offsetHeight + 'px')).observe(document.getElementById('dock'));
 
 // ================= Bucle principal =================
 // ================= Escena: Focos (luces desenfocadas a lo lejos) =================
@@ -1089,7 +1316,11 @@ function drawInfinity(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 
-const scenes = { bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+function drawLyricsScene(dt) {
+  drawBackdrop(dt);            // la portada se ve un poco más en este modo
+  drawAura(dt);
+}
+const scenes = { lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
@@ -1128,6 +1359,7 @@ function render(now) {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   ctx.fillStyle = state.theme === 'dark' ? '#000000' : '#ffffff';
   ctx.fillRect(0, 0, W, H);
+  drawBackdrop(dt);
   (scenes[state.mode] || drawBars)(dt);
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = state.theme === 'dark' ? 0.022 : 0.03;
