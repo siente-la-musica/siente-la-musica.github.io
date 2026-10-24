@@ -17,6 +17,7 @@
     --chip-on: #14141a;
     --chip-on-fg: #ffffff;
     --shadow: 0 10px 40px rgba(20, 20, 40, .12);
+    --pop-bg: rgba(255, 255, 255, .95);
     --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   }
   :root[data-theme="dark"] {
@@ -29,6 +30,7 @@
     --chip-on: #f2f2f7;
     --chip-on-fg: #000000;
     --shadow: 0 10px 40px rgba(0, 0, 0, .5);
+    --pop-bg: rgba(24, 24, 30, .94);
     color-scheme: dark;
   }
   * { box-sizing: border-box; }
@@ -40,7 +42,7 @@
   .dock {
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-    width: max-content; max-width: calc(100% - 32px);
+    width: max-content; max-width: calc(100% - 32px); z-index: 10;
     display: flex; flex-wrap: wrap; gap: 8px 8px; align-items: center; justify-content: center;
     padding: 7px 8px;
     background: var(--glass); border: 1px solid var(--glass-line); border-radius: 22px;
@@ -57,11 +59,32 @@
   .pop {
     position: absolute; bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); z-index: 5;
     display: flex; gap: 4px; padding: 8px; white-space: nowrap;
-    background: var(--glass); border: 1px solid var(--glass-line); border-radius: 16px; box-shadow: var(--shadow);
+    background: var(--pop-bg); border: 1px solid var(--glass-line); border-radius: 16px; box-shadow: var(--shadow);
     -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
   }
   #popColor .group { gap: 8px; padding: 2px 4px; }
   #btnColor { width: 26px; height: 26px; margin: 0 2px; }
+  .pop.grid #modes { display: grid; grid-template-columns: repeat(3, 108px); gap: 4px; }
+  .pop.grid #modes button { justify-content: center; }
+  .pop.col { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; min-width: 260px; white-space: normal; }
+  .pop-title { font-weight: 600; font-size: 14px; }
+  .pop-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
+  .pop-note:empty { display: none; }
+  .seg { display: flex; gap: 3px; flex-wrap: wrap; }
+  .seg button { flex: 1; justify-content: center; }
+  .row-set { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+  .row-set small { display: block; color: var(--muted); font-size: 11px; }
+  .row-set:has(.seg) { flex-direction: column; align-items: stretch; }
+  .row-set input[type=range] { width: 120px; accent-color: var(--fg); }
+  .row-set input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--fg); }
+  button.primary { background: var(--chip-on); color: var(--chip-on-fg); justify-content: center; padding: 9px 12px; }
+  .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; display: inline-block; }
+  body.recording #btnRec { background: #ff3b30; color: #fff; }
+  body.recording :is(.lyricsView, .lyrics, .artistView, .lv-meta, .corner, .song, .status, .intro) { display: none !important; }
+  body.recording canvas { box-shadow: 0 0 0 1px var(--glass-line), 0 30px 80px rgba(0,0,0,.4); }
+  .countdown { position: fixed; inset: 0; display: grid; place-items: center; font-size: clamp(80px, 18vmin, 400px); font-weight: 800; color: var(--fg); text-shadow: 0 0 .3em var(--bg); pointer-events: none; z-index: 20; }
+  body.recording #btnRec .rec-dot { background: #fff; animation: recBlink 1s steps(2) infinite; }
+  @keyframes recBlink { 50% { opacity: .2; } }
   .sep { width: 1px; height: 26px; background: var(--glass-line); }
 
   button {
@@ -138,7 +161,7 @@
   }
   .corner .tx { display: grid; gap: 2px; min-width: 0; }
   .av { width: 2.6em; height: 2.6em; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--glass-line), 0 6px 24px rgba(0,0,0,.25); }
-  body.mode-info .corner { display: none; }
+  body.mode-info .corner, body.mode-strobe .corner, body.mode-strobe .status { display: none; }
   body.mode-info .status { display: none; }
   body.mode-info .song:not(.force) { display: none; }
   body.idle .corner { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
@@ -240,9 +263,8 @@
     .sep { display: none; }
     .dock { width: calc(100% - 24px); gap: 6px; padding: 8px; border-radius: 20px; }
     .dock > .group { max-width: 100%; }
-    #modes { order: -1; width: 100%; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
-    #modes::-webkit-scrollbar { display: none; }
-    #modes button { flex: none; }
+    .pop { position: fixed; left: 12px; right: 12px; bottom: calc(var(--dock-h, 70px) + 28px); transform: none; }
+    .pop.grid #modes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .song { left: 12px; right: 12px; width: auto; }
     body:has(.song:not([hidden])) .status { display: none; }
     .corner { max-width: calc(100% - 40px); }
@@ -260,6 +282,7 @@
 </div>
 
 <div class="song" id="song" hidden aria-live="polite"></div>
+<div class="countdown" id="countdown" hidden></div>
 <div class="lyricsView" id="lyricsView" hidden>
   <div class="lv-stage" id="lvStage"><span class="lv-cur" id="lvCur"></span><div class="lv-next" id="lvNext"></div></div>
   <div class="lv-msg" id="lvMsg"></div>
@@ -296,22 +319,54 @@
   <button id="btnId" hidden>¿Qué suena?</button>
   <button id="btnLyrics" type="button" title="Letra sobre las animaciones">Subtítulos</button>
   <span class="sep"></span>
-  <div class="group" role="group" aria-label="Animación" id="modes">
-    <button data-mode="bars">Barras</button>
-    <button data-mode="mountains">Montañas</button>
-    <button data-mode="ink">Tinta</button>
-    <button data-mode="flowers">Flores</button>
-    <button data-mode="bokeh">Focos</button>
-    <button data-mode="clouds">Nubes</button>
-    <button data-mode="aura">Aura</button>
-    <button data-mode="infinity">Infinito</button>
-    <button data-mode="lyrics">Letra</button>
-    <button data-mode="artist">Artista</button>
+  <div class="pop-wrap">
+    <button id="btnMode" aria-haspopup="true" aria-expanded="false" title="Elegir animación">Barras</button>
+    <div class="pop grid" id="popMode" hidden>
+      <div class="group" role="group" aria-label="Animación" id="modes">
+        <button data-mode="bars">Barras</button>
+        <button data-mode="mountains">Montañas</button>
+        <button data-mode="ink">Tinta</button>
+        <button data-mode="flowers">Flores</button>
+        <button data-mode="bokeh">Focos</button>
+        <button data-mode="clouds">Nubes</button>
+        <button data-mode="rain">Lluvia</button>
+        <button data-mode="light">Luz</button>
+        <button data-mode="aura">Aura</button>
+        <button data-mode="infinity">Infinito</button>
+        <button data-mode="strobe">Estrobo</button>
+        <button data-mode="lyrics">Letra</button>
+        <button data-mode="artist">Artista</button>
+      </div>
+    </div>
+  </div>
+  <button id="btnAuto" type="button" title="Cambia de animación sola en los momentos fuertes de la canción (A)">Auto</button>
+  <div class="pop-wrap">
+    <button id="btnRec" aria-haspopup="true" aria-expanded="false" title="Grabar un clip"><span class="rec-dot"></span>Grabar</button>
+    <div class="pop col" id="popRec" hidden>
+      <div class="pop-title">Grabar un clip</div>
+      <div class="seg" role="group" aria-label="Formato"><button data-fmt="v" aria-pressed="true">Vertical · TikTok</button><button data-fmt="h">Horizontal</button></div>
+      <div class="seg" role="group" aria-label="Duración"><button data-dur="15" aria-pressed="true">15 s</button><button data-dur="30">30 s</button><button data-dur="60">60 s</button><button data-dur="0">Libre</button></div>
+      <p class="pop-note" id="recNote"></p>
+      <button class="primary" id="btnRecStart">Empezar a grabar</button>
+    </div>
   </div>
   <span class="sep"></span>
   <div class="pop-wrap">
     <button class="swatch" id="btnColor" aria-haspopup="true" aria-expanded="false" aria-label="Colores" title="Colores"></button>
     <div class="pop" id="popColor" hidden><div class="group" role="group" aria-label="Color" id="swatches"></div></div>
+  </div>
+  <div class="pop-wrap">
+    <button class="icon" id="btnSettings" aria-haspopup="true" aria-expanded="false" aria-label="Ajustes" title="Ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+    </button>
+    <div class="pop col" id="popSettings" hidden>
+      <div class="pop-title">Ajustes</div>
+      <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
+      <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
+      <div class="row-set"><span>Color del estrobo</span>
+        <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
+      </div>
+    </div>
   </div>
   <div class="group">
     <button class="icon" id="btnTheme" aria-label="Cambiar a modo día o noche" title="Día / Noche"></button>
@@ -349,11 +404,12 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
+  sens: store.get('sens', 1), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+let canvas = document.getElementById('c');
+let ctx = canvas.getContext('2d');
 const layer = document.createElement('canvas');      // escena nítida
 const lctx = layer.getContext('2d');
 const inkLayer = document.createElement('canvas');   // tinta persistente
@@ -366,7 +422,7 @@ const CAN_BLUR = typeof g1c.filter === 'string';   // Chrome, Edge, Firefox, Saf
 // Se dibuja a la resolución real de la pantalla (hasta 8K). Si el equipo no llega
 // a ~40 fps, renderScale baja un poco y vuelve a subir cuando hay margen.
 const MAX_PIXELS = 7680 * 4320;
-let W, H, DPR, MIN, renderScale = 1;
+let W, H, DPR, MIN, renderScale = 1, recSize = null, recording = false;
 function sizeTo(c, w, h) { c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); }
 function resize() {
   const iw = innerWidth, ih = innerHeight, oldW = W, oldH = H;
@@ -376,9 +432,18 @@ function resize() {
     inkCopy = document.createElement('canvas'); inkCopy.width = oldW; inkCopy.height = oldH;
     inkCopy.getContext('2d').drawImage(inkLayer, 0, 0);
   }
-  DPR = (window.devicePixelRatio || 1) * renderScale;
-  if (iw * ih * DPR * DPR > MAX_PIXELS) DPR = Math.sqrt(MAX_PIXELS / (iw * ih));
-  W = Math.round(iw * DPR); H = Math.round(ih * DPR); MIN = Math.min(W, H);
+  if (recSize) {
+    // Grabando: resolución fija del clip, mostrada centrada y entera en la ventana
+    W = recSize.w; H = recSize.h; MIN = Math.min(W, H);
+    const sc = Math.min(iw / W, ih / H), cw = W * sc, chh = H * sc;
+    Object.assign(canvas.style, { width: cw + 'px', height: chh + 'px', left: (iw - cw) / 2 + 'px', top: (ih - chh) / 2 + 'px' });
+    DPR = W / cw;
+  } else {
+    Object.assign(canvas.style, { width: '', height: '', left: '', top: '' });
+    DPR = (window.devicePixelRatio || 1) * renderScale;
+    if (iw * ih * DPR * DPR > MAX_PIXELS) DPR = Math.sqrt(MAX_PIXELS / (iw * ih));
+    W = Math.round(iw * DPR); H = Math.round(ih * DPR); MIN = Math.min(W, H);
+  }
   for (const c of [canvas, layer, inkLayer]) sizeTo(c, W, H);
   // Lo que va desenfocado no necesita más resolución: se calcula en un búfer
   // limitado y se amplía con suavizado, sin diferencia visible y mucho más rápido.
@@ -391,6 +456,7 @@ function resize() {
     if (typeof lights !== 'undefined') for (const l of lights) { l.x *= kx; l.y *= ky; l.r *= km; l.vx *= kx; l.vy *= ky; }
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
+    if (typeof drops !== 'undefined') { drops.length = 0; splashes.length = 0; }
   }
 }
 addEventListener('resize', resize); resize();
@@ -427,6 +493,8 @@ function paletteColors() {
       return hsl(h, Math.max(s, 55), night ? Math.min(74, Math.max(l, 58)) : Math.min(52, Math.max(l, 36)));
     });
   }
+  // Colores de la portada aún sin cargar: grises neutros, para que los nuevos aparezcan desde ahí
+  if (state.palette === 'cover') return night ? ['#8c8f9c', '#a3a6b3', '#7c7f8c'] : ['#6e717d', '#858894', '#5f626e'];
   const p = PALETTES.find(p => p.id === state.palette) || PALETTES[0];
   return night ? p.night : p.day;
 }
@@ -442,8 +510,33 @@ function makeSprite(hex) {
   c.fillStyle = gr; c.fillRect(0, 0, 256, 256);
   return s;
 }
+// Los colores nunca saltan: se funden hacia su objetivo. Al final de una canción con los
+// colores de la portada, se apagan hacia un gris suave y luego toman los de la nueva portada.
+let targetRGB = null, spriteRGB = null, spriteAt = 0;
+const NEUTRAL = { dark: [140, 143, 156], light: [110, 113, 125] };
 function refreshColors() {
-  COLORS = paletteColors(); RGB = COLORS.map(hexToRgb); SPRITES = COLORS.map(makeSprite); BOKEH = COLORS.map(makeBokeh);
+  targetRGB = paletteColors().map(hexToRgb);
+  if (!RGB.length) { RGB = targetRGB.map(c => c.slice()); applyRGB(true); }
+}
+function applyRGB(sprites) {
+  COLORS = RGB.map(c => rgbToHex(c[0], c[1], c[2]));
+  if (sprites) { SPRITES = COLORS.map(makeSprite); BOKEH = COLORS.map(makeBokeh); spriteRGB = RGB.map(c => c.slice()); spriteAt = performance.now(); }
+}
+function colorTick(dt) {
+  if (!targetRGB) return;
+  let goal = targetRGB, fade = 0;
+  if (state.palette === 'cover' && typeof sp !== 'undefined' && sp.item && sp.playing && sp.duration) {
+    const left = sp.duration - (sp.progress + performance.now() - sp.at);
+    fade = Math.max(0, Math.min(1, 1 - left / 5000));   // últimos 5 s
+  }
+  if (fade > 0) { const n = NEUTRAL[state.theme === 'dark' ? 'dark' : 'light']; goal = goal.map(c => c.map((v, k) => v + (n[k] - v) * fade * 0.85)); }
+  const k = 1 - Math.pow(0.12, dt);   // ≈ 1,5 s para fundirse
+  let moved = 0;
+  RGB.forEach((c, i) => c.forEach((v, j) => { const d = goal[i][j] - v; c[j] = v + d * k; moved = Math.max(moved, Math.abs(d)); }));
+  if (moved < 0.3) return;
+  // Las texturas de la tinta y los focos se rehacen como mucho 5 veces por segundo
+  const far = spriteRGB && RGB.some((c, i) => c.some((v, j) => Math.abs(v - spriteRGB[i][j]) > 5));
+  applyRGB(far && performance.now() - spriteAt > 200);
 }
 function mix(t) { // color a lo largo de la paleta, t en [0,1]
   const x = Math.max(0, Math.min(1, t)) * (RGB.length - 1), i = Math.min(RGB.length - 2, Math.floor(x)), f = x - i;
@@ -494,6 +587,10 @@ function applyAll(rebuild = true) {
   if (rebuild) buildSwatches();
   swatchBox.querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed', s.dataset.palette === state.palette));
   document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode));
+  const cur = document.querySelector(`#modes button[data-mode="${state.mode}"]`);
+  document.getElementById('btnMode').textContent = (cur ? cur.textContent : 'Animación') + ' ▾';
+  document.getElementById('btnAuto').setAttribute('aria-pressed', state.auto);
+  document.querySelectorAll('[data-strobe]').forEach(b => b.setAttribute('aria-pressed', b.dataset.strobe === state.strobe));
   refreshColors();
   const bc = document.getElementById('btnColor');
   if (state.palette === 'cover' && coverUrl) { bc.style.background = `center / cover url("${coverUrl}")`; }
@@ -509,18 +606,36 @@ function bindPop(btnId, popId) {
 }
 addEventListener('click', closePops);
 bindPop('btnSource', 'popSource'); bindPop('btnColor', 'popColor');
+bindPop('btnMode', 'popMode'); bindPop('btnSettings', 'popSettings'); bindPop('btnRec', 'popRec');
+// Ajustes
+const sensEl = document.getElementById('sens'), noFlashEl = document.getElementById('noFlash');
+sensEl.value = state.sens; noFlashEl.checked = state.noFlash;
+sensEl.oninput = () => { state.sens = +sensEl.value; store.set('sens', state.sens); };
+noFlashEl.onchange = () => { state.noFlash = noFlashEl.checked; store.set('noFlash', state.noFlash); };
+document.querySelectorAll('[data-strobe]').forEach(b => b.onclick = () => { state.strobe = b.dataset.strobe; store.set('strobe', state.strobe); applyAll(false); });
+document.getElementById('btnAuto').onclick = () => { state.auto = !state.auto; store.set('auto', state.auto); autoT = 0; applyAll(false); };
 function setSource(label) {
   const b = document.getElementById('btnSource');
   b.textContent = label ? label + ' ✓' : 'Conectar audio'; b.setAttribute('aria-pressed', !!label);
 }
 
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+const transC = document.createElement('canvas'), transX = transC.getContext('2d');
+let transA = 0, autoT = 0;
 function setMode(m) {
+  if (m !== state.mode && W) {   // guarda el último fotograma para fundirlo con la nueva animación
+    transC.width = W; transC.height = H; transX.drawImage(canvas, 0, 0); transA = 1;
+  }
   state.mode = m; store.set('mode', m);
   document.body.classList.toggle('mode-lyrics', m === 'lyrics');
+  document.body.classList.toggle('mode-strobe', m === 'strobe');
   document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist');
   if (m === 'artist' && sp.item) arLoad(sp.item);
-  if (m === 'lyrics' && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
+  if ((m === 'lyrics' || m === 'strobe') && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
+  if (m === 'strobe' && !state.noFlash && !store.get('strobeWarned', false)) {
+    store.set('strobeWarned', true);
+    showSong('<div class="meta"><div class="title">Este modo tiene destellos rápidos</div><div class="note">Si te molestan, activa «Sin destellos» en Ajustes.</div></div>');
+  }
   refreshChrome();
   songEl.classList.remove('force');
   ictx.clearRect(0, 0, W, H); blobs.length = 0; lights.length = 0;
@@ -541,7 +656,10 @@ canvas.addEventListener('dblclick', toggleFull);
 let idleTimer;
 function wake() {
   document.body.classList.remove('idle'); clearTimeout(idleTimer);
-  idleTimer = setTimeout(() => { if (analyser || spConnected()) document.body.classList.add('idle'); }, 3000);
+  idleTimer = setTimeout(() => {
+    if (document.querySelector('.pop:not([hidden])')) { wake(); return; }   // con un menú abierto no se oculta la barra
+    if (analyser || spConnected()) document.body.classList.add('idle');
+  }, 3000);
 }
 addEventListener('pointermove', wake); addEventListener('pointerdown', wake);
 addEventListener('keydown', e => {
@@ -552,10 +670,12 @@ addEventListener('keydown', e => {
   const k = '1234567890'.indexOf(e.key);
   if (k >= 0 && order[k]) setMode(order[k]);
   if (e.key === 'Escape') closePops();
+  if (e.key === 'a' || e.key === 'A') document.getElementById('btnAuto').click();
   if (e.key === 'd' || e.key === 'D') document.getElementById('btnTheme').click();
 });
 
 applyAll();
+if (state.mode === 'strobe') document.body.classList.add('mode-strobe');
 if (state.mode === 'lyrics' || state.mode === 'artist') { intro.hidden = true; document.body.classList.add('mode-info'); if (state.mode === 'lyrics') document.body.classList.add('mode-lyrics'); }
 
 // ================= Audio =================
@@ -661,7 +781,8 @@ function analyse(dt) {
       raw[i] = v; if (v > mx) mx = v;
     }
     peak = Math.max(peak * Math.pow(0.6, dt), mx, 0.25);  // ganancia automática
-    for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak);
+    const gain = Math.pow(state.sens, 0.8);   // sensibilidad elegida por la persona
+    for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak * gain);
   } else {
     // Demo: espectro sintético con un "bombo" cada medio segundo
     const kick = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2)), 12);
@@ -678,13 +799,21 @@ function analyse(dt) {
   energy = bass * 0.5 + mid * 0.3 + high * 0.2;
   // Golpes de este fotograma (todas las animaciones leen los mismos) y un "latido" que decae rápido
   hits.bass = onset('bass', bass, dt); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
-  if (hits.bass) { beat = Math.max(beat, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
-  beat *= Math.pow(0.004, dt);
+  if (hits.bass) { beatRaw = Math.max(beatRaw, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
+  // Drop: tras un tramo flojo de graves, vuelven con fuerza
+  eShort += (bass - eShort) * (1 - Math.pow(0.02, dt));
+  eLong += (bass - eLong) * (1 - Math.pow(0.85, dt));
+  dropHit = false;
+  if (eShort < eLong * 0.6) quietT += dt; else quietT = Math.max(0, quietT - dt * 0.4);
+  if (quietT > 1.4 && eShort > eLong * 1.1 && hits.bass) { dropHit = true; quietT = 0; beatRaw = 1; lastDrop = performance.now(); }
+  beatRaw *= Math.pow(0.004, dt);
+  // Sin destellos: el latido sube despacio y con menos fuerza
+  beat = state.noFlash ? beat + (beatRaw * 0.45 - beat) * (1 - Math.pow(0.002, dt)) : beatRaw;
   beatSoft += (beat - beatSoft) * (1 - Math.pow(beat > beatSoft ? 0.0005 : 0.08, dt));
 }
 // Muelle amortiguado: lleva cada valor hacia su objetivo con inercia, sin tirones ni temblores
-function springTo(x, v, target, dt, k = 140) {
-  const d = 2 * Math.sqrt(k) * 0.9;
+function springTo(x, v, target, dt, k = 140, zeta = 0.9) {
+  const d = 2 * Math.sqrt(k) * zeta;   // zeta < 1: rebota un poco, como algo vivo
   for (let i = 0; i < x.length; i++) { v[i] += ((target[i] - x[i]) * k - v[i] * d) * dt; x[i] += v[i] * dt; }
 }
 // Suaviza un perfil entre vecinos para que no haya picos sueltos
@@ -694,14 +823,14 @@ function smoothProfile(a, passes = 2) {
   return a;
 }
 const hits = { bass: 0, mid: 0, high: 0 };
-let beat = 0, beatSoft = 0, lastBassHit = 0;
+let beat = 0, beatRaw = 0, beatSoft = 0, lastBassHit = 0, eShort = 0, eLong = 0, quietT = 0, dropHit = false, lastDrop = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
 function onset(name, value, dt) {
   const f = flux[name]; const d = Math.max(0, value - f.prev); f.prev = value;
   f.avg += (d - f.avg) * Math.min(1, dt * 2);
   f.cd -= dt;
-  if (d > f.avg * 2.4 + 0.035 && f.cd <= 0) { f.cd = name === 'bass' ? 0.18 : name === 'mid' ? 0.12 : 0.08; return Math.min(1, d * 4); }
+  if (d > (f.avg * 2.4 + 0.035) / Math.sqrt(state.sens) && f.cd <= 0) { f.cd = name === 'bass' ? 0.18 : name === 'mid' ? 0.12 : 0.08; return Math.min(1, d * 4); }
   return 0;
 }
 
@@ -752,10 +881,11 @@ function drawBars(dt) {
   for (let i = 0; i < n; i++) {
     // Graves a la izquierda y agudos a la derecha, en escala logarítmica
     const f = i / (n - 1) * (BANDS - 1), a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
-    barT[i] = spec[a] * (1 - (f - a)) + spec[b] * (f - a);
+    const sv = spec[a] * (1 - (f - a)) + spec[b] * (f - a), rv = raw[a] * (1 - (f - a)) + raw[b] * (f - a);
+    barT[i] = rv * 0.6 + sv * 0.4;
+    if (hits.bass) barV[i] += hits.bass * 5 * Math.max(0, 1 - i / (n * 0.45));   // el golpe sacude los graves
   }
-  smoothProfile(barT, 1);
-  springTo(barX, barV, barT, dt, 160);
+  springTo(barX, barV, barT, dt, 420, 0.5);
   lctx.clearRect(0, 0, W, H);
   const slot = W * 0.8 / n, bw = slot * 0.56, x0 = W * 0.1 + (slot - bw) / 2;
   const base = H * 0.62, maxH = H * 0.42;
@@ -784,16 +914,17 @@ function drawMountains(dt) {
   lctx.clearRect(0, 0, W, H);
   const P = ridges[0].length;
   const cfg = [ // de atrás hacia delante
-    { hMax: 0.62, base: 0.28, alpha: 0.35, color: 0.85, k: 40,  shift: 0.07 },   // las del fondo, más perezosas
-    { hMax: 0.50, base: 0.22, alpha: 0.5,  color: 0.6,  k: 70,  shift: -0.05 },
-    { hMax: 0.40, base: 0.16, alpha: 0.7,  color: 0.35, k: 110, shift: 0.03 },
-    { hMax: 0.30, base: 0.10, alpha: 0.95, color: 0.1,  k: 160, shift: 0 },
+    { hMax: 0.62, base: 0.28, alpha: 0.35, color: 0.85, k: 110, shift: 0.07 },   // las del fondo, algo más perezosas
+    { hMax: 0.50, base: 0.22, alpha: 0.5,  color: 0.6,  k: 190, shift: -0.05 },
+    { hMax: 0.40, base: 0.16, alpha: 0.7,  color: 0.35, k: 290, shift: 0.03 },
+    { hMax: 0.30, base: 0.10, alpha: 0.95, color: 0.1,  k: 420, shift: 0 },
   ];
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [];
     for (let p = 0; p < P; p++) ridgeT[p] = specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1);
-    smoothProfile(ridgeT, 3);
-    springTo(r, ridgeV[li], ridgeT, dt, L.k);
+    smoothProfile(ridgeT, 1);
+    if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (1.5 + li) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
+    springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.55);
     for (let p = 0; p < P; p++) {
       const x = p / (P - 1);
       const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.02;
@@ -1164,6 +1295,20 @@ setInterval(spTick, 500);
 // Colores de la portada: los tonos más vivos y abundantes del disco
 // Portada de fondo: muy desenfocada, tenue y con un vaivén lento; se funde al cambiar
 let bgCur = null, bgPrev = null, bgFade = 1;
+// Pide la imagen con permiso para dibujarla en el lienzo grabable; si el servidor no lo da,
+// la carga igual para verla, pero marcada para no dibujarla mientras se graba.
+const imgCache = new Map();
+function loadImageClean(url) {
+  if (imgCache.has(url)) return imgCache.get(url);
+  const pr = new Promise(res => {
+    const a = new Image(); a.crossOrigin = 'anonymous';
+    a.onload = () => res({ img: a, clean: true });
+    a.onerror = () => { const b = new Image(); b.onload = () => res({ img: b, clean: false }); b.onerror = () => res({ img: null, clean: false }); b.src = url; };
+    a.src = url;
+  });
+  imgCache.set(url, pr); return pr;
+}
+let coverClean = null;
 function makeCoverBg(img) {
   const c = document.createElement('canvas'); c.width = c.height = 640;
   const x = c.getContext('2d');
@@ -1183,6 +1328,7 @@ function drawBackdrop(dt, boost = 1) {
   for (const [img, a] of [[bgPrev, 1 - bgFade], [bgCur, bgFade]]) {
     if (!img || a <= 0) continue;
     ctx.globalAlpha = base * a;
+    if (recording && !img.clean) continue;
     ctx.drawImage(img, (W - S) / 2 + ox, (H - S) / 2 + oy, S, S);
   }
   ctx.restore();
@@ -1193,9 +1339,11 @@ function setCover(url) {
   coverUrl = url; coverColors = null;
   if (!url) { setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
   // Fondo: imagen normal, siempre se puede dibujar
-  const show = new Image();
-  show.onload = () => { if (coverUrl === url) setBackdrop(makeCoverBg(show)); };
-  show.src = url;
+  loadImageClean(url).then(({ img, clean }) => {
+    if (coverUrl !== url) return;
+    const bg = makeCoverBg(img); bg.clean = clean; setBackdrop(bg);
+    coverClean = clean ? img : null;
+  });
   // Colores: hace falta leer los píxeles; si el servidor no lo permite, se ignora
   const img = new Image(); img.crossOrigin = 'anonymous';
   img.onload = () => {
@@ -1259,7 +1407,7 @@ async function fetchLyrics(item) {
 async function loadLyrics(item) {
   lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null;
   if (!item || !item.artists) return;   // sin canción, o es un podcast
-  if (!lyricsOn && state.mode !== 'lyrics') return;
+  if (!lyricsOn && state.mode !== 'lyrics' && state.mode !== 'strobe') return;
   if (lyricsCache.has(item.id)) { lyrics = lyricsCache.get(item.id); return; }
   lyrics = { loading: true };
   let data = null;
@@ -1292,7 +1440,7 @@ function showLyricNote(text) {
   lyricsEl.hidden = !text;
 }
 function subtitlesTick() {
-  if (!lyricsOn || state.mode === 'lyrics' || state.mode === 'artist' || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
+  if (!lyricsOn || state.mode === 'lyrics' || state.mode === 'artist' || state.mode === 'strobe' || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
   const msg = lyricsMessage() || (lyrics.plain ? 'Esta canción tiene letra, pero sin tiempos para seguirla' : '');
   if (msg) { if (lyCur.textContent !== msg) showLyricNote(msg); lyricIndex = -3; return; }
   const L = lyrics.lines, pos = lyricPos();
@@ -1394,6 +1542,171 @@ lyricsButton();
 // La letra se coloca siempre por encima de la barra de controles, mida lo que mida
 new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', document.getElementById('dock').offsetHeight + 'px')).observe(document.getElementById('dock'));
 
+// ================= Grabar clips =================
+// Se graba el propio lienzo a 1080×1920 (o 1920×1080) con el sonido que entra a la página.
+// Como la letra y los datos normales son HTML, mientras se graba se dibujan en el lienzo.
+let recFmt = 'v', recDur = 15, recorder = null, recChunks = [], recT0 = 0, recTimer = null, recMime = '';
+const recNote = document.getElementById('recNote'), btnRec = document.getElementById('btnRec');
+function recNotes() {
+  const n = [];
+  if (!analyser) n.push('Sin audio conectado: el clip saldrá sin sonido. Conecta «Audio del PC» para grabarlo con la música.');
+  if (!spConnected()) n.push('Conecta Spotify para que el clip lleve la canción y la letra.');
+  recNote.textContent = n.join(' ');
+}
+btnRec.addEventListener('click', e => {
+  if (recording) { e.stopImmediatePropagation(); stopRecording(); return; }
+  recNotes();
+}, true);
+document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { recFmt = b.dataset.fmt; document.querySelectorAll('[data-fmt]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => { recDur = +b.dataset.dur; document.querySelectorAll('[data-dur]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+document.getElementById('btnRecStart').onclick = async () => {
+  closePops();
+  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div><div class="note">Prueba con Chrome o Edge en un ordenador.</div></div>'); return; }
+  const cd = document.getElementById('countdown');
+  for (const n of [3, 2, 1]) { cd.textContent = n; cd.hidden = false; await new Promise(r => setTimeout(r, 800)); }
+  cd.hidden = true;
+  startRecording();
+};
+function freshCanvas() {   // un lienzo nuevo, sin imágenes de otros sitios, para poder grabarlo
+  const c = document.createElement('canvas'); c.id = 'c';
+  canvas.replaceWith(c); canvas = c; ctx = c.getContext('2d');
+  canvas.addEventListener('dblclick', toggleFull);
+  canvas.addEventListener('contextrestored', () => { resize(); refreshColors(); });
+}
+function startRecording() {
+  recording = true; document.body.classList.add('recording'); document.body.classList.remove('idle');
+  recSize = recFmt === 'v' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+  freshCanvas(); resize();
+  blobs.length = 0; lights.length = 0; ictx.clearRect(0, 0, W, H);
+  const stream = canvas.captureStream(30);
+  if (analyser && recDest) recDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  recMime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find(t => MediaRecorder.isTypeSupported(t)) || '';
+  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 12e6, audioBitsPerSecond: 192e3 }); }
+  catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
+  recChunks = [];
+  recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
+  recorder.onstop = finishRecording;
+  recorder.start(500);
+  recT0 = performance.now();
+  recTimer = setInterval(() => {
+    const t = (performance.now() - recT0) / 1000;
+    btnRec.innerHTML = `<span class="rec-dot"></span>${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')} · Detener`;
+    if (recDur && t >= recDur) stopRecording();
+  }, 250);
+}
+function stopRecording() { if (recorder && recorder.state !== 'inactive') recorder.stop(); clearInterval(recTimer); }
+function finishRecording() {
+  recording = false; recSize = null; document.body.classList.remove('recording');
+  btnRec.innerHTML = '<span class="rec-dot"></span>Grabar';
+  resize(); blobs.length = 0; lights.length = 0;
+  const type = (recMime || 'video/webm').split(';')[0], ext = type.includes('mp4') ? 'mp4' : 'webm';
+  const blob = new Blob(recChunks, { type });
+  const url = URL.createObjectURL(blob);
+  const name = 'siente-la-musica' + (sp.item ? '-' + sp.item.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '') + '.' + ext;
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  showSong(`<div class="meta"><div class="title">Clip guardado</div><div class="note">Se descargó «${esc(name)}» (${(blob.size / 1048576).toFixed(1)} MB).${ext === 'webm' ? ' TikTok acepta este formato; si tu editor no, conviértelo a MP4.' : ''}</div><div class="row"><a href="${url}" download="${esc(name)}">Descargar otra vez</a></div></div>`);
+}
+
+// Texto que se dibuja en el lienzo solo mientras se graba
+function wrapWords(words, maxW) {
+  const lines = []; let cur = [], w = 0;
+  const space = ctx.measureText(' ').width;
+  for (const word of words) {
+    const ww = ctx.measureText(word).width;
+    if (cur.length && w + space + ww > maxW) { lines.push(cur); cur = [word]; w = ww; }
+    else { w += (cur.length ? space : 0) + ww; cur.push(word); }
+  }
+  if (cur.length) lines.push(cur);
+  return lines;
+}
+function drawWordLines(words, lit, size, cx, cy, maxW, weight = 800) {
+  ctx.font = `${weight} ${size}px -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif`;
+  const lines = wrapWords(words, maxW), lh = size * 1.12, space = ctx.measureText(' ').width;
+  let k = 0;
+  lines.forEach((ln, li) => {
+    const lw = ln.reduce((a, w, i) => a + ctx.measureText(w).width + (i ? space : 0), 0);
+    let x = cx - lw / 2; const y = cy - (lines.length - 1) * lh / 2 + li * lh;
+    for (const w of ln) {
+      const on = lit === undefined || k < lit;
+      ctx.fillStyle = on ? (lit === undefined ? textFg() : COLORS[Math.min(2, Math.floor(k / Math.max(1, words.length) * 3))]) : textFg(0.35);
+      ctx.fillText(w, x, y); x += ctx.measureText(w).width + space; k++;
+    }
+  });
+  return lines.length * lh;
+}
+function textFg(a = 1) { return state.theme === 'dark' ? `rgba(255,255,255,${a})` : `rgba(20,20,26,${a})`; }
+function drawRecOverlay() {
+  if (!recording || state.mode === 'strobe') return;
+  const u = MIN / 1080, vertical = H > W;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)'; ctx.shadowBlur = 24 * u;
+  const it = spConnected() && sp.item;
+  // Canción arriba a la izquierda (fuera de la zona de botones de TikTok)
+  if (it && state.mode !== 'artist') {
+    const x0 = W * 0.07, y0 = H * (vertical ? 0.11 : 0.1), s_ = 120 * u;
+    let tx = x0;
+    if (coverClean) {
+      ctx.save(); ctx.beginPath(); ctx.roundRect(x0, y0 - s_ / 2, s_, s_, 16 * u); ctx.clip();
+      ctx.drawImage(coverClean, x0, y0 - s_ / 2, s_, s_); ctx.restore(); tx = x0 + s_ + 28 * u;
+    }
+    ctx.fillStyle = textFg(); ctx.font = `700 ${44 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText(it.name.length > 34 ? it.name.slice(0, 33) + '…' : it.name, tx, y0 - 22 * u);
+    ctx.fillStyle = textFg(0.7); ctx.font = `500 ${34 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText((it.artists || []).map(a => a.name).join(', '), tx, y0 + 26 * u);
+  }
+  ctx.textAlign = 'left';
+  const ly = currentLyric();
+  if (state.mode === 'lyrics' && it) {
+    if (ly) drawWordLines(ly.words, ly.shown, (vertical ? 92 : 104) * u, W / 2, H * 0.5, W * 0.84);
+    else drawWordLines([lyricsMessage() || '♪'], undefined, 56 * u, W / 2, H * 0.5, W * 0.84, 600);
+  } else if (state.mode === 'artist' && it && arCenter) {
+    const a = it.artists[0];
+    ctx.textAlign = 'center';
+    ctx.fillStyle = textFg(0.6); ctx.font = `600 ${28 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText('ESTÁS ESCUCHANDO A', W / 2, arCenter.cy + arCenter.R * 1.55);
+    ctx.textAlign = 'left';
+    drawWordLines(a.name.split(/\s+/), undefined, 104 * u, W / 2, arCenter.cy + arCenter.R * 1.55 + 110 * u, W * 0.86);
+    const f = arFacts[arFactIdx];
+    if (f) { ctx.globalAlpha = 0.85; drawWordLines(f.text.split(/\s+/), undefined, 38 * u, W / 2, H * (vertical ? 0.72 : 0.8), W * 0.78, 500); ctx.globalAlpha = 1; }
+    // Foto del artista dentro del aura
+    const img = artistClean.get(a.id);
+    if (img) {
+      ctx.save(); ctx.shadowBlur = 0; ctx.beginPath(); ctx.arc(arCenter.cx, arCenter.cy, arCenter.R, 0, Math.PI * 2); ctx.clip();
+      const S = arCenter.R * 2 * (1 + bass * 0.015 + beatSoft * 0.03);
+      ctx.drawImage(img, arCenter.cx - S / 2, arCenter.cy - S / 2, S, S); ctx.restore();
+    } else if (!artistClean.has(a.id)) {
+      artistClean.set(a.id, null);
+      const url = artistImageOf(it); if (url) loadImageClean(url).then(r => { if (r.clean) artistClean.set(a.id, r.img); });
+    }
+  } else if (lyricsOn && ly) {
+    // Subtítulos en el tercio inferior, por encima de la zona de texto de TikTok
+    drawWordLines(ly.words, ly.shown, (vertical ? 64 : 58) * u, W / 2, H * (vertical ? 0.68 : 0.82), W * 0.8);
+  }
+  // Firma discreta
+  ctx.textAlign = 'center'; ctx.shadowBlur = 0;
+  ctx.fillStyle = textFg(0.45); ctx.font = `600 ${24 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+  ctx.fillText('siente-la-musica.github.io', W / 2, H * (vertical ? 0.055 : 0.94));
+  ctx.restore();
+}
+const artistClean = new Map();
+
+// ================= Director automático =================
+// Cambia de animación en los drops, o en un golpe fuerte cuando lleva un rato en la misma.
+function autoDirector(dt) {
+  if (!state.auto || recording) return;
+  autoT += dt;
+  if (!(dropHit || (autoT > 40 && hits.bass > 0.5))) return;
+  const pool = ['bars', 'mountains', 'ink', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
+  if (!state.noFlash) pool.push('strobe');
+  if (spConnected() && sp.item) pool.push('lyrics', 'artist');
+  const options = pool.filter(m => m !== state.mode);
+  setMode(options[Math.floor(Math.random() * options.length)]);
+  autoT = 0;
+}
+
 // ================= Bucle principal =================
 // ================= Escena: Focos (luces desenfocadas a lo lejos) =================
 const lights = [];
@@ -1481,7 +1794,7 @@ function drawAura(dt) {
     else if (d < W + H) { x = W; y = d - W; nx = 1; ny = 0; }
     else if (d < 2 * W + H) { x = W - (d - W - H); y = H; nx = 0; ny = 1; }
     else { x = 0; y = H - (d - 2 * W - H); nx = -1; ny = 0; }
-    const r = MIN * b.size * (0.7 + L * 0.85 + beat * 0.18);
+    const r = MIN * b.size * (0.6 + L * 1.05 + beat * 0.25);
     x += nx * r * 0.18; y += ny * r * 0.18;
     const col = night ? RGB[b.c] : RGB[b.c].map(c => 255 - (255 - c) * 0.9);
     glowSpot(x, y, r, col, Math.min(1, (night ? 0.25 + L * 0.8 : 0.18 + L * 0.65) + beat * 0.3));
@@ -1712,13 +2025,19 @@ function arTick() {
   if (arFactIdx < 0 || now - arFactAt > 12000 || (now - arFactAt > 7000 && lastBassHit > arFactAt + 7000)) arShowNext();
 }
 const arWaves = [];
-let arRing = null, arRingV = null, arRingT = null;
+let arRing = null, arRingV = null, arRingT = null, arCenter = null;
 function drawArtistScene(dt) {
   const night = state.theme === 'dark';
   ambient();
-  if (arPhoto.hidden || arEl.hidden) return;
-  const rect = arPhoto.getBoundingClientRect(), k = W / innerWidth;
-  const cx = (rect.left + rect.width / 2) * k, cy = (rect.top + rect.height / 2) * k, R = rect.width / 2 * k;
+  if (!recording && (arPhoto.hidden || arEl.hidden)) return;
+  if (recording && !(spConnected() && sp.item)) return;
+  let cx, cy, R;
+  if (recording) { cx = W / 2; cy = H * (W < H ? 0.34 : 0.42); R = MIN * (W < H ? 0.24 : 0.2); }
+  else {
+    const rect = arPhoto.getBoundingClientRect(), k = W / innerWidth;
+    cx = (rect.left + rect.width / 2) * k; cy = (rect.top + rect.height / 2) * k; R = rect.width / 2 * k;
+  }
+  arCenter = { cx, cy, R };
   if (hits.bass) arWaves.push({ r: R, a: 0.5 + hits.bass * 0.5 });
   lctx.clearRect(0, 0, W, H);
   lctx.lineCap = 'round'; lctx.lineJoin = 'round';
@@ -1726,8 +2045,9 @@ function drawArtistScene(dt) {
   const N = 160, gap = R * 0.07;
   if (!arRing || arRing.length !== N) { arRing = new Float32Array(N); arRingV = new Float32Array(N); arRingT = new Float32Array(N); }
   for (let i = 0; i < N; i++) arRingT[i] = specAt(i / N);
-  smoothProfile(arRingT, 4);
-  springTo(arRing, arRingV, arRingT, dt, 90);
+  smoothProfile(arRingT, 2);
+  if (hits.bass) for (let i = 0; i < N; i++) arRingV[i] += hits.bass * 4;
+  springTo(arRing, arRingV, arRingT, dt, 320, 0.5);
   const cg = lctx.createConicGradient(time * 0.15, cx, cy);
   COLORS.concat(COLORS[0]).forEach((c, i, a) => cg.addColorStop(i / (a.length - 1), c));
   lctx.strokeStyle = cg;
@@ -1737,7 +2057,7 @@ function drawArtistScene(dt) {
     lctx.beginPath();
     for (let i = 0; i <= N; i++) {
       const a = i / N * Math.PI * 2 - Math.PI / 2, v = Math.max(0, arRing[i % N]);
-      const rr = R + gap + R * 0.02 * amp + v * R * 0.16 * amp + Math.sin(a * 3 + time * 0.8) * R * 0.008 * amp;
+      const rr = R + gap + R * 0.02 * amp + v * R * 0.28 * amp + Math.sin(a * 3 + time * 0.8) * R * 0.008 * amp;
       i ? lctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : lctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
     }
     lctx.closePath(); lctx.stroke();
@@ -1823,7 +2143,7 @@ function buildCloud(cl) {
 }
 function drawClouds(dt) {
   const night = state.theme === 'dark';
-  const key = COLORS.join() + MIN;
+  const key = RGB.map(c => c.map(v => Math.round(v / 24)).join('.')).join('|') + MIN;
   if (cloudKey !== key) { cloudKey = key; cloudSprites = CLOUDS.map(buildCloud); }
   // Cielo: un leve tono de la paleta arriba
   const sky = ctx.createLinearGradient(0, 0, 0, H), c = mix(0.5);
@@ -1840,7 +2160,7 @@ function drawClouds(dt) {
       if (cl.layer !== layer) return;
       const sp_ = cloudSprites[i];
       const v = avg(spec, cl.band[0], cl.band[1]);
-      cl.level += (v - cl.level) * (1 - Math.pow(v > cl.level ? 0.0002 : 0.03, dt));
+      cl.level += (v - cl.level) * (1 - Math.pow(v > cl.level ? 0.00001 : 0.01, dt));
       cl.flash *= Math.pow(0.03, dt);
       cl.phase += dt * cl.speed;
       const span = W + sp_.w * 2;
@@ -1849,11 +2169,11 @@ function drawClouds(dt) {
       const depth = [0.55, 0.8, 1][layer];
       // La lámpara se enciende con su banda y destella con los golpes
       lctx.globalCompositeOperation = 'source-over';
-      lctx.globalAlpha = Math.min(1, depth * (night ? 0.3 + cl.level * 0.7 + cl.flash * 0.35 : 0.55 + cl.level * 0.45));
+      lctx.globalAlpha = Math.min(1, depth * (night ? 0.22 + cl.level * 0.85 + cl.flash * 0.4 : 0.45 + cl.level * 0.55));
       lctx.drawImage(sp_.img, x, y, sp_.w, sp_.h);
       if (night) {
         lctx.globalCompositeOperation = 'lighter';
-        lctx.globalAlpha = Math.min(1, depth * (cl.level * 0.35 + cl.flash * 0.55));
+        lctx.globalAlpha = Math.min(1, depth * (cl.level * 0.5 + cl.flash * (state.noFlash ? 0.15 : 0.7)));
         lctx.drawImage(sp_.img, x, y, sp_.w, sp_.h);
       }
     });
@@ -1861,6 +2181,182 @@ function drawClouds(dt) {
   lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
   bloom(layer, night ? 0.85 + beatSoft * 0.3 : 0.4);
   ctx.drawImage(layer, 0, 0);
+}
+
+// ================= Escena: Luz =================
+// Una luz suave en el centro, en tres capas: el halo sigue a los graves, la luz media a los
+// medios y el núcleo a los agudos. No se mueve de sitio: crece, se encoge y respira.
+const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
+function drawLight(dt) {
+  const night = state.theme === 'dark';
+  lightT[0] = bass; lightT[1] = mid; lightT[2] = high;
+  if (hits.bass) lightV[0] += hits.bass * 3;
+  springTo(lightLv, lightV, lightT, dt, 220, 0.6);
+  const [Lb, Lm, Lh] = [...lightLv].map(v => Math.max(0, v));
+  const drift = 0.5 + 0.5 * Math.sin(time * 0.05);
+  ctx.save();
+  ctx.globalCompositeOperation = night ? 'lighter' : 'multiply';
+  const tint = c => night ? c : c.map(x => 255 - (255 - x) * 0.85);
+  glowSpot(W / 2, H / 2, MIN * (0.45 + Lb * 0.75 + beat * 0.15), tint(mix(drift)), night ? 0.28 + Lb * 0.5 : 0.22 + Lb * 0.4);
+  glowSpot(W / 2, H / 2, MIN * (0.22 + Lm * 0.4), tint(mix(1 - drift)), night ? 0.3 + Lm * 0.55 : 0.2 + Lm * 0.4);
+  if (night) glowSpot(W / 2, H / 2, MIN * (0.07 + Lh * 0.16 + beat * 0.03), mix(drift).map(x => x + (255 - x) * 0.7), 0.5 + Lh * 0.5);
+  ctx.restore();
+}
+
+// ================= Escena: Lluvia =================
+// Gotas con profundidad que caen y salpican; unos focos se mueven entre la lluvia y la
+// iluminan por zonas, como una linterna de noche. Cada foco se enciende con su banda.
+const drops = [], splashes = [];
+let dropSprites = null, dropKey = '';
+// Gota: cola que se desvanece y una cabeza redonda y brillante con un leve halo
+function makeDrop(col) {
+  const c = document.createElement('canvas'); c.width = 24; c.height = 96;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 84);
+  g.addColorStop(0, rgba(col, 0)); g.addColorStop(0.7, rgba(col, 0.35)); g.addColorStop(1, rgba(col, 0.9));
+  x.fillStyle = g; x.beginPath(); x.moveTo(11, 0); x.lineTo(13, 0); x.lineTo(15.5, 80); x.lineTo(8.5, 80); x.closePath(); x.fill();
+  const h = x.createRadialGradient(12, 82, 0, 12, 82, 11);
+  h.addColorStop(0, rgba(col.map(v => v + (255 - v) * 0.6), 1)); h.addColorStop(0.35, rgba(col, 0.8)); h.addColorStop(1, rgba(col, 0));
+  x.fillStyle = h; x.beginPath(); x.arc(12, 82, 11, 0, Math.PI * 2); x.fill();
+  return c;
+}
+const rainLights = [{ band: 'bass', c: 0, sx: 0.13, ph: 0 }, { band: 'mid', c: 1, sx: 0.09, ph: 2.1 }, { band: 'high', c: 2, sx: 0.17, ph: 4.2 }];
+const rainLv = new Float32Array(3), rainLvV = new Float32Array(3), rainLvT = new Float32Array(3);
+function newDrop(top) {
+  const z = 0.25 + Math.random() * 0.75;
+  return { x: Math.random() * W * 1.1 - W * 0.05, y: top ? -Math.random() * H * 0.2 : Math.random() * H, z, len: (14 + z * 26) * DPR, floor: H * (0.8 + z * 0.18) };
+}
+function drawRain(dt) {
+  const night = state.theme === 'dark';
+  const want = Math.round(Math.min(1400, 520 * W * H / (1920 * 1080 * DPR * DPR) * (0.6 + energy * 0.9)));
+  while (drops.length < want) drops.push(newDrop(drops.length > 0));
+  if (drops.length > want + 50) drops.length = want;
+  rainLvT[0] = bass; rainLvT[1] = mid; rainLvT[2] = high;
+  if (hits.bass) rainLvV[0] += hits.bass * 4;
+  if (hits.mid) rainLvV[1] += hits.mid * 3;
+  if (hits.high) rainLvV[2] += hits.high * 3;
+  springTo(rainLv, rainLvV, rainLvT, dt, 260, 0.55);
+  // Focos que pasean despacio
+  const L = rainLights.map((l, i) => ({
+    x: W * (0.5 + 0.38 * Math.sin(time * l.sx + l.ph)), y: H * (0.42 + 0.12 * Math.sin(time * l.sx * 1.3 + l.ph)),
+    r: MIN * (0.28 + Math.max(0, rainLv[i]) * 0.25), I: 0.12 + Math.max(0, rainLv[i]) * 1.1, c: RGB[l.c]
+  }));
+  lctx.clearRect(0, 0, W, H);
+  // Haz de cada foco en el aire húmedo
+  lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (const l of L) {
+    const g = lctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 1.6);
+    g.addColorStop(0, rgba(l.c, Math.min(0.4, (night ? 0.08 : 0.06) * l.I))); g.addColorStop(1, rgba(l.c, 0));
+    lctx.fillStyle = g; lctx.fillRect(l.x - l.r * 1.6, l.y - l.r * 1.6, l.r * 3.2, l.r * 3.2);
+    // Reflejo en el suelo mojado
+    const fy = H * 0.92, rg = lctx.createRadialGradient(l.x, fy, 0, l.x, fy, l.r);
+    rg.addColorStop(0, rgba(l.c, Math.min(0.35, 0.07 * l.I))); rg.addColorStop(1, rgba(l.c, 0));
+    lctx.save(); lctx.translate(l.x, fy); lctx.scale(1.8, 0.25); lctx.translate(-l.x, -fy);
+    lctx.fillStyle = rg; lctx.fillRect(l.x - l.r, fy - l.r, l.r * 2, l.r * 2); lctx.restore();
+  }
+  const wind = (mid - 0.3) * 0.25 + Math.sin(time * 0.2) * 0.08;
+  const speedK = 1 + energy * 0.6;
+  const base = night ? [200, 210, 230] : [70, 80, 100];
+  const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
+  if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c))]; }
+  for (const d of drops) {
+    d.y += (650 + d.z * 900) * DPR * speedK * dt; d.x += wind * (650 + d.z * 900) * DPR * dt;
+    if (d.y > d.floor) {
+      if (Math.random() < 0.35) splashes.push({ x: d.x, y: d.floor, z: d.z, t: 0 });
+      Object.assign(d, newDrop(true));
+      continue;
+    }
+    // Cuánta luz recibe esta gota
+    let lit = 0, cr = 0, cg_ = 0, cb = 0;
+    for (const l of L) {
+      const dx = d.x - l.x, dy = d.y - l.y, f = l.I * Math.exp(-(dx * dx + dy * dy) / (l.r * l.r));
+      lit += f; cr += l.c[0] * f; cg_ += l.c[1] * f; cb += l.c[2] * f;
+    }
+    const k = Math.min(1, lit);
+    // Foco que más la ilumina, para teñirla de su color
+    let best = 0, bi = 0; L.forEach((l, j) => { const dx = d.x - l.x, dy = d.y - l.y, f = l.I * Math.exp(-(dx * dx + dy * dy) / (l.r * l.r)); if (f > best) { best = f; bi = j; } });
+    const w = (3 + d.z * 5) * DPR, h = d.len * 1.15;
+    lctx.setTransform(1, 0, -wind, 1, d.x, d.y);   // inclinada según el viento
+    lctx.globalAlpha = (night ? 0.2 + d.z * 0.25 : 0.3 + d.z * 0.3) * (1 - k * 0.7);
+    lctx.drawImage(dropSprites[0], -w / 2, -h, w, h);
+    if (k > 0.02) { lctx.globalAlpha = Math.min(1, k * 1.1); lctx.drawImage(dropSprites[1 + bi], -w / 2, -h, w, h); }
+  }
+  lctx.setTransform(1, 0, 0, 1, 0, 0); lctx.globalAlpha = 1;
+  // Salpicaduras: pequeñas ondas que se abren en el suelo
+  for (let i = splashes.length - 1; i >= 0; i--) {
+    const sp2 = splashes[i]; sp2.t += dt;
+    if (sp2.t > 0.45) { splashes.splice(i, 1); continue; }
+    let lit = 0; for (const l of L) { const dx = sp2.x - l.x; lit += l.I * Math.exp(-(dx * dx) / (l.r * l.r * 1.5)); }
+    const rx = (4 + sp2.t * 34) * DPR * (0.5 + sp2.z);
+    lctx.strokeStyle = rgba(base, (1 - sp2.t / 0.45) * (0.06 + Math.min(1, lit) * 0.45));
+    lctx.lineWidth = DPR * (0.6 + sp2.z * 0.6);
+    lctx.beginPath(); lctx.ellipse(sp2.x, sp2.y, rx, rx * 0.22, 0, 0, Math.PI * 2); lctx.stroke();
+  }
+  if (splashes.length > 400) splashes.splice(0, splashes.length - 400);
+  lctx.globalCompositeOperation = 'source-over';
+  bloom(layer, night ? 0.55 + beatSoft * 0.3 : 0.25);
+  ctx.drawImage(layer, 0, 0);
+}
+
+// ================= Escena: Estrobo =================
+// Fondo plano y la letra en minúsculas condensadas que aparece palabra a palabra;
+// en los golpes la imagen se invierte un instante. Con "sin destellos" solo respira.
+let strobeFlash = 0, strobeLast = 0, strobeLine = '';
+function currentLyric() {
+  if (!(spConnected() && sp.item && lyrics && lyrics.lines)) return null;
+  const Ls = lyrics.lines, pos = lyricPos();
+  let i = -1; while (i + 1 < Ls.length && Ls[i + 1].t <= pos) i++;
+  if (i < 0 || !Ls[i].text) return null;
+  const words = Ls[i].text.split(/\s+/).filter(Boolean);
+  const at = wordTimes(Ls[i].text, Ls[i].t, Ls[i + 1] ? Ls[i + 1].t : Ls[i].t + 4000);
+  return { text: Ls[i].text, words, shown: Math.max(1, at.filter(t => pos >= t).length) };
+}
+function strobeColors() {
+  const night = state.theme === 'dark';
+  if (state.strobe === 'lime') return ['#8ace00', '#000000'];
+  if (state.strobe === 'palette') { const c = RGB[1], lum = (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11); return [COLORS[1], lum > 150 ? '#000000' : '#ffffff']; }
+  return night ? ['#000000', '#ffffff'] : ['#ffffff', '#000000'];
+}
+function drawStrobe(dt) {
+  const now = performance.now();
+  const ly = currentLyric();
+  let words;
+  if (ly) words = ly.words.slice(0, ly.shown);
+  else if (spConnected() && sp.item) words = sp.item.name.split(/\s+/);
+  else words = ['siente', 'la', 'música'];
+  const line = words.join(' ').toLowerCase();
+  if (!state.noFlash) {
+    if (hits.bass && now - strobeLast > 120) { strobeFlash = 0.09; strobeLast = now; }
+    if (ly && ly.text !== strobeLine) { strobeFlash = Math.max(strobeFlash, 0.12); }
+  }
+  if (ly) strobeLine = ly.text;
+  strobeFlash = Math.max(0, strobeFlash - dt);
+  let [bg, fg] = strobeColors();
+  if (strobeFlash > 0) [bg, fg] = [fg, bg];
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  // Texto: ajustado al ancho, hasta 3 líneas, condensado y apenas desenfocado
+  const font = s_ => `500 ${s_}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+  const maxW = W * 0.84 / 0.8;
+  let size = MIN * 0.22, lines = [];
+  for (let tries = 0; tries < 12; tries++) {
+    ctx.font = font(size); lines = []; let cur = '';
+    for (const w of line.split(' ')) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; }
+    if (cur) lines.push(cur);
+    if (lines.length <= 3 && lines.every(l => ctx.measureText(l).width <= maxW)) break;
+    size *= 0.86;
+  }
+  const breathe = state.noFlash ? 0.85 + 0.15 * Math.min(1, bass * 1.5) : 1;
+  ctx.fillStyle = fg; ctx.globalAlpha = breathe;
+  if (CAN_BLUR) ctx.filter = `blur(${(size * 0.012).toFixed(2)}px)`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const lh = size * 1.02, y0 = H / 2 - (lines.length - 1) * lh / 2;
+  lines.forEach((l, i) => {
+    ctx.save(); ctx.translate(W / 2, y0 + i * lh); ctx.scale(0.8, 1);
+    ctx.fillText(l, 0, 0); ctx.restore();
+  });
+  ctx.restore();
 }
 
 function drawLyricsScene(dt) {
@@ -1873,7 +2369,7 @@ function drawLyricsScene(dt) {
   for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
-const scenes = { artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
@@ -1906,19 +2402,27 @@ function frame(now) {
 }
 function render(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; time += dt;
-  if (!document.hidden) adapt(dt);
+  if (!document.hidden && !recording) adapt(dt);
   keepAudioAlive(dt);
   analyse(dt);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   ctx.fillStyle = state.theme === 'dark' ? '#000000' : '#ffffff';
   ctx.fillRect(0, 0, W, H);
-  drawBackdrop(dt);
+  colorTick(dt);
+  if (state.mode !== 'strobe') drawBackdrop(dt);
   (scenes[state.mode] || drawBars)(dt);
   lvFrame(); arFrame();
+  if (transA > 0 && transC.width === W) {
+    ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = transA * transA;
+    ctx.drawImage(transC, 0, 0); ctx.globalAlpha = 1;
+    transA = Math.max(0, transA - dt / 0.9);
+  }
+  autoDirector(dt);
   ctx.globalCompositeOperation = 'source-over';
-  ctx.globalAlpha = state.theme === 'dark' ? 0.022 : 0.03;
+  ctx.globalAlpha = state.mode === 'strobe' ? 0.015 : state.theme === 'dark' ? 0.022 : 0.03;
   ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = 1;
+  drawRecOverlay();
 }
 requestAnimationFrame(frame);
 </script>
