@@ -945,15 +945,15 @@ let bgCur = null, bgPrev = null, bgFade = 1;
 function makeCoverBg(img) {
   const c = document.createElement('canvas'); c.width = c.height = 256;
   const x = c.getContext('2d');
-  if (CAN_BLUR) x.filter = 'blur(14px)';
-  x.drawImage(img, -24, -24, 304, 304);   // un poco más grande para que el desenfoque no deje bordes
+  if (CAN_BLUR) x.filter = 'blur(5px)';
+  x.drawImage(img, -12, -12, 280, 280);   // un poco más grande para que el desenfoque no deje bordes
   return c;
 }
 function setBackdrop(canvasOrNull) { bgPrev = bgCur; bgCur = canvasOrNull; bgFade = 0; }
-function drawBackdrop(dt) {
+function drawBackdrop(dt, boost = 1) {
   if (!bgCur && !bgPrev) return;
   bgFade = Math.min(1, bgFade + dt / 1.6);
-  const night = state.theme === 'dark', base = night ? 0.2 : 0.16;
+  const night = state.theme === 'dark', base = (night ? 0.4 : 0.34) * boost;
   const S = Math.max(W, H) * (1.18 + 0.04 * Math.sin(time * 0.05));
   const ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
   ctx.save();
@@ -969,9 +969,13 @@ function drawBackdrop(dt) {
 function setCover(url) {
   coverUrl = url; coverColors = null;
   if (!url) { setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
+  // Fondo: imagen normal, siempre se puede dibujar
+  const show = new Image();
+  show.onload = () => { if (coverUrl === url) setBackdrop(makeCoverBg(show)); };
+  show.src = url;
+  // Colores: hace falta leer los píxeles; si el servidor no lo permite, se ignora
   const img = new Image(); img.crossOrigin = 'anonymous';
   img.onload = () => {
-    if (coverUrl === url) setBackdrop(makeCoverBg(img));
     try {
       const c = document.createElement('canvas'); c.width = c.height = 40;
       const x = c.getContext('2d'); x.drawImage(img, 0, 0, 40, 40);
@@ -1317,7 +1321,7 @@ function drawInfinity(dt) {
 }
 
 function drawLyricsScene(dt) {
-  drawBackdrop(dt);            // la portada se ve un poco más en este modo
+  drawBackdrop(0, 0.6);        // la portada se ve un poco más en este modo (suma a la del fondo)
   drawAura(dt);
 }
 const scenes = { lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
