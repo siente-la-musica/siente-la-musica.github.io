@@ -6,6 +6,9 @@
 <title>Siente la música</title>
 <meta name="description" content="Visualizador que reacciona a la música que suena en tu PC.">
 <link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://api.spotify.com" crossorigin>
+<link rel="preconnect" href="https://accounts.spotify.com" crossorigin>
+<link rel="preconnect" href="https://i.scdn.co">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="theme-color" content="#000000">
@@ -198,6 +201,11 @@
   .song.player .meta { grid-area: meta; align-self: center; gap: 1px; }
   .song.player .title { font-size: 15px; letter-spacing: -.01em; }
   .song.player .artist { font-size: 13px; }
+  .song.player .artist[data-paused="true"]::after { content: ' · en pausa'; }
+  .song.player .meta, .song.player .cover { transition: opacity .25s, filter .25s; }
+  .song.player.switching .meta, .song.player.switching .cover { opacity: .45; filter: blur(1px); }
+  .song .toast { grid-column: 1 / -1; font-size: 12px; line-height: 1.4; color: var(--fg); background: color-mix(in srgb, var(--fg) 10%, transparent); border-radius: 10px; padding: 7px 10px; }
+  .song .prog .bar.drag i { transition: none; }
   .song.player > .close { display: none; }
   .song .ctl { grid-area: ctl; display: flex; gap: 2px; align-items: center; }
   .song .ctl button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50%; background: none; color: var(--fg); transition: transform .15s, background .2s; }
@@ -260,6 +268,20 @@
   .lib-row .q { opacity: 0; transition: opacity .15s; }
   .lib-row:hover .q, .lib-row:focus-within .q { opacity: 1; }
   @media (hover: none) { .lib-row .q { opacity: .8; } }
+  .lib-row { transition: background .15s, transform .12s; position: relative; }
+  .lib-row:active { transform: scale(.97); background: color-mix(in srgb, var(--c1, #888) 28%, transparent); }
+  .lib-row.busy { pointer-events: none; background: color-mix(in srgb, var(--c1, #888) 22%, transparent); }
+  .lib-row.now .t { color: color-mix(in srgb, var(--c1, var(--fg)) 70%, var(--fg)); }
+  /* Ecualizador pequeño sobre la portada de la canción que suena (o que se está pidiendo) */
+  .lib-row.now::after, .lib-row.busy::after {
+    content: ''; position: absolute; left: 6px; top: 6px; width: 44px; height: 44px; border-radius: 8px;
+    background: rgba(0,0,0,.45) no-repeat center / 18px 16px
+      linear-gradient(#fff, #fff) 0 100% / 4px 60%, linear-gradient(#fff, #fff) 7px 100% / 4px 100%, linear-gradient(#fff, #fff) 14px 100% / 4px 40%;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 16' fill='white'%3E%3Crect x='0' y='6' width='4' height='10' rx='1'%3E%3Canimate attributeName='height' values='10;4;14;10' dur='.9s' repeatCount='indefinite'/%3E%3Canimate attributeName='y' values='6;12;2;6' dur='.9s' repeatCount='indefinite'/%3E%3C/rect%3E%3Crect x='7' y='2' width='4' height='14' rx='1'%3E%3Canimate attributeName='height' values='14;6;10;14' dur='.7s' repeatCount='indefinite'/%3E%3Canimate attributeName='y' values='2;10;6;2' dur='.7s' repeatCount='indefinite'/%3E%3C/rect%3E%3Crect x='14' y='8' width='4' height='8' rx='1'%3E%3Canimate attributeName='height' values='8;14;5;8' dur='.8s' repeatCount='indefinite'/%3E%3Canimate attributeName='y' values='8;2;11;8' dur='.8s' repeatCount='indefinite'/%3E%3C/rect%3E%3C/svg%3E");
+    background-position: center; background-size: 18px 16px; pointer-events: none;
+  }
+  .lib-row.round.now::after, .lib-row.round.busy::after { border-radius: 50%; }
+  .lib-note b { color: var(--fg); }
   .lib-empty { padding: 24px 8px; text-align: center; font-size: 13px; color: var(--muted); }
   @media (max-width: 640px) { .lib { left: 12px; width: auto; } body:not(.idle):has(.song.player:not([hidden])) .lv-meta { opacity: 0; } }
   /* En Portada, Letra y Artista también se ve, para poder pausar y cambiar de canción */
@@ -1028,7 +1050,9 @@ function analyse(dt) {
       v *= 0.85 + 0.5 * (i / BANDS);   // compensa que los agudos suenan más débiles
       raw[i] = v; if (v > mx) mx = v;
     }
-    peak = Math.max(peak * Math.pow(0.6, dt), mx, 0.25);  // ganancia automática
+    // Ganancia automática lenta: se adapta al volumen de la canción en unos 8 s, así una parte
+    // suave se sigue viendo más tranquila que el estribillo (antes se igualaba en 1 s)
+    peak = Math.max(peak * Math.pow(0.92, dt), mx, 0.2);
     const gain = Math.pow(state.sens, 0.8);   // sensibilidad elegida por la persona
     for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak * gain);
   } else {
@@ -1049,7 +1073,8 @@ function analyse(dt) {
   // Golpes de este fotograma (todas las animaciones leen los mismos) y un "latido" que decae rápido
   hits.bass = onset('bass', bass, dt); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
   if (hits.bass) { beatRaw = Math.max(beatRaw, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
-  if (beatTick && !hits.bass) beatRaw = Math.max(beatRaw, 0.35 * Math.min(1, tempo.conf * 1.5));
+  // El pulso «previsto» por el tempo solo sigue mientras haya golpes de verdad (no inventa latidos en las partes tranquilas)
+  if (beatTick && !hits.bass && performance.now() - lastBassHit < 1500) beatRaw = Math.max(beatRaw, 0.35 * Math.min(1, tempo.conf * 1.5));
   // Drop: tras un tramo flojo de graves, vuelven con fuerza
   eShort += (bass - eShort) * (1 - Math.pow(0.02, dt));
   eLong += (bass - eLong) * (1 - Math.pow(0.85, dt));
@@ -1366,8 +1391,8 @@ function drawInk(dt, flowerMode = false) {
     const p = b.age / b.life;
     if (p >= 1) { blobs.splice(bi, 1); continue; }
     const grow = 1 - Math.pow(1 - p, 3);                 // se expande rápido y frena
-    const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06);
-    const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5);
+    const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06 + beatSoft * 0.06);
+    const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5) * (1 + beatSoft * 0.7);   // todos los círculos se avivan con cada golpe
     const th = (r * 0.14 + 3 * DPR) * (1 + beatSoft * 0.35);   // el trazo engorda con el golpe
     const spr = SPRITES[b.sprite];
     const fl = b.flower;
@@ -1479,6 +1504,8 @@ const btnSpotify = document.getElementById('btnSpotify');
 const spotifyOn = () => !!sp.refresh;
 const spConnected = () => !!(fileTrack || sp.refresh || (lf.user && LASTFM_KEY));
 const nowSource = () => fileTrack ? 'file' : sp.refresh ? 'spotify' : lf.user && LASTFM_KEY ? 'lastfm' : null;
+// Renueva el permiso de Spotify antes de que caduque, para que el primer toque no tenga que esperar
+setInterval(() => { if (sp.refresh && sp.expires - Date.now() < 5 * 60e3 && !document.hidden) spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }).catch(() => {}); }, 60e3);
 function spSave() { store.set('sp.token', sp.token); store.set('sp.refresh', sp.refresh); store.set('sp.expires', sp.expires); }
 function spButton() {
   const src = nowSource();
@@ -1543,22 +1570,52 @@ async function spHandleRedirect() {
 }
 
 // Controles: anterior, pausa/reproducir, siguiente y saltar. Spotify solo los permite con Premium.
-async function spControl(action, pos) {
-  if (Date.now() > sp.expires) { try { await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); } catch (e) {} }
-  const url = { next: ['POST', 'next'], previous: ['POST', 'previous'], play: ['PUT', 'play'], pause: ['PUT', 'pause'], seek: ['PUT', 'seek?position_ms=' + pos] }[action];
-  let r;
-  try { r = await fetch('https://api.spotify.com/v1/me/player/' + url[1], { method: url[0], headers: { Authorization: 'Bearer ' + sp.token } }); }
-  catch (e) { return; }
-  if (r.ok || r.status === 204) {
-    if (action === 'pause' || action === 'play') { sp.playing = action === 'play'; sp.progress += action === 'pause' ? performance.now() - sp.at : 0; sp.at = performance.now(); spRender(); }
-    if (action === 'seek') { sp.progress = pos; sp.at = performance.now(); lyricIndex = -2; lvIndex = -2; }
-    setTimeout(spLoop, 350);
-    return;
-  }
-  const d = await r.json().catch(() => ({})), msg = (d.error && d.error.message || '').toLowerCase();
-  if (r.status === 403 && msg.includes('premium')) showSong('<div class="meta"><div class="title">Hace falta Spotify Premium</div><div class="note">Spotify solo deja controlar la música desde otras apps a las cuentas Premium.</div></div>');
-  else if (r.status === 403 || r.status === 401) showSong('<div class="meta"><div class="title">Falta un permiso</div><div class="note">Desconecta Spotify y vuelve a conectarlo para poder controlar la música desde aquí.</div></div>');
-  else if (r.status === 404) showSong('<div class="meta"><div class="title">No hay un reproductor activo</div><div class="note">Abre Spotify en algún dispositivo y pon algo a sonar.</div></div>');
+// La pantalla responde al instante (se asume que saldrá bien) y la orden va por detrás; durante
+// un momento se ignoran las respuestas viejas para que la barra no salte atrás. Después se
+// pregunta a Spotify más seguido para confirmar el cambio enseguida.
+const spPos = () => Math.max(0, Math.min(sp.duration || Infinity, sp.progress + (sp.playing ? performance.now() - sp.at : 0)));
+let spBusy = Promise.resolve();
+function spBurst() { sp.burstUntil = performance.now() + 4000; clearTimeout(sp.timer); sp.timer = setTimeout(spLoop, 300); }
+function spControl(action, pos) {
+  const now = performance.now(), cur = spPos();
+  if (action === 'previous' && cur > 3000) { action = 'seek'; pos = 0; }   // como Spotify: «anterior» a mitad de canción vuelve al inicio
+  if (action === 'play' || action === 'pause') { sp.progress = cur; sp.at = now; sp.playing = action === 'play'; }
+  if (action === 'seek') { sp.progress = pos; sp.at = now; lyricIndex = -2; lvIndex = -2; }
+  if (action === 'next' || action === 'previous') songEl.classList.add('switching');
+  sp.lockUntil = now + 2500;
+  spPatch();
+  // Las órdenes van en fila: así dos toques rápidos no se pisan
+  spBusy = spBusy.then(async () => {
+    try {
+      if (lib.web && sp.deviceId && sp.deviceId === lib.webId) {   // suena en este navegador: control directo, sin pasar por internet
+        await ({ play: () => lib.web.resume(), pause: () => lib.web.pause(), next: () => lib.web.nextTrack(), previous: () => lib.web.previousTrack(), seek: () => lib.web.seek(pos) })[action]();
+      } else {
+        const [m, path] = { next: ['POST', 'next'], previous: ['POST', 'previous'], play: ['PUT', 'play'], pause: ['PUT', 'pause'], seek: ['PUT', 'seek?position_ms=' + Math.round(pos)] }[action];
+        await spApi('/me/player/' + path + (sp.deviceId ? (path.includes('?') ? '&' : '?') + 'device_id=' + encodeURIComponent(sp.deviceId) : ''), { method: m });
+      }
+      spBurst();
+    } catch (e) {
+      sp.lockUntil = 0; songEl.classList.remove('switching');
+      spToast(spErrorText(e));
+      spLoop();
+    }
+  });
+}
+// Aviso corto dentro del reproductor
+function spToast(html) {
+  let t = songEl.querySelector('.toast');
+  if (!t) { t = document.createElement('div'); t.className = 'toast'; songEl.append(t); }
+  t.innerHTML = html; clearTimeout(t._h); t._h = setTimeout(() => t.remove(), 6000);
+}
+// Actualiza solo lo que cambia del reproductor (botón, «en pausa», barra) sin rehacerlo
+function spPatch() {
+  if (!songEl.classList.contains('player')) return spRender();
+  const main = songEl.querySelector('.ctl .main');
+  if (main && main.dataset.sp) { main.dataset.sp = sp.playing ? 'pause' : 'play'; main.innerHTML = sp.playing ? ICON.pause : ICON.play; main.setAttribute('aria-label', sp.playing ? 'Pausar' : 'Reproducir'); }
+  if (main && main.dataset.file && audioEl) { main.innerHTML = audioEl.paused ? ICON.play : ICON.pause; main.setAttribute('aria-label', audioEl.paused ? 'Reproducir' : 'Pausar'); }
+  const ar = songEl.querySelector('.artist');
+  if (ar) ar.dataset.paused = !sp.playing;
+  spTick();
 }
 async function spPoll() {
   if (Date.now() > sp.expires) {
@@ -1568,8 +1625,9 @@ async function spPoll() {
       return 20000;
     }
   }
-  const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing?additional_types=episode', { headers: { Authorization: 'Bearer ' + sp.token } });
-  if (r.status === 204) { spUpdate(null); return document.hidden ? 20000 : 8000; }
+  const r = await fetch('https://api.spotify.com/v1/me/player?additional_types=episode', { headers: { Authorization: 'Bearer ' + sp.token } });
+  const fast = performance.now() < (sp.burstUntil || 0);
+  if (r.status === 204) { if (!fast) spUpdate(null); return fast ? 600 : document.hidden ? 20000 : 8000; }
   if (r.status === 401) { sp.expires = 0; return 500; }
   if (r.status === 403) {
     spLogout('<div class="meta"><div class="title">Tu cuenta no tiene acceso</div><div class="note">Pide a quien creó la página que añada tu correo de Spotify a la lista de usuarios.</div></div>');
@@ -1578,7 +1636,9 @@ async function spPoll() {
   if (r.status === 429) return (Number(r.headers.get('Retry-After')) || 30) * 1000;
   if (!r.ok) return 15000;
   const d = await r.json();
+  sp.deviceId = d?.device?.id || null;
   spUpdate(d);
+  if (fast) return 600;
   if (document.hidden) return 15000;
   // Si suena, se vuelve a preguntar justo al terminar la canción (o cada 5 s como mucho)
   return sp.playing && sp.duration ? Math.max(1000, Math.min(5000, sp.duration - sp.progress + 800)) : 8000;
@@ -1594,12 +1654,25 @@ async function spLoop() {
 function spUpdate(d, src = 'spotify') {
   if (src !== nowSource()) return;   // otra fuente con más prioridad está al mando
   const item = d && d.item;
+  if (src === 'spotify' && sp.expectId) {
+    // Se pidió una canción desde la página: hasta que Spotify la confirme, se ignoran respuestas viejas
+    if (performance.now() < (sp.lockUntil || 0) && (item && item.id) !== sp.expectId) return;
+    sp.expectId = null;
+  }
   const changed = (item && item.id) !== (sp.item && sp.item.id);
+  if (!changed && src === 'spotify' && performance.now() < (sp.lockUntil || 0)) {
+    // Respuesta de antes de la última orden: se mantiene lo que la persona ve, salvo que ya coincida
+    const close = d && Math.abs((d.progress_ms || 0) - spPos()) < 1500 && !!d.is_playing === sp.playing;
+    if (!close) return;
+    sp.lockUntil = 0;
+  }
+  const wasPlaying = sp.playing;
   sp.item = item || null;
   sp.playing = !!(d && d.is_playing);
   sp.progress = (d && d.progress_ms) || 0;
   sp.duration = (item && item.duration_ms) || 0;
   sp.at = performance.now();
+  if (changed) { sp.lockUntil = 0; songEl.classList.remove('switching'); }
   if (changed) {
     sp.dismissed = false;
     setCover(item ? (item.album?.images?.[0]?.url || item.images?.[0]?.url || '') : '');
@@ -1608,7 +1681,8 @@ function spUpdate(d, src = 'spotify') {
     if (state.mode === 'artist') arLoad(item);
     if (state.mode === 'cover') loadAltArt(item);
   }
-  spRender();
+  if (changed || !songEl.classList.contains('player') || songEl.hidden) spRender();
+  else if (wasPlaying !== sp.playing) spPatch();
 }
 const fmt = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 const cornerEl = document.getElementById('corner');
@@ -1678,7 +1752,7 @@ function spRender() {
       : src === 'file' && audioEl ? `<button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button>` : '';
     showSong(
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
-      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${esc(artist)}${play ? '' : ' · en pausa'}</div></div>` +
+      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist" data-paused="${!play}">${esc(artist)}</div></div>` +
       `<div class="ctl">${ctl}<button class="dots" id="spMore" aria-label="Más opciones" aria-expanded="${!!sp.more}">${ICON.dots}</button></div>` +
       `<div class="prog"><span class="time" id="spTimeA">0:00</span><div class="bar"><i id="spBar"></i></div><span class="time" id="spTimeB">${sp.duration ? fmt(sp.duration) : ''}</span></div>` +
       `<div class="more">` +
@@ -1707,7 +1781,23 @@ function spRender() {
     else audioEl.currentTime = Math.max(0, audioEl.currentTime + (k === 'fwd' ? 10 : -10));
   });
   const bar = songEl.querySelector('.bar');
-  if (bar && nowSource() === 'spotify' && sp.duration) { bar.classList.add('seek'); bar.title = 'Saltar a este punto'; bar.onclick = e => { const r = bar.getBoundingClientRect(); spControl('seek', Math.round((e.clientX - r.left) / r.width * sp.duration)); }; }
+  if (bar && sp.duration && (nowSource() === 'spotify' || (nowSource() === 'file' && audioEl))) {
+    // Tocar o arrastrar la barra: se mueve al instante y la orden se manda al soltar
+    bar.classList.add('seek'); bar.title = 'Saltar a este punto';
+    const at = e => { const r = bar.getBoundingClientRect(); return Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * sp.duration; };
+    bar.onpointerdown = e => {
+      e.preventDefault(); bar.setPointerCapture(e.pointerId); bar.classList.add('drag');
+      const show = ms => { document.getElementById('spBar').style.width = (ms / sp.duration * 100) + '%'; const ta = document.getElementById('spTimeA'); if (ta) ta.textContent = fmt(ms); };
+      sp.dragging = true; show(at(e));
+      bar.onpointermove = ev => show(at(ev));
+      bar.onpointerup = ev => {
+        bar.onpointermove = bar.onpointerup = null; bar.classList.remove('drag'); sp.dragging = false;
+        const ms = at(ev);
+        if (nowSource() === 'file') { audioEl.currentTime = ms / 1000; sp.progress = ms; sp.at = performance.now(); lyricIndex = -2; lvIndex = -2; spTick(); }
+        else spControl('seek', ms);
+      };
+    };
+  }
   const e1 = document.getElementById('lfEarly'), e2 = document.getElementById('lfLate');
   if (e1) e1.onclick = () => { sp.progress += 500; lf.offset += 500; lyricIndex = -2; lvIndex = -2; };
   if (e2) e2.onclick = () => { sp.progress -= 500; lf.offset -= 500; lyricIndex = -2; lvIndex = -2; };
@@ -1716,12 +1806,13 @@ function spRender() {
 function spTick() {   // avanza la barra entre consultas, sin preguntar a Spotify
   const bar = document.getElementById('spBar'), ta = document.getElementById('spTimeA'), tb = document.getElementById('spTimeB');
   if (!bar || !sp.duration) return;
-  const pos = Math.max(0, Math.min(sp.duration, sp.progress + (sp.playing ? performance.now() - sp.at : 0)));
+  if (sp.dragging) return;
+  const pos = spPos();
   bar.style.width = (pos / sp.duration * 100).toFixed(2) + '%';
   if (ta) ta.textContent = fmt(pos);
   if (tb) tb.textContent = '−' + fmt(sp.duration - pos);
 }
-setInterval(spTick, 500);
+setInterval(spTick, 250);
 
 // Colores de la portada: los tonos más vivos y abundantes del disco
 // Portada de fondo: muy desenfocada, tenue y con un vaivén lento; se funde al cambiar
@@ -1815,13 +1906,30 @@ const LIB_ICON = {
   queue: '<svg viewBox="0 0 24 24"><path d="M3 6h12v2H3zm0 5h12v2H3zm0 5h8v2H3zm14-2v-3h2v3h3v2h-3v3h-2v-3h-3v-2z"/></svg>',
   more: '<svg viewBox="0 0 24 24"><path d="M8.6 5.4 10 4l8 8-8 8-1.4-1.4L15.2 12z"/></svg>',
 };
-async function spApi(path, opts = {}) {
-  if (Date.now() > sp.expires) await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh });
-  const r = await fetch('https://api.spotify.com/v1' + path, { ...opts, headers: { Authorization: 'Bearer ' + sp.token, 'Content-Type': 'application/json', ...(opts.headers || {}) } });
-  if (r.status === 204) return null;
-  const d = await r.json().catch(() => null);
-  if (!r.ok) { const e = new Error(d?.error?.message || 'Spotify respondió ' + r.status); e.status = r.status; e.reason = d?.error?.reason; throw e; }
+// Llamada a la API de Spotify: renueva el permiso si caducó y reintenta una vez si Spotify
+// pide esperar (429) o si el permiso dejó de valer (401)
+async function spApi(path, opts = {}, retry = true) {
+  if (!sp.token || Date.now() > sp.expires) await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh });
+  let r;
+  try { r = await fetch('https://api.spotify.com/v1' + path, { ...opts, headers: { Authorization: 'Bearer ' + sp.token, 'Content-Type': 'application/json', ...(opts.headers || {}) } }); }
+  catch (e) { const er = new Error('Sin conexión con Spotify. Revisa tu internet.'); er.status = 0; throw er; }
+  if (retry && r.status === 401) { sp.expires = 0; return spApi(path, opts, false); }
+  if (retry && r.status === 429) { await new Promise(res => setTimeout(res, Math.min(5, +(r.headers.get('Retry-After') || 2)) * 1000)); return spApi(path, opts, false); }
+  if (r.status === 204 || r.status === 202) return null;
+  const txt = await r.text(), d = (() => { try { return JSON.parse(txt); } catch (e) { return null; } })();
+  if (!r.ok) { const e = new Error(d?.error?.message || 'Spotify respondió ' + r.status); e.status = r.status; e.reason = d?.error?.reason; lib.lastError = `${path.split('?')[0]} → ${r.status} ${e.reason || e.message}`; throw e; }
   return d;
+}
+// Mensaje claro para cada error de Spotify
+function spErrorText(e) {
+  if (e.status === 0) return e.message;
+  if (e.reason === 'PREMIUM_REQUIRED') return 'Spotify solo deja elegir qué suena con una cuenta Premium.';
+  if (e.reason === 'NO_ACTIVE_DEVICE' || e.status === 404) return 'No encuentro un Spotify abierto. Abre Spotify en tu PC o móvil y vuelve a intentarlo.';
+  if (e.reason === 'QUOTA_EXCEEDED' || e.status === 429) return 'Spotify pide esperar un momento (demasiadas consultas). Prueba en un minuto.';
+  if (e.status === 401) return 'La sesión de Spotify caducó. Pulsa «Dar permiso» para conectarte otra vez.';
+  if (e.status === 403 && /restriction/i.test(e.message)) return 'Spotify no deja reproducir eso ahora en ese dispositivo (puede estar sonando un anuncio).';
+  if (e.status === 403) return 'Spotify no dio permiso para esto (' + esc(e.message) + '). Prueba «Dar permiso».';
+  return 'Spotify dijo: ' + esc(e.message);
 }
 function libNoteShow(html) { libNote.innerHTML = html || ''; libNote.hidden = !html; }
 function libOpen() {
@@ -1849,44 +1957,85 @@ document.getElementById('libClose').onclick = libClose;
 addEventListener('keydown', e => { if (e.key === 'Escape' && !libEl.hidden) libClose(); });
 libBack.onclick = () => { lib.stack.pop(); const prev = lib.stack.pop(); prev ? prev() : libShowTab(lib.tab); };
 
-// Dispositivos: tus Spotify abiertos y, con Premium, esta misma página como altavoz
+// Dispositivos: tus Spotify abiertos y, con Premium, este navegador como altavoz.
+// Se recuerda el que eliges; si no, se usa el que está sonando o tu Spotify del PC/móvil.
 async function libDevices() {
   let list = [];
   try { list = (await spApi('/me/player/devices')).devices || []; } catch (e) {}
-  if (lib.webId && !list.some(d => d.id === lib.webId)) list.unshift({ id: lib.webId, name: 'Esta página', is_active: false, type: 'web' });
-  const cur = libDev.value;
-  libDev.innerHTML = list.length ? list.map(d => `<option value="${esc(d.id)}">${d.id === lib.webId ? 'Esta página' : esc(d.name)}${d.is_active ? ' · sonando' : ''}</option>`).join('')
-    : '<option value="">Abre Spotify en algún dispositivo</option>';
-  const active = list.find(d => d.is_active);
-  libDev.value = list.some(d => d.id === cur) ? cur : active ? active.id : lib.webId || (list[0] && list[0].id) || '';
+  list = list.filter(d => d.id && d.id !== lib.webId);
+  if (lib.webId) list.push({ id: lib.webId, name: 'Este navegador', is_active: false, web: true });
+  lib.devices = list;
+  const saved = store.get('sp.device', ''), cur = libDev.value;
+  libDev.innerHTML = list.length ? list.map(d => `<option value="${esc(d.id)}">${d.web ? 'Este navegador (suena aquí)' : esc(d.name)}${d.is_active ? ' · activo' : ''}</option>`).join('')
+    : '<option value="">Abre Spotify en tu PC o móvil</option>';
+  const has = id => id && list.some(d => d.id === id);
+  const active = list.find(d => d.is_active), real = list.find(d => !d.web);
+  libDev.value = has(cur) ? cur : active ? active.id : has(saved) ? saved : real ? real.id : list[0]?.id || '';
+  return list;
 }
 libDev.onfocus = libDevices;
+libDev.onchange = () => store.set('sp.device', libDev.value);
 function libSdk() {
-  if (lib.sdk) return; lib.sdk = true;
+  if (lib.sdk) return; lib.sdk = true; lib.sdkState = 'cargando';
   window.onSpotifyWebPlaybackSDKReady = () => {
     const pl = new Spotify.Player({ name: 'Siente la música', volume: 0.8, getOAuthToken: async cb => { try { if (Date.now() > sp.expires) await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); } catch (e) {} cb(sp.token); } });
-    pl.addListener('ready', ({ device_id }) => { lib.webId = device_id; libDevices(); });
-    pl.addListener('not_ready', () => { lib.webId = null; libDevices(); });
-    pl.addListener('account_error', () => libNoteShow('Reproducir en esta página necesita Spotify Premium.'));
+    pl.addListener('ready', ({ device_id }) => { lib.webId = device_id; lib.sdkState = 'listo'; libDevices(); });
+    pl.addListener('not_ready', () => { lib.webId = null; lib.sdkState = 'desconectado'; libDevices(); });
+    pl.addListener('account_error', () => { lib.sdkState = 'necesita Premium'; });
+    pl.addListener('authentication_error', () => { lib.sdkState = 'sin permiso (pulsa «Dar permiso»)'; });
+    pl.addListener('initialization_error', e => { lib.sdkState = 'este navegador no puede reproducir Spotify (' + e.message + ')'; });
     pl.addListener('player_state_changed', () => setTimeout(spLoop, 300));
     pl.connect(); lib.web = pl;
   };
-  const sc = document.createElement('script'); sc.src = 'https://sdk.scdn.co/spotify-player.js'; sc.async = true; document.head.append(sc);
+  const sc = document.createElement('script'); sc.src = 'https://sdk.scdn.co/spotify-player.js'; sc.async = true;
+  sc.onerror = () => { lib.sdkState = 'no se pudo cargar'; };
+  document.head.append(sc);
 }
 
-// Reproducir: una canción, una lista de canciones o un álbum/playlist entero
-async function libPlay(body) {
-  if (lib.web && libDev.value === lib.webId) { try { await lib.web.activateElement(); } catch (e) {} }
-  const dev = libDev.value;
-  try { await spApi('/me/player/play' + (dev ? '?device_id=' + encodeURIComponent(dev) : ''), { method: 'PUT', body: JSON.stringify(body) }); }
-  catch (e) {
-    if (e.status === 404) libNoteShow('No hay ningún Spotify abierto. Abre Spotify en tu móvil o PC, o elige «Esta página» en «Suena en».');
-    else if (e.status === 403) libNoteShow('Spotify solo deja elegir qué suena con Premium.');
-    else libNoteShow(esc(e.message));
-    return;
+// Reproducir: una canción, una lista de canciones o un álbum/playlist entero.
+// Si el dispositivo elegido no está activo, primero se le pasa la reproducción.
+async function libPlay(body, row, track) {
+  if (lib.web && libDev.value === lib.webId) { try { lib.web.activateElement(); } catch (e) {} }   // dentro del clic: el navegador deja sonar
+  if (row) row.classList.add('busy');
+  const before = sp.item;
+  if (track && !track.id && track.uri) track = { ...track, id: track.uri.split(':').pop() };
+  if (track && track.id) {   // se muestra ya; Spotify lo confirma por detrás
+    spUpdate({ item: track, is_playing: true, progress_ms: 0 });
+    sp.expectId = track.id; sp.lockUntil = performance.now() + 4000;
+    libList.querySelectorAll('.lib-row.now').forEach(r => r.classList.remove('now')); if (row) row.classList.add('now');
   }
-  libNoteShow(analyser ? '' : 'Consejo: pulsa <b>Conectar audio → Audio del PC</b> para que las animaciones sigan lo que suena.');
-  setTimeout(spLoop, 500); setTimeout(libDevices, 1200);
+  try {
+    let dev = libDev.value;
+    if (!dev) { await libDevices(); dev = libDev.value; }
+    if (!dev) { libNoteShow('No encuentro un Spotify abierto. Abre Spotify en tu PC o móvil (o pulsa play allí una vez) y vuelve a intentarlo.'); return; }
+    const info = (lib.devices || []).find(d => d.id === dev);
+    const play = () => spApi('/me/player/play?device_id=' + encodeURIComponent(dev), { method: 'PUT', body: JSON.stringify(body) });
+    try { await play(); }
+    catch (e) {
+      if (!(e.status === 404 || e.reason === 'NO_ACTIVE_DEVICE' || (e.status === 403 && /restriction/i.test(e.message)) || e.status === 502)) throw e;
+      await spApi('/me/player', { method: 'PUT', body: JSON.stringify({ device_ids: [dev], play: false }) });   // despierta el dispositivo
+      await new Promise(r => setTimeout(r, 700));
+      await play();
+    }
+    libNoteShow(`▶ Sonando en <b>${esc(info ? (info.web ? 'este navegador' : info.name) : 'tu Spotify')}</b>` + (analyser ? '' : ' · pulsa <b>Conectar audio → Audio del PC</b> para que las animaciones lo sigan.'));
+    sp.dismissed = false;
+    spBurst(); setTimeout(libDevices, 1500);
+  } catch (e) {
+    if (track && sp.expectId) { sp.expectId = null; sp.lockUntil = 0; if (before) spUpdate({ item: before, is_playing: sp.playing, progress_ms: spPos() }); spLoop(); } libNoteShow(spErrorText(e) + ' <button id="libDiag">Revisar conexión</button>'); const dg = document.getElementById('libDiag'); if (dg) dg.onclick = libDiagnose; }
+  finally { if (row) row.classList.remove('busy'); }
+}
+// Revisión de la conexión: dice qué funciona y qué no
+async function libDiagnose() {
+  const out = [];
+  try { await spApi('/me/player/devices'); out.push('✓ Sesión de Spotify válida'); } catch (e) { out.push('✗ Sesión: ' + spErrorText(e)); }
+  const need = SP_SCOPES.split(' ').filter(x => !hasScope(x));
+  out.push(need.length ? '✗ Faltan permisos: pulsa «Dar permiso»' : '✓ Permisos completos');
+  const devs = await libDevices();
+  out.push(devs.length ? '✓ Dispositivos: ' + devs.map(d => d.web ? 'este navegador' : esc(d.name) + (d.is_active ? ' (activo)' : '')).join(', ') : '✗ No hay ningún Spotify abierto');
+  out.push('· Reproductor en el navegador: ' + (lib.sdkState || 'no iniciado'));
+  if (lib.lastError) out.push('· Último error: ' + esc(lib.lastError));
+  libNoteShow(out.join('<br>') + (need.length ? '<br><button class="primary" id="libReauth">Dar permiso</button>' : ''));
+  const ra = document.getElementById('libReauth'); if (ra) ra.onclick = () => spLogin();
 }
 async function libQueue(uri, btn) {
   try { await spApi('/me/player/queue?uri=' + encodeURIComponent(uri) + (libDev.value ? '&device_id=' + encodeURIComponent(libDev.value) : ''), { method: 'POST' }); btn.innerHTML = '✓'; }
@@ -1900,7 +2049,7 @@ function libRow(o) {
   b.innerHTML = `${o.img ? `<img src="${esc(o.img)}" alt="" loading="lazy">` : '<span class="ph"></span>'}<span class="tx"><span class="t"></span><span class="s"></span></span>` +
     (o.queue ? `<button class="ib q" aria-label="Añadir a la cola" title="Añadir a la cola">${LIB_ICON.queue}</button>` : o.open ? `<span class="ib" aria-hidden="true">${LIB_ICON.more}</span>` : '');
   b.querySelector('.t').textContent = o.title; b.querySelector('.s').textContent = o.sub || '';
-  b.onclick = e => { if (e.target.closest('.q')) { e.stopPropagation(); libQueue(o.queue, e.target.closest('.q')); return; } (o.open || o.play)(); };
+  b.onclick = e => { if (e.target.closest('.q')) { e.stopPropagation(); libQueue(o.queue, e.target.closest('.q')); return; } o.open ? o.open() : o.play(b); };
   b.onkeydown = e => { if (e.key === 'Enter') b.click(); };
   return b;
 }
@@ -1910,13 +2059,13 @@ function libMsg(t) { libList.innerHTML = ''; const d = document.createElement('d
 function trackRows(tracks, ctx) {
   const uris = tracks.map(t => t.uri);
   return tracks.map((t, i) => libRow({ title: t.name, sub: artistsOf(t), img: imgOf(t) || ctx?.img, uri: t.uri, queue: t.uri,
-    play: () => libPlay(ctx?.uri ? { context_uri: ctx.uri, offset: { uri: t.uri } } : { uris: uris.slice(i, i + 50) }) }));
+    play: row => libPlay(ctx?.uri ? { context_uri: ctx.uri, offset: { uri: t.uri } } : { uris: uris.slice(i, i + 50) }, row, t.album ? t : { ...t, album: { images: ctx?.imgs || [] } }) }));
 }
 function libView(title, back, fill) {
   libTitle.textContent = title; libBack.hidden = !back;
   libList.innerHTML = ''; libList.scrollTop = 0;
   lib.stack.push(() => libView(title, back, fill));
-  fill().catch(e => libMsg(e.status === 401 || e.status === 403 ? 'Spotify no dio permiso para esto. Pulsa «Dar permiso» si aparece arriba.' : 'No se pudo cargar: ' + e.message));
+  fill().catch(e => { libMsg(''); libList.firstChild.innerHTML = spErrorText(e) + '<br><br><button id="libDiag2">Revisar conexión</button>'; document.getElementById('libDiag2').onclick = libDiagnose; });
 }
 function openPlaylist(pl) {
   libView(pl.name, true, async () => {
@@ -1924,17 +2073,17 @@ function openPlaylist(pl) {
     let d; try { d = await spApi(`/playlists/${pl.id}/items?limit=50`); } catch (e) { d = await spApi(`/playlists/${pl.id}/tracks?limit=50`); }
     const tracks = (d.items || []).map(x => x.item || x.track).filter(t => t && t.uri && t.type !== 'episode');
     libList.innerHTML = '';
-    libList.append(libRow({ title: 'Reproducir todo', sub: pl.owner?.display_name || '', img: imgOf(pl), play: () => libPlay({ context_uri: pl.uri }) }));
-    tracks.length ? libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })) : libList.append(libSec('Spotify no deja ver las canciones de esta playlist'));
+    libList.append(libRow({ title: 'Reproducir todo', sub: pl.owner?.display_name || '', img: imgOf(pl), play: row => libPlay({ context_uri: pl.uri }, row) }));
+    tracks.length ? libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })) : libList.append(libSec('Spotify solo muestra las canciones de tus propias playlists; esta puedes reproducirla entera'));
   });
 }
 function openAlbum(al) {
   libView(al.name, true, async () => {
     libMsg('Cargando…');
-    const d = await spApi(`/albums/${al.id}/tracks?limit=50`);
+    const full = await spApi(`/albums/${al.id}`), d = full.tracks || { items: [] };
     libList.innerHTML = '';
-    libList.append(libRow({ title: 'Reproducir el álbum', sub: artistsOf(al), img: imgOf(al), play: () => libPlay({ context_uri: al.uri }) }));
-    libList.append(...trackRows(d.items || [], { uri: al.uri, img: imgOf(al) }));
+    libList.append(libRow({ title: 'Reproducir el álbum', sub: artistsOf(al), img: imgOf(al), play: row => libPlay({ context_uri: al.uri }, row) }));
+    libList.append(...trackRows(d.items || [], { uri: al.uri, img: imgOf(al), imgs: full.images || al.images || [] }));
   });
 }
 function openArtist(ar) {   // Spotify ya no da «canciones más populares» a apps nuevas: se buscan sus canciones
@@ -1942,7 +2091,7 @@ function openArtist(ar) {   // Spotify ya no da «canciones más populares» a a
     libMsg('Cargando…');
     const d = await spApi('/search?type=track,album&limit=10&q=' + encodeURIComponent(`artist:"${ar.name}"`));
     libList.innerHTML = '';
-    libList.append(libRow({ title: 'Reproducir ' + ar.name, sub: 'Mezcla del artista', img: imgOf(ar), round: true, play: () => libPlay({ context_uri: ar.uri }) }));
+    libList.append(libRow({ title: 'Reproducir ' + ar.name, sub: 'Mezcla del artista', img: imgOf(ar), round: true, play: row => libPlay({ context_uri: ar.uri }, row) }));
     const tr = (d.tracks?.items || []).filter(Boolean), al = (d.albums?.items || []).filter(Boolean);
     if (tr.length) libList.append(libSec('Canciones'), ...trackRows(tr));
     if (al.length) libList.append(libSec('Álbumes'), ...al.map(a => libRow({ title: a.name, sub: (a.release_date || '').slice(0, 4), img: imgOf(a), open: () => openAlbum(a) })));
@@ -2112,7 +2261,7 @@ async function fileStart(file) {
   };
   spUpdate({ item: fileTrack.item, is_playing: true, progress_ms: 0 }, 'file');
   audioEl.addEventListener('loadedmetadata', push);
-  ['play', 'pause'].forEach(ev => audioEl.addEventListener(ev, () => { push(); if (!sp.dismissed) spRender(); }));
+  ['play', 'pause'].forEach(ev => audioEl.addEventListener(ev, () => { push(); if (!sp.dismissed) spPatch(); }));
   clearInterval(fileTrack.timer); fileTrack.timer = setInterval(push, 200);
 }
 function fileStop() {
@@ -2762,8 +2911,10 @@ const smooth = t => t * t * (3 - 2 * t);
 function drawInfinity(dt) {
   const night = state.theme === 'dark';
   // Velocidad suavizada: acelera con la música sin tirones
-  const target = 1.5 + energy * 4 + bass * 2;
-  camSpeed += (target - camSpeed) * (1 - Math.pow(0.15, dt));
+  // Avanza solo con la música: en silencio casi se detiene, y cada golpe de graves da un empujón
+  const target = 0.2 + Math.pow(energy, 1.2) * 4.5 + bass * 2;
+  if (hits.bass) camSpeed += hits.bass * 4;
+  camSpeed += (target - camSpeed) * (1 - Math.pow(0.08, dt));
   camZ += dt * camSpeed;
   if (hits.bass) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
@@ -3379,7 +3530,7 @@ function drawFluid(dt) {
   }
   if (hits.mid) ring(1 + Math.round(hits.mid), hits.mid * 0.6, 0.18, 0.3 + hits.mid * 0.3);
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
-  if (beatTick && !hits.bass) ring(1, 0.3, 0.2, 0.25);
+  if (beatTick && !hits.bass && performance.now() - lastBassHit < 1500) ring(1, 0.3, 0.2, 0.25);
   if (Math.random() < energy * dt * 6) ring(1, energy * 0.4, 0.15, 0.15 + energy * 0.25);
   // El ratón o el dedo revuelven
   if (fluid.pointer && fluid.pointer.moves.length) {
@@ -3646,16 +3797,18 @@ function drawMagnet(dt) {
   t.globalCompositeOperation = 'destination-out'; t.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; t.fillRect(0, 0, W, H);
   t.globalCompositeOperation = night ? 'lighter' : 'source-over'; t.lineCap = 'round';
   const lv = [bass, mid, high].map(v => Math.pow(v, 0.8));
+  mag.phase = mag.phase || [0, 2.1, 4.2];   // los imanes avanzan con la energía: en lo suave casi quietos
+  for (let k = 0; k < 3; k++) mag.phase[k] += dt * (0.25 + k * 0.08) * (0.2 + Math.pow(energy, 1.3) * 2.2);
   // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
   const att = [0, 1, 2].map(k => {
-    const a = time * (0.25 + k * 0.08) * (1 + energy) + k * 2.1, r = MIN * (0.12 + lv[k] * 0.22);
+    const a = mag.phase[k], r = MIN * (0.12 + lv[k] * 0.22);
     return [W / 2 + Math.cos(a) * r * 1.4, H / 2 + Math.sin(a * 1.3) * r];
   });
   const usePtr = mag.pointer && (mag.down || performance.now() - mag.pointer.at < 2000);
   const px = usePtr ? mag.pointer.x * W : 0, py = usePtr ? mag.pointer.y * H : 0;
   const kick = hits.bass ? hits.bass : 0, burst = mag.release;
   mag.release = 0;
-  const s = MIN, maxV = s * (0.6 + energy * 1.2);
+  const s = MIN, maxV = s * (0.25 + energy * 1.5);
   const cols = RGB.map(c => night ? c : c.map(v => v * 0.8));
   for (let i = 0; i < mag.n; i++) {
     const b = mag.band[i];
@@ -3665,7 +3818,7 @@ function drawMagnet(dt) {
     let dx = tx - mag.x[i], dy = ty - mag.y[i];
     const d2 = dx * dx + dy * dy + s * s * 0.002, d = Math.sqrt(d2);
     // Atracción + giro alrededor del imán
-    const f = (usePtr ? 14 : 7 + lv[b] * 12) * s / d;
+    const f = (usePtr ? 14 : 7 * (0.25 + energy * 1.3) + lv[b] * 12) * s / d;   // en las partes suaves todo va más despacio
     let ax = dx / d * f - dy / d * f * swirl, ay = dy / d * f + dx / d * f * swirl;
     // Golpe de bajo o soltar el ratón: estallido hacia fuera
     if (kick && b === 0 || burst) { const k = (burst ? 0.55 : kick * 0.8) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
@@ -3966,10 +4119,9 @@ function drawStrobe(dt) {
   const line = words.join(' ').toLowerCase();
   if (!state.noFlash) {
     if (hits.bass && now - strobeLast > 120) { strobeFlash = 0.09; strobeLast = now; }
-    if (beatTick && tempo.conf > 0.4 && now - strobeLast > 220) { strobeFlash = 0.06; strobeLast = now; }   // también en el compás
     if (ly && ly.text !== strobeLine) { strobeFlash = Math.max(strobeFlash, 0.12); }
   }
-  if (hits.bass || beatTick) strobeColorK = (strobeColorK + 1) % 3;   // en la paleta, el fondo cambia de color al ritmo
+  if (hits.bass || (beatTick && now - lastBassHit < 1200)) strobeColorK = (strobeColorK + 1) % 3;   // en la paleta, el fondo cambia de color al ritmo
   if (ly) strobeLine = ly.text;
   strobeFlash = Math.max(0, strobeFlash - dt);
   let [bg, fg] = strobeColors();
@@ -4041,12 +4193,16 @@ function drawVinyl(dt) {
   const R = MIN * (vertical ? 0.36 : 0.37), cx = W / 2 - R * (vertical ? 0.14 : 0.18), cy = H * (vertical ? 0.46 : 0.5);   // a un lado para que quepa el brazo
   if (!vinyl.base || Math.abs(vinyl.baseR - R) > 2) { vinyl.base = vinylBase(R); vinyl.baseR = R; }
   // ¿Suena? Con canción conectada se sabe; si no, se mira el audio
-  const playing = spConnected() && sp.item ? sp.playing : (!analyser || energy > 0.02);
+  // Con Spotify se sabe si suena; con solo audio, se da por parado tras 3 s seguidos de silencio
+  // (así las partes suaves de una canción no levantan el brazo)
+  vinyl.quiet = energy > 0.03 ? 0 : (vinyl.quiet || 0) + dt;
+  const playing = spConnected() && sp.item ? sp.playing : (!analyser || vinyl.quiet < 3);
   const rps = tempo.conf > 0.3 && tempo.bpm ? Math.max(0.3, Math.min(0.9, tempo.bpm / 240)) : 0.555;
   const goal = playing ? rps : 0;
   vinyl.spin += (goal - vinyl.spin) * (1 - Math.pow(goal > vinyl.spin ? 0.02 : 0.25, dt));   // arranca rápido, frena despacio
-  if (dropHit) { vinyl.scratch = -9; vinyl.hopV += 1.4; vinyl.flashes.push({ t: 0 }); }
-  vinyl.scratch *= Math.pow(0.004, dt);
+  if (dropHit) { vinyl.scratch = 2.5; vinyl.hopV += 0.8; vinyl.flashes.push({ t: 0 }); }   // en un drop, el disco se acelera un instante
+  if (hits.bass) vinyl.hopV += hits.bass * 0.25;   // la aguja salta un poco con cada golpe
+  vinyl.scratch *= Math.pow(0.02, dt);
   vinyl.ang += (vinyl.spin * Math.PI * 2 + vinyl.scratch) * dt;
   ctx.save();
   glowSpot(cx, cy, R * 2, mix(0.5), (night ? 0.2 : 0.14) + beatSoft * 0.22);
@@ -4060,6 +4216,8 @@ function drawVinyl(dt) {
   ctx.restore();
   // Disco (surcos pre-dibujados) girando
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang); ctx.drawImage(vinyl.base, -R, -R, R * 2, R * 2); ctx.restore();
+  // Halo de color que respira con los graves, por debajo de los reflejos
+  glowSpot(cx, cy, R * 1.05, mix(0.5), (night ? 0.12 : 0.08) * (bass + beatSoft * 1.5));
   // Luz en los surcos: dos reflejos que no giran (la luz está quieta). Cada anillo del disco
   // escucha una zona del espectro y su reflejo brilla y toma color con ella.
   if (ctx.createConicGradient) {
@@ -4068,7 +4226,7 @@ function drawVinyl(dt) {
     for (let k = 0; k < RINGS; k++) {
       const t = k / (RINGS - 1), band = Math.min(BANDS - 1, Math.floor((1 - t) * BANDS * 0.8));
       const lv = Math.pow(spec[band], 1.3), c = mix(t);
-      const a = 0.05 + lv * 0.32 + beatSoft * 0.05;
+      const a = 0.04 + lv * 0.4 + beatSoft * 0.08;
       const ra = r0 + (r1 - r0) * k / RINGS, rb = r0 + (r1 - r0) * (k + 1) / RINGS;
       const cg = ctx.createConicGradient(-0.75 + Math.sin(time * 0.2) * 0.05, cx, cy);
       const tint = c.map(v => v * 0.6 + 255 * 0.4);
@@ -4166,12 +4324,15 @@ const grain = (() => {
   return ctx.createPattern(n, 'repeat');
 })();
 
-let slowFor = 0, fastFor = 0, coolDown = 0;
+let slowFor = 0, fastFor = 0, coolDown = 0, drops_ = 0;
+addEventListener('visibilitychange', () => { slowFor = 0; });   // al volver a la pestaña el primer fotograma es lento: no cuenta
 function adapt(dt) {
   coolDown -= dt;
-  if (dt > 0.026) { slowFor += dt; fastFor = 0; } else if (dt < 0.019) { fastFor += dt; slowFor = 0; }
-  if (slowFor > 3 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.1); slowFor = 0; coolDown = 30; resize(); }
-  else if (fastFor > 15 && coolDown <= 0 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
+  // Baja la resolución si el equipo no llega, y solo la sube tras mucho rato holgado. Cada cambio se nota
+  // un instante, así que tras bajar dos veces seguidas se queda fija (evita el «sube y baja» constante).
+  if (dt > 0.026) { slowFor += dt; fastFor = 0; } else if (dt < 0.014) { fastFor += dt; slowFor = 0; } else { fastFor = 0; }
+  if (slowFor > 3 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.1); slowFor = 0; coolDown = 120; drops_ += 1; resize(); }
+  else if (fastFor > 30 && coolDown <= 0 && drops_ < 2 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
 }
 
 let frameErrors = 0;
