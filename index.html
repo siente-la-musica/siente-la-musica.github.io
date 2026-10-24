@@ -64,8 +64,14 @@
   }
   #popColor .group { gap: 8px; padding: 2px 4px; }
   #btnColor { width: 26px; height: 26px; margin: 0 2px; }
-  .pop.grid #modes { display: grid; grid-template-columns: repeat(3, 108px); gap: 4px; }
-  .pop.grid #modes button { justify-content: center; }
+  .pop.grid { padding: 12px; }
+  .pop.grid #modes { display: grid; grid-template-columns: repeat(4, 150px); gap: 10px; }
+  .pop.grid #modes button {
+    flex-direction: column; align-items: stretch; gap: 6px; padding: 5px 5px 8px; border-radius: 14px; font-size: 13px;
+  }
+  .pop.grid #modes img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 10px; display: block; background: #000; }
+  .pop.grid #modes button[aria-pressed="true"] img { box-shadow: 0 0 0 2px var(--chip-on-fg); }
+  .intro .see { pointer-events: auto; margin-top: 18px; padding: 10px 18px; font-size: 15px; background: var(--chip-on); color: var(--chip-on-fg); }
   .pop.col { flex-direction: column; align-items: stretch; gap: 10px; padding: 12px 14px; min-width: 260px; white-space: normal; }
   .pop-title { font-weight: 600; font-size: 14px; }
   .pop-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
@@ -264,7 +270,7 @@
     .dock { width: calc(100% - 24px); gap: 6px; padding: 8px; border-radius: 20px; }
     .dock > .group { max-width: 100%; }
     .pop { position: fixed; left: 12px; right: 12px; bottom: calc(var(--dock-h, 70px) + 28px); transform: none; }
-    .pop.grid #modes { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .pop.grid #modes { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 60vh; overflow-y: auto; }
     .song { left: 12px; right: 12px; width: auto; }
     body:has(.song:not([hidden])) .status { display: none; }
     .corner { max-width: calc(100% - 40px); }
@@ -278,6 +284,7 @@
   <div>
     <h1>Siente la música</h1>
     <p>Pulsa <b>Audio del PC</b>, elige <b>Pantalla completa</b> o la pestaña donde suena la música, y activa <b>Compartir audio del sistema</b>.</p>
+    <button class="see" id="btnSee" type="button">Ver las animaciones</button>
   </div>
 </div>
 
@@ -326,6 +333,7 @@
         <button data-mode="bars">Barras</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
+        <button data-mode="fluid">Fluido</button>
         <button data-mode="flowers">Flores</button>
         <button data-mode="bokeh">Focos</button>
         <button data-mode="clouds">Nubes</button>
@@ -334,6 +342,7 @@
         <button data-mode="aura">Aura</button>
         <button data-mode="infinity">Infinito</button>
         <button data-mode="strobe">Estrobo</button>
+        <button data-mode="cover">Portada 3D</button>
         <button data-mode="lyrics">Letra</button>
         <button data-mode="artist">Artista</button>
       </div>
@@ -363,6 +372,7 @@
       <div class="pop-title">Ajustes</div>
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
+      <label class="row-set" for="aiDepthEl"><span>Portada 3D con IA <small>Descarga única de unos 27 MB la primera vez</small></span> <input type="checkbox" id="aiDepthEl"></label>
       <div class="row-set"><span>Color del estrobo</span>
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
@@ -404,7 +414,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), aiDepth: store.get('aiDepth', true), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -602,7 +612,7 @@ function applyAll(rebuild = true) {
   swatchBox.querySelectorAll('.swatch').forEach(s => s.setAttribute('aria-pressed', s.dataset.palette === state.palette));
   document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode));
   const cur = document.querySelector(`#modes button[data-mode="${state.mode}"]`);
-  document.getElementById('btnMode').textContent = (cur ? cur.textContent : 'Animación') + ' ▾';
+  document.getElementById('btnMode').textContent = (cur ? cur.textContent.trim() : 'Animación') + ' ▾';
   document.getElementById('btnAuto').setAttribute('aria-pressed', state.auto);
   document.querySelectorAll('[data-strobe]').forEach(b => b.setAttribute('aria-pressed', b.dataset.strobe === state.strobe));
   refreshColors();
@@ -620,12 +630,20 @@ function bindPop(btnId, popId) {
 }
 addEventListener('click', closePops);
 bindPop('btnSource', 'popSource'); bindPop('btnColor', 'popColor');
-bindPop('btnMode', 'popMode'); bindPop('btnSettings', 'popSettings'); bindPop('btnRec', 'popRec');
+// Tarjetas con vista previa en el menú de animaciones
+document.querySelectorAll('#modes button').forEach(b => {
+  const img = document.createElement('img'); img.src = 'previews/' + b.dataset.mode + '.webp'; img.alt = ''; img.loading = 'lazy';
+  const label = document.createElement('span'); label.textContent = b.textContent; b.textContent = ''; b.append(img, label);
+});
+bindPop('btnMode', 'popMode');
+document.getElementById('btnSee').onclick = e => { e.stopPropagation(); document.getElementById('btnMode').click(); }; bindPop('btnSettings', 'popSettings'); bindPop('btnRec', 'popRec');
 // Ajustes
 const sensEl = document.getElementById('sens'), noFlashEl = document.getElementById('noFlash');
 sensEl.value = state.sens; noFlashEl.checked = state.noFlash;
 sensEl.oninput = () => { state.sens = +sensEl.value; store.set('sens', state.sens); };
 noFlashEl.onchange = () => { state.noFlash = noFlashEl.checked; store.set('noFlash', state.noFlash); };
+const aiEl = document.getElementById('aiDepthEl'); aiEl.checked = state.aiDepth;
+aiEl.onchange = () => { state.aiDepth = aiEl.checked; store.set('aiDepth', state.aiDepth); if (state.aiDepth && state.mode === 'cover' && coverClean) cover3dImage(coverUrl, coverClean); };
 document.querySelectorAll('[data-strobe]').forEach(b => b.onclick = () => { state.strobe = b.dataset.strobe; store.set('strobe', state.strobe); applyAll(false); });
 document.getElementById('btnAuto').onclick = () => { state.auto = !state.auto; store.set('auto', state.auto); autoT = 0; applyAll(false); };
 function setSource(label) {
@@ -643,8 +661,9 @@ function setMode(m) {
   state.mode = m; store.set('mode', m);
   document.body.classList.toggle('mode-lyrics', m === 'lyrics');
   document.body.classList.toggle('mode-strobe', m === 'strobe');
-  document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist');
+  document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist' || m === 'cover');
   if (m === 'artist' && sp.item) arLoad(sp.item);
+  if (m === 'cover' && coverClean) { cover3dImage(coverUrl, coverClean); }
   if ((m === 'lyrics' || m === 'strobe') && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
   if (m === 'strobe' && !state.noFlash && !store.get('strobeWarned', false)) {
     store.set('strobeWarned', true);
@@ -690,7 +709,7 @@ addEventListener('keydown', e => {
 
 applyAll();
 if (state.mode === 'strobe') document.body.classList.add('mode-strobe');
-if (state.mode === 'lyrics' || state.mode === 'artist') { intro.hidden = true; document.body.classList.add('mode-info'); if (state.mode === 'lyrics') document.body.classList.add('mode-lyrics'); }
+if (state.mode === 'lyrics' || state.mode === 'artist' || state.mode === 'cover') { intro.hidden = true; document.body.classList.add('mode-info'); if (state.mode === 'lyrics') document.body.classList.add('mode-lyrics'); }
 
 // ================= Audio =================
 let audioCtx, analyser, freqData, source, currentStream, audioEl, recDest;
@@ -1250,7 +1269,7 @@ function spButton() {
 }
 // Ajusta los textos de ayuda a lo que haya conectado
 function refreshChrome() {
-  intro.hidden = !!analyser || spConnected() || state.mode === 'lyrics' || state.mode === 'artist';
+  intro.hidden = !!analyser || spConnected() || ['lyrics', 'artist', 'cover'].includes(state.mode);
   if (!analyser) setStatus(spConnected() ? 'Muestra · pulsa Audio del PC para que las animaciones sigan tu música' : 'Sin audio · vista de demostración');
   try { lyricsButton(); } catch (e) {}   // aún no existe durante la carga inicial
 }
@@ -1458,6 +1477,7 @@ function drawBackdrop(dt, boost = 1) {
 }
 
 function setCover(url) {
+  if (url !== coverUrl) cover3dLeaving();
   coverUrl = url; coverColors = null;
   if (!url) { setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
   // Fondo: imagen normal, siempre se puede dibujar
@@ -1465,6 +1485,7 @@ function setCover(url) {
     if (coverUrl !== url) return;
     const bg = makeCoverBg(img); bg.clean = clean; setBackdrop(bg);
     coverClean = clean ? img : null;
+    cover3dImage(url, clean ? img : null);
   });
   // Colores: hace falta leer los píxeles; si el servidor no lo permite, se ignora
   const img = new Image(); img.crossOrigin = 'anonymous';
@@ -1562,7 +1583,7 @@ function showLyricNote(text) {
   lyricsEl.hidden = !text;
 }
 function subtitlesTick() {
-  if (!lyricsOn || state.mode === 'lyrics' || state.mode === 'artist' || state.mode === 'strobe' || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
+  if (!lyricsOn || ['lyrics', 'artist', 'strobe', 'cover'].includes(state.mode) || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
   const msg = lyricsMessage() || (lyrics.plain ? 'Esta canción tiene letra, pero sin tiempos para seguirla' : '');
   if (msg) { if (lyCur.textContent !== msg) showLyricNote(msg); lyricIndex = -3; return; }
   const L = lyrics.lines, pos = lyricPos();
@@ -1767,7 +1788,7 @@ function drawRecOverlay() {
   ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)'; ctx.shadowBlur = 24 * u;
   const it = spConnected() && sp.item;
   // Canción arriba a la izquierda (fuera de la zona de botones de TikTok)
-  if (it && state.mode !== 'artist') {
+  if (it && state.mode !== 'artist' && state.mode !== 'cover') {
     const x0 = W * 0.07, y0 = H * (vertical ? 0.11 : 0.1), s_ = 120 * u;
     let tx = x0;
     if (coverClean) {
@@ -1821,9 +1842,9 @@ function autoDirector(dt) {
   if (!state.auto || recording) return;
   autoT += dt;
   if (!(dropHit || (autoT > 40 && hits.bass > 0.5))) return;
-  const pool = ['bars', 'mountains', 'ink', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
+  const pool = ['bars', 'mountains', 'ink', 'fluid', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
   if (!state.noFlash) pool.push('strobe');
-  if (spConnected() && sp.item) pool.push('lyrics', 'artist');
+  if (spConnected() && sp.item) pool.push('lyrics', 'artist', 'cover');
   const options = pool.filter(m => m !== state.mode);
   setMode(options[Math.floor(Math.random() * options.length)]);
   autoT = 0;
@@ -2305,6 +2326,339 @@ function drawClouds(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 
+// ================= Motor WebGL2 (Fluido y Portada 3D) =================
+const GLX = { gl: null, c: null, ok: null, quad: null };
+function glInit() {
+  if (GLX.ok !== null) return GLX.ok;
+  const c = document.createElement('canvas');
+  const gl = c.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false, preserveDrawingBuffer: false });
+  if (!gl || !gl.getExtension('EXT_color_buffer_float')) { GLX.ok = false; return false; }
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const buf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  c.addEventListener('webglcontextlost', e => { e.preventDefault(); GLX.ok = null; fluid.ready = false; cover3d.prog = null; });
+  Object.assign(GLX, { gl, c, ok: true });
+  return true;
+}
+const GL_VS = `#version 300 es
+layout(location = 0) in vec2 aPos;
+out vec2 vUv, vL, vR, vT, vB;
+uniform vec2 texel;
+void main() {
+  vUv = aPos * 0.5 + 0.5;
+  vL = vUv - vec2(texel.x, 0.); vR = vUv + vec2(texel.x, 0.); vT = vUv + vec2(0., texel.y); vB = vUv - vec2(0., texel.y);
+  gl_Position = vec4(aPos, 0., 1.);
+}`;
+function glProgram(fs) {
+  const gl = GLX.gl, mk = (t, src) => { const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
+  const pr = gl.createProgram();
+  gl.attachShader(pr, mk(gl.VERTEX_SHADER, GL_VS));
+  gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp sampler2D;\nin vec2 vUv, vL, vR, vT, vB;\nout vec4 o;\n' + fs));
+  gl.linkProgram(pr);
+  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
+  const u = {}; const n = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(pr, i).name; u[name] = gl.getUniformLocation(pr, name); }
+  return { pr, u };
+}
+function glFBO(w, h) {
+  const gl = GLX.gl, t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, w, h, 0, gl.RGBA, gl.HALF_FLOAT, null);
+  const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+  gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  return { t, f, w, h, texel: [1 / w, 1 / h] };
+}
+function glDouble(w, h) { const d = { read: glFBO(w, h), write: glFBO(w, h), swap() { [d.read, d.write] = [d.write, d.read]; } }; return d; }
+function glBind(unit, fbo) { const gl = GLX.gl; gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, fbo.t); return unit; }
+function glBlit(target, w, h) { const gl = GLX.gl; gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.f : null); gl.viewport(0, 0, target ? target.w : w, target ? target.h : h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+
+// ================= Escena: Fluido =================
+// Simulación de fluidos ("stable fluids") en la tarjeta gráfica: la música inyecta tinta y
+// empujones; la presión y los remolinos hacen el resto. El ratón o el dedo lo revuelven.
+const fluid = { ready: false, key: '', pointer: null };
+function fluidSetup() {
+  const gl = GLX.gl;
+  const P = s_ => glProgram(s_);
+  fluid.p = {
+    splat: P(`uniform sampler2D uTarget; uniform float aspect, radius; uniform vec3 color; uniform vec2 point;
+      void main() { vec2 p = vUv - point; p.x *= aspect; o = vec4(texture(uTarget, vUv).xyz + exp(-dot(p, p) / radius) * color, 1.); }`),
+    advect: P(`uniform sampler2D uVelocity, uSource; uniform vec2 texel; uniform float dt, dissipation;
+      void main() { vec2 c = vUv - dt * texture(uVelocity, vUv).xy * texel; o = texture(uSource, c) / (1. + dissipation * dt); }`),
+    divergence: P(`uniform sampler2D uVelocity;
+      void main() { float L = texture(uVelocity, vL).x, R = texture(uVelocity, vR).x, T = texture(uVelocity, vT).y, B = texture(uVelocity, vB).y;
+        vec2 C = texture(uVelocity, vUv).xy;
+        if (vL.x < 0.) L = -C.x; if (vR.x > 1.) R = -C.x; if (vT.y > 1.) T = -C.y; if (vB.y < 0.) B = -C.y;
+        o = vec4(0.5 * (R - L + T - B), 0., 0., 1.); }`),
+    curl: P(`uniform sampler2D uVelocity;
+      void main() { float L = texture(uVelocity, vL).y, R = texture(uVelocity, vR).y, T = texture(uVelocity, vT).x, B = texture(uVelocity, vB).x;
+        o = vec4(0.5 * (R - L - T + B), 0., 0., 1.); }`),
+    vorticity: P(`uniform sampler2D uVelocity, uCurl; uniform float curl, dt;
+      void main() { float L = texture(uCurl, vL).x, R = texture(uCurl, vR).x, T = texture(uCurl, vT).x, B = texture(uCurl, vB).x, C = texture(uCurl, vUv).x;
+        vec2 f = 0.5 * vec2(abs(T) - abs(B), abs(R) - abs(L)); f /= length(f) + 0.0001; f *= curl * C; f.y *= -1.;
+        vec2 v = texture(uVelocity, vUv).xy + f * dt; o = vec4(clamp(v, -1000., 1000.), 0., 1.); }`),
+    pressure: P(`uniform sampler2D uPressure, uDivergence;
+      void main() { float L = texture(uPressure, vL).x, R = texture(uPressure, vR).x, T = texture(uPressure, vT).x, B = texture(uPressure, vB).x;
+        o = vec4((L + R + B + T - texture(uDivergence, vUv).x) * 0.25, 0., 0., 1.); }`),
+    gradient: P(`uniform sampler2D uPressure, uVelocity;
+      void main() { float L = texture(uPressure, vL).x, R = texture(uPressure, vR).x, T = texture(uPressure, vT).x, B = texture(uPressure, vB).x;
+        o = vec4(texture(uVelocity, vUv).xy - vec2(R - L, T - B), 0., 1.); }`),
+    clear: P(`uniform sampler2D uTexture; uniform float value; void main() { o = value * texture(uTexture, vUv); }`),
+    display: P(`uniform sampler2D uTexture; uniform float light;
+      void main() { vec3 c = texture(uTexture, vUv).rgb; c = c / (1. + c * 0.35);   // tono suave, sin quemarse
+        float a = clamp(max(c.r, max(c.g, c.b)) * 1.4, 0., 1.);
+        if (light > 0.5) c *= 1.5;
+        o = light > 0.5 ? vec4(c * a, a) : vec4(c, a); }`),
+  };
+  fluid.ready = true; fluid.key = '';
+}
+function fluidSize() {
+  const aspect = W / H, sim = 128, dye = Math.min(1024, Math.round(Math.min(W, H) * 0.6));
+  const sw = aspect >= 1 ? Math.round(sim * aspect) : sim, sh = aspect >= 1 ? sim : Math.round(sim / aspect);
+  const dw = aspect >= 1 ? Math.round(dye * aspect) : dye, dh = aspect >= 1 ? dye : Math.round(dye / aspect);
+  const key = [sw, sh, dw, dh].join('x');
+  if (key === fluid.key) return;
+  fluid.key = key;
+  fluid.vel = glDouble(sw, sh); fluid.dye = glDouble(dw, dh); fluid.pres = glDouble(sw, sh);
+  fluid.div = glFBO(sw, sh); fluid.curlF = glFBO(sw, sh);
+  const cw = Math.min(W, 1920), ch = Math.round(cw * H / W);
+  GLX.c.width = cw; GLX.c.height = ch;
+}
+function fluidSplat(x, y, dx, dy, col, r) {
+  const gl = GLX.gl, p = fluid.p.splat;
+  gl.useProgram(p.pr);
+  gl.uniform1f(p.u.aspect, W / H); gl.uniform2f(p.u.point, x, y); gl.uniform1f(p.u.radius, r);
+  gl.uniform1i(p.u.uTarget, glBind(0, fluid.vel.read)); gl.uniform3f(p.u.color, dx, dy, 0);
+  gl.uniform2fv(p.u.texel, fluid.vel.read.texel); glBlit(fluid.vel.write); fluid.vel.swap();
+  gl.uniform1i(p.u.uTarget, glBind(0, fluid.dye.read)); gl.uniform3f(p.u.color, col[0], col[1], col[2]);
+  gl.uniform2fv(p.u.texel, fluid.dye.read.texel); glBlit(fluid.dye.write); fluid.dye.swap();
+}
+function fluidStep(dt) {
+  const gl = GLX.gl, P = fluid.p, v = fluid.vel, sw = v.read.w, sh = v.read.h;
+  gl.disable(gl.BLEND);
+  const use = (p, texel) => { gl.useProgram(p.pr); gl.uniform2fv(p.u.texel, texel); return p.u; };
+  let u = use(P.curl, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); glBlit(fluid.curlF);
+  u = use(P.vorticity, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uCurl, glBind(1, fluid.curlF));
+  gl.uniform1f(u.curl, 18 + energy * 30); gl.uniform1f(u.dt, dt); glBlit(v.write); v.swap();
+  u = use(P.divergence, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); glBlit(fluid.div);
+  u = use(P.clear, v.read.texel); gl.uniform1i(u.uTexture, glBind(0, fluid.pres.read)); gl.uniform1f(u.value, 0.8); glBlit(fluid.pres.write); fluid.pres.swap();
+  u = use(P.pressure, v.read.texel); gl.uniform1i(u.uDivergence, glBind(0, fluid.div));
+  for (let i = 0; i < 20; i++) { gl.uniform1i(u.uPressure, glBind(1, fluid.pres.read)); glBlit(fluid.pres.write); fluid.pres.swap(); }
+  u = use(P.gradient, v.read.texel); gl.uniform1i(u.uPressure, glBind(0, fluid.pres.read)); gl.uniform1i(u.uVelocity, glBind(1, v.read)); glBlit(v.write); v.swap();
+  u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(0, v.read));
+  gl.uniform1f(u.dt, dt); gl.uniform1f(u.dissipation, 0.25); glBlit(v.write); v.swap();
+  u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(1, fluid.dye.read));
+  gl.uniform1f(u.dissipation, 0.6 + (1 - energy) * 0.6); glBlit(fluid.dye.write); fluid.dye.swap();
+}
+const fluidColor = (c, k) => c.map(x => x / 255 * k);
+addEventListener('pointermove', e => {
+  if (state.mode !== 'fluid' || recording) return;
+  const x = e.clientX / innerWidth, y = 1 - e.clientY / innerHeight;
+  if (fluid.pointer) fluid.pointer.moves.push([x, y, x - fluid.pointer.x, y - fluid.pointer.y]);
+  fluid.pointer = { x, y, moves: fluid.pointer ? fluid.pointer.moves : [] };
+});
+function drawFluid(dt) {
+  if (!glInit()) { drawInk(dt); return; }   // sin WebGL2: se usa la tinta
+  if (!fluid.ready) { try { fluidSetup(); } catch (e) { console.error(e); GLX.ok = false; return; } }
+  fluidSize();
+  const night = state.theme === 'dark', R = r => r / 100;
+  // La música inyecta tinta
+  const ring = (n, strength, size, k) => {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, rr = 0.12 + Math.random() * 0.25;
+      const x = 0.5 + Math.cos(a) * rr * (H / W), y = 0.5 + Math.sin(a) * rr;
+      const sp_ = (700 + strength * 2200), dir = a + (Math.random() - 0.5) * 1.6 + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
+      fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[Math.floor(Math.random() * 3)], k), R(size));
+    }
+  };
+  if (hits.bass) ring(2 + Math.round(hits.bass * 2), hits.bass, 0.35 + hits.bass * 0.3, 0.45 + hits.bass * 0.5);
+  if (hits.mid) ring(1 + Math.round(hits.mid), hits.mid * 0.6, 0.18, 0.3 + hits.mid * 0.3);
+  if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
+  if (beatTick && !hits.bass) ring(1, 0.3, 0.2, 0.25);
+  if (Math.random() < energy * dt * 6) ring(1, energy * 0.4, 0.15, 0.15 + energy * 0.25);
+  // El ratón o el dedo revuelven
+  if (fluid.pointer && fluid.pointer.moves.length) {
+    for (const [x, y, dx, dy] of fluid.pointer.moves.splice(0)) fluidSplat(x, y, dx * 6000, dy * 6000, fluidColor(mix(x), 0.18), R(0.2));
+  }
+  fluidStep(Math.min(dt, 0.033));
+  // Mostrar
+  const gl = GLX.gl, d = fluid.p.display;
+  gl.useProgram(d.pr); gl.uniform2fv(d.u.texel, fluid.dye.read.texel); gl.uniform1i(d.u.uTexture, glBind(0, fluid.dye.read));
+  gl.uniform1f(d.u.light, night ? 1 : 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, GLX.c.width, GLX.c.height);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save();
+  ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  ctx.drawImage(GLX.c, 0, 0, W, H);
+  ctx.restore();
+  if (night) bloom(GLX.c, 0.35 + beatSoft * 0.3);
+}
+
+// ================= Escena: Portada 3D =================
+// La portada como una tarjeta con relieve: un mapa de profundidad (calculado con IA en el
+// navegador, o estimado mientras tanto) desplaza cada punto según lo cerca que está; el
+// ratón y la música mueven la cámara. Al cambiar de canción, la portada estalla en
+// partículas que flotan hasta que llega la nueva y luego se reordenan formándola.
+const cover3d = { prog: null, img: null, url: '', depth: null, depthFor: '', aiState: 'idle', mouse: [0, 0], parts: null, partT: 0, waiting: false };
+const depthCache = new Map();
+addEventListener('pointermove', e => { cover3d.mouse = [(e.clientX / innerWidth - 0.5) * 2, (e.clientY / innerHeight - 0.5) * 2]; });
+function syntheticDepth(img) {   // estimación rápida: zonas claras y centrales, más cerca
+  const n = 128, c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, n, n);
+  const d = x.getImageData(0, 0, n, n);
+  for (let i = 0; i < n * n; i++) {
+    const px = i % n, py = Math.floor(i / n), dist = Math.hypot(px / n - 0.5, py / n - 0.55) * 1.6;
+    const l = (d.data[i * 4] * 0.3 + d.data[i * 4 + 1] * 0.59 + d.data[i * 4 + 2] * 0.11) / 255;
+    const v = Math.max(0, Math.min(1, l * 0.45 + (1 - dist) * 0.55)) * 255;
+    d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v; d.data[i * 4 + 3] = 255;
+  }
+  x.putImageData(d, 0, 0);
+  const o = document.createElement('canvas'); o.width = o.height = n;
+  const ox = o.getContext('2d'); if (CAN_BLUR) ox.filter = 'blur(4px)'; ox.drawImage(c, 0, 0);
+  return o;
+}
+let depthPipe = null;
+async function aiDepth(url) {
+  if (depthCache.has(url)) return depthCache.get(url);
+  if (!state.aiDepth) return null;
+  try {
+    if (!depthPipe) {
+      cover3d.aiState = 'loading';
+      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0');
+      depthPipe = await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', { dtype: 'q8' });
+    }
+    cover3d.aiState = 'working';
+    const out = await depthPipe(url);
+    const c = out.depth.toCanvas();
+    const o = document.createElement('canvas'); o.width = o.height = 256;
+    const ox = o.getContext('2d'); if (CAN_BLUR) ox.filter = 'blur(1.5px)'; ox.drawImage(c, 0, 0, 256, 256);
+    depthCache.set(url, o); cover3d.aiState = 'ready';
+    return o;
+  } catch (e) { console.warn('Profundidad con IA no disponible:', e); cover3d.aiState = 'failed'; return null; }
+}
+function cover3dSetup() {
+  cover3d.prog = glProgram(`uniform sampler2D uImg, uDepth; uniform vec2 uOff; uniform float uZoom, uRound;
+    void main() {
+      vec2 uv = (vUv - 0.5) / uZoom + 0.5;
+      // Busca el punto que, desplazado por su profundidad, cae en este píxel (paralaje)
+      vec2 p = uv;
+      for (int i = 0; i < 10; i++) p = uv + uOff * (texture(uDepth, p).r - 0.5);
+      vec3 c = texture(uImg, p).rgb;
+      float d = texture(uDepth, p).r;
+      c *= 0.88 + d * 0.22;   // lo cercano, un poco más luminoso
+      vec2 q = abs(vUv - 0.5) - (0.5 - uRound);
+      float m = 1. - smoothstep(0., 0.004, length(max(q, 0.)) - uRound);
+      o = vec4(c * m, m);
+    }`);
+  cover3d.tImg = GLX.gl.createTexture(); cover3d.tDepth = GLX.gl.createTexture();
+}
+function glUpload(tex, source) {
+  const gl = GLX.gl; gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+function sampleColors(img, n) {
+  const c = document.createElement('canvas'); c.width = c.height = n;
+  const x = c.getContext('2d'); x.drawImage(img, 0, 0, n, n);
+  return x.getImageData(0, 0, n, n).data;
+}
+// Llamadas desde setCover
+function cover3dLeaving() {
+  if (state.mode !== 'cover' || !cover3d.img) return;
+  const n = 64, col = sampleColors(cover3d.img, n), parts = [];
+  for (let i = 0; i < n * n; i++) {
+    const u = (i % n + 0.5) / n, v = (Math.floor(i / n) + 0.5) / n, a = Math.random() * Math.PI * 2;
+    parts.push({ u, v, x: u, y: v, vx: Math.cos(a) * (0.2 + Math.random() * 0.6), vy: Math.sin(a) * (0.2 + Math.random() * 0.6) - 0.15,
+      c: [col[i * 4], col[i * 4 + 1], col[i * 4 + 2]], tc: null, tu: u, tv: v, ph: Math.random() * 6.28 });
+  }
+  cover3d.parts = parts; cover3d.partT = 0; cover3d.waiting = true; cover3d.img = null;
+}
+function cover3dImage(url, img) {
+  if (!img) { cover3d.img = null; return; }
+  cover3d.url = url; cover3d.img = img;
+  cover3d.depth = depthCache.get(url) || syntheticDepth(img); cover3d.depthFor = '';
+  if (state.mode === 'cover') aiDepth(url).then(d => { if (d && cover3d.url === url) { cover3d.depth = d; cover3d.depthFor = ''; } });
+  if (cover3d.parts) {   // las partículas ya tienen adónde ir
+    const n = 64, col = sampleColors(img, n);
+    const order = [...cover3d.parts.keys()].sort(() => Math.random() - 0.5);
+    order.forEach((pi, i) => { const q = cover3d.parts[pi]; q.tu = (i % n + 0.5) / n; q.tv = (Math.floor(i / n) + 0.5) / n; q.tc = [col[i * 4], col[i * 4 + 1], col[i * 4 + 2]]; });
+    cover3d.waiting = false; cover3d.partT = 0;
+  }
+}
+function drawCover(dt) {
+  const night = state.theme === 'dark', vertical = H > W;
+  const S = Math.min(MIN * (vertical ? 0.78 : 0.6), 1500), cx = W / 2, cy = H * (vertical ? 0.42 : 0.46);
+  const x0 = cx - S / 2, y0 = cy - S / 2;
+  glowSpot(cx, cy, S * (1.05 + beatSoft * 0.15), mix(0.5), (night ? 0.3 : 0.2) + beatSoft * 0.25);
+  const it = spConnected() && sp.item;
+  if (cover3d.parts) {
+    // Partículas: estallan, flotan mientras se espera la nueva portada y luego la forman
+    cover3d.partT += dt;
+    const t = cover3d.partT, gather = cover3d.waiting ? 0 : Math.min(1, Math.max(0, (t - 0.35) / 1.2));
+    const ease = gather * gather * (3 - 2 * gather), cell = S / 64 * 1.05;
+    for (const q of cover3d.parts) {
+      if (cover3d.waiting || t < 0.35) {
+        q.x += q.vx * dt * (0.5 + bass); q.y += q.vy * dt * (0.5 + bass);
+        q.vx *= Math.pow(0.4, dt); q.vy *= Math.pow(0.4, dt);
+        q.x += Math.sin(time * 1.3 + q.ph) * 0.0006; q.y += Math.cos(time * 1.1 + q.ph) * 0.0006;
+      }
+      const px = q.x + (q.tu - q.x) * ease, py = q.y + (q.tv - q.y) * ease;
+      if (gather >= 1) { q.x = q.tu; q.y = q.tv; }
+      const c = q.tc ? q.c.map((v, k) => v + (q.tc[k] - v) * ease) : q.c;
+      ctx.fillStyle = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
+      ctx.fillRect(x0 + px * S - cell / 2, y0 + py * S - cell / 2, cell * (1 - (1 - ease) * 0.3), cell * (1 - (1 - ease) * 0.3));
+    }
+    if (!cover3d.waiting && gather >= 1) cover3d.parts = null;
+  } else if (cover3d.img && glInit()) {
+    if (!cover3d.prog) { try { cover3dSetup(); } catch (e) { console.error(e); GLX.ok = false; return; } }
+    const gl = GLX.gl, sz = Math.round(Math.min(S, 1400));
+    if (GLX.c.width !== sz || GLX.c.height !== sz) { GLX.c.width = sz; GLX.c.height = sz; fluid.key = ''; }
+    if (cover3d.depthFor !== cover3d.url + (cover3d.depth ? cover3d.depth.width : '')) {
+      glUpload(cover3d.tImg, cover3d.img); glUpload(cover3d.tDepth, cover3d.depth);
+      cover3d.depthFor = cover3d.url + (cover3d.depth ? cover3d.depth.width : '');
+    }
+    const p = cover3d.prog; gl.useProgram(p.pr);
+    gl.uniform2f(p.u.texel, 1 / sz, 1 / sz);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cover3d.tImg); gl.uniform1i(p.u.uImg, 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, cover3d.tDepth); gl.uniform1i(p.u.uDepth, 1);
+    const sway = 0.012 + bass * 0.02;
+    const ox = cover3d.mouse[0] * 0.035 + Math.sin(time * 0.45) * sway, oy = -cover3d.mouse[1] * 0.035 + Math.cos(time * 0.37) * sway;
+    gl.uniform2f(p.u.uOff, -ox, -oy);
+    gl.uniform1f(p.u.uZoom, 0.94 + beatSoft * 0.03 + bass * 0.01);
+    gl.uniform1f(p.u.uRound, 0.035);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, sz, sz);
+    gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.BLEND);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = S * 0.08; ctx.shadowOffsetY = S * 0.03;
+    ctx.drawImage(GLX.c, x0, y0, S, S); ctx.restore();
+  } else {
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = textFg(0.6); ctx.font = `600 ${Math.round(MIN * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText(!spConnected() ? 'Conecta Spotify para ver la portada en 3D' : !sp.item ? 'Pon algo en tu Spotify' : 'Cargando la portada…', cx, cy);
+    ctx.restore();
+  }
+  // Título y artista bajo la portada
+  if (it) {
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)'; ctx.shadowBlur = MIN * 0.02;
+    ctx.fillStyle = textFg(); ctx.font = `700 ${Math.round(MIN * (vertical ? 0.05 : 0.04))}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText(it.name.length > 40 ? it.name.slice(0, 39) + '…' : it.name, cx, y0 + S + MIN * 0.09);
+    ctx.fillStyle = textFg(0.65); ctx.font = `500 ${Math.round(MIN * (vertical ? 0.035 : 0.027))}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText((it.artists || []).map(a => a.name).join(', '), cx, y0 + S + MIN * (vertical ? 0.15 : 0.135));
+    if (cover3d.aiState === 'loading' || cover3d.aiState === 'working') {
+      ctx.fillStyle = textFg(0.45); ctx.font = `500 ${Math.round(MIN * 0.018)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+      ctx.fillText(cover3d.aiState === 'loading' ? 'Preparando la profundidad con IA (descarga única)…' : 'Calculando la profundidad…', cx, y0 - MIN * 0.04);
+    }
+    ctx.restore();
+  }
+}
+
 // ================= Escena: Luz =================
 // Una luz suave en el centro, en tres capas: el halo sigue a los graves, la luz media a los
 // medios y el núcleo a los agudos. No se mueve de sitio: crece, se encoge y respira.
@@ -2491,7 +2845,7 @@ function drawLyricsScene(dt) {
   for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
-const scenes = { light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
