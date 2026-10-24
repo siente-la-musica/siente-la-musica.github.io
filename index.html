@@ -106,6 +106,7 @@
   .song .cover { width: 56px; height: 56px; border-radius: 10px; flex: none; object-fit: cover; background: var(--chip); }
   .song .meta { min-width: 0; flex: 1; display: grid; gap: 2px; }
   .song .title { font-weight: 600; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .song .artist .av { width: 1.3em; height: 1.3em; vertical-align: -.3em; margin-right: .35em; box-shadow: none; }
   .song .artist, .song .note { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .song .note { white-space: normal; }
   .song a { color: inherit; font-size: 13px; font-weight: 600; }
@@ -121,12 +122,17 @@
   .corner {
     position: fixed; left: max(20px, env(safe-area-inset-left, 0px));
     bottom: calc(var(--dock-h, 70px) + 34px + env(safe-area-inset-bottom, 0px));
-    max-width: min(46vw, 520px); display: grid; gap: 2px; pointer-events: none;
+    max-width: min(46vw, 560px); display: flex; gap: .8em; align-items: center; pointer-events: none;
+    font-size: clamp(14px, 1.05vw, 48px);
     transition: opacity .6s, bottom .5s; text-shadow: 0 0 1em var(--bg);
   }
+  .corner .tx { display: grid; gap: 2px; min-width: 0; }
+  .av { width: 2.6em; height: 2.6em; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--glass-line), 0 6px 24px rgba(0,0,0,.25); }
+  body.mode-lyrics .corner { display: none; }
+  body.mode-lyrics .status { display: none; }
   body.idle .corner { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
-  .corner .t { font-size: clamp(14px, 1.05vw, 48px); font-weight: 600; color: var(--fg); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .corner .a { font-size: clamp(12px, .85vw, 40px); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .corner .t { font-size: 1em; font-weight: 600; color: var(--fg); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .corner .a { font-size: .8em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body:not(.idle) .song:not([hidden]) ~ .corner { opacity: 0; }
   body.idle .song { opacity: 0; pointer-events: none; }
   .song { transition: opacity .5s; }
@@ -148,25 +154,39 @@
   @keyframes lyricIn { from { opacity: 0; transform: translateY(.5em); filter: blur(4px); } }
   @media (prefers-reduced-motion: reduce) { .lyrics .swap { animation: none; } }
 
-  /* Modo Letra: lista completa, la línea actual grande y nítida, las demás pequeñas y desenfocadas */
-  .lyricsView {
-    position: fixed; inset: 0; overflow: hidden; pointer-events: none;
-    -webkit-mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent);
-            mask-image: linear-gradient(transparent, #000 18%, #000 78%, transparent);
+  /* Modo Letra: tipografía en movimiento. Una línea a la vez, centrada; las palabras se
+     encienden con los colores de la paleta, la línea que acaba se evapora hacia arriba
+     y el texto late con los graves. */
+  .lyricsView { position: fixed; inset: 0; pointer-events: none; display: grid; place-items: center; padding: 0 max(24px, 6vw); }
+  .lv-stage {
+    position: relative; width: min(90vw, 24ch); text-align: center;
+    font-size: clamp(30px, 4.8vw, 240px); font-weight: 800; letter-spacing: -.025em; line-height: 1.1;
+    transform: scale(var(--pulse, 1)); transition: transform .08s linear;
   }
-  .lv-col {
-    position: absolute; left: 50%; top: 0; width: min(88vw, 26ch);
-    font-size: clamp(28px, 4.4vw, 220px); font-weight: 800; letter-spacing: -.025em; line-height: 1.15;
-    transform: translateX(-50%); transition: transform .8s cubic-bezier(.22,.8,.24,1);
+  .lv-cur { display: block; text-wrap: balance; }
+  .lv-cur .w {
+    display: inline-block; color: color-mix(in srgb, var(--fg) 26%, transparent);
+    transition: color .35s, transform .45s cubic-bezier(.2,.8,.2,1), text-shadow .45s;
   }
-  .lv-col p {
-    margin: 0 0 .55em; color: var(--fg); transform-origin: left center; text-wrap: balance;
-    transition: opacity .6s, filter .6s, transform .6s cubic-bezier(.22,.8,.24,1);
+  .lv-cur .w.on { color: var(--c); transform: translateY(-.03em); text-shadow: 0 0 .45em color-mix(in srgb, var(--c) 40%, transparent); }
+  .lv-cur.plain .w { color: var(--c); }
+  .lv-cur.enter .w { animation: wordIn .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 45ms); }
+  @keyframes wordIn { from { opacity: 0; filter: blur(.12em); transform: translateY(.4em) scale(.94); } }
+  .lv-out { position: absolute; inset: 0 0 auto; animation: lineOut 1.4s cubic-bezier(.3,.6,.3,1) forwards; }
+  .lv-out .w { color: var(--c); }
+  @keyframes lineOut { to { opacity: 0; transform: translateY(-1.1em) scale(1.05); filter: blur(.22em); letter-spacing: .05em; } }
+  .lv-next { margin-top: 1.1em; font-size: .34em; font-weight: 600; letter-spacing: 0; color: var(--muted); opacity: .75; text-wrap: balance; }
+  .lv-msg { font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); text-align: center; }
+  .lv-meta {
+    position: fixed; top: calc(24px + env(safe-area-inset-top, 0px)); left: max(24px, env(safe-area-inset-left, 0px));
+    display: flex; align-items: center; gap: .9em; font-size: clamp(14px, 1.1vw, 52px); max-width: 60vw;
   }
-  .lv-col.plain p { opacity: .8; }
-  .lv-msg { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; padding: 0 24px;
-    font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); }
-  @media (prefers-reduced-motion: reduce) { .lv-col, .lv-col p { transition: none; } }
+  .lv-meta .cv { width: 4.2em; height: 4.2em; border-radius: .5em; object-fit: cover; box-shadow: 0 10px 40px rgba(0,0,0,.35); flex: none; }
+  .lv-meta .av { width: 3em; height: 3em; margin-left: -1.6em; border: 3px solid var(--bg); box-sizing: content-box; }
+  .lv-meta .tx { display: grid; gap: .15em; min-width: 0; }
+  .lv-meta .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lv-meta .a { color: var(--muted); font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  @media (prefers-reduced-motion: reduce) { .lv-cur.enter .w, .lv-out { animation: none; } .lv-out { display: none; } }
 
   @media (max-width: 560px) { .sep { display: none; } .dock { gap: 8px; } }
 </style>
@@ -182,8 +202,12 @@
 </div>
 
 <div class="song" id="song" hidden aria-live="polite"></div>
-<div class="lyricsView" id="lyricsView" hidden><div class="lv-col" id="lvCol"></div><div class="lv-msg" id="lvMsg"></div></div>
-<div class="corner" id="corner" hidden><span class="t"></span><span class="a"></span></div>
+<div class="lyricsView" id="lyricsView" hidden>
+  <div class="lv-stage" id="lvStage"><span class="lv-cur" id="lvCur"></span><div class="lv-next" id="lvNext"></div></div>
+  <div class="lv-msg" id="lvMsg"></div>
+</div>
+<div class="lv-meta" id="lvMeta" hidden><img class="cv" alt=""><img class="av" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span></div></div>
+<div class="corner" id="corner" hidden><img class="av" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span></div></div>
 <div class="lyrics" id="lyrics" hidden><p class="prev"></p><p class="cur"></p><p class="next"></p></div>
 
 <div class="status" id="status"><span class="dot"></span><span id="statusText">Sin audio · vista de demostración</span></div>
@@ -386,6 +410,7 @@ function applyAll(rebuild = true) {
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
 function setMode(m) {
   state.mode = m; store.set('mode', m);
+  document.body.classList.toggle('mode-lyrics', m === 'lyrics');
   if (m === 'lyrics' && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
   intro.hidden = m === 'lyrics' || !!analyser;
   ictx.clearRect(0, 0, W, H); blobs.length = 0; lights.length = 0;
@@ -424,7 +449,7 @@ addEventListener('keydown', e => {
 });
 
 applyAll();
-if (state.mode === 'lyrics') intro.hidden = true;
+if (state.mode === 'lyrics') { intro.hidden = true; document.body.classList.add('mode-lyrics'); }
 
 // ================= Audio =================
 let audioCtx, analyser, freqData, source, currentStream, audioEl, recDest;
@@ -896,17 +921,41 @@ function spUpdate(d) {
     sp.dismissed = false;
     setCover(item ? (item.album?.images?.[0]?.url || item.images?.[0]?.url || '') : '');
     loadLyrics(item);
+    loadArtistImage(item);
   }
   spRender();
 }
 const fmt = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
 const cornerEl = document.getElementById('corner');
+const artistImages = new Map();
+async function loadArtistImage(item) {
+  const id = item && item.artists && item.artists[0] && item.artists[0].id;
+  if (!id) return;
+  if (!artistImages.has(id)) {
+    let url = '';
+    try {
+      const r = await fetch('https://api.spotify.com/v1/artists/' + id, { headers: { Authorization: 'Bearer ' + sp.token } });
+      if (r.ok) { const d = await r.json(); const im = d.images || []; url = (im[1] || im[0] || {}).url || ''; }
+    } catch (e) {}
+    artistImages.set(id, url);
+  }
+  if (sp.item && sp.item.id === item.id) spRender();
+}
+function artistImageOf(it) { const id = it && it.artists && it.artists[0] && it.artists[0].id; return (id && artistImages.get(id)) || ''; }
+function setImg(el, url) { if (!url) { el.hidden = true; el.removeAttribute('src'); return; } if (el.getAttribute('src') !== url) el.src = url; el.hidden = false; }
 function spCorner() {
   const it = spConnected() && sp.item;
   cornerEl.hidden = !it;
   if (!it) return;
+  const artist = it.artists ? it.artists.map(a => a.name).join(', ') : (it.show?.name || '');
   cornerEl.querySelector('.t').textContent = it.name;
-  cornerEl.querySelector('.a').textContent = it.artists ? it.artists.map(a => a.name).join(', ') : (it.show?.name || '');
+  cornerEl.querySelector('.a').textContent = artist;
+  setImg(cornerEl.querySelector('.av'), artistImageOf(it));
+  // Cabecera del modo Letra: portada y foto del artista superpuestas
+  lvMeta.querySelector('.t').textContent = it.name;
+  lvMeta.querySelector('.a').textContent = artist;
+  setImg(lvMeta.querySelector('.cv'), it.album?.images?.[1]?.url || it.album?.images?.[0]?.url || it.images?.[0]?.url || '');
+  setImg(lvMeta.querySelector('.av'), artistImageOf(it));
 }
 function spRender() {
   spCorner();
@@ -920,7 +969,7 @@ function spRender() {
     const link = it.external_urls?.spotify || '';
     showSong(
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
-      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${esc(artist)}${sp.playing ? '' : ' · en pausa'}</div>` +
+      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${artistImageOf(it) ? `<img class="av" src="${esc(artistImageOf(it))}" alt="">` : ''}${esc(artist)}${sp.playing ? '' : ' · en pausa'}</div>` +
       `<div class="bar"><i id="spBar"></i></div>` +
       `<div class="row"><span class="time" id="spTime"></span>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Abrir en Spotify</a>` : ''}<button id="spOut">Desconectar</button></div></div>`
     );
@@ -943,10 +992,11 @@ setInterval(spTick, 500);
 // Portada de fondo: muy desenfocada, tenue y con un vaivén lento; se funde al cambiar
 let bgCur = null, bgPrev = null, bgFade = 1;
 function makeCoverBg(img) {
-  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const c = document.createElement('canvas'); c.width = c.height = 640;
   const x = c.getContext('2d');
-  if (CAN_BLUR) x.filter = 'blur(5px)';
-  x.drawImage(img, -12, -12, 280, 280);   // un poco más grande para que el desenfoque no deje bordes
+  x.imageSmoothingQuality = 'high';
+  if (CAN_BLUR) x.filter = 'blur(2px)';     // apenas suavizada: se reconoce la portada
+  x.drawImage(img, -6, -6, 652, 652);       // un poco más grande para que el borde no se aclare
   return c;
 }
 function setBackdrop(canvasOrNull) { bgPrev = bgCur; bgCur = canvasOrNull; bgFade = 0; }
@@ -1034,7 +1084,7 @@ async function fetchLyrics(item) {
   return list.find(x => Math.abs(x.duration - dur) <= 5) || null;
 }
 async function loadLyrics(item) {
-  lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null; lvBuilt = null;
+  lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null;
   if (!item || !item.artists) return;   // sin canción, o es un podcast
   if (!lyricsOn && state.mode !== 'lyrics') return;
   if (lyricsCache.has(item.id)) { lyrics = lyricsCache.get(item.id); return; }
@@ -1085,38 +1135,72 @@ function subtitlesTick() {
   lyricsEl.hidden = false;
 }
 
-// --- Modo Letra a pantalla completa ---
-const lvEl = document.getElementById('lyricsView'), lvCol = document.getElementById('lvCol'), lvMsg = document.getElementById('lvMsg');
-let lvBuilt = null, lvIndex = -2;
-function lvBuild() {
-  const lines = lyrics.lines ? lyrics.lines.map(l => l.text || '♪') : lyrics.plain;
-  lvCol.className = 'lv-col' + (lyrics.plain ? ' plain' : '');
-  lvCol.innerHTML = '';
-  for (const t of lines) { const p = document.createElement('p'); p.textContent = t; lvCol.appendChild(p); }
-  lvBuilt = lyrics; lvIndex = -2;
+// --- Modo Letra: tipografía en movimiento ---
+const lvEl = document.getElementById('lyricsView'), lvStage = document.getElementById('lvStage');
+const lvCur = document.getElementById('lvCur'), lvNext = document.getElementById('lvNext'), lvMsg = document.getElementById('lvMsg');
+const lvMeta = document.getElementById('lvMeta');
+let lvIndex = -2, lvLyrics = null, lvWordsAt = [];
+
+function lvRenderLine(text, next, words) {
+  // La línea que termina se queda flotando y se evapora
+  if (lvCur.textContent.trim()) {
+    const out = lvCur.cloneNode(true);
+    out.className = 'lv-cur lv-out'; out.removeAttribute('id');
+    lvStage.appendChild(out);
+    setTimeout(() => out.remove(), 1500);
+  }
+  lvCur.innerHTML = '';
+  const parts = text.split(/\s+/).filter(Boolean);
+  parts.forEach((w, k) => {
+    const sp_ = document.createElement('span');
+    sp_.className = 'w'; sp_.textContent = w;
+    sp_.style.setProperty('--i', k);
+    sp_.style.setProperty('--c', rgba(mix(parts.length > 1 ? k / (parts.length - 1) : 0.5), 1));
+    lvCur.appendChild(sp_);
+    if (k < parts.length - 1) lvCur.appendChild(document.createTextNode(' '));
+  });
+  lvCur.className = 'lv-cur' + (words ? '' : ' plain'); void lvCur.offsetWidth; lvCur.classList.add('enter');
+  lvNext.textContent = next || '';
+}
+// Reparte el tiempo de la línea entre sus palabras según su longitud
+function wordTimes(text, t0, t1) {
+  const parts = text.split(/\s+/).filter(Boolean), span = Math.min(t1 - t0, 6000) * 0.85;
+  const total = parts.reduce((a, w) => a + w.length + 2, 0);
+  let acc = 0;
+  return parts.map(w => { const t = t0 + acc / total * span; acc += w.length + 2; return t; });
 }
 function lvTick() {
-  if (state.mode !== 'lyrics') { lvEl.hidden = true; return; }
-  lvEl.hidden = false;
+  const on = state.mode === 'lyrics';
+  lvEl.hidden = !on; lvMeta.hidden = !on || !spConnected() || !sp.item;
+  if (!on) return;
   const msg = lyricsMessage();
-  lvMsg.textContent = msg; lvCol.hidden = !!msg;
-  if (msg) return;
-  if (lvBuilt !== lyrics) lvBuild();
-  const ps = lvCol.children, n = ps.length;
-  let i;
-  if (lyrics.lines) { const L = lyrics.lines, pos = lyricPos(); i = -1; while (i + 1 < L.length && L[i + 1].t <= pos) i++; i = Math.max(0, i); }
-  else i = Math.min(n - 1, Math.floor(lyricPos() / Math.max(1, sp.duration) * n));   // sin tiempos: avanza según la canción
-  if (i === lvIndex) return;
-  lvIndex = i;
-  for (let k = 0; k < n; k++) {
-    const d = Math.abs(k - i), p = ps[k];
-    if (d > 9) { p.style.opacity = 0; continue; }
-    p.style.opacity = d === 0 ? 1 : Math.max(0.14, 0.5 - d * 0.06);
-    p.style.filter = d === 0 ? 'none' : `blur(${Math.min(0.11, 0.025 + d * 0.022).toFixed(3)}em)`;
-    p.style.transform = d === 0 ? 'scale(1)' : 'scale(.8)';
+  lvMsg.textContent = msg; lvMsg.hidden = !msg; lvStage.hidden = !!msg;
+  if (msg) { lvIndex = -2; lvCur.textContent = ''; return; }
+  if (lvLyrics !== lyrics) { lvLyrics = lyrics; lvIndex = -2; lvCur.textContent = ''; }
+  let i, text, next;
+  if (lyrics.lines) {
+    const L = lyrics.lines, pos = lyricPos();
+    i = -1; while (i + 1 < L.length && L[i + 1].t <= pos) i++;
+    if (i === lvIndex) return;
+    text = i < 0 ? '♪' : (L[i].text || '♪');
+    next = L[i + 1] ? L[i + 1].text : '';
+    lvWordsAt = i < 0 || !L[i].text ? [] : wordTimes(L[i].text, L[i].t, L[i + 1] ? L[i + 1].t : L[i].t + 4000);
+  } else {
+    const P = lyrics.plain;
+    i = Math.min(P.length - 1, Math.floor(lyricPos() / Math.max(1, sp.duration) * P.length));   // sin tiempos: según el avance
+    if (i === lvIndex) return;
+    text = P[i]; next = P[i + 1] || ''; lvWordsAt = [];
   }
-  const cur = ps[i];
-  if (cur) lvCol.style.transform = `translateX(-50%) translateY(${(innerHeight * 0.42 - cur.offsetTop - cur.offsetHeight / 2).toFixed(1)}px)`;
+  lvIndex = i;
+  lvRenderLine(text, next, !!lyrics.lines);
+}
+// Cada fotograma: enciende las palabras a su tiempo y hace latir el texto con los graves
+function lvFrame() {
+  if (state.mode !== 'lyrics' || lvEl.hidden) return;
+  lvStage.style.setProperty('--pulse', (1 + bass * 0.035).toFixed(4));
+  if (!lvWordsAt.length) return;
+  const pos = lyricPos(), ws = lvCur.querySelectorAll('.w');
+  ws.forEach((w, k) => { const on = pos >= lvWordsAt[k]; if (w.classList.contains('on') !== on) w.classList.toggle('on', on); });
 }
 addEventListener('resize', () => { lvIndex = -2; });
 
@@ -1365,6 +1449,7 @@ function render(now) {
   ctx.fillRect(0, 0, W, H);
   drawBackdrop(dt);
   (scenes[state.mode] || drawBars)(dt);
+  lvFrame();
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = state.theme === 'dark' ? 0.022 : 0.03;
   ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H);
