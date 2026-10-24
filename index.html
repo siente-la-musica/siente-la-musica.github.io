@@ -334,6 +334,7 @@
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
+        <button data-mode="magnet">Partículas</button>
         <button data-mode="flowers">Flores</button>
         <button data-mode="bokeh">Focos</button>
         <button data-mode="clouds">Nubes</button>
@@ -1849,7 +1850,7 @@ function autoDirector(dt) {
   if (!state.auto || recording) return;
   autoT += dt;
   if (!(dropHit || (autoT > 40 && hits.bass > 0.5))) return;
-  const pool = ['bars', 'mountains', 'ink', 'fluid', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
+  const pool = ['bars', 'mountains', 'ink', 'fluid', 'magnet', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
   if (!state.noFlash) pool.push('strobe');
   if (spConnected() && sp.item) pool.push('lyrics', 'artist', 'cover');
   const options = pool.filter(m => m !== state.mode);
@@ -2718,6 +2719,78 @@ function drawCover(dt) {
   }
 }
 
+// ================= Escena: Partículas magnéticas =================
+// Miles de partículas con estela giran alrededor de imanes que bailan con la música.
+// El ratón o el dedo las atrae; si se mantiene pulsado las hace girar en espiral y, al
+// soltar, estallan. Cada golpe de bajo las empuja hacia fuera.
+const mag = { n: 0, x: null, y: null, vx: null, vy: null, band: null, pointer: null, down: false, release: 0, trail: null, tctx: null };
+addEventListener('pointermove', e => { if (state.mode === 'magnet') mag.pointer = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, at: performance.now() }; });
+addEventListener('pointerdown', e => { if (state.mode === 'magnet' && !e.target.closest('.dock, .pop, .song')) { mag.down = true; mag.pointer = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, at: performance.now() }; } });
+addEventListener('pointerup', () => { if (mag.down) { mag.down = false; mag.release = 1; } });
+function magInit() {
+  const n = Math.round(Math.min(7000, 3500 * (W * H) / (1920 * 1080 * DPR * DPR) + 1500));
+  mag.n = n; mag.x = new Float32Array(n); mag.y = new Float32Array(n); mag.vx = new Float32Array(n); mag.vy = new Float32Array(n); mag.band = new Uint8Array(n);
+  for (let i = 0; i < n; i++) { mag.x[i] = Math.random() * W; mag.y[i] = Math.random() * H; mag.band[i] = i % 3; }
+  mag.trail = document.createElement('canvas'); mag.trail.width = W; mag.trail.height = H; mag.tctx = mag.trail.getContext('2d');
+  mag.W = W; mag.H = H; mag.buckets = Array.from({ length: 12 }, () => []);
+}
+function drawMagnet(dt) {
+  const night = state.theme === 'dark';
+  if (!mag.n || mag.W !== W || mag.H !== H) magInit();
+  const t = mag.tctx;
+  // Estelas: lo anterior se desvanece poco a poco
+  t.globalCompositeOperation = 'destination-out'; t.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; t.fillRect(0, 0, W, H);
+  t.globalCompositeOperation = night ? 'lighter' : 'source-over'; t.lineCap = 'round';
+  const lv = [bass, mid, high].map(v => Math.pow(v, 0.8));
+  // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
+  const att = [0, 1, 2].map(k => {
+    const a = time * (0.25 + k * 0.08) * (1 + energy) + k * 2.1, r = MIN * (0.12 + lv[k] * 0.22);
+    return [W / 2 + Math.cos(a) * r * 1.4, H / 2 + Math.sin(a * 1.3) * r];
+  });
+  const usePtr = mag.pointer && (mag.down || performance.now() - mag.pointer.at < 2000);
+  const px = usePtr ? mag.pointer.x * W : 0, py = usePtr ? mag.pointer.y * H : 0;
+  const kick = hits.bass ? hits.bass : 0, burst = mag.release;
+  mag.release = 0;
+  const s = MIN, maxV = s * (0.6 + energy * 1.2);
+  const cols = RGB.map(c => night ? c : c.map(v => v * 0.8));
+  for (let i = 0; i < mag.n; i++) {
+    const b = mag.band[i];
+    let tx, ty, swirl;
+    if (usePtr) { tx = px; ty = py; swirl = mag.down ? 2.2 : 0.6; }
+    else { tx = att[b][0]; ty = att[b][1]; swirl = 0.9 + lv[b]; }
+    let dx = tx - mag.x[i], dy = ty - mag.y[i];
+    const d2 = dx * dx + dy * dy + s * s * 0.002, d = Math.sqrt(d2);
+    // Atracción + giro alrededor del imán
+    const f = (usePtr ? 14 : 7 + lv[b] * 12) * s / d;
+    let ax = dx / d * f - dy / d * f * swirl, ay = dy / d * f + dx / d * f * swirl;
+    // Golpe de bajo o soltar el ratón: estallido hacia fuera
+    if (kick && b === 0 || burst) { const k = (burst ? 0.55 : kick * 0.8) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
+    mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
+    mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
+    const v2 = mag.vx[i] * mag.vx[i] + mag.vy[i] * mag.vy[i];
+    if (v2 > maxV * maxV * 4) { const k = maxV * 2 / Math.sqrt(v2); mag.vx[i] *= k; mag.vy[i] *= k; }
+    const ox = mag.x[i], oy = mag.y[i];
+    mag.x[i] += mag.vx[i] * dt; mag.y[i] += mag.vy[i] * dt;
+    // Las que se van muy lejos vuelven por un borde
+    if (mag.x[i] < -W * 0.2 || mag.x[i] > W * 1.2 || mag.y[i] < -H * 0.2 || mag.y[i] > H * 1.2) { mag.x[i] = Math.random() * W; mag.y[i] = Math.random() < 0.5 ? -10 : H + 10; mag.vx[i] = mag.vy[i] = 0; continue; }
+    // Se agrupa por banda y velocidad para dibujar todo en pocos trazos
+    const sp = Math.min(3, Math.floor(Math.sqrt(v2) / maxV * 4));
+    const seg = mag.buckets[b * 4 + sp]; seg.push(ox, oy, mag.x[i], mag.y[i]);
+  }
+  for (let k = 0; k < 12; k++) {
+    const seg = mag.buckets[k]; if (!seg.length) continue;
+    const b = Math.floor(k / 4), sp = (k % 4) / 3, c = cols[b];
+    t.strokeStyle = `rgba(${c[0] + (255 - c[0]) * sp * 0.3 | 0},${c[1] + (255 - c[1]) * sp * 0.3 | 0},${c[2] + (255 - c[2]) * sp * 0.3 | 0},${Math.min(1, (night ? 0.28 : 0.4) + sp * 0.3 + lv[b] * 0.25).toFixed(2)})`;
+    t.lineWidth = DPR * (1.1 + sp * 1.4);
+    t.beginPath();
+    for (let j = 0; j < seg.length; j += 4) { t.moveTo(seg[j], seg[j + 1]); t.lineTo(seg[j + 2] + 0.01, seg[j + 3]); }
+    t.stroke(); seg.length = 0;
+  }
+  ambient();
+  if (night) bloom(mag.trail, 0.45 + beatSoft * 0.35);
+  ctx.drawImage(mag.trail, 0, 0);
+}
+
 // ================= Escena: Luz =================
 // Una luz suave en el centro, en tres capas: el halo sigue a los graves, la luz media a los
 // medios y el núcleo a los agudos. No se mueve de sitio: crece, se encoge y respira.
@@ -2772,7 +2845,7 @@ function newDrop(top) {
   return { x: Math.random() * W * 1.2 - W * 0.1, y: top ? -Math.random() * H * 0.25 : Math.random() * H, z, sp: 0.85 + Math.random() * 0.3, len: (14 + z * 26) * DPR, floor: H * 0.8 + H * 0.2 * (0.1 + z * 0.85) };
 }
 // Estado de la lluvia: ritmo de caída, viento y relámpago, todos con inercia
-const rainState = { speed: 0.6, speedV: 0, wind: 0, windV: 0, flash: 0 }, ripples = [];
+const rainState = { speed: 0.6, speedV: 0, wind: 0, windV: 0, flash: 0, amount: 0.4 }, ripples = [];
 function drawRain(dt) {
   const night = state.theme === 'dark', rs = rainState;
   // La música marca el tiempo de la lluvia: casi cámara lenta en lo tranquilo, aguacero en lo intenso
@@ -2786,9 +2859,12 @@ function drawRain(dt) {
   // Relámpago en los golpes fuertes
   if (hits.bass > 0.6 && !state.noFlash) rs.flash = Math.max(rs.flash, 0.55 + hits.bass * 0.45);
   rs.flash *= Math.pow(0.0015, dt);
-  const want = Math.round(Math.min(1800, 850 * W * H / (1920 * 1080 * DPR * DPR) * (0.45 + Math.min(1.2, rs.speed) * 0.7)));
-  while (drops.length < want) drops.push(newDrop(drops.length > 0));
-  if (drops.length > want + 60) drops.length = want;
+  // Cantidad: de llovizna (15 %) a aguacero según la intensidad. Las gotas nuevas entran por
+  // arriba poco a poco y las que sobran simplemente no vuelven a caer, así nunca hay cortes.
+  rs.amount += ((0.15 + Math.pow(energy, 0.9) * 1.25) - rs.amount) * (1 - Math.pow(0.25, dt));
+  if (hits.bass) rs.amount = Math.min(1.6, rs.amount + hits.bass * 0.12);
+  const want = Math.round(Math.min(2200, 1300 * W * H / (1920 * 1080 * DPR * DPR) * rs.amount));
+  for (let k = 0; k < 40 && drops.length < want; k++) drops.push(newDrop(true));
   rainLvT[0] = Math.pow(bass, 0.8); rainLvT[1] = Math.pow(mid, 0.8); rainLvT[2] = Math.pow(high, 0.8);
   if (hits.bass) rainLvV[0] += hits.bass * 5;
   if (hits.mid) rainLvV[1] += hits.mid * 4;
@@ -2824,12 +2900,13 @@ function drawRain(dt) {
   const wind = rs.wind, base = night ? [200, 210, 230] : [70, 80, 100];
   const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
   if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c))]; }
-  for (const d of drops) {
+  for (let di = drops.length - 1; di >= 0; di--) {
+    const d = drops[di];
     const v = (650 + d.z * 900) * DPR * rs.speed * d.sp;
     d.y += v * dt; d.x += wind * v * dt;
     if (d.y > d.floor) {
       if (Math.random() < 0.2) ripple(d.x, d.z, 0.35, false);
-      Object.assign(d, newDrop(true));
+      if (drops.length > want) drops.splice(di, 1); else Object.assign(d, newDrop(true));
       continue;
     }
     let lit = 0, best = 0, bi = 0;
@@ -2937,7 +3014,7 @@ function drawLyricsScene(dt) {
   for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
-const scenes = { cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
