@@ -221,6 +221,47 @@
   .song .more button, .song .more a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 10px; border-radius: 99px; background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); text-decoration: none; }
   .song .more svg { width: 14px; height: 14px; }
   .song .more button:hover, .song .more a:hover { background: color-mix(in srgb, var(--fg) 18%, transparent); filter: none; }
+  /* Biblioteca de Spotify: panel lateral de cristal */
+  .lib {
+    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: calc(var(--dock-h, 70px) + 28px + env(safe-area-inset-bottom, 0px));
+    width: min(400px, calc(100% - 24px)); z-index: 6; display: flex; flex-direction: column; gap: 10px; padding: 12px;
+    background:
+      radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--c1, #888) 18%, transparent), transparent 70%),
+      var(--pop-bg);
+    border: 1px solid var(--glass-line); border-radius: 20px; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(28px) saturate(1.6); backdrop-filter: blur(28px) saturate(1.6);
+    animation: libIn .35s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes libIn { from { opacity: 0; transform: translateX(24px); } }
+  .lib[hidden] { display: none; }
+  .lib-head { display: flex; align-items: center; gap: 6px; }
+  .lib-title { flex: 1; font-weight: 700; font-size: 17px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lib .ib { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: none; color: var(--muted); }
+  .lib .ib:hover { background: var(--chip); color: var(--fg); filter: none; }
+  .lib svg { width: 18px; height: 18px; fill: currentColor; }
+  .lib input[type=search] { font: inherit; font-size: 14px; color: var(--fg); background: var(--chip); border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; outline: none; }
+  .lib input[type=search]:focus { border-color: var(--glass-line); }
+  .lib-tabs button { font-size: 12px; padding: 6px 10px; }
+  .lib-dev { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .lib-dev select { flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--chip); border: 0; border-radius: 8px; padding: 5px 8px; }
+  .lib-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+  .lib-note button { font-size: 12px; padding: 4px 10px; margin-top: 6px; }
+  .lib-list { flex: 1; overflow-y: auto; margin: 0 -6px; padding: 0 6px; display: grid; align-content: start; gap: 2px; overscroll-behavior: contain; scrollbar-width: thin; }
+  .lib-sec { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 10px 4px 4px; }
+  .lib-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 12px; background: none; text-align: left; width: 100%; font-size: 14px; }
+  .lib-row:hover { background: var(--chip); filter: none; }
+  .lib-row.now { background: color-mix(in srgb, var(--c1, #888) 22%, transparent); }
+  .lib-row img, .lib-row .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--chip); }
+  .lib-row.round img { border-radius: 50%; }
+  .lib-row .tx { min-width: 0; display: grid; gap: 1px; }
+  .lib-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lib-row .s { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lib-row .q { opacity: 0; transition: opacity .15s; }
+  .lib-row:hover .q, .lib-row:focus-within .q { opacity: 1; }
+  @media (hover: none) { .lib-row .q { opacity: .8; } }
+  .lib-empty { padding: 24px 8px; text-align: center; font-size: 13px; color: var(--muted); }
+  @media (max-width: 640px) { .lib { left: 12px; width: auto; } body:not(.idle):has(.song.player:not([hidden])) .lv-meta { opacity: 0; } }
   /* En Portada, Letra y Artista también se ve, para poder pausar y cambiar de canción */
   body.mode-info .song.player:not([hidden]) { display: grid; }
   .song .bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width .2s linear; }
@@ -243,6 +284,7 @@
   .corner .a { font-size: .8em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   body:not(.idle) .song:not([hidden]) ~ .corner { opacity: 0; }
   body.idle .song { opacity: 0; pointer-events: none; }
+  body.idle:has(.lib:not([hidden])) .song { opacity: 1; pointer-events: auto; }
   .song { transition: opacity .5s; }
 
   /* Letra: línea actual grande, anterior y siguiente atenuadas */
@@ -1648,8 +1690,9 @@ function spRender() {
       true
     );
     songEl.classList.toggle('open-more', !!sp.more);
+    if (typeof libLayout === 'function') requestAnimationFrame(libLayout);
     songEl.style.setProperty('--cv', cover ? `url("${cover.replace(/"/g, '%22')}")` : 'none');
-    document.getElementById('spMore').onclick = e => { e.stopPropagation(); sp.more = !sp.more; songEl.classList.toggle('open-more', sp.more); e.currentTarget.setAttribute('aria-expanded', sp.more); };
+    document.getElementById('spMore').onclick = e => { e.stopPropagation(); sp.more = !sp.more; songEl.classList.toggle('open-more', sp.more); e.currentTarget.setAttribute('aria-expanded', sp.more); libLayout(); };
     document.getElementById('spHide').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   }
   songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
@@ -1784,16 +1827,24 @@ function libNoteShow(html) { libNote.innerHTML = html || ''; libNote.hidden = !h
 function libOpen() {
   closePops();
   if (!spotifyOn()) { openMusic(); return; }
-  libEl.hidden = false; sp.dismissed = true; songEl.hidden = true;
+  libEl.hidden = false; sp.dismissed = false; sp.more = false; spRender(); libLayout();
   const missing = !hasScope('user-library-read') || !hasScope('streaming');
   if (missing) libNoteShow('Para ver tu biblioteca y reproducir aquí, Spotify necesita unos permisos nuevos.<br><button class="primary" id="libReauth">Dar permiso</button>');
   else if (!analyser) libNoteShow('Consejo: pulsa <b>Conectar audio → Audio del PC</b> para que las animaciones sigan lo que pongas aquí.');
   else libNoteShow('');
   const ra = document.getElementById('libReauth'); if (ra) ra.onclick = () => spLogin();
   libDevices(); if (hasScope('streaming')) libSdk();
+  if (missing) { libList.innerHTML = ''; return; }
   if (!libList.childElementCount) libShowTab(lib.tab);
 }
-function libClose() { libEl.hidden = true; sp.dismissed = false; spRender(); }
+function libClose() { libEl.hidden = true; }
+// El panel se abre debajo del reproductor, que sigue a la vista
+function libLayout() {
+  if (libEl.hidden) return;
+  const r = songEl.hidden || !songEl.classList.contains('player') ? null : songEl.getBoundingClientRect();
+  libEl.style.top = r && r.height ? Math.round(r.bottom + 10) + 'px' : '';
+}
+addEventListener('resize', libLayout);
 document.getElementById('libClose').onclick = libClose;
 addEventListener('keydown', e => { if (e.key === 'Escape' && !libEl.hidden) libClose(); });
 libBack.onclick = () => { lib.stack.pop(); const prev = lib.stack.pop(); prev ? prev() : libShowTab(lib.tab); };
@@ -3977,8 +4028,8 @@ function vinylBase(R) {
   const gaps = [0.52, 0.63, 0.74, 0.86].map(v => v + (Math.random() - 0.5) * 0.03);
   for (let r = m * 0.36; r < m * 0.965; r += Math.max(1, m / 260)) {
     const gap = gaps.some(v => Math.abs(r / m - v) < 0.006);
-    x.strokeStyle = gap ? 'rgba(255,255,255,.07)' : `rgba(255,255,255,${0.018 + Math.random() * 0.03})`;
-    x.lineWidth = gap ? m * 0.008 : Math.max(0.5, m / 700);
+    x.strokeStyle = gap ? 'rgba(0,0,0,.55)' : `rgba(255,255,255,${0.014 + Math.random() * 0.022})`;   // el espacio entre canciones es liso y más oscuro
+    x.lineWidth = gap ? m * 0.012 : Math.max(0.5, m / 700);
     x.beginPath(); x.arc(m, m, r, 0, Math.PI * 2); x.stroke();
   }
   x.strokeStyle = 'rgba(255,255,255,.12)'; x.lineWidth = Math.max(1, m * 0.006);
@@ -3987,7 +4038,7 @@ function vinylBase(R) {
 }
 function drawVinyl(dt) {
   const night = state.theme === 'dark', vertical = H > W;
-  const R = MIN * (vertical ? 0.42 : 0.36), cx = W / 2 - (vertical ? 0 : R * 0.12), cy = H * (vertical ? 0.44 : 0.5);
+  const R = MIN * (vertical ? 0.36 : 0.37), cx = W / 2 - R * (vertical ? 0.14 : 0.18), cy = H * (vertical ? 0.46 : 0.5);   // a un lado para que quepa el brazo
   if (!vinyl.base || Math.abs(vinyl.baseR - R) > 2) { vinyl.base = vinylBase(R); vinyl.baseR = R; }
   // ¿Suena? Con canción conectada se sabe; si no, se mira el audio
   const playing = spConnected() && sp.item ? sp.playing : (!analyser || energy > 0.02);
@@ -3998,88 +4049,107 @@ function drawVinyl(dt) {
   vinyl.scratch *= Math.pow(0.004, dt);
   vinyl.ang += (vinyl.spin * Math.PI * 2 + vinyl.scratch) * dt;
   ctx.save();
-  glowSpot(cx, cy, R * 1.9, mix(0.5), (night ? 0.22 : 0.16) + beatSoft * 0.25);
+  glowSpot(cx, cy, R * 2, mix(0.5), (night ? 0.2 : 0.14) + beatSoft * 0.22);
   ambient();
-  // Plato metálico bajo el disco
-  const pl = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
-  pl.addColorStop(0, night ? '#3a3a42' : '#d9d9de'); pl.addColorStop(1, night ? '#16161a' : '#9a9aa2');
-  ctx.save(); ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(0,0,0,.25)'; ctx.shadowBlur = R * 0.15; ctx.shadowOffsetY = R * 0.05;
-  ctx.fillStyle = pl; ctx.beginPath(); ctx.arc(cx, cy, R * 1.035, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-  // Disco con su sombra
+  // Plato: un borde metálico fino que asoma bajo el disco
   ctx.save();
-  ctx.shadowColor = night ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.3)'; ctx.shadowBlur = R * 0.12; ctx.shadowOffsetY = R * 0.04;
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fillStyle = '#0c0c0f'; ctx.fill();
+  ctx.shadowColor = night ? 'rgba(0,0,0,.75)' : 'rgba(0,0,0,.32)'; ctx.shadowBlur = R * 0.16; ctx.shadowOffsetY = R * 0.06;
+  const pl = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  pl.addColorStop(0, night ? '#4a4a52' : '#e4e4e8'); pl.addColorStop(0.5, night ? '#24242a' : '#b4b4bc'); pl.addColorStop(1, night ? '#3a3a42' : '#d0d0d6');
+  ctx.fillStyle = pl; ctx.beginPath(); ctx.arc(cx, cy, R * 1.025, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
+  // Disco (surcos pre-dibujados) girando
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang); ctx.drawImage(vinyl.base, -R, -R, R * 2, R * 2); ctx.restore();
-  // Surcos que se encienden con su frecuencia
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  const N = 28;
-  for (let k = 0; k < N; k++) {
-    const t = k / (N - 1), lv = Math.pow(spec[Math.min(BANDS - 1, Math.floor(t * BANDS * 0.85))], 1.6);
-    if (lv < 0.04) continue;
-    ctx.strokeStyle = rgba(mix(t), Math.min(0.4, lv * 0.38)); ctx.lineWidth = R * (0.004 + lv * 0.006);
-    ctx.beginPath(); ctx.arc(cx, cy, R * (0.95 - t * 0.56), 0, Math.PI * 2); ctx.stroke();
-  }
-  ctx.restore();
-  // Reflejo de la luz: dos cuñas quietas (la luz no gira con el disco)
+  // Luz en los surcos: dos reflejos que no giran (la luz está quieta). Cada anillo del disco
+  // escucha una zona del espectro y su reflejo brilla y toma color con ella.
   if (ctx.createConicGradient) {
-    const cg = ctx.createConicGradient(-0.7, cx, cy), a = 0.11 + beatSoft * 0.12 + high * 0.06;
-    [[0, 0], [0.05, a], [0.11, 0], [0.5, 0], [0.55, a * 0.8], [0.61, 0], [1, 0]].forEach(([o, al]) => cg.addColorStop(o, `rgba(255,255,255,${al})`));
-    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R * 0.99, 0, Math.PI * 2); ctx.arc(cx, cy, R * 0.34, 0, Math.PI * 2, true); ctx.fillStyle = cg; ctx.fill(); ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    const RINGS = 9, r0 = R * 0.36, r1 = R * 0.965;
+    for (let k = 0; k < RINGS; k++) {
+      const t = k / (RINGS - 1), band = Math.min(BANDS - 1, Math.floor((1 - t) * BANDS * 0.8));
+      const lv = Math.pow(spec[band], 1.3), c = mix(t);
+      const a = 0.05 + lv * 0.32 + beatSoft * 0.05;
+      const ra = r0 + (r1 - r0) * k / RINGS, rb = r0 + (r1 - r0) * (k + 1) / RINGS;
+      const cg = ctx.createConicGradient(-0.75 + Math.sin(time * 0.2) * 0.05, cx, cy);
+      const tint = c.map(v => v * 0.6 + 255 * 0.4);
+      [[0, 0], [0.04, a * 0.5], [0.075, a], [0.12, 0], [0.48, 0], [0.54, a * 0.7], [0.58, a * 0.35], [0.63, 0], [1, 0]]
+        .forEach(([o, al]) => cg.addColorStop(o, rgba(tint, al)));
+      ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(cx, cy, rb, 0, Math.PI * 2); ctx.arc(cx, cy, ra, 0, Math.PI * 2, true); ctx.fill();
+    }
+    ctx.restore();
   }
-  // Etiqueta: la portada, girando
+  // Etiqueta: la portada, girando, con un borde que brilla un poco
   const Rl = R * 0.33, img = recording ? coverClean : (coverClean || coverAny);
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang);
   ctx.beginPath(); ctx.arc(0, 0, Rl, 0, Math.PI * 2); ctx.clip();
   if (img) ctx.drawImage(img, -Rl, -Rl, Rl * 2, Rl * 2);
   else { const lg = ctx.createLinearGradient(-Rl, -Rl, Rl, Rl); lg.addColorStop(0, COLORS[0]); lg.addColorStop(0.5, COLORS[1]); lg.addColorStop(1, COLORS[2]); ctx.fillStyle = lg; ctx.fillRect(-Rl, -Rl, Rl * 2, Rl * 2); }
-  const vg = ctx.createRadialGradient(0, 0, Rl * 0.6, 0, 0, Rl); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
+  const vg = ctx.createRadialGradient(0, 0, Rl * 0.55, 0, 0, Rl); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.28)');
   ctx.fillStyle = vg; ctx.fillRect(-Rl, -Rl, Rl * 2, Rl * 2);
   ctx.restore();
-  // Eje central metálico
+  ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = R * 0.008; ctx.beginPath(); ctx.arc(cx, cy, Rl, 0, Math.PI * 2); ctx.stroke();
+  // Eje central
   const sg = ctx.createRadialGradient(cx - R * 0.006, cy - R * 0.006, 0, cx, cy, R * 0.022);
-  sg.addColorStop(0, '#f2f2f4'); sg.addColorStop(1, '#6c6c74');
-  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx, cy, R * 0.02, 0, Math.PI * 2); ctx.fill();
-  // Brazo: avanza hacia el centro con la canción; se levanta en pausa
+  sg.addColorStop(0, '#f6f6f8'); sg.addColorStop(1, '#707078');
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx, cy, R * 0.018, 0, Math.PI * 2); ctx.fill();
+
+  // Brazo: avanza hacia el centro con la canción; se levanta y se aparta en pausa
   const prog = sp.item && sp.duration ? Math.max(0, Math.min(1, lyricPos() / sp.duration)) : (time * 0.004) % 1;
   vinyl.hop += vinyl.hopV * dt; vinyl.hopV += (-vinyl.hop * 160 - vinyl.hopV * 9) * dt;
   vinyl.lift += ((playing ? 0 : 1) - vinyl.lift) * (1 - Math.pow(0.05, dt));
-  const Px = cx + R * 1.14, Py = cy - R * 0.9, dx = cx - Px, dy = cy - Py, d = Math.hypot(dx, dy), L = d * 0.96;
+  const Px = cx + R * 1.22, Py = cy - R * 0.78, dx = cx - Px, dy = cy - Py, d = Math.hypot(dx, dy), L = d * 0.97;
   const needle = rn => {   // punto del brazo que cae sobre el radio rn
     const a = (L * L - rn * rn + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L * L - a * a));
     const ux = dx / d, uy = dy / d, bx = Px + a * ux, by = Py + a * uy;
     const p1 = [bx - h * uy, by + h * ux], p2 = [bx + h * uy, by - h * ux];
     return p1[1] > p2[1] ? p1 : p2;
   };
-  const rn = R * (0.93 - prog * 0.5) + vinyl.hop * R * 0.04;
-  const on = needle(rn);
+  const on = needle(R * (0.92 - prog * 0.5) + vinyl.hop * R * 0.04);
+  const outer = needle(R * 0.92);
   let ang = Math.atan2(on[1] - Py, on[0] - Px);
-  const rest = Math.atan2(needle(R * 0.93)[1] - Py, needle(R * 0.93)[0] - Px) - 0.42;
-  ang = ang + (rest - ang) * vinyl.lift;
+  const rest = Math.atan2(outer[1] - Py, outer[0] - Px) - 0.38;
+  ang += (rest - ang) * vinyl.lift;
   const nx = Px + Math.cos(ang) * L, ny = Py + Math.sin(ang) * L;
   for (const f of vinyl.flashes) {   // en los drops, un anillo sale desde la aguja
     f.t += dt; const k = f.t / 0.9;
-    ctx.strokeStyle = rgba(mix(0.5), (1 - k) * 0.6); ctx.lineWidth = R * 0.012 * (1 - k);
-    ctx.beginPath(); ctx.arc(cx, cy, Math.hypot(nx - cx, ny - cy) * (1 + k * 0.35), 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = rgba(mix(0.5), (1 - k) * 0.55); ctx.lineWidth = R * 0.01 * (1 - k);
+    ctx.beginPath(); ctx.arc(cx, cy, Math.hypot(nx - cx, ny - cy) * (1 + k * 0.3), 0, Math.PI * 2); ctx.stroke();
   }
   vinyl.flashes = vinyl.flashes.filter(f => f.t < 0.9);
   const lift = vinyl.lift * 0.6 + Math.max(0, vinyl.hop) * 0.6;
+  const ca = Math.cos(ang), sa = Math.sin(ang), nxp = -sa, nyp = ca;   // dirección del brazo y su perpendicular
   ctx.save();
-  ctx.lineCap = 'round';
-  ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(0,0,0,.28)'; ctx.shadowBlur = R * (0.02 + lift * 0.05); ctx.shadowOffsetX = R * (0.01 + lift * 0.04); ctx.shadowOffsetY = R * (0.02 + lift * 0.05);
-  // contrapeso, tubo y cabezal
-  const bx = Px - Math.cos(ang) * L * 0.22, by = Py - Math.sin(ang) * L * 0.22;
-  const metal = ctx.createLinearGradient(Px - R * 0.1, Py, Px + R * 0.1, Py + R * 0.2); metal.addColorStop(0, '#e9e9ee'); metal.addColorStop(1, '#8d8d96');
-  ctx.strokeStyle = metal; ctx.lineWidth = R * 0.03;
-  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(nx - Math.cos(ang) * R * 0.08, ny - Math.sin(ang) * R * 0.08); ctx.stroke();
-  ctx.fillStyle = '#2a2a30'; ctx.beginPath(); ctx.arc(bx, by, R * 0.05, 0, Math.PI * 2); ctx.fill();
-  ctx.save(); ctx.translate(nx, ny); ctx.rotate(ang + 0.3);
-  ctx.fillStyle = '#1d1d22'; ctx.beginPath(); ctx.roundRect(-R * 0.1, -R * 0.03, R * 0.13, R * 0.06, R * 0.012); ctx.fill();
-  ctx.fillStyle = rgba(mix(0.2), 0.9);   // luz de la aguja ctx.beginPath(); ctx.arc(0, 0, R * 0.008 * (1 + beat), 0, Math.PI * 2); ctx.fill();
+  // Base del brazo
+  ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(0,0,0,.25)'; ctx.shadowBlur = R * 0.06; ctx.shadowOffsetY = R * 0.025;
+  const bg_ = ctx.createRadialGradient(Px - R * 0.03, Py - R * 0.03, 0, Px, Py, R * 0.13);
+  bg_.addColorStop(0, night ? '#3c3c44' : '#f0f0f3'); bg_.addColorStop(1, night ? '#16161a' : '#b8b8c0');
+  ctx.fillStyle = bg_; ctx.beginPath(); ctx.arc(Px, Py, R * 0.12, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = night ? 'rgba(0,0,0,.55)' : 'rgba(0,0,0,.25)'; ctx.shadowBlur = R * (0.02 + lift * 0.05); ctx.shadowOffsetX = R * (0.012 + lift * 0.04); ctx.shadowOffsetY = R * (0.02 + lift * 0.05);
+  // Contrapeso: un cilindro detrás del eje
+  ctx.save(); ctx.translate(Px - ca * R * 0.16, Py - sa * R * 0.16); ctx.rotate(ang);
+  const cw = ctx.createLinearGradient(0, -R * 0.055, 0, R * 0.055); cw.addColorStop(0, '#5a5a62'); cw.addColorStop(0.45, '#d8d8de'); cw.addColorStop(1, '#3a3a40');
+  ctx.fillStyle = cw; ctx.beginPath(); ctx.roundRect(-R * 0.06, -R * 0.055, R * 0.12, R * 0.11, R * 0.02); ctx.fill();
   ctx.restore();
+  // Tubo con una curva suave (como los brazos en S)
+  const ex = nx - ca * R * 0.12, ey = ny - sa * R * 0.12;
+  const mx = (Px + ex) / 2 + nxp * R * 0.06, my = (Py + ey) / 2 + nyp * R * 0.06;
+  const tube = ctx.createLinearGradient(Px + nxp * R * 0.02, Py + nyp * R * 0.02, Px - nxp * R * 0.02, Py - nyp * R * 0.02);
+  tube.addColorStop(0, '#9a9aa2'); tube.addColorStop(0.5, '#f4f4f7'); tube.addColorStop(1, '#8a8a92');
+  ctx.lineCap = 'round'; ctx.strokeStyle = tube; ctx.lineWidth = R * 0.022;
+  ctx.beginPath(); ctx.moveTo(Px - ca * R * 0.1, Py - sa * R * 0.1); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke();
+  // Cabezal: pieza plana que se estrecha, con la aguja y una luz que late
+  ctx.save(); ctx.translate(nx, ny); ctx.rotate(ang + 0.42);
+  const hs = ctx.createLinearGradient(0, -R * 0.035, 0, R * 0.035); hs.addColorStop(0, '#d0d0d6'); hs.addColorStop(1, '#55555c');
+  ctx.fillStyle = hs; ctx.beginPath();
+  ctx.moveTo(-R * 0.14, -R * 0.022); ctx.lineTo(R * 0.03, -R * 0.034); ctx.quadraticCurveTo(R * 0.05, 0, R * 0.03, R * 0.034); ctx.lineTo(-R * 0.14, R * 0.022); ctx.closePath(); ctx.fill();
   ctx.shadowColor = 'transparent';
-  const pg = ctx.createRadialGradient(Px - R * 0.02, Py - R * 0.02, 0, Px, Py, R * 0.075); pg.addColorStop(0, '#f4f4f6'); pg.addColorStop(1, '#5e5e66');
-  ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(Px, Py, R * 0.07, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#18181c'; ctx.fillRect(-R * 0.03, -R * 0.018, R * 0.05, R * 0.036);
+  ctx.fillStyle = rgba(mix(0.2), 0.95); ctx.beginPath(); ctx.arc(R * 0.008, 0, R * 0.007 * (1 + beat * 0.8), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // Eje del brazo
+  ctx.shadowColor = 'transparent';
+  const pg = ctx.createRadialGradient(Px - R * 0.015, Py - R * 0.015, 0, Px, Py, R * 0.05); pg.addColorStop(0, '#fafafc'); pg.addColorStop(1, '#6a6a72');
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(Px, Py, R * 0.045, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
   ctx.restore();
 }
