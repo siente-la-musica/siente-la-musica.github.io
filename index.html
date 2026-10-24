@@ -167,26 +167,28 @@
   }
   .lv-cur { display: block; text-wrap: balance; }
   .lv-cur .w {
-    display: inline-block; color: color-mix(in srgb, var(--fg) 26%, transparent);
+    display: inline-block; color: color-mix(in srgb, var(--fg) 42%, transparent);
+    text-shadow: 0 0 .35em color-mix(in srgb, var(--bg) 70%, transparent), 0 0 .9em color-mix(in srgb, var(--bg) 50%, transparent);
     transition: color .35s, transform .45s cubic-bezier(.2,.8,.2,1), text-shadow .45s;
   }
-  .lv-cur .w.on { color: var(--c); transform: translateY(-.03em); text-shadow: 0 0 .45em color-mix(in srgb, var(--c) 40%, transparent); }
+  .lv-cur .w.on { color: var(--c); transform: translateY(-.03em); text-shadow: 0 0 .3em color-mix(in srgb, var(--bg) 60%, transparent), 0 0 .5em color-mix(in srgb, var(--c) 45%, transparent); }
   .lv-cur.plain .w { color: var(--c); }
   .lv-cur.enter .w { animation: wordIn .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(220ms + var(--i) * 45ms); }
   @keyframes wordIn { from { opacity: 0; filter: blur(.12em); transform: translateY(.4em) scale(.94); } }
   .lv-out { position: absolute; inset: 0 0 auto; animation: lineOut .7s cubic-bezier(.4,0,.6,1) forwards; }
   .lv-out .w { color: var(--c); }
   @keyframes lineOut { from { opacity: .55; } to { opacity: 0; transform: translateY(-1.6em) scale(1.04); filter: blur(.25em); letter-spacing: .05em; } }
-  .lv-next { margin-top: 1.1em; font-size: .34em; font-weight: 600; letter-spacing: 0; color: var(--muted); opacity: .75; text-wrap: balance; }
+  .lv-next { margin-top: 1.1em; font-size: .34em; font-weight: 600; letter-spacing: 0; color: color-mix(in srgb, var(--fg) 70%, transparent); text-wrap: balance; text-shadow: 0 0 .5em var(--bg), 0 0 1.2em var(--bg); }
   .lv-msg { font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); text-align: center; display: grid; gap: .8em; justify-items: center; }
   .lv-msg button { pointer-events: auto; font-size: .7em; padding: .6em 1.1em; background: var(--chip-on); color: var(--chip-on-fg); }
   .lv-meta {
     position: fixed; top: calc(24px + env(safe-area-inset-top, 0px)); left: max(24px, env(safe-area-inset-left, 0px));
     display: flex; align-items: center; gap: .9em; font-size: clamp(14px, 1.1vw, 52px); max-width: 60vw;
   }
-  .lv-meta .cv { width: 4.2em; height: 4.2em; border-radius: .5em; object-fit: cover; box-shadow: 0 10px 40px rgba(0,0,0,.35); flex: none; }
-  .lv-meta .av { width: 3em; height: 3em; margin-left: -1.6em; border: 3px solid var(--bg); box-sizing: content-box; }
-  .lv-meta .tx { display: grid; gap: .15em; min-width: 0; }
+  .lv-meta .art { position: relative; flex: none; width: 4.2em; height: 4.2em; }
+  .lv-meta .cv { width: 100%; height: 100%; border-radius: .55em; object-fit: cover; box-shadow: 0 .6em 2em rgba(0,0,0,.35); }
+  .lv-meta .av { position: absolute; right: -.55em; bottom: -.55em; width: 2em; height: 2em; box-shadow: 0 0 0 2px rgba(255,255,255,.9), 0 .3em 1em rgba(0,0,0,.35); }
+  .lv-meta .tx { display: grid; gap: .15em; min-width: 0; margin-left: .5em; text-shadow: 0 0 1em var(--bg), 0 0 .3em var(--bg); }
   .lv-meta .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .lv-meta .a { color: color-mix(in srgb, var(--fg) 65%, transparent); font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { .lv-cur.enter .w, .lv-out { animation: none; } .lv-out { display: none; } }
@@ -219,7 +221,7 @@
   <div class="lv-stage" id="lvStage"><span class="lv-cur" id="lvCur"></span><div class="lv-next" id="lvNext"></div></div>
   <div class="lv-msg" id="lvMsg"></div>
 </div>
-<div class="lv-meta" id="lvMeta" hidden><img class="cv" alt=""><img class="av" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span></div></div>
+<div class="lv-meta" id="lvMeta" hidden><div class="art"><img class="cv" alt=""><img class="av" alt="" hidden></div><div class="tx"><span class="t"></span><span class="a"></span></div></div>
 <div class="corner" id="corner" hidden><img class="av" alt="" hidden><div class="tx"><span class="t"></span><span class="a"></span></div></div>
 <div class="lyrics" id="lyrics" hidden><p class="prev"></p><p class="cur"></p><p class="next"></p></div>
 
@@ -1432,8 +1434,14 @@ function drawInfinity(dt) {
 }
 
 function drawLyricsScene(dt) {
-  drawBackdrop(0, 0.6);        // la portada se ve un poco más en este modo (suma a la del fondo)
+  drawBackdrop(0, 0.5);        // la portada se ve algo más en este modo (suma a la del fondo)
   drawAura(dt);
+  // Velo suave del color de fondo detrás de la letra para que se lea sobre cualquier portada
+  const night = state.theme === 'dark', R = Math.max(W, H) * 0.4;
+  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R);
+  const bgc = night ? [0, 0, 0] : [255, 255, 255];
+  for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 const scenes = { lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
