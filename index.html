@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Siente la música</title>
 <meta name="description" content="Visualizador que reacciona a la música que suena en tu PC.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Siente">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
   /* Pantalla única: lienzo a sangre y una barra de cristal flotante abajo. */
   :root {
@@ -64,7 +71,20 @@
   }
   #popColor .group { gap: 8px; padding: 2px 4px; }
   #btnColor { width: 26px; height: 26px; margin: 0 2px; }
-  .pop.grid { padding: 12px; }
+  .pop.grid { padding: 12px; flex-direction: column; gap: 12px; }
+  #popMode { max-height: calc(100dvh - var(--dock-h, 70px) - 60px); overflow-y: auto; overscroll-behavior: contain; }
+  .favs { display: grid; gap: 8px; }
+  .favs-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+  .fav-add { font-size: 12px; padding: 5px 10px; }
+  .fav-list { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; max-width: calc(4 * 150px + 30px); scrollbar-width: thin; }
+  .fav-list:empty::before { content: 'Guarda tus combinaciones de animación y colores para volver a ellas con un toque.'; font-size: 12px; color: var(--muted); white-space: normal; }
+  .fav { position: relative; flex: none; width: 112px; display: grid; gap: 4px; padding: 4px 4px 6px; border-radius: 12px; font-size: 11px; text-align: left; }
+  .fav .th { position: relative; height: 54px; border-radius: 8px; background-size: cover; background-position: center; overflow: hidden; }
+  .fav .th i { position: absolute; left: 0; right: 0; bottom: 0; height: 5px; }
+  .fav .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
+  .fav .x { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 13px; line-height: 1; background: rgba(0,0,0,.55); color: #fff; opacity: 0; transition: opacity .2s; }
+  .fav:hover .x, .fav:focus-within .x { opacity: 1; }
+  @media (hover: none) { .fav .x { opacity: .85; } }
   .pop.grid #modes { display: grid; grid-template-columns: repeat(4, 150px); gap: 10px; }
   .pop.grid #modes button {
     flex-direction: column; align-items: stretch; gap: 6px; padding: 5px 5px 8px; border-radius: 14px; font-size: 13px;
@@ -83,6 +103,10 @@
   .row-set small { display: block; color: var(--muted); font-size: 11px; }
   .row-set:has(.seg) { flex-direction: column; align-items: stretch; }
   .row-set input[type=range] { width: 120px; accent-color: var(--fg); }
+  .rec-when { display: grid; gap: 6px; }
+  .rec-when[hidden] { display: none; }
+  .rec-when input[type=range] { width: 100%; accent-color: var(--fg); }
+  .rec-line { font-size: 12px; color: var(--muted); min-height: 1.3em; font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .row-set input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--fg); }
   button.primary { background: var(--chip-on); color: var(--chip-on-fg); justify-content: center; padding: 9px 12px; }
   .rec-dot { width: 8px; height: 8px; border-radius: 50%; background: #ff3b30; display: inline-block; }
@@ -374,6 +398,10 @@
   <div class="pop-wrap">
     <button id="btnMode" aria-haspopup="true" aria-expanded="false" title="Elegir animación">Barras</button>
     <div class="pop grid" id="popMode" hidden>
+      <div class="favs">
+        <div class="favs-head"><span class="pop-title">Favoritos</span><button class="keep fav-add" id="favAdd" title="Guarda la animación, los colores y los ajustes de ahora">＋ Guardar el de ahora</button></div>
+        <div class="fav-list" id="favList"></div>
+      </div>
       <div class="group" role="group" aria-label="Animación" id="modes">
         <button data-mode="bars">Barras</button>
         <button data-mode="mountains">Montañas</button>
@@ -403,6 +431,12 @@
       <div class="seg" role="group" aria-label="Formato"><button data-fmt="v" aria-pressed="true">Vertical · TikTok</button><button data-fmt="h">Horizontal</button></div>
       <div class="seg" role="group" aria-label="Sonido"><button data-snd="1" aria-pressed="true">Con el sonido del PC</button><button data-snd="0">Sin sonido</button></div>
       <div class="seg" role="group" aria-label="Duración"><button data-dur="15" aria-pressed="true">15 s</button><button data-dur="30">30 s</button><button data-dur="60">60 s</button><button data-dur="0">Libre</button></div>
+      <div class="rec-when" id="recWhen" hidden>
+        <div class="row-set"><span>Empieza en</span><span class="time" id="recWhenLbl">0:00</span></div>
+        <input type="range" id="recStart" min="0" max="200" step="0.5" value="0" aria-label="Momento en que empieza el clip">
+        <div class="rec-line" id="recLine"></div>
+        <div class="seg" role="group" aria-label="Atajos"><button id="recChorus">Ir al estribillo</button><button id="recNow" aria-pressed="true">Desde donde va</button></div>
+      </div>
       <div class="row-set"><span>Estilo de la letra</span>
         <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button></div>
       </div>
@@ -424,6 +458,7 @@
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
       <label class="row-set" for="coverBg"><span>Portada de fondo <small>La portada de la canción, suave detrás de la animación</small></span> <input type="checkbox" id="coverBg"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
+      <div class="row-set" id="installRow" hidden><span>Instalar como app <small id="installNote">Ábrela desde el escritorio o la pantalla de inicio, sin barra del navegador</small></span> <button class="primary keep" id="btnInstall">Instalar</button></div>
       <div class="row-set"><span>Color del estrobo</span>
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
@@ -679,7 +714,7 @@ function closePops() { document.querySelectorAll('.pop').forEach(p => p.hidden =
 function bindPop(btnId, popId) {
   const b = document.getElementById(btnId), p = document.getElementById(popId);
   b.addEventListener('click', e => { e.stopPropagation(); const open = p.hidden; closePops(); p.hidden = !open; b.setAttribute('aria-expanded', open); });
-  p.addEventListener('click', e => { e.stopPropagation(); if (e.target.closest('button')) setTimeout(closePops, 120); });
+  p.addEventListener('click', e => { e.stopPropagation(); if (e.target.closest('button') && !e.target.closest('.seg, .keep')) setTimeout(closePops, 120); });   // las opciones no cierran el menú
 }
 addEventListener('click', closePops);
 bindPop('btnSource', 'popSource'); bindPop('btnColor', 'popColor');
@@ -698,6 +733,16 @@ const coverBgEl = document.getElementById('coverBg');
 coverBgEl.checked = state.coverBg;
 coverBgEl.onchange = () => { state.coverBg = coverBgEl.checked; store.set('coverBg', state.coverBg); };
 noFlashEl.onchange = () => { state.noFlash = noFlashEl.checked; store.set('noFlash', state.noFlash); };
+// Instalar como app (PWA): Chrome y Edge avisan con beforeinstallprompt; en iPhone se explica cómo
+let installEv = null;
+const installRow = document.getElementById('installRow'), installNote = document.getElementById('installNote'), btnInstall = document.getElementById('btnInstall');
+const standalone = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; installRow.hidden = standalone(); });
+addEventListener('appinstalled', () => { installRow.hidden = true; installEv = null; });
+if (isIOS && !standalone()) { installRow.hidden = false; btnInstall.hidden = true; installNote.textContent = 'En Safari pulsa Compartir (el cuadrado con la flecha) y luego «Añadir a pantalla de inicio».'; }
+btnInstall.onclick = async () => { if (!installEv) return; installEv.prompt(); await installEv.userChoice.catch(() => {}); installEv = null; installRow.hidden = true; };
 document.querySelectorAll('[data-strobe]').forEach(b => b.onclick = () => { state.strobe = b.dataset.strobe; store.set('strobe', state.strobe); applyAll(false); });
 document.getElementById('btnAuto').onclick = () => { state.auto = !state.auto; store.set('auto', state.auto); autoT = 0; applyAll(false); };
 function setSource(label) {
@@ -706,6 +751,37 @@ function setSource(label) {
 }
 
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
+
+// Favoritos: combinaciones guardadas de animación, colores y ajustes
+const FAV_KEYS = ['mode', 'palette', 'custom', 'theme', 'strobe', 'lyricStyle', 'sens', 'coverBg'];
+let favs = store.get('favs', []);
+const favList = document.getElementById('favList');
+function favName(f) {
+  const m = document.querySelector(`#modes button[data-mode="${f.mode}"] span`);
+  const pal = { cover: 'Portada', mood: 'Ánimo', custom: 'Mi color' }[f.palette] || (f.palette[0].toUpperCase() + f.palette.slice(1));
+  return (m ? m.textContent : f.mode) + ' · ' + pal;
+}
+function renderFavs() {
+  favList.innerHTML = '';
+  favs.forEach((f, i) => {
+    const b = document.createElement('button'); b.className = 'fav keep'; b.title = favName(f) + (f.theme === 'dark' ? ' · noche' : ' · día');
+    b.innerHTML = `<span class="th" style="background-image:url('previews/${f.mode}.webp')"><i style="background:linear-gradient(90deg,${f.colors.join(',')})"></i></span><span class="nm"></span><span class="x" role="button" aria-label="Borrar favorito">×</span>`;
+    b.querySelector('.nm').textContent = favName(f);
+    b.onclick = e => {
+      if (e.target.closest('.x')) { favs.splice(i, 1); store.set('favs', favs); renderFavs(); return; }
+      FAV_KEYS.forEach(k => { if (f[k] !== undefined) { state[k] = f[k]; store.set(k, f[k]); } });
+      sensEl.value = state.sens; coverBgEl.checked = state.coverBg; markStyle();
+      setMode(f.mode); applyAll(); closePops();
+    };
+    favList.append(b);
+  });
+}
+document.getElementById('favAdd').onclick = () => {
+  const f = { colors: COLORS.slice() }; FAV_KEYS.forEach(k => f[k] = state[k]);
+  favs = favs.filter(x => FAV_KEYS.some(k => x[k] !== f[k]));   // sin duplicados
+  favs.unshift(f); favs = favs.slice(0, 12); store.set('favs', favs); renderFavs();
+};
+renderFavs();
 const transC = document.createElement('canvas'), transX = transC.getContext('2d');
 let transA = 0, autoT = 0;
 function setMode(m) {
@@ -1518,7 +1594,8 @@ function spRender() {
         (link ? `<a class="ib" href="${esc(link)}" target="_blank" rel="noopener" title="${linkName}" aria-label="${linkName}">${ICON.open}</a>` : '') +
         (src === 'lastfm' ? '<button class="pill" id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button class="pill" id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
       `</div>` +
-      (src === 'spotify' ? `<div class="ctl"><button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button></div>` : '<div></div>') +
+      (src === 'spotify' ? `<div class="ctl"><button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button></div>`
+        : src === 'file' && audioEl ? `<div class="ctl"><button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button></div>` : '<div></div>') +
       `<div class="r"><button class="ib" id="spOut" title="Desconectar" aria-label="Desconectar">${ICON.power}</button></div></div>`,
       true
     );
@@ -1527,6 +1604,12 @@ function spRender() {
   const out = document.getElementById('spOut');
   if (out) out.onclick = () => { const s_ = nowSource(); if (s_ === 'file') fileStop(); else if (s_ === 'lastfm') lfLogout(); else spLogout(); };
   songEl.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => spControl(b.dataset.sp));
+  songEl.querySelectorAll('[data-file]').forEach(b => b.onclick = () => {
+    if (!audioEl) return;
+    const k = b.dataset.file;
+    if (k === 'toggle') audioEl.paused ? audioEl.play().catch(() => {}) : audioEl.pause();
+    else audioEl.currentTime = Math.max(0, audioEl.currentTime + (k === 'fwd' ? 10 : -10));
+  });
   const bar = songEl.querySelector('.bar');
   if (bar && nowSource() === 'spotify' && sp.duration) { bar.classList.add('seek'); bar.title = 'Saltar a este punto'; bar.onclick = e => { const r = bar.getBoundingClientRect(); spControl('seek', Math.round((e.clientX - r.left) / r.width * sp.duration)); }; }
   const e1 = document.getElementById('lfEarly'), e2 = document.getElementById('lfLate');
@@ -1738,6 +1821,7 @@ async function fileStart(file) {
   };
   spUpdate({ item: fileTrack.item, is_playing: true, progress_ms: 0 }, 'file');
   audioEl.addEventListener('loadedmetadata', push);
+  ['play', 'pause'].forEach(ev => audioEl.addEventListener(ev, () => { push(); if (!sp.dismissed) spRender(); }));
   clearInterval(fileTrack.timer); fileTrack.timer = setInterval(push, 200);
 }
 function fileStop() {
@@ -1933,8 +2017,47 @@ function recNotes() {
 }
 btnRec.addEventListener('click', e => {
   if (recording) { e.stopImmediatePropagation(); stopRecording(); return; }
-  recNotes();
+  recNotes(); recWhenSetup();
 }, true);
+// Elegir el momento del clip: con un archivo o con Spotify (Premium) se puede saltar a
+// cualquier punto. La canción arranca un poco antes para que la cuenta atrás caiga en el punto elegido.
+const recWhen = document.getElementById('recWhen'), recStartEl = document.getElementById('recStart');
+const recWhenLbl = document.getElementById('recWhenLbl'), recLine = document.getElementById('recLine');
+let recStartAt = null;   // en ms; null = desde donde va
+const canSeek = () => sp.item && sp.duration && (nowSource() === 'file' || nowSource() === 'spotify');
+function lineAt(ms) {
+  const Ls = lyrics && lyrics.lines; if (!Ls) return '';
+  let i = -1; while (i + 1 < Ls.length && Ls[i + 1].t <= ms + 1500) i++;
+  return i >= 0 ? Ls[i].text : '';
+}
+function chorusAt() {   // el estribillo: la línea que más se repite (la primera vez que suena)
+  const Ls = lyrics && lyrics.lines; if (!Ls) return null;
+  const seen = new Map();
+  Ls.forEach(l => { const k = norm(l.text); if (k.length < 6) return; const e = seen.get(k) || { n: 0, t: l.t }; e.n++; seen.set(k, e); });
+  let best = null; for (const e of seen.values()) if (e.n >= 2 && (!best || e.n > best.n || (e.n === best.n && e.t < best.t))) best = e;
+  return best ? Math.max(0, best.t - 1000) : null;
+}
+function recWhenShow(ms) {
+  recWhenLbl.textContent = ms == null ? 'donde va ahora' : fmt(ms);
+  const l = lineAt(ms == null ? lyricPos() : ms);
+  recLine.textContent = l ? '«' + l + '»' : '';
+  document.getElementById('recNow').setAttribute('aria-pressed', ms == null);
+}
+function recWhenSetup() {
+  recWhen.hidden = !canSeek();
+  if (recWhen.hidden) { recStartAt = null; return; }
+  recStartEl.max = (sp.duration / 1000).toFixed(1);
+  if (recStartAt == null) recStartEl.value = (lyricPos() / 1000).toFixed(1);
+  document.getElementById('recChorus').hidden = chorusAt() == null;
+  recWhenShow(recStartAt);
+}
+recStartEl.oninput = () => { recStartAt = recStartEl.value * 1000; recWhenShow(recStartAt); };
+document.getElementById('recNow').onclick = () => { recStartAt = null; recStartEl.value = (lyricPos() / 1000).toFixed(1); recWhenShow(null); };
+document.getElementById('recChorus').onclick = () => { const t = chorusAt(); if (t == null) return; recStartAt = t; recStartEl.value = (t / 1000).toFixed(1); recWhenShow(t); };
+async function seekForClip(ms) {
+  if (nowSource() === 'file' && audioEl) { audioEl.currentTime = ms / 1000; if (audioEl.paused) audioEl.play().catch(() => {}); }
+  else if (nowSource() === 'spotify') { await spControl('seek', Math.round(ms)); if (!sp.playing) spControl('play'); }
+}
 document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { recFmt = b.dataset.fmt; document.querySelectorAll('[data-fmt]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { recSound = b.dataset.snd === '1'; document.querySelectorAll('[data-snd]').forEach(x => x.setAttribute('aria-pressed', x === b)); recNotes(); });
 const markStyle = () => document.querySelectorAll('[data-lstyle]').forEach(x => x.setAttribute('aria-pressed', x.dataset.lstyle === state.lyricStyle));
@@ -1945,6 +2068,7 @@ document.getElementById('btnRecStart').onclick = async () => {
   closePops();
   if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div><div class="note">Prueba con Chrome o Edge en un ordenador.</div></div>'); return; }
   const cd = document.getElementById('countdown');
+  if (recStartAt != null && canSeek()) { await seekForClip(Math.max(0, recStartAt - 2400)); recStartAt = null; }
   for (const n of [3, 2, 1]) { cd.textContent = n; cd.hidden = false; await new Promise(r => setTimeout(r, 800)); }
   cd.hidden = true;
   startRecording();
