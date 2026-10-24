@@ -307,7 +307,13 @@ const MAX_PIXELS = 7680 * 4320;
 let W, H, DPR, MIN, renderScale = 1;
 function sizeTo(c, w, h) { c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); }
 function resize() {
-  const iw = innerWidth, ih = innerHeight;
+  const iw = innerWidth, ih = innerHeight, oldW = W, oldH = H;
+  // Copia de la tinta para no perderla al cambiar de tamaño
+  let inkCopy = null;
+  if (oldW && typeof blobs !== 'undefined' && blobs.length) {
+    inkCopy = document.createElement('canvas'); inkCopy.width = oldW; inkCopy.height = oldH;
+    inkCopy.getContext('2d').drawImage(inkLayer, 0, 0);
+  }
   DPR = (window.devicePixelRatio || 1) * renderScale;
   if (iw * ih * DPR * DPR > MAX_PIXELS) DPR = Math.sqrt(MAX_PIXELS / (iw * ih));
   W = Math.round(iw * DPR); H = Math.round(ih * DPR); MIN = Math.min(W, H);
@@ -317,6 +323,13 @@ function resize() {
   const k1 = CAN_BLUR ? Math.min(0.5, 1600 / W) : 0.25, k2 = CAN_BLUR ? Math.min(0.25, 640 / W) : 1 / 16;
   sizeTo(g1, W * k1, H * k1); sizeTo(g2, W * k2, H * k2);
   for (const c of [ctx, lctx, ictx, g1c, g2c]) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; }
+  // Lo que ya está en pantalla se lleva a la nueva resolución: nada salta de sitio
+  if (oldW && (oldW !== W || oldH !== H)) {
+    const kx = W / oldW, ky = H / oldH, km = Math.min(kx, ky);
+    if (typeof lights !== 'undefined') for (const l of lights) { l.x *= kx; l.y *= ky; l.r *= km; l.vx *= kx; l.vy *= ky; }
+    if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
+    if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
+  }
 }
 addEventListener('resize', resize); resize();
 // Si la tarjeta gráfica se reinicia (pasa con lienzos muy grandes), se reconstruye todo
@@ -483,7 +496,7 @@ function setupAnalyser() {
   analyser = audioCtx.createAnalyser();
   recDest = audioCtx.createMediaStreamDestination(); // copia del audio para reconocer canciones
   analyser.fftSize = 4096;
-  analyser.smoothingTimeConstant = 0.6;
+  analyser.smoothingTimeConstant = 0.4;   // reacciona antes a los cambios
   analyser.minDecibels = -88; analyser.maxDecibels = -22;
   freqData = new Uint8Array(analyser.frequencyBinCount);
   // Bandas logarítmicas de 35 Hz a 14 kHz
@@ -580,12 +593,18 @@ function analyse(dt) {
     }
   }
   for (let i = 0; i < BANDS; i++) {
-    const k = raw[i] > spec[i] ? 1 - Math.pow(0.0005, dt) : 1 - Math.pow(0.04, dt); // sube rápido, baja suave
+    const k = raw[i] > spec[i] ? 1 - Math.pow(0.00001, dt) : 1 - Math.pow(0.006, dt); // sube al instante, baja rápido pero suave
     spec[i] += (raw[i] - spec[i]) * k;
   }
   bass = avg(raw, 0, 10); mid = avg(raw, 10, 38); high = avg(raw, 38, BANDS);
   energy = bass * 0.5 + mid * 0.3 + high * 0.2;
+  // Golpes de este fotograma (todas las animaciones leen los mismos) y un "latido" que decae rápido
+  hits.bass = onset('bass', bass, dt); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
+  if (hits.bass) beat = Math.max(beat, 0.55 + hits.bass * 0.45);
+  beat *= Math.pow(0.004, dt);
 }
+const hits = { bass: 0, mid: 0, high: 0 };
+let beat = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
 function onset(name, value, dt) {
@@ -653,13 +672,13 @@ function drawBars() {
     lctx.beginPath(); lctx.roundRect(x, cy - h, bw, h * 2, bw / 2); lctx.fill();
   }
   ambient();
-  bloom(layer, night ? 0.9 : 0.55);
+  bloom(layer, (night ? 0.9 : 0.55) + beat * 0.5);
   ctx.globalAlpha = night ? 0.9 : 0.85; ctx.drawImage(layer, 0, 0); ctx.globalAlpha = 1;
 }
 
 // ================= Escena: Montañas =================
 const ridges = [0, 1, 2, 3].map(() => new Float32Array(120));
-function drawMountains() {
+function drawMountains(dt) {
   const night = state.theme === 'dark';
   lctx.clearRect(0, 0, W, H);
   const P = ridges[0].length;
@@ -674,9 +693,9 @@ function drawMountains() {
     for (let p = 0; p < P; p++) {
       const x = p / (P - 1);
       const target = specAt(((x + L.shift) % 1 + 1) % 1);
-      r[p] += (target - r[p]) * L.lag;
+      r[p] += (target - r[p]) * (1 - Math.pow(1 - Math.min(0.95, L.lag * 1.6), dt * 60));
       const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.02;
-      pts.push([x * W, H - H * (L.base + wob + Math.pow(r[p], 1.2) * (L.hMax - L.base))]);
+      pts.push([x * W, H - H * (L.base + wob + Math.pow(r[p], 1.2) * (L.hMax - L.base) * (1 + beat * 0.12))]);
     }
     const c = mix(L.color);
     const top = Math.min(...pts.map(p => p[1]));
@@ -701,7 +720,7 @@ function drawMountains() {
     lctx.stroke();
   });
   ambient();
-  bloom(layer, night ? 0.8 : 0.45);
+  bloom(layer, (night ? 0.8 : 0.45) + beat * 0.4);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -729,7 +748,7 @@ function spawnBlob(size, strength) {
 function drawInk(dt) {
   const night = state.theme === 'dark';
   // Detecta golpes y decide cuántos círculos aparecen
-  const ob = onset('bass', bass, dt), om = onset('mid', mid, dt), oh = onset('high', high, dt);
+  const ob = hits.bass, om = hits.mid, oh = hits.high;
   if (ob) spawnBlob('big', ob);
   if (om) for (let k = 0; k < 1 + Math.floor(om * 2); k++) spawnBlob('mid', om);
   if (oh) for (let k = 0; k < 1 + Math.floor(oh * 3); k++) spawnBlob('small', oh);
@@ -1029,7 +1048,7 @@ function drawBackdrop(dt, boost = 1) {
   if (!bgCur && !bgPrev) return;
   bgFade = Math.min(1, bgFade + dt / 1.6);
   const night = state.theme === 'dark', base = (night ? 0.36 : 0.2) * boost;
-  const S = Math.max(W, H) * (1.18 + 0.04 * Math.sin(time * 0.05));
+  const S = Math.max(W, H) * (1.18 + 0.04 * Math.sin(time * 0.05) + beat * 0.012);
   const ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
   ctx.save();
   for (const [img, a] of [[bgPrev, 1 - bgFade], [bgCur, bgFade]]) {
@@ -1226,7 +1245,7 @@ function lvTick() {
 // Cada fotograma: enciende las palabras a su tiempo y hace latir el texto con los graves
 function lvFrame() {
   if (state.mode !== 'lyrics' || lvEl.hidden) return;
-  lvStage.style.setProperty('--pulse', (1 + bass * 0.035).toFixed(4));
+  lvStage.style.setProperty('--pulse', (1 + bass * 0.02 + beat * 0.03).toFixed(4));
   if (!lvWordsAt.length) return;
   const pos = lyricPos(), ws = lvCur.querySelectorAll('.w');
   ws.forEach((w, k) => { const on = pos >= lvWordsAt[k]; if (w.classList.contains('on') !== on) w.classList.toggle('on', on); });
@@ -1275,7 +1294,7 @@ function spawnLight(size, strength) {
 }
 function drawBokeh(dt) {
   const night = state.theme === 'dark';
-  const ob = onset('bass', bass, dt), om = onset('mid', mid, dt), oh = onset('high', high, dt);
+  const ob = hits.bass, om = hits.mid, oh = hits.high;
   if (ob) for (let k = 0; k < 1 + Math.floor(ob * 2); k++) spawnLight('big', ob);
   if (om) for (let k = 0; k < 1 + Math.floor(om * 3); k++) spawnLight('mid', om);
   if (oh) for (let k = 0; k < 2 + Math.floor(oh * 4); k++) spawnLight('small', oh);
@@ -1291,7 +1310,7 @@ function drawBokeh(dt) {
     L.x += L.vx * dt; L.y += L.vy * dt;
     const env = Math.min(1, p / 0.12) * Math.pow(1 - p, 1.2);      // aparece rápido, se apaga lento
     const r = L.r * (1 + level[L.band] * 0.35) * (0.85 + 0.15 * env);
-    lctx.globalAlpha = env * (0.55 + L.strength * 0.45) * (night ? 0.9 : 0.75);
+    lctx.globalAlpha = Math.min(1, env * (0.55 + L.strength * 0.45) * (night ? 0.9 : 0.75) * (1 + beat * 0.45));
     lctx.drawImage(BOKEH[L.c], L.x - r, L.y - r, r * 2, r * 2);
   }
   lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
@@ -1311,7 +1330,7 @@ const AURA = [
   { band: [20, 40], speed: 0.017, off: 0.2,  size: 0.5,  c: 1 },
   { band: [32, 64], speed: -0.015, off: 0.7,  size: 0.45, c: 2 },
 ];
-const auraLevel = AURA.map(() => 0);
+const auraLevel = AURA.map(() => 0), auraPhase = AURA.map(b => b.off);
 function glowSpot(x, y, r, col, a) {
   const g = ctx.createRadialGradient(x, y, 0, x, y, r);
   for (let i = 0; i <= 8; i++) { const t = i / 8; g.addColorStop(t, rgba(col, a * Math.exp(-4.2 * t * t) * (1 - t))); }
@@ -1324,21 +1343,22 @@ function drawAura(dt) {
   const per = 2 * (W + H);
   AURA.forEach((b, i) => {
     const v = avg(spec, b.band[0], b.band[1]);
-    auraLevel[i] += (v - auraLevel[i]) * (1 - Math.pow(0.05, dt));
+    auraLevel[i] += (v - auraLevel[i]) * (1 - Math.pow(v > auraLevel[i] ? 0.00005 : 0.01, dt));
     const L = auraLevel[i];
+    auraPhase[i] += dt * b.speed * (1 + energy * 3);   // con más energía, la luz recorre el borde más rápido
     // Posición sobre el contorno, un poco por fuera de la pantalla
-    let d = (((b.off + time * b.speed) % 1 + 1) % 1) * per, x, y, nx, ny;
+    let d = (((auraPhase[i]) % 1 + 1) % 1) * per, x, y, nx, ny;
     if (d < W) { x = d; y = 0; nx = 0; ny = -1; }
     else if (d < W + H) { x = W; y = d - W; nx = 1; ny = 0; }
     else if (d < 2 * W + H) { x = W - (d - W - H); y = H; nx = 0; ny = 1; }
     else { x = 0; y = H - (d - 2 * W - H); nx = -1; ny = 0; }
-    const r = MIN * b.size * (0.85 + L * 0.5);
+    const r = MIN * b.size * (0.7 + L * 0.85 + beat * 0.18);
     x += nx * r * 0.18; y += ny * r * 0.18;
     const col = night ? RGB[b.c] : RGB[b.c].map(c => 255 - (255 - c) * 0.9);
-    glowSpot(x, y, r, col, night ? 0.38 + L * 0.6 : 0.25 + L * 0.5);
+    glowSpot(x, y, r, col, Math.min(1, (night ? 0.25 + L * 0.8 : 0.18 + L * 0.65) + beat * 0.3));
   });
   // Luz leve en el centro
-  glowSpot(W / 2, H / 2, Math.max(W, H) * 0.6, mix(0.5), night ? 0.07 + energy * 0.16 : 0.06 + energy * 0.12);
+  glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.08), mix(0.5), (night ? 0.05 + energy * 0.2 : 0.04 + energy * 0.15) + beat * 0.12);
   ctx.restore();
 }
 
@@ -1364,7 +1384,7 @@ function drawInfinity(dt) {
   const target = 1.5 + energy * 4 + bass * 2;
   camSpeed += (target - camSpeed) * (1 - Math.pow(0.15, dt));
   camZ += dt * camSpeed;
-  if (onset('bass', bass, dt)) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
+  if (hits.bass) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
 
   const F = MIN * 0.55, FAR = 24, SP = 0.8;
@@ -1399,7 +1419,7 @@ function drawInfinity(dt) {
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
     const R = sc * tunnelRadius(z) * (1 + v * 0.12);
     const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
-    lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2)));
+    lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + beat * 0.4)));
     const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
     // Las líneas de menos de un píxel parpadean: se mantienen a 1 px y se atenúan en su lugar
     lctx.lineWidth = Math.max(DPR, lw);
@@ -1459,8 +1479,8 @@ let slowFor = 0, fastFor = 0, coolDown = 0;
 function adapt(dt) {
   coolDown -= dt;
   if (dt > 0.026) { slowFor += dt; fastFor = 0; } else if (dt < 0.019) { fastFor += dt; slowFor = 0; }
-  if (slowFor > 2 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.15); slowFor = 0; coolDown = 20; resize(); }
-  else if (fastFor > 8 && coolDown <= 0 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.15); fastFor = 0; resize(); }
+  if (slowFor > 3 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.1); slowFor = 0; coolDown = 30; resize(); }
+  else if (fastFor > 15 && coolDown <= 0 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
 }
 
 let frameErrors = 0;
