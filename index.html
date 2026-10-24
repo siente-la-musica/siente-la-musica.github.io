@@ -154,6 +154,9 @@
   .song .row button { font-size: 12px; padding: 0; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
   .song .row button:hover { color: var(--fg); filter: none; }
   .song .time { font-variant-numeric: tabular-nums; }
+  .song .ctl { display: inline-flex; gap: 2px; }
+  .song .ctl button { text-decoration: none; font-size: 14px; padding: 2px 6px; color: var(--fg); background: var(--chip); border-radius: 8px; }
+  .song .bar { height: 5px; }
   .swatch.cover-swatch { background-size: cover; background-position: center; }
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
   .song .bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width .2s linear; }
@@ -355,7 +358,7 @@
         <button data-mode="aura">Aura</button>
         <button data-mode="infinity">Infinito</button>
         <button data-mode="strobe">Estrobo</button>
-        <button data-mode="cover">Portada 3D</button>
+        <button data-mode="cover">Portada</button>
         <button data-mode="lyrics">Letra</button>
         <button data-mode="artist">Artista</button>
       </div>
@@ -482,7 +485,7 @@ function resize() {
     if (typeof lights !== 'undefined') for (const l of lights) { l.x *= kx; l.y *= ky; l.r *= km; l.vx *= kx; l.vy *= ky; }
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
-    if (typeof drops !== 'undefined') { drops.length = 0; splashes.length = 0; ripples.length = 0; }
+    if (typeof drops !== 'undefined') { for (const d of drops) { d.x *= kx; d.y *= ky; d.floor *= ky; d.len *= km; } for (const q of ripples) { q.x *= kx; q.y *= ky; } splashes.length = 0; }
   }
 }
 addEventListener('resize', resize); resize();
@@ -678,6 +681,7 @@ function setMode(m) {
   document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist' || m === 'cover');
   if (m === 'artist' && sp.item) arLoad(sp.item);
   if (m === 'cover' && coverClean) { cover3dImage(coverUrl, coverClean); }
+  if (m === 'cover' && sp.item) loadAltArt(sp.item);
   if ((m === 'lyrics' || m === 'strobe') && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
   if (m === 'strobe' && !state.noFlash && !store.get('strobeWarned', false)) {
     store.set('strobeWarned', true);
@@ -1046,7 +1050,7 @@ function drawBars(dt) {
   }
   springTo(barX, barV, barT, dt, 520, 0.45);
   lctx.clearRect(0, 0, W, H);
-  const slot = W * 0.92 / n, bw = slot * 0.62, x0 = W * 0.04 + (slot - bw) / 2;
+  const slot = W / n, bw = slot * 0.7, x0 = (slot - bw) / 2;   // de borde a borde
   const base = H * 0.985, maxH = H * 0.86;
   for (let i = 0; i < n; i++) {
     const v = Math.max(0, Math.min(1.15, barX[i]));
@@ -1135,7 +1139,7 @@ function spawnBlob(size, strength, flower) {
     flower: flower ? { k: 4 + Math.floor(Math.random() * 4), rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 0.25, inner: Math.random() < 0.6 } : null
   });
   if (flower) { const b = blobs[blobs.length - 1]; b.tendrils.length = 0; b.harm.forEach(h => h.a *= 0.25); b.flower.inner = false; }
-  if (blobs.length > 60) blobs.shift();
+  if (blobs.length > 42) blobs.shift();
 }
 
 function petalShape(fl, a) {   // |cos| elevado da pétalos redondeados; el 0.4 de base deja el centro lleno
@@ -1169,11 +1173,11 @@ function drawInk(dt, flowerMode = false) {
     const grow = 1 - Math.pow(1 - p, 3);                 // se expande rápido y frena
     const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06);
     const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5);
-    const th = r * 0.14 + 3 * DPR;
+    const th = (r * 0.14 + 3 * DPR) * (1 + beatSoft * 0.35);   // el trazo engorda con el golpe
     const spr = SPRITES[b.sprite];
     const fl = b.flower;
     if (fl) fl.rot += fl.spin * dt;
-    const M = Math.max(28, Math.min(fl ? 360 : 150, Math.round(r / DPR * (fl ? 2.4 : 0.9))));
+    const M = Math.max(24, Math.min(fl ? 220 : 110, Math.round(r / DPR * (fl ? 1.5 : 0.7))));
     // Corona exterior y, en las flores, una interior más pequeña con los pétalos intercalados
     for (const ring of [1]) {
       for (let i = 0; i < M * ring; i++) {
@@ -1305,7 +1309,7 @@ async function spLogin() {
   store.set('sp.verifier', verifier); store.set('sp.state', st);
   location.href = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
     response_type: 'code', client_id: SPOTIFY_CLIENT_ID, redirect_uri: SPOTIFY_REDIRECT,
-    scope: 'user-read-currently-playing user-read-playback-state',
+    scope: 'user-read-currently-playing user-read-playback-state user-modify-playback-state',
     code_challenge_method: 'S256', code_challenge: challenge, state: st
   });
 }
@@ -1338,6 +1342,24 @@ async function spHandleRedirect() {
   } catch (e) { showSong(`<div class="meta"><div class="title">No se conectó Spotify</div><div class="note">${esc(e.message)}</div></div>`); }
 }
 
+// Controles: anterior, pausa/reproducir, siguiente y saltar. Spotify solo los permite con Premium.
+async function spControl(action, pos) {
+  if (Date.now() > sp.expires) { try { await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); } catch (e) {} }
+  const url = { next: ['POST', 'next'], previous: ['POST', 'previous'], play: ['PUT', 'play'], pause: ['PUT', 'pause'], seek: ['PUT', 'seek?position_ms=' + pos] }[action];
+  let r;
+  try { r = await fetch('https://api.spotify.com/v1/me/player/' + url[1], { method: url[0], headers: { Authorization: 'Bearer ' + sp.token } }); }
+  catch (e) { return; }
+  if (r.ok || r.status === 204) {
+    if (action === 'pause' || action === 'play') { sp.playing = action === 'play'; sp.progress += action === 'pause' ? performance.now() - sp.at : 0; sp.at = performance.now(); spRender(); }
+    if (action === 'seek') { sp.progress = pos; sp.at = performance.now(); lyricIndex = -2; lvIndex = -2; }
+    setTimeout(spLoop, 350);
+    return;
+  }
+  const d = await r.json().catch(() => ({})), msg = (d.error && d.error.message || '').toLowerCase();
+  if (r.status === 403 && msg.includes('premium')) showSong('<div class="meta"><div class="title">Hace falta Spotify Premium</div><div class="note">Spotify solo deja controlar la música desde otras apps a las cuentas Premium.</div></div>');
+  else if (r.status === 403 || r.status === 401) showSong('<div class="meta"><div class="title">Falta un permiso</div><div class="note">Desconecta Spotify y vuelve a conectarlo para poder controlar la música desde aquí.</div></div>');
+  else if (r.status === 404) showSong('<div class="meta"><div class="title">No hay un reproductor activo</div><div class="note">Abre Spotify en algún dispositivo y pon algo a sonar.</div></div>');
+}
 async function spPoll() {
   if (Date.now() > sp.expires) {
     try { await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); }
@@ -1384,6 +1406,7 @@ function spUpdate(d, src = 'spotify') {
     loadLyrics(item);
     loadArtistImage(item);
     if (state.mode === 'artist') arLoad(item);
+    if (state.mode === 'cover') loadAltArt(item);
   }
   spRender();
 }
@@ -1445,12 +1468,16 @@ function spRender() {
       `<div class="bar"><i id="spBar"></i></div>` +
       `<div class="row"><span class="time" id="spTime"></span>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${linkName}</a>` : ''}` +
       (nowSource() === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
+      (nowSource() === 'spotify' ? `<span class="ctl"><button data-sp="previous" aria-label="Anterior">⏮</button><button data-sp="${sp.playing ? 'pause' : 'play'}" aria-label="${sp.playing ? 'Pausar' : 'Reproducir'}">${sp.playing ? '⏸' : '▶'}</button><button data-sp="next" aria-label="Siguiente">⏭</button></span>` : '') +
       `<button id="spOut">Desconectar</button></div></div>`
     );
   }
   songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   const out = document.getElementById('spOut');
   if (out) out.onclick = () => { const s_ = nowSource(); if (s_ === 'file') fileStop(); else if (s_ === 'lastfm') lfLogout(); else spLogout(); };
+  songEl.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => spControl(b.dataset.sp));
+  const bar = songEl.querySelector('.bar');
+  if (bar && nowSource() === 'spotify' && sp.duration) { bar.style.cursor = 'pointer'; bar.title = 'Saltar a este punto'; bar.onclick = e => { const r = bar.getBoundingClientRect(); spControl('seek', Math.round((e.clientX - r.left) / r.width * sp.duration)); }; }
   const e1 = document.getElementById('lfEarly'), e2 = document.getElementById('lfLate');
   if (e1) e1.onclick = () => { sp.progress += 500; lf.offset += 500; lyricIndex = -2; lvIndex = -2; };
   if (e2) e2.onclick = () => { sp.progress -= 500; lf.offset -= 500; lyricIndex = -2; lvIndex = -2; };
@@ -2155,10 +2182,11 @@ function drawAura(dt) {
     const r = MIN * b.size * (0.6 + L * 1.05 + beat * 0.25);
     x += nx * r * 0.18; y += ny * r * 0.18;
     const col = night ? RGB[b.c] : RGB[b.c].map(c => 255 - (255 - c) * 0.9);
-    glowSpot(x, y, r, col, Math.min(1, (night ? 0.25 + L * 0.8 : 0.18 + L * 0.65) + beat * 0.3));
+    const sat_ = night ? col : col;
+    glowSpot(x, y, r * 1.1, sat_, Math.min(1, (night ? 0.36 + L * 0.95 : 0.28 + L * 0.75) + beat * 0.35));
   });
   // Luz leve en el centro
-  glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.08), mix(0.5), (night ? 0.05 + energy * 0.2 : 0.04 + energy * 0.15) + beat * 0.12);
+  glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.1), mix(0.5), (night ? 0.08 + energy * 0.3 : 0.06 + energy * 0.22) + beat * 0.16);
   ctx.restore();
 }
 
@@ -2596,7 +2624,7 @@ addEventListener('pointerdown', e => {
   if (sky.flashes.length > 3) sky.flashes.shift();
 });
 function skySetup() {
-  sky.prog = glProgram(`uniform vec2 uRes, uPtr; uniform float uTime, uNight, uScroll, uSwirl;
+  sky.prog = glProgram(`uniform vec2 uRes, uPtr; uniform float uTime, uNight, uScroll, uSwirl, uPulse;
     uniform vec3 uC0, uC1, uC2;
     uniform vec4 uL[7];   // x, y, intensidad, color (0-2; 3 = blanco)
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -2609,11 +2637,11 @@ function skySetup() {
       p = uPtr + mat2(cos(f), -sin(f), sin(f), cos(f)) * d0;
       vec2 q = vec2(fbm(p + vec2(0., uTime * .03)), fbm(p + vec2(5.2, 1.3) - uTime * .025));
       float d = fbm(p + 1.7 * q + vec2(uScroll, 0.));
-      return smoothstep(.36, .78, d);
+      return smoothstep(.36 - uPulse * .1, .78 - uPulse * .06, d);   // con los graves se espesa
     }
     vec3 pal(float k) { return k < .5 ? uC0 : k < 1.5 ? uC1 : k < 2.5 ? uC2 : vec3(1.); }
     void main() {
-      vec2 uv = vUv, p = vec2(uv.x * uRes.x / uRes.y, uv.y) * 2.2;
+      vec2 uv = vUv, p = (vec2(uv.x * uRes.x / uRes.y, uv.y) - vec2(uRes.x / uRes.y, 1.) * .5) * (2.2 - uPulse * .12) + vec2(uRes.x / uRes.y, 1.) * 1.1;
       float d = dens(p);
       float d2 = dens(p + vec2(.04, .06));       // un poco hacia la luz: da relieve
       float shade = clamp(.55 + (d - d2) * 2.2, 0., 1.);
@@ -2656,14 +2684,16 @@ function drawSkyClouds(dt) {
   sky.pointerLv += ((performance.now() - sky.pointerAt < 2500 ? 1 : 0) - sky.pointerLv) * (1 - Math.pow(0.05, dt));
   const L = [];
   // Tres luces que pasean por dentro, una por banda
-  for (let i = 0; i < 3; i++) L.push(0.5 + 0.36 * Math.sin(time * (0.07 + i * 0.03) + i * 2.1), 0.55 + 0.22 * Math.sin(time * (0.05 + i * 0.02) + i * 1.3), 0.15 + Math.max(0, sky.lv[i]) * 1.5, i);
+  for (let i = 0; i < 3; i++) L.push(0.5 + 0.36 * Math.sin(time * (0.07 + i * 0.03) + i * 2.1), 0.55 + 0.22 * Math.sin(time * (0.05 + i * 0.02) + i * 1.3), 0.08 + Math.max(0, sky.lv[i]) * 2.1, i);
   for (let i = 0; i < 3; i++) { const f = sky.flashes[i]; L.push(f ? f.x : 0, f ? f.y : 0, f ? f.k * 0.9 : 0, f ? f.c : 0); }
   L.push(sky.pointer[0], sky.pointer[1], sky.pointerLv * (0.9 + bass * 0.6), 3);   // la linterna del ratón
   const p = sky.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, sky.t); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uScroll, -sky.t * 0.035);
   sky.swirl *= Math.pow(0.35, dt);
-  gl.uniform2f(p.u.uPtr, sky.pointer[0] * cw / ch * 2.2, sky.pointer[1] * 2.2); gl.uniform1f(p.u.uSwirl, sky.swirl + (hits.bass || 0) * 0.3);
+  if (hits.bass) { sky.swirl += hits.bass * 1.2; if (performance.now() - sky.pointerAt > 2500) sky.pointer = [0.2 + Math.random() * 0.6, 0.3 + Math.random() * 0.5]; }   // los golpes también la revuelven
+  gl.uniform2f(p.u.uPtr, sky.pointer[0] * cw / ch * 2.2, sky.pointer[1] * 2.2); gl.uniform1f(p.u.uSwirl, sky.swirl);
+  gl.uniform1f(p.u.uPulse, Math.min(1.2, Math.max(0, sky.lv[0]) * 0.8 + beatSoft * 0.6));
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform4fv(p.u['uL[0]'], new Float32Array(L));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
@@ -2776,7 +2806,11 @@ function drawFluid(dt) {
       fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[Math.floor(Math.random() * 3)], k), R(size));
     }
   };
-  if (hits.bass) ring(2 + Math.round(hits.bass * 2), hits.bass, 0.35 + hits.bass * 0.3, 0.45 + hits.bass * 0.5);
+  if (hits.bass) {
+    ring(2 + Math.round(hits.bass * 2), hits.bass, 0.35 + hits.bass * 0.3, 0.45 + hits.bass * 0.5);
+    // Onda expansiva: empuja el fluido hacia fuera desde el centro
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(0.5 + Math.cos(a) * 0.05 * H / W, 0.5 + Math.sin(a) * 0.05, Math.cos(a) * 2600 * hits.bass, Math.sin(a) * 2600 * hits.bass, fluidColor(RGB[k % 3], 0.12 * hits.bass), R(0.12)); }
+  }
   if (hits.mid) ring(1 + Math.round(hits.mid), hits.mid * 0.6, 0.18, 0.3 + hits.mid * 0.3);
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
   if (beatTick && !hits.bass) ring(1, 0.3, 0.2, 0.25);
@@ -2794,7 +2828,7 @@ function drawFluid(dt) {
     const a = fluid.emitA + i * Math.PI * 2 / 5, rr = 0.22 + lv * 0.08;
     const x = 0.5 + Math.cos(a) * rr * (H / W), y = 0.5 + Math.sin(a) * rr;
     const dir = a + Math.PI / 2, sp_ = 250 + lv * 2200;
-    fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[i % 3], lv * 0.09), R(0.06 + lv * 0.12));
+    fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[i % 3], lv * 0.14), R(0.06 + lv * 0.14));
   }
   fluidStep(Math.min(dt, 0.033));
   // Mostrar
@@ -2817,7 +2851,7 @@ function drawFluid(dt) {
 const cover3d = { prog: null, img: null, url: '', upFor: '', mouse: [0, 0], tilt: [0, 0], tiltV: [0, 0], parts: null, partT: 0, waiting: false };
 addEventListener('pointermove', e => { cover3d.mouse = [(e.clientX / innerWidth - 0.5) * 2, (e.clientY / innerHeight - 0.5) * 2]; });
 function cover3dSetup() {
-  cover3d.prog = glProgram(`uniform sampler2D uImg; uniform vec2 uTilt; uniform float uZoom, uRound, uShine, uShinePos;
+  cover3d.prog = glProgram(`uniform sampler2D uImg; uniform vec2 uTilt; uniform float uZoom, uRound, uShine, uShinePos, uAlpha;
     void main() {
       // Rayo desde la cámara contra una tarjeta girada (perspectiva real)
       vec2 p = (vUv - 0.5) * 2.;
@@ -2836,6 +2870,7 @@ function cover3dSetup() {
       float band = exp(-pow((uv.x + uv.y - uShinePos) * 5., 2.));
       c += vec3(1.) * band * uShine;
       c *= 0.92 + 0.08 * (1. - length(uv - 0.5));
+      m *= uAlpha;
       o = vec4(c * m, m);
     }`);
   cover3d.tImg = GLX.gl.createTexture();
@@ -2856,49 +2891,113 @@ function sampleColors(img, n) {
 // Llamadas desde setCover
 function cover3dLeaving() {
   if (state.mode !== 'cover' || !cover3d.img) return;
-  const n = 64, col = sampleColors(cover3d.img, n), parts = [];
-  for (let i = 0; i < n * n; i++) {
-    const u = (i % n + 0.5) / n, v = (Math.floor(i / n) + 0.5) / n, a = Math.random() * Math.PI * 2;
-    parts.push({ u, v, x: u, y: v, vx: Math.cos(a) * (0.2 + Math.random() * 0.6), vy: Math.sin(a) * (0.2 + Math.random() * 0.6) - 0.15,
-      c: [col[i * 4], col[i * 4 + 1], col[i * 4 + 2]], tc: null, tu: u, tv: v, ph: Math.random() * 6.28 });
-  }
-  cover3d.parts = parts; cover3d.partT = 0; cover3d.waiting = true; cover3d.img = null;
+  cover3d.flip = { t: 0, next: null };   // espera a la portada nueva sin hacer nada brusco
 }
 function cover3dImage(url, img) {
-  if (!img) { cover3d.img = null; return; }
+  if (!img) { if (!cover3d.flip) cover3d.img = null; return; }
+  if (cover3d.flip && cover3d.img) { cover3d.flip.next = { url, img }; cover3d.flip.t = 0; return; }
   cover3d.url = url; cover3d.img = img; cover3d.upFor = '';
-  if (cover3d.parts) {   // las partículas ya tienen adónde ir
-    const n = 64, col = sampleColors(img, n);
-    const order = [...cover3d.parts.keys()].sort(() => Math.random() - 0.5);
-    order.forEach((pi, i) => { const q = cover3d.parts[pi]; q.tu = (i % n + 0.5) / n; q.tv = (Math.floor(i / n) + 0.5) / n; q.tc = [col[i * 4], col[i * 4 + 1], col[i * 4 + 2]]; });
-    cover3d.waiting = false; cover3d.partT = 0;
+}
+// Ángulo extra del giro: se pone de canto, cambia la imagen y vuelve de frente
+function coverFlipAngle(dt) {
+  const f = cover3d.flip;
+  if (!f) return 0;
+  if (!f.next) return Math.sin(time * 2) * 0.03;   // esperando: apenas se mece
+  f.t += dt;
+  const e = x => x * x * (3 - 2 * x), OUT = 0.32, IN = 0.42;
+  if (f.t < OUT) return e(f.t / OUT) * 1.5;
+  if (!f.swapped) { f.swapped = true; cover3d.url = f.next.url; cover3d.img = f.next.img; cover3d.upFor = ''; }
+  const k = Math.min(1, (f.t - OUT) / IN);
+  if (k >= 1) { cover3d.flip = null; return 0; }
+  return -(1 - e(k)) * 1.5;
+}
+
+// ================= Portadas alternativas del álbum (Cover Art Archive) =================
+// Para un álbum se buscan sus ediciones en MusicBrainz y sus imágenes en el Cover Art
+// Archive (portadas alternativas, contraportadas, libretos). Se usan de fondo y en
+// tarjetas que flotan alrededor de la portada.
+const altArt = { key: '', cache: new Map(), imgs: [], bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: 0 };
+async function altArtFor(artist, album) {
+  const q = `releasegroup:"${album.replace(/"/g, '')}" AND artist:"${artist.replace(/"/g, '')}"`;
+  const r = await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=5&query=' + encodeURIComponent(q));
+  if (!r.ok) return [];
+  const rg = ((await r.json())['release-groups'] || []).find(g => g.score >= 85 && norm(g.title).startsWith(norm(album).slice(0, 12)));
+  if (!rg || rg['primary-type'] === 'Single') return [];
+  await new Promise(x => setTimeout(x, 1100));   // MusicBrainz pide como mucho una consulta por segundo
+  const rr = await fetch(`https://musicbrainz.org/ws/2/release?release-group=${rg.id}&fmt=json&limit=40`);
+  if (!rr.ok) return [];
+  const rels = ((await rr.json()).releases || []).filter(x => x['cover-art-archive']?.artwork).slice(0, 8);
+  const urls = [], seen = new Set();
+  for (const rel of rels) {
+    try {
+      const c = await fetch('https://coverartarchive.org/release/' + rel.id);
+      if (!c.ok) continue;
+      for (const im of (await c.json()).images || []) {
+        const u = im.thumbnails?.['500'] || im.thumbnails?.large || im.image;
+        if (u && !seen.has(im.id)) { seen.add(im.id); urls.push(u.replace(/^http:/, 'https:')); }
+      }
+    } catch (e) {}
+    if (urls.length >= 12) break;
+  }
+  return urls;
+}
+async function loadAltArt(item) {
+  const album = item && item.album?.name, artist = item && item.artists?.[0]?.name;
+  const single = !album || item.album?.album_type === 'single' || (item.album?.total_tracks && item.album.total_tracks <= 2) || norm(album) === norm(item.name);
+  const key = single ? '' : norm(artist) + '|' + norm(album);
+  if (key === altArt.key) return;
+  Object.assign(altArt, { key, imgs: [], bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: performance.now() });
+  if (!key) return;
+  if (!altArt.cache.has(key)) altArt.cache.set(key, altArtFor(artist, album).catch(() => []));
+  const urls = await altArt.cache.get(key);
+  for (const u of urls) {
+    const { img, clean } = await loadImageClean(u);
+    if (altArt.key !== key) return;
+    if (img) { const bg = makeCoverBg(img); bg.clean = clean; altArt.imgs.push({ img, clean, bg }); }
   }
 }
+function drawAltArt(dt, cx, cy, S) {
+  const A = altArt.imgs, night = state.theme === 'dark', now = performance.now();
+  if (!A.length) return;
+  // Fondo: pasa de una imagen a otra con un golpe (o cada 10 s)
+  if (!altArt.cur || (now - altArt.bgAt > 6000 && hits.bass) || now - altArt.bgAt > 10000) {
+    altArt.prev = altArt.cur; altArt.cur = A[altArt.bgIdx++ % A.length]; altArt.bgAt = now; altArt.fade = 0;
+  }
+  altArt.fade = Math.min(1, altArt.fade + dt / 1.5);
+  const Sb = Math.max(W, H) * (1.15 + 0.03 * Math.sin(time * 0.06) + beatSoft * 0.01);
+  for (const [it, a] of [[altArt.prev, 1 - altArt.fade], [altArt.cur, altArt.fade]]) {
+    if (!it || a <= 0 || (recording && !it.clean)) continue;
+    ctx.globalAlpha = a * (night ? 0.32 : 0.22);
+    ctx.drawImage(it.bg, (W - Sb) / 2 + Math.sin(time * 0.04) * W * 0.02, (H - Sb) / 2, Sb, Sb);
+  }
+  ctx.globalAlpha = 1;
+  // Tarjetas que flotan alrededor (solo en horizontal: en vertical no caben)
+  if (W < H * 1.1 || A.length < 2) return;
+  if (now - altArt.cycleAt > 12000 || (now - altArt.cycleAt > 8000 && hits.bass)) { altArt.cycle++; altArt.cycleAt = now; }
+  const spots = [[-0.98, -0.28, 0.36, -0.12], [-0.86, 0.42, 0.28, 0.08], [0.98, -0.3, 0.34, 0.1], [0.88, 0.4, 0.3, -0.07]];
+  spots.forEach(([ox, oy, sz, rot], k) => {
+    const item = A[(k + altArt.cycle) % A.length];
+    if (!item || (recording && !item.clean)) return;
+    const z = 0.5 + k * 0.15, s_ = S * sz * (1 + beatSoft * 0.03);
+    const x = cx + ox * S + Math.sin(time * 0.3 + k * 2) * S * 0.02 - cover3d.mouse[0] * S * 0.04 * z;
+    const y = cy + oy * S + Math.cos(time * 0.25 + k) * S * 0.02 - cover3d.mouse[1] * S * 0.04 * z;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot + Math.sin(time * 0.2 + k) * 0.02);
+    ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = s_ * 0.12; ctx.shadowOffsetY = s_ * 0.04;
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath(); ctx.roundRect(-s_ / 2, -s_ / 2, s_, s_, s_ * 0.04); ctx.fillStyle = '#000'; ctx.fill();
+    ctx.shadowBlur = 0; ctx.save(); ctx.clip(); ctx.drawImage(item.img, -s_ / 2, -s_ / 2, s_, s_); ctx.restore();
+    ctx.restore();
+  });
+}
+
 function drawCover(dt) {
   const night = state.theme === 'dark', vertical = H > W;
   const S = Math.min(MIN * (vertical ? 0.78 : 0.6), 1500), cx = W / 2, cy = H * (vertical ? 0.42 : 0.46);
   const x0 = cx - S / 2, y0 = cy - S / 2;
-  glowSpot(cx, cy, S * (1.05 + beatSoft * 0.15), mix(0.5), (night ? 0.3 : 0.2) + beatSoft * 0.25);
   const it = spConnected() && sp.item;
-  if (cover3d.parts) {
-    // Partículas: estallan, flotan mientras se espera la nueva portada y luego la forman
-    cover3d.partT += dt;
-    const t = cover3d.partT, gather = cover3d.waiting ? 0 : Math.min(1, Math.max(0, (t - 0.35) / 1.2));
-    const ease = gather * gather * (3 - 2 * gather), cell = S / 64 * 1.05;
-    for (const q of cover3d.parts) {
-      if (cover3d.waiting || t < 0.35) {
-        q.x += q.vx * dt * (0.5 + bass); q.y += q.vy * dt * (0.5 + bass);
-        q.vx *= Math.pow(0.4, dt); q.vy *= Math.pow(0.4, dt);
-        q.x += Math.sin(time * 1.3 + q.ph) * 0.0006; q.y += Math.cos(time * 1.1 + q.ph) * 0.0006;
-      }
-      const px = q.x + (q.tu - q.x) * ease, py = q.y + (q.tv - q.y) * ease;
-      if (gather >= 1) { q.x = q.tu; q.y = q.tv; }
-      const c = q.tc ? q.c.map((v, k) => v + (q.tc[k] - v) * ease) : q.c;
-      ctx.fillStyle = `rgb(${c[0] | 0},${c[1] | 0},${c[2] | 0})`;
-      ctx.fillRect(x0 + px * S - cell / 2, y0 + py * S - cell / 2, cell * (1 - (1 - ease) * 0.3), cell * (1 - (1 - ease) * 0.3));
-    }
-    if (!cover3d.waiting && gather >= 1) cover3d.parts = null;
-  } else if (cover3d.img && glInit()) {
+  drawAltArt(dt, cx, cy, S);
+  glowSpot(cx, cy, S * (1.05 + beatSoft * 0.15), mix(0.5), (night ? 0.3 : 0.2) + beatSoft * 0.25);
+  if (false) {  } else if (cover3d.img && glInit()) {
     if (!cover3d.prog) { try { cover3dSetup(); } catch (e) { console.error(e); GLX.ok = false; return; } }
     const gl = GLX.gl, sz = Math.round(Math.min(S, 1400));
     if (GLX.c.width !== sz || GLX.c.height !== sz) { GLX.c.width = sz; GLX.c.height = sz; fluid.key = ''; }
@@ -2910,7 +3009,9 @@ function drawCover(dt) {
     const p = cover3d.prog; gl.useProgram(p.pr);
     gl.uniform2f(p.u.texel, 1 / sz, 1 / sz);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cover3d.tImg); gl.uniform1i(p.u.uImg, 0);
-    gl.uniform2f(p.u.uTilt, cover3d.tilt[0], cover3d.tilt[1]);
+    const flipA = coverFlipAngle(dt);
+    gl.uniform2f(p.u.uTilt, cover3d.tilt[0], cover3d.tilt[1] + flipA);
+    gl.uniform1f(p.u.uAlpha, Math.max(0, Math.min(1, (1.55 - Math.abs(flipA)) / 0.35)) * (cover3d.flip && !cover3d.flip.next ? 0.85 : 1));
     gl.uniform1f(p.u.uZoom, 0.78 + beatSoft * 0.025 + bass * 0.01);
     gl.uniform1f(p.u.uRound, 0.03);
     gl.uniform1f(p.u.uShine, 0.06 + beatSoft * 0.22);
@@ -2923,7 +3024,7 @@ function drawCover(dt) {
   } else {
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = textFg(0.6); ctx.font = `600 ${Math.round(MIN * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
-    ctx.fillText(!spConnected() ? 'Conecta tu música para ver la portada en 3D' : !sp.item ? 'Pon algo de música' : 'Cargando la portada…', cx, cy);
+    ctx.fillText(!spConnected() ? 'Conecta tu música para ver la portada' : !sp.item ? 'Pon algo de música' : 'Cargando la portada…', cx, cy);
     ctx.restore();
   }
   // Título y artista bajo la portada
@@ -3014,7 +3115,7 @@ function drawMagnet(dt) {
 // Un cielo de estrellas separadas, a distintas profundidades. Cada estrella escucha una
 // frecuencia y brilla con ella; los golpes lanzan estrellas fugaces y el ratón hace brillar
 // las que tiene cerca. El cielo avanza despacio, como si viajaras.
-const starSky = { list: null, key: '', shooting: [], ptr: null };
+const starSky = { list: null, key: '', shooting: [], ptr: null, waves: [], lines: [] };
 addEventListener('pointermove', e => { if (state.mode === 'stars') starSky.ptr = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, at: performance.now() }; });
 function starsInit() {
   const n = Math.round(Math.min(1400, 700 * (W * H) / (1920 * 1080 * DPR * DPR) + 300));
@@ -3030,7 +3131,17 @@ function drawStars(dt) {
   if (!starSky.list || starSky.key !== W + 'x' + H) starsInit();
   if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
   ambient();
-  const speed = 0.004 + energy * 0.02;
+  const speed = 0.003 + Math.pow(energy, 1.3) * 0.06 + beatSoft * 0.02;   // con energía, el viaje acelera
+  // Onda que recorre el cielo desde el centro en cada golpe, encendiendo las estrellas a su paso
+  if (hits.bass || (beatTick && tempo.conf > 0.35)) starSky.waves.push({ r: 0, k: hits.bass ? 0.8 + hits.bass * 0.7 : 0.5 });
+  starSky.waves.forEach(w => { w.r += dt * 1.5; w.k *= Math.pow(0.3, dt); });
+  starSky.waves = starSky.waves.filter(w => w.r < 1.3 && w.k > 0.03);
+  // Constelaciones: con los medios, unas estrellas cercanas se unen con líneas un momento
+  if (hits.mid && starSky.list) {
+    const cx = Math.random(), cy = Math.random(), near = starSky.list.filter(s_ => s_.z > 0.25 && Math.hypot(s_.x - cx, (s_.y - cy) * H / W) < 0.12).slice(0, 7);
+    if (near.length > 2) starSky.lines.push({ stars: near, k: 0.5 + hits.mid * 0.5, c: Math.floor(Math.random() * 3) });
+    if (starSky.lines.length > 4) starSky.lines.shift();
+  }
   const p = starSky.ptr && performance.now() - starSky.ptr.at < 2500 ? starSky.ptr : null;
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
   for (const s_ of starSky.list) {
@@ -3040,17 +3151,29 @@ function drawStars(dt) {
     let near = 0;
     if (p) { const dx = s_.x - p.x, dy = (s_.y - p.y) * H / W; near = Math.exp(-(dx * dx + dy * dy) * 160); }
     const tw = 0.6 + 0.4 * Math.sin(time * s_.tw + s_.ph);
-    const b = Math.min(1.4, s_.base * tw + lv * (0.6 + s_.z * 1.4) + near * 0.9 + beatSoft * 0.15 * s_.z);
+    let wave = 0; const dc = Math.hypot(s_.x - 0.5, (s_.y - 0.5) * H / W);
+    for (const w of starSky.waves) wave += w.k * Math.exp(-Math.pow((dc - w.r) * 14, 2));
+    const b = Math.min(1.6, s_.base * tw * (0.5 + energy) + lv * (1 + s_.z * 2) + near * 0.9 + wave + beat * (0.25 + s_.z * 0.6));   // todas laten con el golpe
     const col = s_.c < 0 ? [235, 238, 255] : RGB[s_.c];
-    const r = DPR * (0.5 + s_.z * 1.6) * (1 + lv * 1.2 + near);
+    const r = DPR * (0.5 + s_.z * 1.6) * (1 + lv * 1.2 + near + beat * 0.6 * s_.z);
     ctx.globalAlpha = Math.min(1, b);
-    ctx.fillStyle = rgba(col, 1); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgba(col, 1);
+    const streak = speed * (0.2 + s_.z) * W * 0.06;   // a mucha velocidad, las estrellas se estiran
+    if (streak > r * 2) { ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = r * 1.4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + streak, y); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
     if (b > 0.55) {   // las que brillan fuerte, con halo
       const hr = r * (4 + b * 6);
       ctx.globalAlpha = Math.min(0.9, (b - 0.55) * 0.9);
       ctx.drawImage(SPRITES[s_.c < 0 ? 1 : s_.c], x - hr, y - hr, hr * 2, hr * 2);
     }
   }
+  // Líneas de las constelaciones
+  for (const cl of starSky.lines) {
+    cl.k *= Math.pow(0.3, dt);
+    ctx.globalAlpha = cl.k * 0.6; ctx.strokeStyle = rgba(RGB[cl.c], 1); ctx.lineWidth = DPR;
+    ctx.beginPath(); cl.stars.forEach((s_, i) => i ? ctx.lineTo(s_.x * W, s_.y * H) : ctx.moveTo(s_.x * W, s_.y * H)); ctx.stroke();
+  }
+  starSky.lines = starSky.lines.filter(c => c.k > 0.03);
   // Estrellas fugaces con los golpes
   if (hits.bass && Math.random() < 0.7) starSky.shooting.push({ x: Math.random() * W * 0.8 + W * 0.2, y: Math.random() * H * 0.4, vx: -(0.6 + Math.random() * 0.5) * MIN, vy: (0.25 + Math.random() * 0.25) * MIN, life: 0.9, t: 0, c: Math.floor(Math.random() * 3) });
   for (let i = starSky.shooting.length - 1; i >= 0; i--) {
@@ -3068,7 +3191,6 @@ function drawStars(dt) {
 // ================= Escena: Luz =================
 // Una luz suave en el centro, en tres capas: el halo sigue a los graves, la luz media a los
 // medios y el núcleo a los agudos. No se mueve de sitio: crece, se encoge y respira.
-const lightRings = [];
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
 function drawLight(dt) {
   const night = state.theme === 'dark';
@@ -3087,20 +3209,17 @@ function drawLight(dt) {
     // Núcleo discreto: solo brilla de verdad con los agudos
     glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), mix(drift).map(x => x + (255 - x) * 0.6), 0.15 + Lh * 0.6);
   } else {
-    // De día: color saturado sobre blanco; tamaño y fuerza cambian mucho con la música
-    const sat = c => { const [h, s_, l] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(75, s_), 52)); };
-    glowSpot(W / 2, H / 2, MIN * (0.18 + Lb * 1.25 + beat * 0.25), sat(mix(drift)), 0.15 + Lb * 0.75);
-    glowSpot(W / 2, H / 2, MIN * (0.08 + Lm * 0.55), sat(mix(1 - drift)), 0.2 + Lm * 0.7);
-    glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), sat(mix(drift)), 0.25 + Lh * 0.7);
-  }
-  // Ondas de luz que salen del centro con cada golpe
-  if (hits.bass) lightRings.push({ r: MIN * 0.05, a: 0.5 + hits.bass * 0.5, c: Math.floor(Math.random() * 3) });
-  ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  for (let i = lightRings.length - 1; i >= 0; i--) {
-    const w = lightRings[i]; w.r += dt * MIN * (0.45 + energy * 0.5); w.a *= Math.pow(0.3, dt);
-    if (w.a < 0.02 || w.r > Math.max(W, H)) { lightRings.splice(i, 1); continue; }
-    ctx.strokeStyle = rgba(RGB[w.c], w.a * (night ? 0.5 : 0.65)); ctx.lineWidth = MIN * 0.006 * (1 + w.a);
-    ctx.beginPath(); ctx.arc(W / 2, H / 2, w.r, 0, Math.PI * 2); ctx.stroke();
+    // De día: tres lóbulos de color que giran alrededor del centro y laten con su banda;
+    // con 'multiply' el color se mezcla como tinta de luz sobre el blanco.
+    const sat = c => { const [h, s_, l] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(80, s_), 60)); };
+    ctx.globalCompositeOperation = 'multiply';
+    const L3 = [Lb, Lm, Lh];
+    for (let k = 0; k < 3; k++) {
+      const a = time * (0.35 + energy * 0.8) + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
+      glowSpot(W / 2 + Math.cos(a) * off, H / 2 + Math.sin(a) * off, MIN * (0.16 + L3[k] * 0.95 + beat * 0.2), sat(RGB[k]), 0.35 + L3[k] * 0.6);
+    }
+    ctx.globalCompositeOperation = 'source-over';
+    glowSpot(W / 2, H / 2, MIN * (0.04 + Lh * 0.1), sat(mix(drift)), 0.3 + Lh * 0.6);
   }
   ctx.restore();
 }
@@ -3197,7 +3316,7 @@ function drawRain(dt) {
     for (let j = 0; j < 3; j++) { const l = L[j], dx = d.x - l.x, dy = d.y - l.y, f = l.I * Math.exp(-(dx * dx + dy * dy) / (l.r * l.r)); lit += f; if (f > best) { best = f; bi = j; } }
     const k = Math.min(1, lit + rs.flash * 0.6);
     // Estela: cuanto más rápido cae, más se estira
-    const w = (3 + d.z * 5) * DPR, h = d.len * (0.75 + Math.min(1.6, rs.speed) * 0.55);
+    const w = (1.7 + d.z * 2.8) * DPR, h = d.len * (0.75 + Math.min(1.6, rs.speed) * 0.55);
     lctx.setTransform(1, 0, -wind, 1, d.x, d.y);
     lctx.globalAlpha = (night ? 0.18 + d.z * 0.25 : 0.28 + d.z * 0.3) * (1 - k * 0.7);
     lctx.drawImage(dropSprites[0], -w / 2, -h, w, h);
@@ -3230,7 +3349,7 @@ function drawRain(dt) {
 // ================= Escena: Estrobo =================
 // Fondo plano y la letra en minúsculas condensadas que aparece palabra a palabra;
 // en los golpes la imagen se invierte un instante. Con "sin destellos" solo respira.
-let strobeFlash = 0, strobeLast = 0, strobeLine = '';
+let strobeFlash = 0, strobeLast = 0, strobeLine = '', strobeColorK = 0;
 function currentLyric() {
   if (!(spConnected() && sp.item && lyrics && lyrics.lines)) return null;
   const Ls = lyrics.lines, pos = lyricPos();
@@ -3243,7 +3362,7 @@ function currentLyric() {
 function strobeColors() {
   const night = state.theme === 'dark';
   if (state.strobe === 'lime') return ['#8ace00', '#000000'];
-  if (state.strobe === 'palette') { const c = RGB[1], lum = (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11); return [COLORS[1], lum > 150 ? '#000000' : '#ffffff']; }
+  if (state.strobe === 'palette') { const c = RGB[strobeColorK], lum = (c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11); return [COLORS[strobeColorK], lum > 150 ? '#000000' : '#ffffff']; }
   return night ? ['#000000', '#ffffff'] : ['#ffffff', '#000000'];
 }
 function drawStrobe(dt) {
@@ -3256,8 +3375,10 @@ function drawStrobe(dt) {
   const line = words.join(' ').toLowerCase();
   if (!state.noFlash) {
     if (hits.bass && now - strobeLast > 120) { strobeFlash = 0.09; strobeLast = now; }
+    if (beatTick && tempo.conf > 0.4 && now - strobeLast > 220) { strobeFlash = 0.06; strobeLast = now; }   // también en el compás
     if (ly && ly.text !== strobeLine) { strobeFlash = Math.max(strobeFlash, 0.12); }
   }
+  if (hits.bass || beatTick) strobeColorK = (strobeColorK + 1) % 3;   // en la paleta, el fondo cambia de color al ritmo
   if (ly) strobeLine = ly.text;
   strobeFlash = Math.max(0, strobeFlash - dt);
   let [bg, fg] = strobeColors();
@@ -3281,8 +3402,9 @@ function drawStrobe(dt) {
   if (CAN_BLUR) ctx.filter = `blur(${(size * 0.012).toFixed(2)}px)`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lh = size * 1.02, y0 = H / 2 - (lines.length - 1) * lh / 2;
+  const pump = 1 + bass * 0.08 + beat * 0.08;   // el texto late con los graves
   lines.forEach((l, i) => {
-    ctx.save(); ctx.translate(W / 2, y0 + i * lh); ctx.scale(0.8, 1);
+    ctx.save(); ctx.translate(W / 2, H / 2 + (y0 + i * lh - H / 2) * pump); ctx.scale(0.8 * pump, pump);
     ctx.fillText(l, 0, 0); ctx.restore();
   });
   ctx.restore();
