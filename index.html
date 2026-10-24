@@ -100,6 +100,7 @@
   .lf-row input { flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--fg); background: var(--chip); border: 1px solid var(--glass-line); border-radius: 10px; padding: 8px 10px; }
   .seg button { flex: 1; justify-content: center; }
   .row-set { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+  .row-set[hidden], .pop [hidden] { display: none !important; }
   .row-set small { display: block; color: var(--muted); font-size: 11px; }
   .row-set:has(.seg) { flex-direction: column; align-items: stretch; }
   .row-set input[type=range] { width: 120px; accent-color: var(--fg); }
@@ -180,81 +181,48 @@
   .song .time { font-variant-numeric: tabular-nums; }
   .swatch.cover-swatch { background-size: cover; background-position: center; }
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
-  /* Reproductor: portada y título arriba, barra con los dos tiempos, controles centrados.
-     Se tiñe con los colores de la animación para que parezca parte de la página. */
+  /* Reproductor: la portada desenfocada hace de fondo; portada, título y controles en una fila
+     y debajo una línea de progreso fina. Las demás opciones quedan tras «⋯». */
   .song.player {
-    display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: 10px 12px; padding: 12px 14px 10px 12px;
-    background:
-      radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--c1, #888) 22%, transparent), transparent 60%),
-      radial-gradient(120% 140% at 100% 100%, color-mix(in srgb, var(--c2, #888) 16%, transparent), transparent 60%),
-      var(--glass);
+    display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; grid-template-areas: "cv meta ctl" "prog prog prog" "more more more";
+    gap: 8px 12px; padding: 12px 14px 10px 12px; overflow: hidden; isolation: isolate;
+    width: min(420px, calc(100% - 32px)); border-radius: 22px;
+    background: color-mix(in srgb, var(--bg) 55%, transparent);
   }
-  .song.player .cover { width: 64px; height: 64px; border-radius: 12px; box-shadow: 0 6px 22px color-mix(in srgb, var(--c1, #000) 35%, rgba(0,0,0,.25)); }
-  .song.player .meta { align-self: center; padding-right: 22px; }
-  .song.player .close { position: absolute; top: 6px; right: 6px; color: var(--muted); }
-  .song .prog { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 11px; color: var(--muted); }
-  .song .prog .bar { margin: 0; height: 4px; position: relative; overflow: visible; }
-  .song .prog .bar i { border-radius: 2px; background: linear-gradient(90deg, var(--c1, var(--fg)), var(--c2, var(--fg))); position: relative; }
-  .song .prog .bar i::after { content: ''; position: absolute; right: -5px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--fg); opacity: 0; transition: opacity .2s; }
-  .song .prog .bar.seek { cursor: pointer; }
-  .song .prog .bar.seek:hover i::after { opacity: 1; }
-  .song .prog .bar.seek::before { content: ''; position: absolute; inset: -8px 0; }
-  .song .ctl-row { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; min-height: 34px; }
-  .song .ctl-row .l { justify-self: start; display: flex; gap: 6px; flex-wrap: wrap; }
-  .song .ctl-row .r { justify-self: end; display: flex; gap: 6px; }
-  .song .ctl { display: flex; gap: 6px; align-items: center; }
-  .song .ctl button, .song .ib { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50%; background: none; color: var(--fg); }
-  .song .ctl button:hover, .song .ib:hover { background: var(--chip); filter: none; }
-  .song .ctl button.main { width: 40px; height: 40px; background: var(--fg); color: var(--bg); }
+  .song.player::before {   /* portada desenfocada */
+    content: ''; position: absolute; inset: -30%; z-index: -2; background: var(--cv, none) center / cover, linear-gradient(135deg, var(--c1, #555), var(--c2, #555));
+    filter: blur(36px) saturate(1.5); opacity: .75; transform: scale(1.1);
+  }
+  .song.player::after { content: ''; position: absolute; inset: 0; z-index: -1; background: color-mix(in srgb, var(--bg) 52%, transparent); }
+  .song.player .cover { grid-area: cv; width: 52px; height: 52px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+  .song.player .meta { grid-area: meta; align-self: center; gap: 1px; }
+  .song.player .title { font-size: 15px; letter-spacing: -.01em; }
+  .song.player .artist { font-size: 13px; }
+  .song.player > .close { display: none; }
+  .song .ctl { grid-area: ctl; display: flex; gap: 2px; align-items: center; }
+  .song .ctl button { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border-radius: 50%; background: none; color: var(--fg); transition: transform .15s, background .2s; }
+  .song .ctl button:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); filter: none; }
+  .song .ctl button:active { transform: scale(.9); }
+  .song .ctl button.main { width: 42px; height: 42px; background: var(--fg); color: var(--bg); box-shadow: 0 6px 18px rgba(0,0,0,.25); }
   .song .ctl button.main:hover { background: var(--fg); transform: scale(1.06); }
-  .song .ctl button { transition: transform .15s, background .2s; }
-  .song .ctl button:active { transform: scale(.92); }
+  .song .ctl button.dots { width: 30px; color: var(--muted); }
   .song svg { width: 18px; height: 18px; fill: currentColor; }
-  .song .ib { width: 30px; height: 30px; color: var(--muted); }
-  .song .ib svg { width: 16px; height: 16px; }
-  /* Biblioteca de Spotify: panel lateral de cristal */
-  .lib {
-    position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: max(12px, env(safe-area-inset-right, 0px));
-    bottom: calc(var(--dock-h, 70px) + 28px + env(safe-area-inset-bottom, 0px));
-    width: min(400px, calc(100% - 24px)); z-index: 6; display: flex; flex-direction: column; gap: 10px; padding: 12px;
-    background:
-      radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--c1, #888) 18%, transparent), transparent 70%),
-      var(--pop-bg);
-    border: 1px solid var(--glass-line); border-radius: 20px; box-shadow: var(--shadow);
-    -webkit-backdrop-filter: blur(28px) saturate(1.6); backdrop-filter: blur(28px) saturate(1.6);
-    animation: libIn .35s cubic-bezier(.2,.8,.2,1);
-  }
-  @keyframes libIn { from { opacity: 0; transform: translateX(24px); } }
-  .lib[hidden] { display: none; }
-  .lib-head { display: flex; align-items: center; gap: 6px; }
-  .lib-title { flex: 1; font-weight: 700; font-size: 17px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lib .ib { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: none; color: var(--muted); }
-  .lib .ib:hover { background: var(--chip); color: var(--fg); filter: none; }
-  .lib svg { width: 18px; height: 18px; fill: currentColor; }
-  .lib input[type=search] { font: inherit; font-size: 14px; color: var(--fg); background: var(--chip); border: 1px solid transparent; border-radius: 12px; padding: 10px 12px; outline: none; }
-  .lib input[type=search]:focus { border-color: var(--glass-line); }
-  .lib-tabs button { font-size: 12px; padding: 6px 10px; }
-  .lib-dev { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-  .lib-dev select { flex: 1; min-width: 0; font: inherit; color: var(--fg); background: var(--chip); border: 0; border-radius: 8px; padding: 5px 8px; }
-  .lib-note { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
-  .lib-note button { font-size: 12px; padding: 4px 10px; margin-top: 6px; }
-  .lib-list { flex: 1; overflow-y: auto; margin: 0 -6px; padding: 0 6px; display: grid; align-content: start; gap: 2px; overscroll-behavior: contain; scrollbar-width: thin; }
-  .lib-sec { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 10px 4px 4px; }
-  .lib-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 12px; background: none; text-align: left; width: 100%; font-size: 14px; }
-  .lib-row:hover { background: var(--chip); filter: none; }
-  .lib-row.now { background: color-mix(in srgb, var(--c1, #888) 22%, transparent); }
-  .lib-row img, .lib-row .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--chip); }
-  .lib-row.round img { border-radius: 50%; }
-  .lib-row .tx { min-width: 0; display: grid; gap: 1px; }
-  .lib-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lib-row .s { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lib-row .q { opacity: 0; transition: opacity .15s; }
-  .lib-row:hover .q, .lib-row:focus-within .q { opacity: 1; }
-  @media (hover: none) { .lib-row .q { opacity: .8; } }
-  .lib-empty { padding: 24px 8px; text-align: center; font-size: 13px; color: var(--muted); }
-  @media (max-width: 640px) { .lib { left: 12px; width: auto; } }
-  .song .pill { font-size: 11px; padding: 4px 8px; border-radius: 99px; background: var(--chip); color: var(--muted); text-decoration: none; }
-  .song .pill:hover { color: var(--fg); filter: none; }
+  .song .ctl .main svg { width: 20px; height: 20px; }
+  .song .prog { grid-area: prog; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: 11px; color: var(--muted); }
+  .song .prog .bar { margin: 0; height: 3px; border-radius: 3px; position: relative; overflow: visible; background: color-mix(in srgb, var(--fg) 16%, transparent); transition: height .15s; }
+  .song .prog .bar i { display: block; height: 100%; border-radius: 3px; background: var(--fg); position: relative; }
+  .song .prog .bar i::after { content: ''; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: var(--fg); transform: scale(0); transition: transform .15s; }
+  .song .prog .bar.seek { cursor: pointer; }
+  .song .prog .bar.seek:hover { height: 5px; }
+  .song .prog .bar.seek:hover i::after { transform: scale(1); }
+  .song .prog .bar.seek::before { content: ''; position: absolute; inset: -10px 0; }
+  .song .more { grid-area: more; display: none; flex-wrap: wrap; gap: 6px; }
+  .song.open-more .more { display: flex; }
+  .song .more button, .song .more a { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 6px 10px; border-radius: 99px; background: color-mix(in srgb, var(--fg) 10%, transparent); color: var(--fg); text-decoration: none; }
+  .song .more svg { width: 14px; height: 14px; }
+  .song .more button:hover, .song .more a:hover { background: color-mix(in srgb, var(--fg) 18%, transparent); filter: none; }
+  /* En Portada, Letra y Artista también se ve, para poder pausar y cambiar de canción */
+  body.mode-info .song.player:not([hidden]) { display: grid; }
   .song .bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width .2s linear; }
 
   /* Canción en una esquina: discreta, siempre visible cuando la tarjeta no está */
@@ -269,7 +237,7 @@
   .av { width: 2.6em; height: 2.6em; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--glass-line), 0 6px 24px rgba(0,0,0,.25); }
   body.mode-info .corner, body.mode-strobe .corner, body.mode-strobe .status { display: none; }
   body.mode-info .status { display: none; }
-  body.mode-info .song:not(.force) { display: none; }
+  body.mode-info .song:not(.force):not(.player) { display: none; }
   body.idle .corner { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
   .corner .t { font-size: 1em; font-weight: 600; color: var(--fg); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .corner .a { font-size: .8em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -305,7 +273,7 @@
   }
   .lv-cur { display: block; text-wrap: balance; }
   .lv-cur .w {
-    display: inline-block; color: color-mix(in srgb, var(--fg) 42%, transparent);
+    display: inline-block; color: color-mix(in srgb, var(--fg) 42%, transparent); transform-origin: 50% 80%;
     text-shadow: 0 0 .35em color-mix(in srgb, var(--bg) 70%, transparent), 0 0 .9em color-mix(in srgb, var(--bg) 50%, transparent);
     transition: color .35s, transform .45s cubic-bezier(.2,.8,.2,1), text-shadow .45s;
   }
@@ -471,6 +439,7 @@
         <button data-mode="aura">Aura</button>
         <button data-mode="infinity">Infinito</button>
         <button data-mode="strobe">Estrobo</button>
+        <button data-mode="vinyl">Vinilo</button>
         <button data-mode="cover">Portada</button>
         <button data-mode="lyrics">Letra</button>
         <button data-mode="artist">Artista</button>
@@ -492,7 +461,7 @@
         <div class="seg" role="group" aria-label="Atajos"><button id="recChorus">Ir al estribillo</button><button id="recNow" aria-pressed="true">Desde donde va</button></div>
       </div>
       <div class="row-set"><span>Estilo de la letra</span>
-        <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button></div>
+        <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button><button data-lstyle="liquid">Líquida</button></div>
       </div>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
@@ -511,6 +480,7 @@
       <div class="pop-title">Ajustes</div>
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
       <label class="row-set" for="coverBg"><span>Portada de fondo <small>La portada de la canción, suave detrás de la animación</small></span> <input type="checkbox" id="coverBg"></label>
+      <label class="row-set" for="wakeLock"><span>No bloquear la pantalla <small>Mientras la página está abierta, la pantalla no se apaga ni se bloquea</small></span> <input type="checkbox" id="wakeLock"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
       <div class="row-set" id="installRow" hidden><span>Instalar como app <small id="installNote">Ábrela desde el escritorio o la pantalla de inicio, sin barra del navegador</small></span> <button class="primary keep" id="btnInstall">Instalar</button></div>
       <div class="row-set"><span>Color del estrobo</span>
@@ -554,7 +524,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), coverBg: store.get('coverBg', true), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), coverBg: store.get('coverBg', true), wake: store.get('wake', true), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -786,6 +756,21 @@ sensEl.oninput = () => { state.sens = +sensEl.value; store.set('sens', state.sen
 const coverBgEl = document.getElementById('coverBg');
 coverBgEl.checked = state.coverBg;
 coverBgEl.onchange = () => { state.coverBg = coverBgEl.checked; store.set('coverBg', state.coverBg); };
+// Pantalla siempre encendida (Wake Lock). El navegador lo suelta al cambiar de pestaña: se vuelve a pedir.
+const wakeEl = document.getElementById('wakeLock');
+let wakeSentinel = null;
+async function wakeSync() {
+  try {
+    if (state.wake && !document.hidden && 'wakeLock' in navigator) { if (!wakeSentinel || wakeSentinel.released) wakeSentinel = await navigator.wakeLock.request('screen'); }
+    else if (wakeSentinel) { await wakeSentinel.release(); wakeSentinel = null; }
+  } catch (e) {}
+}
+wakeEl.checked = state.wake;
+wakeEl.closest('label').hidden = !('wakeLock' in navigator);
+wakeEl.onchange = () => { state.wake = wakeEl.checked; store.set('wake', state.wake); wakeSync(); };
+document.addEventListener('visibilitychange', wakeSync);
+addEventListener('pointerdown', wakeSync, { once: true });   // algunos navegadores lo piden tras tocar la página
+wakeSync();
 noFlashEl.onchange = () => { state.noFlash = noFlashEl.checked; store.set('noFlash', state.noFlash); };
 // Instalar como app (PWA): Chrome y Edge avisan con beforeinstallprompt; en iPhone se explica cómo
 let installEv = null;
@@ -1630,6 +1615,7 @@ const ICON = {
   next: '<svg viewBox="0 0 24 24"><rect x="16.6" y="6" width="2.4" height="12" rx="1"/><path d="M5 6.9v10.2a.9.9 0 0 0 1.4.75L14 12.75a.9.9 0 0 0 0-1.5L6.4 6.15A.9.9 0 0 0 5 6.9z"/></svg>',
   open: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6h-2V7.4l-7.3 7.3-1.4-1.4L16.6 6H14V4zM5 6h6v2H6v10h10v-5h2v6a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z"/></svg>',
   lib: '<svg viewBox="0 0 24 24"><path d="M10 4a6 6 0 0 1 4.8 9.6l5.3 5.3-1.4 1.4-5.3-5.3A6 6 0 1 1 10 4zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8z"/></svg>',
+  dots: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   power: '<svg viewBox="0 0 24 24"><path d="M11 3h2v9h-2zM7.05 6.05l1.41 1.41A6 6 0 1 0 15.54 7.46l1.41-1.41A8 8 0 1 1 7.05 6.05z"/></svg>',
 };
 function spRender() {
@@ -1645,19 +1631,26 @@ function spRender() {
     const link = it.external_urls?.spotify || it.external_urls?.lastfm || '';
     const linkName = it.external_urls?.spotify ? 'Abrir en Spotify' : 'Ver en Last.fm';
     const src = nowSource(), play = sp.playing;
+    const ctl = src === 'spotify'
+      ? `<button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button>`
+      : src === 'file' && audioEl ? `<button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button>` : '';
     showSong(
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
-      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${artistImageOf(it) ? `<img class="av" src="${esc(artistImageOf(it))}" alt="">` : ''}${esc(artist)}${play ? '' : ' · en pausa'}</div></div>` +
+      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${esc(artist)}${play ? '' : ' · en pausa'}</div></div>` +
+      `<div class="ctl">${ctl}<button class="dots" id="spMore" aria-label="Más opciones" aria-expanded="${!!sp.more}">${ICON.dots}</button></div>` +
       `<div class="prog"><span class="time" id="spTimeA">0:00</span><div class="bar"><i id="spBar"></i></div><span class="time" id="spTimeB">${sp.duration ? fmt(sp.duration) : ''}</span></div>` +
-      `<div class="ctl-row"><div class="l">` +
-        (link ? `<a class="ib" href="${esc(link)}" target="_blank" rel="noopener" title="${linkName}" aria-label="${linkName}">${ICON.open}</a>` : '') +
-        (src === 'lastfm' ? '<button class="pill" id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button class="pill" id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
-      `</div>` +
-      (src === 'spotify' ? `<div class="ctl"><button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button></div>`
-        : src === 'file' && audioEl ? `<div class="ctl"><button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button></div>` : '<div></div>') +
-      `<div class="r">${src === 'spotify' ? `<button class="ib" id="spLib" title="Buscar y reproducir" aria-label="Buscar y reproducir">${ICON.lib}</button>` : ''}<button class="ib" id="spOut" title="Desconectar" aria-label="Desconectar">${ICON.power}</button></div></div>`,
+      `<div class="more">` +
+        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button>` : '') +
+        (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
+        (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
+        `<button id="spHide">Ocultar</button><button id="spOut">${ICON.power}Desconectar</button>` +
+      `</div>`,
       true
     );
+    songEl.classList.toggle('open-more', !!sp.more);
+    songEl.style.setProperty('--cv', cover ? `url("${cover.replace(/"/g, '%22')}")` : 'none');
+    document.getElementById('spMore').onclick = e => { e.stopPropagation(); sp.more = !sp.more; songEl.classList.toggle('open-more', sp.more); e.currentTarget.setAttribute('aria-expanded', sp.more); };
+    document.getElementById('spHide').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   }
   songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   const out = document.getElementById('spOut');
@@ -1733,12 +1726,12 @@ function drawBackdrop(dt, boost = 1) {
 function setCover(url) {
   if (url !== coverUrl) cover3dLeaving();
   coverUrl = url; coverColors = null;
-  if (!url) { setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
+  if (!url) { coverAny = null; setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
   // Fondo: imagen normal, siempre se puede dibujar
   loadImageClean(url).then(({ img, clean }) => {
     if (coverUrl !== url) return;
     const bg = makeCoverBg(img); bg.clean = clean; setBackdrop(bg);
-    coverClean = clean ? img : null;
+    coverClean = clean ? img : null; coverAny = img;
     cover3dImage(url, clean ? img : null);
   });
   // Colores: hace falta leer los píxeles; si el servidor no lo permite, se ignora
@@ -2228,12 +2221,36 @@ function lvTick() {
   lvRenderLine(text, next, !!lyrics.lines);
 }
 // Cada fotograma: enciende las palabras a su tiempo y hace latir el texto con los graves
+// Letra líquida: las palabras se estiran con los graves, tiemblan con los agudos y se mecen con los medios
+const liquid = { st: 0, stV: 0 };
+const calmMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function liquidTick(dt) {
+  if (hits.bass) liquid.stV += hits.bass * 9;
+  const t = [liquid.st], v = [liquid.stV];
+  springTo(t, v, [bass * 0.5], dt, 220, 0.35); liquid.st = t[0]; liquid.stV = v[0];
+}
+function liquidWord(k, newest, lit) {   // deformación de una palabra: [escala x, escala y, x, y, giro]
+  const amt = state.noFlash || calmMotion.matches ? 0.35 : 1;
+  const w = (newest ? 1 : lit ? 0.45 : 0.15) * amt, st = Math.max(-0.2, liquid.st) * w;
+  const tr = high * 0.05 * (lit ? 1 : 0.4) * amt;
+  return [1 - st * 0.18, 1 + st * 0.55, (Math.random() - 0.5) * tr, (Math.random() - 0.5) * tr, Math.sin(time * 2.1 + k * 1.7) * mid * 3.2 * w];
+}
 function lvFrame() {
   if (state.mode !== 'lyrics' || lvEl.hidden) return;
   lvStage.style.setProperty('--pulse', (1 + bass * 0.02 + beat * 0.03).toFixed(4));
-  if (!lvWordsAt.length) return;
   const pos = lyricPos(), ws = lvCur.querySelectorAll('.w');
-  ws.forEach((w, k) => { const on = pos >= lvWordsAt[k]; if (w.classList.contains('on') !== on) w.classList.toggle('on', on); });
+  let newest = -1;
+  ws.forEach((w, k) => {
+    const on = !lvWordsAt.length || pos >= lvWordsAt[k];
+    if (lvWordsAt.length && w.classList.contains('on') !== on) w.classList.toggle('on', on);
+    if (on) newest = k;
+  });
+  ws.forEach((w, k) => {
+    const [sx, sy, jx, jy, rot] = liquidWord(k, k === newest, k <= newest);
+    w.style.scale = sx.toFixed(3) + ' ' + sy.toFixed(3);
+    w.style.translate = jx.toFixed(3) + 'em ' + jy.toFixed(3) + 'em';
+    w.style.rotate = rot.toFixed(2) + 'deg';
+  });
 }
 addEventListener('resize', () => { lvIndex = -2; });
 
@@ -2410,6 +2427,25 @@ function drawLyricStyled(ly, size, cx, cy, maxW) {
     ctx.textAlign = 'left';
     return;
   }
+  if (st === 'liquid') {   // líquida: cada palabra se estira, tiembla y se mece con la música
+    ctx.font = `900 ${size}px ${fam}`;
+    const lines = wrapWords(ly.words, maxW), lh = size * 1.2, space = ctx.measureText(' ').width;
+    let k = 0;
+    lines.forEach((ln, li) => {
+      const lw = ln.reduce((a, w, i) => a + ctx.measureText(w).width + (i ? space : 0), 0);
+      let x = cx - lw / 2; const y = cy - (lines.length - 1) * lh / 2 + li * lh;
+      for (const w of ln) {
+        const ww = ctx.measureText(w).width, lit = k < ly.shown;
+        const [sx, sy, jx, jy, rot] = liquidWord(k, k === ly.shown - 1, lit);
+        ctx.save(); ctx.translate(x + ww / 2 + jx * size, y + size * 0.3 + jy * size); ctx.rotate(rot * Math.PI / 180); ctx.scale(sx, sy);
+        ctx.textAlign = 'center'; ctx.fillStyle = lit ? COLORS[k % 3] : textFg(0.35);
+        ctx.fillText(w, 0, -size * 0.3); ctx.restore();
+        x += ww + space; k++;
+      }
+    });
+    ctx.textAlign = 'left';
+    return;
+  }
   if (st === 'type') {   // máquina de escribir, letra a letra, con cursor
     const prog = Math.max(0, Math.min(1, (ly.pos - ly.start) / Math.max(400, (ly.end - ly.start) * 0.8)));
     const shown = ly.text.slice(0, Math.round(ly.text.length * prog));
@@ -2502,16 +2538,45 @@ function drawRecOverlay() {
 const artistClean = new Map();
 
 // ================= Director automático =================
-// Cambia de animación en los drops, o en un golpe fuerte cuando lleva un rato en la misma.
+// Elige la animación según cómo es la canción: tranquila, media o enérgica. Mide la energía
+// de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
+// carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
+const MOODS = {
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers'] },
+  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains'] },
+};
+const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
+function moodTick(dt) {
+  // El volumen se normaliza solo, así que se mira el carácter: cuánto golpea (subidas y bajadas
+  // rápidas de energía), cuántos golpes de graves hay por segundo, el brillo y el tempo
+  const k = 1 - Math.pow(0.5, dt / 4);   // medias de unos 6 s
+  mood.lvl += (energy - mood.lvl) * k * 4;
+  mood.punch += (Math.abs(energy - mood.lvl) - mood.punch) * k;
+  mood.hitRate += ((hits.bass > 0.2 ? 1 / Math.max(dt, 1 / 120) : 0) - mood.hitRate) * k;
+  mood.bright += (high - mood.bright) * k;
+  const bpm = tempo.conf > 0.3 ? tempo.bpm : 105;
+  const score = Math.min(1, mood.punch * 8) * 0.9 + Math.min(1, mood.hitRate / 2.2) * 0.7 + Math.max(0, Math.min(1, (bpm - 85) / 50)) * 0.3 + mood.bright * 0.2;
+  mood.score = score;
+  const m = score < 0.45 ? 'calm' : score > 0.9 ? 'high' : 'medium';
+  if (m === mood.cur) { mood.cand = null; return false; }
+  if (mood.cand !== m) { mood.cand = m; mood.candT = 0; }
+  mood.candT += dt;
+  if (mood.candT > 6) { mood.cur = m; mood.cand = null; return true; }   // el carácter cambió de verdad
+  return false;
+}
 function autoDirector(dt) {
+  const changed = moodTick(dt);
   if (!state.auto || recording) return;
   autoT += dt;
-  if (!(dropHit || (autoT > 40 && hits.bass > 0.5))) return;
-  const pool = ['bars', 'mountains', 'ink', 'fluid', 'magnet', 'stars', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
-  if (!state.noFlash) pool.push('strobe');
-  if (spConnected() && sp.item) pool.push('lyrics', 'artist', 'cover');
+  if (dropHit && mood.cur !== 'calm') mood.cur = 'high';
+  if (!(changed || dropHit || (autoT > 40 && hits.bass > 0.5) || (autoT > 60 && mood.cur === 'calm'))) return;
+  const pool = MOODS[mood.cur].modes.slice();
+  if (mood.cur === 'high' && !state.noFlash) pool.push('strobe');
+  if (spConnected() && sp.item) pool.push(mood.cur === 'calm' ? 'lyrics' : 'cover', mood.cur === 'high' ? 'lyrics' : 'artist');
   const options = pool.filter(m => m !== state.mode);
   setMode(options[Math.floor(Math.random() * options.length)]);
+  document.getElementById('btnAuto').title = 'Automático · canción ' + MOODS[mood.cur].name;
   autoT = 0;
 }
 
@@ -3895,7 +3960,131 @@ function drawLyricsScene(dt) {
   for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
-const scenes = { stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+
+// ================= Escena: Vinilo =================
+// Un disco que gira al tempo de la canción (una vuelta por compás). Al pausar frena como un
+// tocadiscos de verdad; el brazo avanza hacia el centro con la canción y en los drops la
+// aguja salta y el disco hace un «scratch». Los surcos se iluminan: fuera los graves, dentro los agudos.
+const vinyl = { ang: 0, spin: 0, scratch: 0, base: null, baseR: 0, arm: null, armV: 0, hop: 0, hopV: 0, lift: 1, flashes: [] };
+let coverAny = null;   // la portada aunque no se pueda grabar (para verla en pantalla)
+function vinylBase(R) {
+  const c = document.createElement('canvas'), S = Math.ceil(R * 2); c.width = c.height = S;
+  const x = c.getContext('2d'), m = S / 2;
+  const g = x.createRadialGradient(m, m, 0, m, m, m);
+  g.addColorStop(0, '#16161a'); g.addColorStop(0.97, '#0c0c0f'); g.addColorStop(1, '#202024');
+  x.fillStyle = g; x.beginPath(); x.arc(m, m, m, 0, Math.PI * 2); x.fill();
+  // Surcos finos y, cada tanto, el espacio liso entre canciones
+  const gaps = [0.52, 0.63, 0.74, 0.86].map(v => v + (Math.random() - 0.5) * 0.03);
+  for (let r = m * 0.36; r < m * 0.965; r += Math.max(1, m / 260)) {
+    const gap = gaps.some(v => Math.abs(r / m - v) < 0.006);
+    x.strokeStyle = gap ? 'rgba(255,255,255,.07)' : `rgba(255,255,255,${0.018 + Math.random() * 0.03})`;
+    x.lineWidth = gap ? m * 0.008 : Math.max(0.5, m / 700);
+    x.beginPath(); x.arc(m, m, r, 0, Math.PI * 2); x.stroke();
+  }
+  x.strokeStyle = 'rgba(255,255,255,.12)'; x.lineWidth = Math.max(1, m * 0.006);
+  x.beginPath(); x.arc(m, m, m * 0.995, 0, Math.PI * 2); x.stroke();
+  return c;
+}
+function drawVinyl(dt) {
+  const night = state.theme === 'dark', vertical = H > W;
+  const R = MIN * (vertical ? 0.42 : 0.36), cx = W / 2 - (vertical ? 0 : R * 0.12), cy = H * (vertical ? 0.44 : 0.5);
+  if (!vinyl.base || Math.abs(vinyl.baseR - R) > 2) { vinyl.base = vinylBase(R); vinyl.baseR = R; }
+  // ¿Suena? Con canción conectada se sabe; si no, se mira el audio
+  const playing = spConnected() && sp.item ? sp.playing : (!analyser || energy > 0.02);
+  const rps = tempo.conf > 0.3 && tempo.bpm ? Math.max(0.3, Math.min(0.9, tempo.bpm / 240)) : 0.555;
+  const goal = playing ? rps : 0;
+  vinyl.spin += (goal - vinyl.spin) * (1 - Math.pow(goal > vinyl.spin ? 0.02 : 0.25, dt));   // arranca rápido, frena despacio
+  if (dropHit) { vinyl.scratch = -9; vinyl.hopV += 1.4; vinyl.flashes.push({ t: 0 }); }
+  vinyl.scratch *= Math.pow(0.004, dt);
+  vinyl.ang += (vinyl.spin * Math.PI * 2 + vinyl.scratch) * dt;
+  ctx.save();
+  glowSpot(cx, cy, R * 1.9, mix(0.5), (night ? 0.22 : 0.16) + beatSoft * 0.25);
+  ambient();
+  // Plato metálico bajo el disco
+  const pl = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  pl.addColorStop(0, night ? '#3a3a42' : '#d9d9de'); pl.addColorStop(1, night ? '#16161a' : '#9a9aa2');
+  ctx.save(); ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(0,0,0,.25)'; ctx.shadowBlur = R * 0.15; ctx.shadowOffsetY = R * 0.05;
+  ctx.fillStyle = pl; ctx.beginPath(); ctx.arc(cx, cy, R * 1.035, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  // Disco con su sombra
+  ctx.save();
+  ctx.shadowColor = night ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.3)'; ctx.shadowBlur = R * 0.12; ctx.shadowOffsetY = R * 0.04;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fillStyle = '#0c0c0f'; ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang); ctx.drawImage(vinyl.base, -R, -R, R * 2, R * 2); ctx.restore();
+  // Surcos que se encienden con su frecuencia
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  const N = 28;
+  for (let k = 0; k < N; k++) {
+    const t = k / (N - 1), lv = Math.pow(spec[Math.min(BANDS - 1, Math.floor(t * BANDS * 0.85))], 1.6);
+    if (lv < 0.04) continue;
+    ctx.strokeStyle = rgba(mix(t), Math.min(0.4, lv * 0.38)); ctx.lineWidth = R * (0.004 + lv * 0.006);
+    ctx.beginPath(); ctx.arc(cx, cy, R * (0.95 - t * 0.56), 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.restore();
+  // Reflejo de la luz: dos cuñas quietas (la luz no gira con el disco)
+  if (ctx.createConicGradient) {
+    const cg = ctx.createConicGradient(-0.7, cx, cy), a = 0.11 + beatSoft * 0.12 + high * 0.06;
+    [[0, 0], [0.05, a], [0.11, 0], [0.5, 0], [0.55, a * 0.8], [0.61, 0], [1, 0]].forEach(([o, al]) => cg.addColorStop(o, `rgba(255,255,255,${al})`));
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R * 0.99, 0, Math.PI * 2); ctx.arc(cx, cy, R * 0.34, 0, Math.PI * 2, true); ctx.fillStyle = cg; ctx.fill(); ctx.restore();
+  }
+  // Etiqueta: la portada, girando
+  const Rl = R * 0.33, img = recording ? coverClean : (coverClean || coverAny);
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang);
+  ctx.beginPath(); ctx.arc(0, 0, Rl, 0, Math.PI * 2); ctx.clip();
+  if (img) ctx.drawImage(img, -Rl, -Rl, Rl * 2, Rl * 2);
+  else { const lg = ctx.createLinearGradient(-Rl, -Rl, Rl, Rl); lg.addColorStop(0, COLORS[0]); lg.addColorStop(0.5, COLORS[1]); lg.addColorStop(1, COLORS[2]); ctx.fillStyle = lg; ctx.fillRect(-Rl, -Rl, Rl * 2, Rl * 2); }
+  const vg = ctx.createRadialGradient(0, 0, Rl * 0.6, 0, 0, Rl); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.35)');
+  ctx.fillStyle = vg; ctx.fillRect(-Rl, -Rl, Rl * 2, Rl * 2);
+  ctx.restore();
+  // Eje central metálico
+  const sg = ctx.createRadialGradient(cx - R * 0.006, cy - R * 0.006, 0, cx, cy, R * 0.022);
+  sg.addColorStop(0, '#f2f2f4'); sg.addColorStop(1, '#6c6c74');
+  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(cx, cy, R * 0.02, 0, Math.PI * 2); ctx.fill();
+  // Brazo: avanza hacia el centro con la canción; se levanta en pausa
+  const prog = sp.item && sp.duration ? Math.max(0, Math.min(1, lyricPos() / sp.duration)) : (time * 0.004) % 1;
+  vinyl.hop += vinyl.hopV * dt; vinyl.hopV += (-vinyl.hop * 160 - vinyl.hopV * 9) * dt;
+  vinyl.lift += ((playing ? 0 : 1) - vinyl.lift) * (1 - Math.pow(0.05, dt));
+  const Px = cx + R * 1.14, Py = cy - R * 0.9, dx = cx - Px, dy = cy - Py, d = Math.hypot(dx, dy), L = d * 0.96;
+  const needle = rn => {   // punto del brazo que cae sobre el radio rn
+    const a = (L * L - rn * rn + d * d) / (2 * d), h = Math.sqrt(Math.max(0, L * L - a * a));
+    const ux = dx / d, uy = dy / d, bx = Px + a * ux, by = Py + a * uy;
+    const p1 = [bx - h * uy, by + h * ux], p2 = [bx + h * uy, by - h * ux];
+    return p1[1] > p2[1] ? p1 : p2;
+  };
+  const rn = R * (0.93 - prog * 0.5) + vinyl.hop * R * 0.04;
+  const on = needle(rn);
+  let ang = Math.atan2(on[1] - Py, on[0] - Px);
+  const rest = Math.atan2(needle(R * 0.93)[1] - Py, needle(R * 0.93)[0] - Px) - 0.42;
+  ang = ang + (rest - ang) * vinyl.lift;
+  const nx = Px + Math.cos(ang) * L, ny = Py + Math.sin(ang) * L;
+  for (const f of vinyl.flashes) {   // en los drops, un anillo sale desde la aguja
+    f.t += dt; const k = f.t / 0.9;
+    ctx.strokeStyle = rgba(mix(0.5), (1 - k) * 0.6); ctx.lineWidth = R * 0.012 * (1 - k);
+    ctx.beginPath(); ctx.arc(cx, cy, Math.hypot(nx - cx, ny - cy) * (1 + k * 0.35), 0, Math.PI * 2); ctx.stroke();
+  }
+  vinyl.flashes = vinyl.flashes.filter(f => f.t < 0.9);
+  const lift = vinyl.lift * 0.6 + Math.max(0, vinyl.hop) * 0.6;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(0,0,0,.28)'; ctx.shadowBlur = R * (0.02 + lift * 0.05); ctx.shadowOffsetX = R * (0.01 + lift * 0.04); ctx.shadowOffsetY = R * (0.02 + lift * 0.05);
+  // contrapeso, tubo y cabezal
+  const bx = Px - Math.cos(ang) * L * 0.22, by = Py - Math.sin(ang) * L * 0.22;
+  const metal = ctx.createLinearGradient(Px - R * 0.1, Py, Px + R * 0.1, Py + R * 0.2); metal.addColorStop(0, '#e9e9ee'); metal.addColorStop(1, '#8d8d96');
+  ctx.strokeStyle = metal; ctx.lineWidth = R * 0.03;
+  ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(nx - Math.cos(ang) * R * 0.08, ny - Math.sin(ang) * R * 0.08); ctx.stroke();
+  ctx.fillStyle = '#2a2a30'; ctx.beginPath(); ctx.arc(bx, by, R * 0.05, 0, Math.PI * 2); ctx.fill();
+  ctx.save(); ctx.translate(nx, ny); ctx.rotate(ang + 0.3);
+  ctx.fillStyle = '#1d1d22'; ctx.beginPath(); ctx.roundRect(-R * 0.1, -R * 0.03, R * 0.13, R * 0.06, R * 0.012); ctx.fill();
+  ctx.fillStyle = rgba(mix(0.2), 0.9);   // luz de la aguja ctx.beginPath(); ctx.arc(0, 0, R * 0.008 * (1 + beat), 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.shadowColor = 'transparent';
+  const pg = ctx.createRadialGradient(Px - R * 0.02, Py - R * 0.02, 0, Px, Py, R * 0.075); pg.addColorStop(0, '#f4f4f6'); pg.addColorStop(1, '#5e5e66');
+  ctx.fillStyle = pg; ctx.beginPath(); ctx.arc(Px, Py, R * 0.07, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.restore();
+}
+
+const scenes = { vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
@@ -3937,7 +4126,7 @@ function render(now) {
   colorTick(dt);
   if (state.mode !== 'strobe') drawBackdrop(dt);
   (scenes[state.mode] || drawBars)(dt);
-  lvFrame(); arFrame();
+  liquidTick(dt); lvFrame(); arFrame();
   if (transA > 0 && transC.width === W) {
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = transA * transA;
     ctx.drawImage(transC, 0, 0); ctx.globalAlpha = 1;
