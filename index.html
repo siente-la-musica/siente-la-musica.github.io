@@ -354,6 +354,7 @@
     <div class="pop col" id="popRec" hidden>
       <div class="pop-title">Grabar un clip</div>
       <div class="seg" role="group" aria-label="Formato"><button data-fmt="v" aria-pressed="true">Vertical · TikTok</button><button data-fmt="h">Horizontal</button></div>
+      <div class="seg" role="group" aria-label="Sonido"><button data-snd="1" aria-pressed="true">Con el sonido del PC</button><button data-snd="0">Sin sonido</button></div>
       <div class="seg" role="group" aria-label="Duración"><button data-dur="15" aria-pressed="true">15 s</button><button data-dur="30">30 s</button><button data-dur="60">60 s</button><button data-dur="0">Libre</button></div>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
@@ -372,7 +373,6 @@
       <div class="pop-title">Ajustes</div>
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
-      <label class="row-set" for="aiDepthEl"><span>Portada 3D con IA <small>Descarga única de unos 27 MB la primera vez</small></span> <input type="checkbox" id="aiDepthEl"></label>
       <div class="row-set"><span>Color del estrobo</span>
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
@@ -414,7 +414,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), aiDepth: store.get('aiDepth', true), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -642,8 +642,6 @@ const sensEl = document.getElementById('sens'), noFlashEl = document.getElementB
 sensEl.value = state.sens; noFlashEl.checked = state.noFlash;
 sensEl.oninput = () => { state.sens = +sensEl.value; store.set('sens', state.sens); };
 noFlashEl.onchange = () => { state.noFlash = noFlashEl.checked; store.set('noFlash', state.noFlash); };
-const aiEl = document.getElementById('aiDepthEl'); aiEl.checked = state.aiDepth;
-aiEl.onchange = () => { state.aiDepth = aiEl.checked; store.set('aiDepth', state.aiDepth); if (state.aiDepth && state.mode === 'cover' && coverClean) cover3dImage(coverUrl, coverClean); };
 document.querySelectorAll('[data-strobe]').forEach(b => b.onclick = () => { state.strobe = b.dataset.strobe; store.set('strobe', state.strobe); applyAll(false); });
 document.getElementById('btnAuto').onclick = () => { state.auto = !state.auto; store.set('auto', state.auto); autoT = 0; applyAll(false); };
 function setSource(label) {
@@ -755,7 +753,7 @@ document.getElementById('btnSystem').onclick = async () => {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       video: true,
-      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 },
       systemAudio: 'include'
     });
     stream.getVideoTracks().forEach(t => t.stop());
@@ -1012,39 +1010,38 @@ function specAt(x) {
 }
 
 // ================= Escena: Barras =================
-// Un ecualizador sereno: barras redondeadas que crecen desde una línea con su reflejo
-// debajo; cada barra va con un muelle, así suben y bajan con suavidad y sin parpadeos.
-let barX = null, barV = null, barT = null;
+// Ecualizador desde el borde inferior: barras redondeadas que suben con fuerza, con un
+// brillo en la punta. Cada barra va con un muelle vivo y los golpes sacuden los graves.
+let barX = null, barV = null, barT = null, barPeak = null;
 function drawBars(dt) {
   const night = state.theme === 'dark';
-  const n = Math.max(20, Math.min(48, Math.round(W / DPR / 34)));
-  if (!barX || barX.length !== n) { barX = new Float32Array(n); barV = new Float32Array(n); barT = new Float32Array(n); }
+  const n = Math.max(20, Math.min(44, Math.round(W / DPR / 36)));
+  if (!barX || barX.length !== n) { barX = new Float32Array(n); barV = new Float32Array(n); barT = new Float32Array(n); barPeak = new Float32Array(n); }
   for (let i = 0; i < n; i++) {
-    // Graves a la izquierda y agudos a la derecha, en escala logarítmica
     const f = i / (n - 1) * (BANDS - 1), a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
     const sv = spec[a] * (1 - (f - a)) + spec[b] * (f - a), rv = raw[a] * (1 - (f - a)) + raw[b] * (f - a);
-    barT[i] = rv * 0.6 + sv * 0.4;
-    if (hits.bass) barV[i] += hits.bass * 5 * Math.max(0, 1 - i / (n * 0.45));   // el golpe sacude los graves
+    // Curva que exagera: lo flojo sigue bajo y lo fuerte sube mucho
+    barT[i] = Math.pow(rv * 0.65 + sv * 0.35, 0.85) * 1.15;
+    if (hits.bass) barV[i] += hits.bass * 7 * Math.max(0, 1 - i / (n * 0.5));
+    if (hits.mid && i > n * 0.25 && i < n * 0.75) barV[i] += hits.mid * 4;
   }
-  springTo(barX, barV, barT, dt, 420, 0.5);
+  springTo(barX, barV, barT, dt, 520, 0.45);
   lctx.clearRect(0, 0, W, H);
-  const slot = W * 0.8 / n, bw = slot * 0.56, x0 = W * 0.1 + (slot - bw) / 2;
-  const base = H * 0.62, maxH = H * 0.42;
+  const slot = W * 0.92 / n, bw = slot * 0.62, x0 = W * 0.04 + (slot - bw) / 2;
+  const base = H * 0.985, maxH = H * 0.86;
   for (let i = 0; i < n; i++) {
-    const v = Math.max(0, Math.min(1.1, barX[i]));
-    const h = bw + Math.pow(v, 1.1) * maxH, x = x0 + i * slot, c = mix(i / (n - 1));
+    const v = Math.max(0, Math.min(1.15, barX[i]));
+    const h = bw * 0.6 + v * maxH, x = x0 + i * slot, c = mix(i / (n - 1));
+    barPeak[i] = Math.max(barPeak[i] - dt * 0.35, v);   // marca de pico que cae despacio
     const g = lctx.createLinearGradient(0, base - h, 0, base);
-    g.addColorStop(0, rgba(c, night ? 0.55 : 0.6)); g.addColorStop(1, rgba(c, 1));
+    g.addColorStop(0, rgba(c.map(x_ => x_ + (255 - x_) * 0.35), 1)); g.addColorStop(0.25, rgba(c, 0.95)); g.addColorStop(1, rgba(c, night ? 0.25 : 0.35));
     lctx.fillStyle = g;
-    lctx.beginPath(); lctx.roundRect(x, base - h, bw, h, [bw / 2, bw / 2, bw * 0.2, bw * 0.2]); lctx.fill();
-    // Reflejo que se desvanece
-    const rh = h * 0.45, gr = lctx.createLinearGradient(0, base + bw * 0.35, 0, base + bw * 0.35 + rh);
-    gr.addColorStop(0, rgba(c, night ? 0.28 : 0.22)); gr.addColorStop(1, rgba(c, 0));
-    lctx.fillStyle = gr;
-    lctx.beginPath(); lctx.roundRect(x, base + bw * 0.35, bw, rh, [bw * 0.2, bw * 0.2, bw / 2, bw / 2]); lctx.fill();
+    lctx.beginPath(); lctx.roundRect(x, base - h, bw, h, [bw / 2, bw / 2, 0, 0]); lctx.fill();
+    const py = base - (bw * 0.6 + barPeak[i] * maxH) - bw * 0.5;
+    lctx.fillStyle = rgba(c, 0.7); lctx.beginPath(); lctx.roundRect(x, py, bw, Math.max(DPR * 2, bw * 0.18), bw * 0.09); lctx.fill();
   }
   ambient();
-  bloom(layer, (night ? 0.7 : 0.4) + beatSoft * 0.35);
+  bloom(layer, (night ? 0.75 : 0.4) + beatSoft * 0.45);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -1055,21 +1052,21 @@ function drawMountains(dt) {
   lctx.clearRect(0, 0, W, H);
   const P = ridges[0].length;
   const cfg = [ // de atrás hacia delante
-    { hMax: 0.62, base: 0.28, alpha: 0.35, color: 0.85, k: 110, shift: 0.07 },   // las del fondo, algo más perezosas
-    { hMax: 0.50, base: 0.22, alpha: 0.5,  color: 0.6,  k: 190, shift: -0.05 },
-    { hMax: 0.40, base: 0.16, alpha: 0.7,  color: 0.35, k: 290, shift: 0.03 },
-    { hMax: 0.30, base: 0.10, alpha: 0.95, color: 0.1,  k: 420, shift: 0 },
+    { hMax: 0.82, base: 0.24, alpha: 0.35, color: 0.85, k: 130, shift: 0.07 },   // las del fondo, algo más perezosas
+    { hMax: 0.70, base: 0.18, alpha: 0.5,  color: 0.6,  k: 220, shift: -0.05 },
+    { hMax: 0.58, base: 0.12, alpha: 0.7,  color: 0.35, k: 330, shift: 0.03 },
+    { hMax: 0.46, base: 0.07, alpha: 0.95, color: 0.1,  k: 460, shift: 0 },
   ];
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [];
-    for (let p = 0; p < P; p++) ridgeT[p] = specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1);
+    for (let p = 0; p < P; p++) ridgeT[p] = Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 0.8) * 1.15;   // exagera los picos
     smoothProfile(ridgeT, 1);
-    if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (1.5 + li) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
-    springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.55);
+    if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (2.5 + li * 1.5) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
+    springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.45);
     for (let p = 0; p < P; p++) {
       const x = p / (P - 1);
       const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.02;
-      pts.push([x * W, H - H * (L.base + wob + Math.pow(Math.max(0, r[p]), 1.2) * (L.hMax - L.base))]);
+      pts.push([x * W, H - H * (L.base + wob + Math.min(1.2, Math.max(0, r[p])) * (L.hMax - L.base))]);
     }
     const c = mix(L.color);
     const top = H - H * L.hMax;   // degradado fijo: el brillo de la capa no vibra cuando cambian los picos
@@ -1118,7 +1115,7 @@ function spawnBlob(size, strength, flower) {
     // Flor: número de pétalos, giro y una segunda corona interior
     flower: flower ? { k: 4 + Math.floor(Math.random() * 4), rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 0.25, inner: Math.random() < 0.6 } : null
   });
-  if (flower) { const b = blobs[blobs.length - 1]; b.tendrils.forEach((t, j) => { t.a = b.flower.rot + j * Math.PI * 2 / b.flower.k; t.curl *= 0.5; }); b.harm.forEach(h => h.a *= 0.4); }
+  if (flower) { const b = blobs[blobs.length - 1]; b.tendrils.length = 0; b.harm.forEach(h => h.a *= 0.25); b.flower.inner = false; }
   if (blobs.length > 60) blobs.shift();
 }
 
@@ -1157,22 +1154,22 @@ function drawInk(dt, flowerMode = false) {
     const spr = SPRITES[b.sprite];
     const fl = b.flower;
     if (fl) fl.rot += fl.spin * dt;
-    const M = Math.max(28, Math.min(fl ? 220 : 150, Math.round(r / DPR * (fl ? 1.4 : 0.9))));
+    const M = Math.max(28, Math.min(fl ? 360 : 150, Math.round(r / DPR * (fl ? 2.4 : 0.9))));
     // Corona exterior y, en las flores, una interior más pequeña con los pétalos intercalados
-    for (const ring of fl && fl.inner ? [1, 0.55] : [1]) {
+    for (const ring of [1]) {
       for (let i = 0; i < M * ring; i++) {
         const a = (i / (M * ring)) * 6.283 + Math.random() * 0.05;
         let n = 0; for (const h of b.harm) n += h.a * Math.sin(h.k * a + h.p + b.age * h.s);
         const shape = fl ? (ring === 1 ? petalShape(fl, a) : petalShape({ k: fl.k, rot: fl.rot + Math.PI / fl.k }, a)) * ring : 1;
         const gapMask = fl ? 1 : 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(a * b.gapK + b.gap), 0.6);
-        const tk = fl ? th * (0.55 + 0.45 * shape) : th;   // trazo más fino hacia el centro de la flor
-        const rr = r * shape * (1 + n) + (Math.random() - 0.5) * tk * 0.8;
+        const tk = fl ? th * 0.32 : th;   // en las flores, un contorno fino y limpio
+        const rr = r * shape * (1 + n) + (Math.random() - 0.5) * tk * (fl ? 0.35 : 0.8);
         const s = tk * (0.7 + Math.random() * 0.9);
-        ictx.globalAlpha = fadeA * gapMask * (night ? 0.16 : 0.2) * (ring === 1 ? 1 : 0.8);
+        ictx.globalAlpha = fadeA * gapMask * (fl ? (night ? 0.3 : 0.36) : (night ? 0.16 : 0.2));
         ictx.drawImage(spr, b.x + Math.cos(a) * rr - s, b.y + Math.sin(a) * rr - s, s * 2, s * 2);
       }
     }
-    if (fl && p > 0.08) {   // corazón de la flor
+    if (false) {   // (las flores ya no llevan corazón: solo el contorno)
       const s = r * 0.12 * (1 + beatSoft * 0.3);
       ictx.globalAlpha = fadeA * 0.25;
       ictx.drawImage(SPRITES[(b.sprite + 1) % 3], b.x - s, b.y - s, s * 2, s * 2);
@@ -1688,11 +1685,12 @@ new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', 
 // ================= Grabar clips =================
 // Se graba el propio lienzo a 1080×1920 (o 1920×1080) con el sonido que entra a la página.
 // Como la letra y los datos normales son HTML, mientras se graba se dibujan en el lienzo.
-let recFmt = 'v', recDur = 15, recorder = null, recChunks = [], recT0 = 0, recTimer = null, recMime = '';
+let recSound = true, recFmt = 'v', recDur = 15, recorder = null, recChunks = [], recT0 = 0, recTimer = null, recMime = '';
 const recNote = document.getElementById('recNote'), btnRec = document.getElementById('btnRec');
 function recNotes() {
   const n = [];
-  if (!analyser) n.push('Sin audio conectado: el clip saldrá sin sonido. Conecta «Audio del PC» para grabarlo con la música.');
+  if (!recSound) n.push('Consejo: en TikTok añade la canción desde su biblioteca de sonidos; suena perfecta y queda vinculada a la canción.');
+  else if (!analyser) n.push('Sin audio conectado: el clip saldrá sin sonido. Conecta «Audio del PC» para grabarlo con la música.');
   if (!spConnected()) n.push('Conecta Spotify para que el clip lleve la canción y la letra.');
   recNote.textContent = n.join(' ');
 }
@@ -1701,6 +1699,7 @@ btnRec.addEventListener('click', e => {
   recNotes();
 }, true);
 document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { recFmt = b.dataset.fmt; document.querySelectorAll('[data-fmt]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { recSound = b.dataset.snd === '1'; document.querySelectorAll('[data-snd]').forEach(x => x.setAttribute('aria-pressed', x === b)); recNotes(); });
 document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => { recDur = +b.dataset.dur; document.querySelectorAll('[data-dur]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 document.getElementById('btnRecStart').onclick = async () => {
   closePops();
@@ -1722,10 +1721,18 @@ function startRecording() {
   freshCanvas(); resize();
   blobs.length = 0; lights.length = 0; ictx.clearRect(0, 0, W, H);
   const stream = canvas.captureStream(30);
-  if (analyser && recDest) recDest.stream.getAudioTracks().forEach(t => stream.addTrack(t));
+  stream.getVideoTracks().forEach(t => { try { t.contentHint = 'detail'; } catch (e) {} });   // prioriza nitidez
+  // Sonido: la pista original tal cual llega (sin pasar por el analizador, que la reprocesa)
+  if (recSound) {
+    let tracks = [];
+    if (currentStream) tracks = currentStream.getAudioTracks().filter(t => t.readyState === 'live');
+    else if (audioEl && audioEl.captureStream) tracks = audioEl.captureStream().getAudioTracks();
+    if (!tracks.length && analyser && recDest) tracks = recDest.stream.getAudioTracks();
+    tracks.forEach(t => stream.addTrack(t));
+  }
   recMime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
     .find(t => MediaRecorder.isTypeSupported(t)) || '';
-  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 12e6, audioBitsPerSecond: 192e3 }); }
+  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 28e6, audioBitsPerSecond: 256e3 }); }
   catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
   recChunks = [];
   recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
@@ -2224,105 +2231,93 @@ function arFrame() {
 setInterval(arTick, 150);
 
 // ================= Escena: Nubes =================
-// Siempre las mismas nubes, desfilando de lado y reapareciendo por el otro, como un salvapantallas.
-// Se iluminan por dentro con su banda de la música y destellan como relámpagos con los golpes.
+// Nubes vivas: cada una es un grupo de bultos suaves que se mueven despacio entre sí (la
+// nube cambia de forma), respira con su banda y se hincha con los golpes. Los golpes
+// encienden relámpagos que nacen en un bulto y recorren la nube por dentro.
 function seeded(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const CLOUDS = (() => {
   const rnd = seeded(2000), list = [];
-  [[0, 5, 0.22], [1, 4, 0.36], [2, 3, 0.55]].forEach(([layer, count, size]) => {
-    for (let i = 0; i < count; i++) list.push({
-      layer, u: (i + rnd() * 0.6) / count, v: layer === 0 ? 0.08 + rnd() * 0.3 : layer === 1 ? 0.2 + rnd() * 0.4 : 0.35 + rnd() * 0.45,
-      size: size * (0.8 + rnd() * 0.45), seed: Math.floor(rnd() * 1e9),
-      speed: [1 / 140, 1 / 85, 1 / 50][layer] * (0.85 + rnd() * 0.3),
-      band: layer === 0 ? [34, 64] : layer === 1 ? [10, 34] : [0, 10], c: i % 3, level: 0, flash: 0, phase: 0
-    });
+  [[0, 4, 0.2], [1, 4, 0.32], [2, 3, 0.48]].forEach(([layer, count, size]) => {
+    for (let i = 0; i < count; i++) {
+      const puffs = [], np = 9 + Math.floor(rnd() * 6);
+      for (let k = 0; k < np; k++) {
+        const t = k / (np - 1), bump = Math.sin(Math.PI * (0.1 + t * 0.8));
+        puffs.push({ x: (t - 0.5) * 1.6 + (rnd() - 0.5) * 0.2, y: -bump * 0.35 * rnd() - 0.05, r: 0.22 + 0.3 * bump * (0.6 + rnd() * 0.6),
+          ph: rnd() * 6.28, sp: 0.2 + rnd() * 0.4, flash: 0, delay: -1 });
+      }
+      list.push({
+        layer, u: (i + rnd() * 0.6) / count, v: layer === 0 ? 0.14 + rnd() * 0.22 : layer === 1 ? 0.3 + rnd() * 0.3 : 0.45 + rnd() * 0.35,
+        size: size * (0.85 + rnd() * 0.35), puffs, speed: [1 / 150, 1 / 95, 1 / 60][layer] * (0.85 + rnd() * 0.3),
+        band: layer === 0 ? [34, 64] : layer === 1 ? [10, 34] : [0, 10], c: i % 3, level: 0, lvV: 0, phase: 0
+      });
+    }
   });
   return list;
 })();
-let cloudSprites = null, cloudKey = '';
-// Cada nube es como una lámpara: esferas unidas con base redondeada, un núcleo de luz por
-// dentro, relieve en cada bulto y bordes suaves. Se dibuja una vez y se reutiliza.
-function buildCloud(cl) {
-  const cw = MIN * cl.size, rnd = seeded(cl.seed);
-  const sc = Math.min(1, 900 / cw), w = Math.ceil(cw * 1.1 * sc), h = Math.ceil(cw * 0.62 * sc);
-  const baseY = h * 0.8, spheres = [];
-  const count = 4 + Math.floor(rnd() * 3);
-  for (let i = 0; i < count; i++) {
-    const t = (i + 0.5) / count, bump = Math.sin(Math.PI * (0.15 + t * 0.7));
-    const r = h * (0.2 + 0.2 * bump) * (0.85 + rnd() * 0.3);
-    spheres.push([w * (0.12 + t * 0.76) + (rnd() - 0.5) * w * 0.04, baseY - r * (0.55 + 0.35 * bump), r]);
-  }
-  const col = RGB[cl.c], lamp = col.map(c => c + (255 - c) * 0.35);
-  const shape = (x, fill) => {
-    x.fillStyle = fill; x.beginPath();
-    for (const [cx, cy, r] of spheres) { x.moveTo(cx + r, cy); x.arc(cx, cy, r, 0, Math.PI * 2); }
-    const bh = h * 0.2; x.roundRect(w * 0.1, baseY - bh, w * 0.8, bh, bh / 2);   // base plana y redondeada
-    x.fill();
-  };
-  const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
-  const x = tmp.getContext('2d');
-  shape(x, rgba(lamp, 1));
-  x.globalCompositeOperation = 'source-atop';
-  // Núcleo de luz: más claro en el centro de la nube
-  const core = x.createRadialGradient(w / 2, baseY - h * 0.25, 0, w / 2, baseY - h * 0.25, w * 0.45);
-  core.addColorStop(0, 'rgba(255,255,255,.6)'); core.addColorStop(1, 'rgba(255,255,255,0)');
-  x.fillStyle = core; x.fillRect(0, 0, w, h);
-  // Relieve: cada bulto con su brillo arriba a la izquierda
-  for (const [cx, cy, r] of spheres) {
-    const hl = x.createRadialGradient(cx - r * 0.35, cy - r * 0.4, 0, cx - r * 0.35, cy - r * 0.4, r * 1.1);
-    hl.addColorStop(0, 'rgba(255,255,255,.4)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
-    x.fillStyle = hl; x.fillRect(0, 0, w, h);
-  }
-  // Base algo más oscura, como el plástico de la lámpara
-  const sh = x.createLinearGradient(0, baseY - h * 0.35, 0, baseY);
-  sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, rgba(col.map(c => c * 0.55), 0.45));
-  x.fillStyle = sh; x.fillRect(0, 0, w, h);
-  // Bordes suaves
-  const out = document.createElement('canvas'); out.width = w; out.height = h;
-  const o = out.getContext('2d');
-  if (CAN_BLUR) o.filter = `blur(${Math.max(1, w / 260).toFixed(1)}px)`;
-  o.drawImage(tmp, 0, 0);
-  return { img: out, w: w / sc, h: h / sc };
+let puffSprite = null;
+function makePuff() {   // bulto de nube: blanco con caída gaussiana muy suave
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d'), g = x.createRadialGradient(128, 128, 0, 128, 128, 128);
+  for (let i = 0; i <= 10; i++) { const t = i / 10; g.addColorStop(t, `rgba(255,255,255,${(Math.exp(-3.2 * t * t) * (1 - t)).toFixed(3)})`); }
+  x.fillStyle = g; x.fillRect(0, 0, 256, 256);
+  return c;
+}
+function lightning(cl, strength) {   // el relámpago nace en un bulto y se propaga a los demás
+  const start = cl.puffs[Math.floor(Math.random() * cl.puffs.length)];
+  for (const pf of cl.puffs) pf.delay = Math.hypot(pf.x - start.x, pf.y - start.y) * 0.12, pf.pending = strength;
 }
 function drawClouds(dt) {
+  if (glInit()) { try { drawSkyClouds(dt); return; } catch (e) { console.error(e); } }
+  drawCloudsPuffs(dt);
+}
+function drawCloudsPuffs(dt) {
   const night = state.theme === 'dark';
-  const key = RGB.map(c => c.map(v => Math.round(v / 24)).join('.')).join('|') + MIN;
-  if (cloudKey !== key) { cloudKey = key; cloudSprites = CLOUDS.map(buildCloud); }
-  // Cielo: un leve tono de la paleta arriba
+  if (!puffSprite) puffSprite = makePuff();
   const sky = ctx.createLinearGradient(0, 0, 0, H), c = mix(0.5);
-  sky.addColorStop(0, rgba(c, night ? 0.12 + energy * 0.08 : 0.16 + energy * 0.06)); sky.addColorStop(1, rgba(c, 0));
+  sky.addColorStop(0, rgba(c, night ? 0.1 + energy * 0.1 : 0.18 + energy * 0.08)); sky.addColorStop(1, rgba(c, 0));
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-  // Destellos: los golpes encienden una nube cercana; los agudos, una lejana
   const pick = layer => { const cs = CLOUDS.filter(x => x.layer === layer); return cs[Math.floor(Math.random() * cs.length)]; };
-  if (hits.bass) { pick(2).flash = 1; if (hits.bass > 0.6) pick(1).flash = 0.8; }
-  if (hits.mid) pick(1).flash = Math.max(0.6, hits.mid);
-  if (hits.high) pick(0).flash = 0.7;
+  const fk = state.noFlash ? 0.3 : 1;
+  if (hits.bass) { lightning(pick(2), (0.6 + hits.bass * 0.6) * fk); if (hits.bass > 0.6) lightning(pick(1), 0.7 * fk); }
+  if (hits.mid) lightning(pick(1), (0.4 + hits.mid * 0.5) * fk);
+  if (hits.high) lightning(pick(0), 0.6 * fk);
   lctx.clearRect(0, 0, W, H);
   for (let layer = 0; layer < 3; layer++) {
-    CLOUDS.forEach((cl, i) => {
-      if (cl.layer !== layer) return;
-      const sp_ = cloudSprites[i];
-      const v = avg(spec, cl.band[0], cl.band[1]);
-      cl.level += (v - cl.level) * (1 - Math.pow(v > cl.level ? 0.00001 : 0.01, dt));
-      cl.flash *= Math.pow(0.03, dt);
+    for (const cl of CLOUDS) {
+      if (cl.layer !== layer) continue;
+      const v = Math.pow(avg(spec, cl.band[0], cl.band[1]), 0.8);
+      cl.lvV += ((v - cl.level) * 220 - cl.lvV * 2 * Math.sqrt(220) * 0.5) * dt; cl.level += cl.lvV * dt;
+      if (hits.bass && layer === 2) cl.lvV += hits.bass * 2;
       cl.phase += dt * cl.speed;
-      const span = W + sp_.w * 2;
-      const x = (((cl.u + cl.phase) % 1 + 1) % 1) * span - sp_.w;
-      const y = cl.v * H + Math.sin(time * 0.3 + i) * MIN * 0.006 - sp_.h / 2;
-      const depth = [0.55, 0.8, 1][layer];
-      // La lámpara se enciende con su banda y destella con los golpes
-      lctx.globalCompositeOperation = 'source-over';
-      lctx.globalAlpha = Math.min(1, depth * (night ? 0.22 + cl.level * 0.85 + cl.flash * 0.4 : 0.45 + cl.level * 0.55));
-      lctx.drawImage(sp_.img, x, y, sp_.w, sp_.h);
-      if (night) {
-        lctx.globalCompositeOperation = 'lighter';
-        lctx.globalAlpha = Math.min(1, depth * (cl.level * 0.5 + cl.flash * (state.noFlash ? 0.15 : 0.7)));
-        lctx.drawImage(sp_.img, x, y, sp_.w, sp_.h);
+      const S = MIN * cl.size * (1 + Math.max(0, cl.level) * 0.14 + beatSoft * 0.05);
+      const span = W + S * 2.4;
+      const cx = (((cl.u + cl.phase) % 1 + 1) % 1) * span - S * 1.2, cy = cl.v * H + Math.sin(time * 0.25 + cl.u * 9) * MIN * 0.01;
+      const depth = [0.5, 0.75, 1][layer], L = Math.max(0, cl.level);
+      for (const pf of cl.puffs) {
+        if (pf.delay >= 0) { pf.delay -= dt; if (pf.delay < 0) { pf.flash = Math.max(pf.flash, pf.pending); pf.delay = -1; } }
+        pf.flash *= Math.pow(0.012, dt);
+        // El bulto se mueve un poco alrededor de su sitio: la nube cambia de forma
+        const px = cx + (pf.x + Math.sin(time * pf.sp + pf.ph) * 0.06 * (1 + mid)) * S;
+        const py = cy + (pf.y + Math.cos(time * pf.sp * 0.8 + pf.ph) * 0.04) * S;
+        const r = pf.r * S * (1 + L * 0.12) * 1.6;
+        // Cuerpo de la nube
+        lctx.globalCompositeOperation = 'source-over';
+        lctx.globalAlpha = depth * (night ? 0.16 + L * 0.1 : 0.55);
+        lctx.drawImage(puffSprite, px - r, py - r, r * 2, r * 2);
+        // Luz interior: la banda la enciende y el relámpago la hace destellar
+        const lit = Math.min(1, (night ? 0.12 : 0.08) + L * 0.6 + pf.flash);
+        lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+        lctx.globalAlpha = depth * lit * (night ? 0.9 : 0.55);
+        lctx.drawImage(SPRITES[cl.c], px - r * 0.8, py - r * 0.8, r * 1.6, r * 1.6);
+        if (pf.flash > 0.25 && night) {   // destello casi blanco en el centro del relámpago
+          lctx.globalAlpha = depth * (pf.flash - 0.25) * 0.8;
+          lctx.drawImage(puffSprite, px - r * 0.5, py - r * 0.5, r, r);
+        }
       }
-    });
+    }
   }
   lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
-  bloom(layer, night ? 0.85 + beatSoft * 0.3 : 0.4);
+  bloom(layer, night ? 0.7 + beatSoft * 0.3 : 0.3);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -2375,6 +2370,93 @@ function glFBO(w, h) {
 function glDouble(w, h) { const d = { read: glFBO(w, h), write: glFBO(w, h), swap() { [d.read, d.write] = [d.write, d.read]; } }; return d; }
 function glBind(unit, fbo) { const gl = GLX.gl; gl.activeTexture(gl.TEXTURE0 + unit); gl.bindTexture(gl.TEXTURE_2D, fbo.t); return unit; }
 function glBlit(target, w, h) { const gl = GLX.gl; gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.f : null); gl.viewport(0, 0, target ? target.w : w, target ? target.h : h); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4); }
+
+// ================= Nubes de shader =================
+// Un cielo de nubes hecho con ruido fractal deformado (domain warping): suaves, con volumen y
+// cambiando de forma sin parar. Tres luces de colores pasean por dentro siguiendo graves,
+// medios y agudos; los golpes encienden relámpagos y el ratón es una linterna.
+const sky = { prog: null, flashes: [], pointer: [0.5, 0.5], pointerLv: 0, pointerAt: 0, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3), t: 0 };
+addEventListener('pointermove', e => {
+  if (state.mode !== 'clouds') return;
+  sky.pointer = [e.clientX / innerWidth, 1 - e.clientY / innerHeight]; sky.pointerAt = performance.now();
+});
+function skySetup() {
+  sky.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uScroll;
+    uniform vec3 uC0, uC1, uC2;
+    uniform vec4 uL[7];   // x, y, intensidad, color (0-2; 3 = blanco)
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+      return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+    float fbm(vec2 p) { float v = 0., a = .5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6); for (int i = 0; i < 6; i++) { v += a * n(p); p = m * p; a *= .5; } return v; }
+    float dens(vec2 p) {
+      vec2 q = vec2(fbm(p + vec2(0., uTime * .03)), fbm(p + vec2(5.2, 1.3) - uTime * .025));
+      float d = fbm(p + 1.7 * q + vec2(uScroll, 0.));
+      return smoothstep(.36, .78, d);
+    }
+    vec3 pal(float k) { return k < .5 ? uC0 : k < 1.5 ? uC1 : k < 2.5 ? uC2 : vec3(1.); }
+    void main() {
+      vec2 uv = vUv, p = vec2(uv.x * uRes.x / uRes.y, uv.y) * 2.2;
+      float d = dens(p);
+      float d2 = dens(p + vec2(.04, .06));       // un poco hacia la luz: da relieve
+      float shade = clamp(.55 + (d - d2) * 2.2, 0., 1.);
+      d *= smoothstep(-.05, .35, uv.y) * smoothstep(1.08, .55, uv.y);   // menos nubes pegadas al suelo y al techo
+      vec3 light = vec3(0.);
+      for (int i = 0; i < 7; i++) {
+        vec2 dl = (uv - uL[i].xy) * vec2(uRes.x / uRes.y, 1.);
+        float f = uL[i].z * exp(-dot(dl, dl) * 7.);
+        light += pal(uL[i].w) * f;
+      }
+      vec3 col;
+      float a;
+      if (uNight > .5) {
+        col = vec3(.09, .1, .15) * shade + light * (.35 + d * 1.1) * (.6 + shade * .6);
+        col = col / (1. + col * .9);   // tono suave: los relámpagos brillan sin quemar la imagen
+        a = clamp(d * 1.1, 0., 1.);
+        col += light * .06;   // un leve brillo en el aire entre nubes
+        a = max(a, clamp(length(light) * .08, 0., .5));
+      } else {
+        col = mix(vec3(.78, .8, .86), vec3(1.), shade) + light * .55 * d;
+        a = clamp(d * 1.15, 0., 1.);
+      }
+      o = vec4(col * a, a);
+    }`);
+}
+function drawSkyClouds(dt) {
+  const night = state.theme === 'dark', gl = GLX.gl;
+  if (!sky.prog) skySetup();
+  // Media resolución: las nubes son suaves y así va mucho más rápido
+  const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W);
+  if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
+  sky.lvT[0] = Math.pow(bass, 0.8); sky.lvT[1] = Math.pow(mid, 0.8); sky.lvT[2] = Math.pow(high, 0.8);
+  springTo(sky.lv, sky.lvV, sky.lvT, dt, 200, 0.5);
+  sky.t += dt * (1 + energy * 1.5);   // con más energía, las nubes se transforman más rápido
+  const fk = state.noFlash ? 0.35 : 1;
+  const flash = (x, y, k) => { sky.flashes.push({ x, y, k, c: Math.floor(Math.random() * 3) }); if (sky.flashes.length > 3) sky.flashes.shift(); };
+  if (hits.bass) flash(0.15 + Math.random() * 0.7, 0.35 + Math.random() * 0.45, (1 + hits.bass) * fk);
+  if (hits.mid) flash(0.1 + Math.random() * 0.8, 0.3 + Math.random() * 0.5, (0.5 + hits.mid * 0.5) * fk);
+  sky.flashes.forEach(f => f.k *= Math.pow(0.02, dt));
+  sky.pointerLv += ((performance.now() - sky.pointerAt < 2500 ? 1 : 0) - sky.pointerLv) * (1 - Math.pow(0.05, dt));
+  const L = [];
+  // Tres luces que pasean por dentro, una por banda
+  for (let i = 0; i < 3; i++) L.push(0.5 + 0.36 * Math.sin(time * (0.07 + i * 0.03) + i * 2.1), 0.55 + 0.22 * Math.sin(time * (0.05 + i * 0.02) + i * 1.3), 0.15 + Math.max(0, sky.lv[i]) * 1.5, i);
+  for (let i = 0; i < 3; i++) { const f = sky.flashes[i]; L.push(f ? f.x : 0, f ? f.y : 0, f ? f.k * 0.9 : 0, f ? f.c : 0); }
+  L.push(sky.pointer[0], sky.pointer[1], sky.pointerLv * (0.9 + bass * 0.6), 3);   // la linterna del ratón
+  const p = sky.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, sky.t); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uScroll, -sky.t * 0.035);
+  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
+  gl.uniform4fv(p.u['uL[0]'], new Float32Array(L));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  if (!night) {   // de día, un cielo con un toque de la paleta detrás
+    const g = ctx.createLinearGradient(0, 0, 0, H), c = mix(0.5);
+    g.addColorStop(0, rgba(c.map(v => v + (255 - v) * 0.55), 1)); g.addColorStop(1, '#ffffff');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  ctx.drawImage(GLX.c, 0, 0, W, H);
+  if (night) bloom(GLX.c, 0.35 + beatSoft * 0.3);
+}
 
 // ================= Escena: Fluido =================
 // Simulación de fluidos ("stable fluids") en la tarjeta gráfica: la música inyecta tinta y
@@ -2483,6 +2565,17 @@ function drawFluid(dt) {
   if (fluid.pointer && fluid.pointer.moves.length) {
     for (const [x, y, dx, dy] of fluid.pointer.moves.splice(0)) fluidSplat(x, y, dx * 6000, dy * 6000, fluidColor(mix(x), 0.18), R(0.2));
   }
+  // Emisores: cinco chorros en círculo, cada uno con su banda; giran despacio y laten con la música
+  fluid.emitA = (fluid.emitA || 0) + dt * (0.15 + energy * 0.6);
+  const bandsE = [bass, (bass + mid) / 2, mid, (mid + high) / 2, high];
+  for (let i = 0; i < 5; i++) {
+    const lv = Math.pow(bandsE[i], 1.3);
+    if (lv < 0.04) continue;
+    const a = fluid.emitA + i * Math.PI * 2 / 5, rr = 0.22 + lv * 0.08;
+    const x = 0.5 + Math.cos(a) * rr * (H / W), y = 0.5 + Math.sin(a) * rr;
+    const dir = a + Math.PI / 2, sp_ = 250 + lv * 2200;
+    fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[i % 3], lv * 0.09), R(0.06 + lv * 0.12));
+  }
   fluidStep(Math.min(dt, 0.033));
   // Mostrar
   const gl = GLX.gl, d = fluid.p.display;
@@ -2498,62 +2591,34 @@ function drawFluid(dt) {
 }
 
 // ================= Escena: Portada 3D =================
-// La portada como una tarjeta con relieve: un mapa de profundidad (calculado con IA en el
-// navegador, o estimado mientras tanto) desplaza cada punto según lo cerca que está; el
-// ratón y la música mueven la cámara. Al cambiar de canción, la portada estalla en
+// La portada como una tarjeta física que se inclina en perspectiva real hacia el ratón y
+// se mece con la música; un reflejo de luz recorre su superficie con cada golpe. Al cambiar de canción, la portada estalla en
 // partículas que flotan hasta que llega la nueva y luego se reordenan formándola.
-const cover3d = { prog: null, img: null, url: '', depth: null, depthFor: '', aiState: 'idle', mouse: [0, 0], parts: null, partT: 0, waiting: false };
-const depthCache = new Map();
+const cover3d = { prog: null, img: null, url: '', upFor: '', mouse: [0, 0], tilt: [0, 0], tiltV: [0, 0], parts: null, partT: 0, waiting: false };
 addEventListener('pointermove', e => { cover3d.mouse = [(e.clientX / innerWidth - 0.5) * 2, (e.clientY / innerHeight - 0.5) * 2]; });
-function syntheticDepth(img) {   // estimación rápida: zonas claras y centrales, más cerca
-  const n = 128, c = document.createElement('canvas'); c.width = c.height = n;
-  const x = c.getContext('2d'); x.drawImage(img, 0, 0, n, n);
-  const d = x.getImageData(0, 0, n, n);
-  for (let i = 0; i < n * n; i++) {
-    const px = i % n, py = Math.floor(i / n), dist = Math.hypot(px / n - 0.5, py / n - 0.55) * 1.6;
-    const l = (d.data[i * 4] * 0.3 + d.data[i * 4 + 1] * 0.59 + d.data[i * 4 + 2] * 0.11) / 255;
-    const v = Math.max(0, Math.min(1, l * 0.45 + (1 - dist) * 0.55)) * 255;
-    d.data[i * 4] = d.data[i * 4 + 1] = d.data[i * 4 + 2] = v; d.data[i * 4 + 3] = 255;
-  }
-  x.putImageData(d, 0, 0);
-  const o = document.createElement('canvas'); o.width = o.height = n;
-  const ox = o.getContext('2d'); if (CAN_BLUR) ox.filter = 'blur(4px)'; ox.drawImage(c, 0, 0);
-  return o;
-}
-let depthPipe = null;
-async function aiDepth(url) {
-  if (depthCache.has(url)) return depthCache.get(url);
-  if (!state.aiDepth) return null;
-  try {
-    if (!depthPipe) {
-      cover3d.aiState = 'loading';
-      const { pipeline } = await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.0.0');
-      depthPipe = await pipeline('depth-estimation', 'onnx-community/depth-anything-v2-small', { dtype: 'q8' });
-    }
-    cover3d.aiState = 'working';
-    const out = await depthPipe(url);
-    const c = out.depth.toCanvas();
-    const o = document.createElement('canvas'); o.width = o.height = 256;
-    const ox = o.getContext('2d'); if (CAN_BLUR) ox.filter = 'blur(1.5px)'; ox.drawImage(c, 0, 0, 256, 256);
-    depthCache.set(url, o); cover3d.aiState = 'ready';
-    return o;
-  } catch (e) { console.warn('Profundidad con IA no disponible:', e); cover3d.aiState = 'failed'; return null; }
-}
 function cover3dSetup() {
-  cover3d.prog = glProgram(`uniform sampler2D uImg, uDepth; uniform vec2 uOff; uniform float uZoom, uRound;
+  cover3d.prog = glProgram(`uniform sampler2D uImg; uniform vec2 uTilt; uniform float uZoom, uRound, uShine, uShinePos;
     void main() {
-      vec2 uv = (vUv - 0.5) / uZoom + 0.5;
-      // Busca el punto que, desplazado por su profundidad, cae en este píxel (paralaje)
-      vec2 p = uv;
-      for (int i = 0; i < 10; i++) p = uv + uOff * (texture(uDepth, p).r - 0.5);
-      vec3 c = texture(uImg, p).rgb;
-      float d = texture(uDepth, p).r;
-      c *= 0.88 + d * 0.22;   // lo cercano, un poco más luminoso
-      vec2 q = abs(vUv - 0.5) - (0.5 - uRound);
-      float m = 1. - smoothstep(0., 0.004, length(max(q, 0.)) - uRound);
+      // Rayo desde la cámara contra una tarjeta girada (perspectiva real)
+      vec2 p = (vUv - 0.5) * 2.;
+      float D = 3.2;
+      vec3 ro = vec3(0., 0., D), rd = normalize(vec3(p, -D));
+      float cx = cos(uTilt.x), sx = sin(uTilt.x), cy = cos(uTilt.y), sy = sin(uTilt.y);
+      mat3 R = mat3(cy, 0., -sy,  0., 1., 0.,  sy, 0., cy) * mat3(1., 0., 0.,  0., cx, sx,  0., -sx, cx);
+      vec3 n = R * vec3(0., 0., 1.);
+      float t = -dot(ro, n) / dot(rd, n);
+      vec3 hit = transpose(R) * (ro + rd * t);
+      vec2 uv = hit.xy / (2. * uZoom) + 0.5;
+      vec2 q = abs(uv - 0.5) - (0.5 - uRound);
+      float m = 1. - smoothstep(0., 0.003, length(max(q, 0.)) - uRound);
+      vec3 c = texture(uImg, clamp(uv, 0., 1.)).rgb;
+      // Reflejo: una franja de luz diagonal que se desliza
+      float band = exp(-pow((uv.x + uv.y - uShinePos) * 5., 2.));
+      c += vec3(1.) * band * uShine;
+      c *= 0.92 + 0.08 * (1. - length(uv - 0.5));
       o = vec4(c * m, m);
     }`);
-  cover3d.tImg = GLX.gl.createTexture(); cover3d.tDepth = GLX.gl.createTexture();
+  cover3d.tImg = GLX.gl.createTexture();
 }
 function glUpload(tex, source) {
   const gl = GLX.gl; gl.bindTexture(gl.TEXTURE_2D, tex);
@@ -2581,9 +2646,7 @@ function cover3dLeaving() {
 }
 function cover3dImage(url, img) {
   if (!img) { cover3d.img = null; return; }
-  cover3d.url = url; cover3d.img = img;
-  cover3d.depth = depthCache.get(url) || syntheticDepth(img); cover3d.depthFor = '';
-  if (state.mode === 'cover') aiDepth(url).then(d => { if (d && cover3d.url === url) { cover3d.depth = d; cover3d.depthFor = ''; } });
+  cover3d.url = url; cover3d.img = img; cover3d.upFor = '';
   if (cover3d.parts) {   // las partículas ya tienen adónde ir
     const n = 64, col = sampleColors(img, n);
     const order = [...cover3d.parts.keys()].sort(() => Math.random() - 0.5);
@@ -2619,19 +2682,19 @@ function drawCover(dt) {
     if (!cover3d.prog) { try { cover3dSetup(); } catch (e) { console.error(e); GLX.ok = false; return; } }
     const gl = GLX.gl, sz = Math.round(Math.min(S, 1400));
     if (GLX.c.width !== sz || GLX.c.height !== sz) { GLX.c.width = sz; GLX.c.height = sz; fluid.key = ''; }
-    if (cover3d.depthFor !== cover3d.url + (cover3d.depth ? cover3d.depth.width : '')) {
-      glUpload(cover3d.tImg, cover3d.img); glUpload(cover3d.tDepth, cover3d.depth);
-      cover3d.depthFor = cover3d.url + (cover3d.depth ? cover3d.depth.width : '');
-    }
+    if (cover3d.upFor !== cover3d.url) { glUpload(cover3d.tImg, cover3d.img); cover3d.upFor = cover3d.url; }
+    // Inclinación con muelle: sigue al ratón y se mece con la música; cada golpe la empuja
+    const tgt = [-cover3d.mouse[1] * 0.22 + Math.sin(time * 0.5) * (0.04 + bass * 0.08), cover3d.mouse[0] * 0.28 + Math.cos(time * 0.41) * (0.05 + mid * 0.08)];
+    if (hits.bass) cover3d.tiltV[0] += hits.bass * 1.2 * (Math.random() < 0.5 ? 1 : -1);
+    springTo(cover3d.tilt, cover3d.tiltV, tgt, dt, 60, 0.45);
     const p = cover3d.prog; gl.useProgram(p.pr);
     gl.uniform2f(p.u.texel, 1 / sz, 1 / sz);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, cover3d.tImg); gl.uniform1i(p.u.uImg, 0);
-    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, cover3d.tDepth); gl.uniform1i(p.u.uDepth, 1);
-    const sway = 0.012 + bass * 0.02;
-    const ox = cover3d.mouse[0] * 0.035 + Math.sin(time * 0.45) * sway, oy = -cover3d.mouse[1] * 0.035 + Math.cos(time * 0.37) * sway;
-    gl.uniform2f(p.u.uOff, -ox, -oy);
-    gl.uniform1f(p.u.uZoom, 0.94 + beatSoft * 0.03 + bass * 0.01);
-    gl.uniform1f(p.u.uRound, 0.035);
+    gl.uniform2f(p.u.uTilt, cover3d.tilt[0], cover3d.tilt[1]);
+    gl.uniform1f(p.u.uZoom, 0.78 + beatSoft * 0.025 + bass * 0.01);
+    gl.uniform1f(p.u.uRound, 0.03);
+    gl.uniform1f(p.u.uShine, 0.06 + beatSoft * 0.22);
+    gl.uniform1f(p.u.uShinePos, ((time * 0.25) % 3) - 0.5);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, sz, sz);
     gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.disable(gl.BLEND);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -2651,10 +2714,6 @@ function drawCover(dt) {
     ctx.fillText(it.name.length > 40 ? it.name.slice(0, 39) + '…' : it.name, cx, y0 + S + MIN * 0.09);
     ctx.fillStyle = textFg(0.65); ctx.font = `500 ${Math.round(MIN * (vertical ? 0.035 : 0.027))}px -apple-system, "Segoe UI", system-ui, sans-serif`;
     ctx.fillText((it.artists || []).map(a => a.name).join(', '), cx, y0 + S + MIN * (vertical ? 0.15 : 0.135));
-    if (cover3d.aiState === 'loading' || cover3d.aiState === 'working') {
-      ctx.fillStyle = textFg(0.45); ctx.font = `500 ${Math.round(MIN * 0.018)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
-      ctx.fillText(cover3d.aiState === 'loading' ? 'Preparando la profundidad con IA (descarga única)…' : 'Calculando la profundidad…', cx, y0 - MIN * 0.04);
-    }
     ctx.restore();
   }
 }
@@ -2665,17 +2724,27 @@ function drawCover(dt) {
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
 function drawLight(dt) {
   const night = state.theme === 'dark';
-  lightT[0] = bass; lightT[1] = mid; lightT[2] = high;
-  if (hits.bass) lightV[0] += hits.bass * 3;
-  springTo(lightLv, lightV, lightT, dt, 220, 0.6);
-  const [Lb, Lm, Lh] = [...lightLv].map(v => Math.max(0, v));
+  lightT[0] = Math.pow(bass, 0.8); lightT[1] = Math.pow(mid, 0.8); lightT[2] = high;
+  if (hits.bass) lightV[0] += hits.bass * 5;
+  if (hits.mid) lightV[1] += hits.mid * 3;
+  springTo(lightLv, lightV, lightT, dt, 260, 0.45);
+  const [Lb, Lm, Lh] = [...lightLv].map(v => Math.max(0, Math.min(1.3, v)));
   const drift = 0.5 + 0.5 * Math.sin(time * 0.05);
   ctx.save();
-  ctx.globalCompositeOperation = night ? 'lighter' : 'multiply';
-  const tint = c => night ? c : c.map(x => 255 - (255 - x) * 0.85);
-  glowSpot(W / 2, H / 2, MIN * (0.45 + Lb * 0.75 + beat * 0.15), tint(mix(drift)), night ? 0.28 + Lb * 0.5 : 0.22 + Lb * 0.4);
-  glowSpot(W / 2, H / 2, MIN * (0.22 + Lm * 0.4), tint(mix(1 - drift)), night ? 0.3 + Lm * 0.55 : 0.2 + Lm * 0.4);
-  if (night) glowSpot(W / 2, H / 2, MIN * (0.07 + Lh * 0.16 + beat * 0.03), mix(drift).map(x => x + (255 - x) * 0.7), 0.5 + Lh * 0.5);
+  if (night) {
+    ctx.globalCompositeOperation = 'lighter';
+    // Halo: de pequeño a casi toda la pantalla según los graves
+    glowSpot(W / 2, H / 2, MIN * (0.25 + Lb * 1.1 + beat * 0.2), mix(drift), 0.12 + Lb * 0.55);
+    glowSpot(W / 2, H / 2, MIN * (0.12 + Lm * 0.5), mix(1 - drift), 0.1 + Lm * 0.6);
+    // Núcleo discreto: solo brilla de verdad con los agudos
+    glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), mix(drift).map(x => x + (255 - x) * 0.6), 0.15 + Lh * 0.6);
+  } else {
+    // De día: color saturado sobre blanco, con suficiente presencia
+    const sat = c => { const [h, s_, l] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(70, s_), 55)); };
+    glowSpot(W / 2, H / 2, MIN * (0.3 + Lb * 1.0 + beat * 0.2), sat(mix(drift)), 0.3 + Lb * 0.5);
+    glowSpot(W / 2, H / 2, MIN * (0.14 + Lm * 0.45), sat(mix(1 - drift)), 0.35 + Lm * 0.5);
+    glowSpot(W / 2, H / 2, MIN * (0.04 + Lh * 0.1), sat(mix(drift)), 0.4 + Lh * 0.5);
+  }
   ctx.restore();
 }
 
@@ -2896,7 +2965,7 @@ function render(now) {
   autoDirector(dt);
   ctx.globalCompositeOperation = 'source-over';
   ctx.globalAlpha = state.mode === 'strobe' ? 0.015 : state.theme === 'dark' ? 0.022 : 0.03;
-  ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H);
+  if (!recording) { ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); }
   ctx.globalAlpha = 1;
   drawRecOverlay();
 }
