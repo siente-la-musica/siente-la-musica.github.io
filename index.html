@@ -487,6 +487,12 @@ function paletteColors() {
     const L = night ? Math.max(l, 58) : Math.min(l, 50);
     return [hsl(h - 28, s, L), hsl(h, s, L), hsl(h + 28, s, L)];
   }
+  if (state.palette === 'mood') {
+    if (musicKey.tonic < 0) return night ? ['#9a9cab', '#b3b5c4', '#8a8c9b'] : ['#6e717d', '#858894', '#5f626e'];
+    // Mayor: naranjas, rosas y dorados. Menor: azules, violetas y turquesas. La nota mueve el tono.
+    const h0 = (musicKey.minor ? 205 : 18) + (musicKey.tonic - 6) * 4, L = night ? 64 : 46;
+    return [hsl(h0 - 24, 80, L), hsl(h0, 85, L), hsl(h0 + (musicKey.minor ? 40 : 30), 80, L)];
+  }
   if (state.palette === 'cover' && coverColors) {
     return coverColors.map(hex => {
       const [h, s, l] = hexToHsl(hex);
@@ -560,6 +566,14 @@ function buildSwatches() {
     b.className = 'swatch'; b.dataset.palette = p.id; b.setAttribute('aria-label', 'Color ' + p.id);
     b.style.background = `linear-gradient(135deg, ${c[0]}, ${c[1]} 55%, ${c[2]})`;
     b.onclick = () => { state.palette = p.id; store.set('palette', p.id); applyAll(); };
+    swatchBox.appendChild(b);
+  }
+  {
+    const b = document.createElement('button');
+    b.className = 'swatch'; b.dataset.palette = 'mood';
+    b.setAttribute('aria-label', 'Colores según el ánimo de la canción'); b.title = 'Ánimo: cálidos en tonos mayores, fríos en menores';
+    b.style.background = 'linear-gradient(135deg, #ff9a3d 0 50%, #4f7bff 50% 100%)';
+    b.onclick = () => { state.palette = 'mood'; store.set('palette', 'mood'); applyAll(); };
     swatchBox.appendChild(b);
   }
   if (coverUrl) {
@@ -713,7 +727,7 @@ function useStream(stream, label) {
   track.addEventListener('ended', () => { setStatus('Captura detenida. Pulsa Conectar audio para volver a empezar.'); analyser = null; setSource(''); document.body.classList.remove('idle'); });
   track.addEventListener('mute', () => setStatus('Sin señal de audio por ahora', true));
   track.addEventListener('unmute', () => setStatus(label, true));
-  setStatus(label, true);
+  setStatus(label, true); statusBase = label;
   intro.hidden = true; wake();
 }
 
@@ -749,7 +763,7 @@ fileInput.onchange = () => {
   source = audioCtx.createMediaElementSource(audioEl);
   source.connect(analyser); source.connect(recDest); analyser.connect(audioCtx.destination);
   audioEl.play();
-  setStatus('Reproduciendo ' + f.name, true); setSource('Archivo');
+  setStatus('Reproduciendo ' + f.name, true); statusBase = 'Reproduciendo ' + f.name; setSource('Archivo');
   intro.hidden = true; wake();
 };
 
@@ -797,9 +811,11 @@ function analyse(dt) {
   }
   bass = avg(raw, 0, 10); mid = avg(raw, 10, 38); high = avg(raw, 38, BANDS);
   energy = bass * 0.5 + mid * 0.3 + high * 0.2;
+  if (analyser) { tempoTick(); keyTick(dt); }
   // Golpes de este fotograma (todas las animaciones leen los mismos) y un "latido" que decae rápido
   hits.bass = onset('bass', bass, dt); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
   if (hits.bass) { beatRaw = Math.max(beatRaw, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
+  if (beatTick && !hits.bass) beatRaw = Math.max(beatRaw, 0.35 * Math.min(1, tempo.conf * 1.5));
   // Drop: tras un tramo flojo de graves, vuelven con fuerza
   eShort += (bass - eShort) * (1 - Math.pow(0.02, dt));
   eLong += (bass - eLong) * (1 - Math.pow(0.85, dt));
@@ -823,6 +839,112 @@ function smoothProfile(a, passes = 2) {
   return a;
 }
 const hits = { bass: 0, mid: 0, high: 0 };
+
+// ================= Tempo (BPM) y pulso =================
+// Se guarda la "fuerza de ataque" del sonido 100 veces por segundo durante 8 s y se busca
+// cada cuánto se repite (autocorrelación). Con el tempo y la fase se predice el próximo
+// pulso, así las animaciones caen en el compás aunque el bombo sea suave.
+const ENV_HZ = 100, ENV_LEN = 800, env = new Float32Array(ENV_LEN), prevRaw = new Float32Array(BANDS);
+let envPos = 0, envAcc = 0, envFill = 0, tempoCalc = 0;
+const tempo = { bpm: 0, period: 0, conf: 0, phaseRef: 0, history: [], lastTick: 0 };
+let beatTick = false;
+let tempoLastT = 0;
+function tempoTick() {
+  // Se mide con el reloj real (no con el de las animaciones, que se limita si el equipo va lento)
+  const nowT = performance.now() / 1000, dt = tempoLastT ? Math.min(0.5, nowT - tempoLastT) : 0; tempoLastT = nowT;
+  // Ataque: suma de subidas por banda, con más peso en graves
+  let flux = 0;
+  for (let i = 0; i < BANDS; i++) { const d = raw[i] - prevRaw[i]; if (d > 0) flux += d * (i < 12 ? 2 : 1); prevRaw[i] = raw[i]; }
+  envAcc += dt;
+  while (envAcc >= 1 / ENV_HZ) { env[envPos] = flux; envPos = (envPos + 1) % ENV_LEN; envFill = Math.min(ENV_LEN, envFill + 1); envAcc -= 1 / ENV_HZ; }
+  tempoCalc += dt;
+  if (tempoCalc > 1 && envFill > ENV_HZ * 4) { tempoCalc = 0; estimateTempo(); }
+  // Pulso predicho
+  beatTick = false;
+  if (tempo.period && tempo.conf > 0.25) {
+    const now = performance.now() / 1000, n = Math.floor((now - tempo.phaseRef) / tempo.period);
+    if (n !== tempo.lastTick) { tempo.lastTick = n; beatTick = true; }
+  }
+}
+function estimateTempo() {
+  const N = envFill, x = new Float32Array(N);
+  for (let i = 0; i < N; i++) x[i] = env[(envPos - N + i + ENV_LEN) % ENV_LEN];
+  let mean = 0; for (const v of x) mean += v; mean /= N;
+  for (let i = 0; i < N; i++) x[i] = Math.max(0, x[i] - mean);
+  let best = 0, bestLag = 0, sum = 0, cnt = 0;
+  for (let lag = Math.round(ENV_HZ * 60 / 190); lag <= Math.round(ENV_HZ * 60 / 65); lag++) {
+    let c = 0; for (let i = lag; i < N; i++) c += x[i] * x[i - lag];
+    c /= (N - lag);
+    const bpm = 60 * ENV_HZ / lag, pref = Math.exp(-Math.pow(Math.log2(bpm / 118), 2) / 0.5);   // preferencia suave por tempos habituales
+    sum += c; cnt++;
+    if (c * pref > best) { best = c * pref; bestLag = lag; }
+  }
+  if (!bestLag || !sum) return;
+  // Afinado con interpolación entre retardos vecinos
+  const ac = lag => { let c = 0; for (let i = lag; i < N; i++) c += x[i] * x[i - lag]; return c / (N - lag); };
+  const a = ac(bestLag - 1), b = ac(bestLag), c2 = ac(bestLag + 1), den = a - 2 * b + c2;
+  const lagF = bestLag + (den ? 0.5 * (a - c2) / den : 0);
+  const bpm = 60 * ENV_HZ / lagF;
+  tempo.history.push(bpm); if (tempo.history.length > 7) tempo.history.shift();
+  const sorted = [...tempo.history].sort((p, q) => p - q);
+  tempo.bpm = sorted[Math.floor(sorted.length / 2)];
+  tempo.period = 60 / tempo.bpm;
+  tempo.conf = Math.min(1, (b / (sum / cnt) - 1) / 2);
+  // Fase: el desplazamiento cuyos pulsos coinciden con más ataques
+  const P = tempo.period * ENV_HZ; let bestPh = 0, bestS = -1;
+  for (let ph = 0; ph < P; ph += 1) {
+    let sc = 0; for (let t = N - 1 - ph; t >= 0; t -= P) sc += x[Math.round(t)];
+    if (sc > bestS) { bestS = sc; bestPh = ph; }
+  }
+  const now = performance.now() / 1000;
+  tempo.phaseRef = now - bestPh / ENV_HZ;   // un pulso ocurrió hace bestPh muestras
+  tempo.lastTick = Math.floor((now - tempo.phaseRef) / tempo.period);
+}
+
+// ================= Tonalidad =================
+// Se acumula cuánta energía tiene cada nota (Do, Do♯… Si) y se compara con los perfiles
+// de Krumhansl de las 24 tonalidades mayores y menores.
+const chroma = new Float32Array(12);
+const KMAJ = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const KMIN = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+const NOTE_ES = ['Do', 'Do♯', 'Re', 'Mi♭', 'Mi', 'Fa', 'Fa♯', 'Sol', 'La♭', 'La', 'Si♭', 'Si'];
+const musicKey = { tonic: -1, minor: false, conf: 0, name: '' };
+let keyCalc = 0, binPc = null;
+function keyTick(dt) {
+  if (!binPc) {   // nota de cada franja del espectro (65 Hz – 2 kHz)
+    binPc = new Int8Array(freqData.length).fill(-1);
+    const hz = audioCtx.sampleRate / analyser.fftSize;
+    for (let i = 1; i < freqData.length; i++) { const f = i * hz; if (f >= 65 && f <= 2000) binPc[i] = ((Math.round(12 * Math.log2(f / 440)) + 69) % 12 + 12) % 12; }
+  }
+  const decay = Math.pow(0.9, dt);   // memoria de unos 10 s
+  for (let k = 0; k < 12; k++) chroma[k] *= decay;
+  for (let i = 1; i < freqData.length; i++) if (binPc[i] >= 0) { const v = freqData[i] / 255; chroma[binPc[i]] += v * v * dt; }
+  keyCalc += dt;
+  if (keyCalc < 2) return;
+  keyCalc = 0;
+  const corr = (prof, t) => {
+    let mx = 0, my = 0; for (let k = 0; k < 12; k++) { mx += chroma[(k + t) % 12]; my += prof[k]; } mx /= 12; my /= 12;
+    let n = 0, dx = 0, dy = 0;
+    for (let k = 0; k < 12; k++) { const a = chroma[(k + t) % 12] - mx, b = prof[k] - my; n += a * b; dx += a * a; dy += b * b; }
+    return n / Math.sqrt(dx * dy || 1);
+  };
+  let best = -2, second = -2, tonic = 0, minor = false;
+  for (let t = 0; t < 12; t++) for (const [prof, mn] of [[KMAJ, false], [KMIN, true]]) {
+    const c = corr(prof, t);
+    if (c > best) { second = best; best = c; tonic = t; minor = mn; } else if (c > second) second = c;
+  }
+  Object.assign(musicKey, { tonic, minor, conf: Math.max(0, best - second) * 5 + Math.max(0, best) * 0.5, name: NOTE_ES[tonic] + (minor ? ' menor' : ' mayor') });
+  if (state.palette === 'mood') refreshColors();
+  updateMusicStatus();
+}
+let statusBase = '';
+function updateMusicStatus() {
+  if (!analyser || !statusBase) return;
+  const parts = [statusBase];
+  if (tempo.bpm && tempo.conf > 0.25) parts.push(Math.round(tempo.bpm) + ' BPM');
+  if (musicKey.conf > 0.35) parts.push(musicKey.name);
+  statusText.textContent = parts.join(' · ');
+}
 let beat = 0, beatRaw = 0, beatSoft = 0, lastBassHit = 0, eShort = 0, eLong = 0, quietT = 0, dropHit = false, lastDrop = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
