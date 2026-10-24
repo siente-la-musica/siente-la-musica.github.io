@@ -97,7 +97,7 @@
 
   .song {
     position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
-    width: min(340px, calc(100% - 32px));
+    width: min(380px, calc(100% - 32px));
     display: flex; gap: 12px; align-items: center; padding: 10px 12px 10px 10px;
     background: var(--glass); border: 1px solid var(--glass-line); border-radius: 18px; box-shadow: var(--shadow);
     -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
@@ -111,8 +111,9 @@
   .song .note { white-space: normal; }
   .song a { color: inherit; font-size: 13px; font-weight: 600; }
   .song .close { padding: 4px 8px; font-size: 16px; line-height: 1; align-self: flex-start; }
-  .song .row { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
-  .song .row button { font-size: 12px; padding: 4px 8px; }
+  .song .row { display: flex; flex-wrap: nowrap; gap: 4px 12px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .song .row button { font-size: 12px; padding: 0; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
+  .song .row button:hover { color: var(--fg); filter: none; }
   .song .time { font-variant-numeric: tabular-nums; }
   .swatch.cover-swatch { background-size: cover; background-position: center; }
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
@@ -130,6 +131,7 @@
   .av { width: 2.6em; height: 2.6em; border-radius: 50%; object-fit: cover; flex: none; box-shadow: 0 0 0 1px var(--glass-line), 0 6px 24px rgba(0,0,0,.25); }
   body.mode-lyrics .corner { display: none; }
   body.mode-lyrics .status { display: none; }
+  body.mode-lyrics .song:not(.force) { display: none; }
   body.idle .corner { bottom: calc(24px + env(safe-area-inset-bottom, 0px)); }
   .corner .t { font-size: 1em; font-weight: 600; color: var(--fg); opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .corner .a { font-size: .8em; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -170,13 +172,14 @@
   }
   .lv-cur .w.on { color: var(--c); transform: translateY(-.03em); text-shadow: 0 0 .45em color-mix(in srgb, var(--c) 40%, transparent); }
   .lv-cur.plain .w { color: var(--c); }
-  .lv-cur.enter .w { animation: wordIn .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(var(--i) * 45ms); }
+  .lv-cur.enter .w { animation: wordIn .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(220ms + var(--i) * 45ms); }
   @keyframes wordIn { from { opacity: 0; filter: blur(.12em); transform: translateY(.4em) scale(.94); } }
-  .lv-out { position: absolute; inset: 0 0 auto; animation: lineOut 1.4s cubic-bezier(.3,.6,.3,1) forwards; }
+  .lv-out { position: absolute; inset: 0 0 auto; animation: lineOut .7s cubic-bezier(.4,0,.6,1) forwards; }
   .lv-out .w { color: var(--c); }
-  @keyframes lineOut { to { opacity: 0; transform: translateY(-1.1em) scale(1.05); filter: blur(.22em); letter-spacing: .05em; } }
+  @keyframes lineOut { from { opacity: .55; } to { opacity: 0; transform: translateY(-1.6em) scale(1.04); filter: blur(.25em); letter-spacing: .05em; } }
   .lv-next { margin-top: 1.1em; font-size: .34em; font-weight: 600; letter-spacing: 0; color: var(--muted); opacity: .75; text-wrap: balance; }
-  .lv-msg { font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); text-align: center; }
+  .lv-msg { font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); text-align: center; display: grid; gap: .8em; justify-items: center; }
+  .lv-msg button { pointer-events: auto; font-size: .7em; padding: .6em 1.1em; background: var(--chip-on); color: var(--chip-on-fg); }
   .lv-meta {
     position: fixed; top: calc(24px + env(safe-area-inset-top, 0px)); left: max(24px, env(safe-area-inset-left, 0px));
     display: flex; align-items: center; gap: .9em; font-size: clamp(14px, 1.1vw, 52px); max-width: 60vw;
@@ -185,10 +188,20 @@
   .lv-meta .av { width: 3em; height: 3em; margin-left: -1.6em; border: 3px solid var(--bg); box-sizing: content-box; }
   .lv-meta .tx { display: grid; gap: .15em; min-width: 0; }
   .lv-meta .t { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .lv-meta .a { color: var(--muted); font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lv-meta .a { color: color-mix(in srgb, var(--fg) 65%, transparent); font-size: .85em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { .lv-cur.enter .w, .lv-out { animation: none; } .lv-out { display: none; } }
 
-  @media (max-width: 560px) { .sep { display: none; } .dock { gap: 8px; } }
+  @media (max-width: 700px) {
+    .sep { display: none; }
+    .dock { width: calc(100% - 24px); gap: 6px; padding: 8px; border-radius: 20px; }
+    .dock > .group { max-width: 100%; }
+    #modes { order: -1; width: 100%; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; scrollbar-width: none; -webkit-mask-image: linear-gradient(90deg, #000 85%, transparent); mask-image: linear-gradient(90deg, #000 85%, transparent); }
+    #modes::-webkit-scrollbar { display: none; }
+    #modes button { flex: none; }
+    .song { left: 12px; right: 12px; width: auto; }
+    body:has(.song:not([hidden])) .status { display: none; }
+    .corner { max-width: calc(100% - 40px); }
+  }
 </style>
 </head>
 <body>
@@ -412,7 +425,8 @@ function setMode(m) {
   state.mode = m; store.set('mode', m);
   document.body.classList.toggle('mode-lyrics', m === 'lyrics');
   if (m === 'lyrics' && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
-  intro.hidden = m === 'lyrics' || !!analyser;
+  refreshChrome();
+  songEl.classList.remove('force');
   ictx.clearRect(0, 0, W, H); blobs.length = 0; lights.length = 0;
   applyAll(false);
 }
@@ -512,6 +526,8 @@ document.getElementById('btnMic').onclick = async () => {
 };
 
 const fileInput = document.getElementById('file');
+// En móviles no se puede capturar el audio del sistema: se oculta el botón
+if (!navigator.mediaDevices?.getDisplayMedia) document.getElementById('btnSystem').hidden = true;
 document.getElementById('btnFile').onclick = () => fileInput.click();
 fileInput.onchange = () => {
   const f = fileInput.files[0]; if (!f) return;
@@ -692,7 +708,7 @@ const blobs = [];
 let inkFade = 0;
 function spawnBlob(size, strength) {
   const big = size === 'big', medium = size === 'mid';
-  const maxR = MIN * (big ? 0.14 + Math.random() * 0.2 : medium ? 0.06 + Math.random() * 0.08 : 0.02 + Math.random() * 0.04) * (0.7 + strength * 0.6);
+  const maxR = MIN * (big ? 0.12 + Math.random() * 0.13 : medium ? 0.06 + Math.random() * 0.08 : 0.02 + Math.random() * 0.04) * (0.7 + strength * 0.6);
   const m = maxR * 1.1;
   const harm = [];
   for (let k = 0; k < 5; k++) harm.push({ k: 2 + Math.floor(Math.random() * 7), a: (Math.random() * 0.06) / (1 + k * 0.4), p: Math.random() * 6.28, s: (Math.random() - 0.5) * 0.8 });
@@ -835,6 +851,13 @@ function spSave() { store.set('sp.token', sp.token); store.set('sp.refresh', sp.
 function spButton() {
   btnSpotify.setAttribute('aria-pressed', spConnected());
   btnSpotify.textContent = spConnected() ? 'Spotify ✓' : 'Spotify';
+  refreshChrome();
+}
+// Ajusta los textos de ayuda a lo que haya conectado
+function refreshChrome() {
+  intro.hidden = !!analyser || spConnected() || state.mode === 'lyrics';
+  if (!analyser) setStatus(spConnected() ? 'Muestra · pulsa Audio del PC para que las animaciones sigan tu música' : 'Sin audio · vista de demostración');
+  try { lyricsButton(); } catch (e) {}   // aún no existe durante la carga inicial
 }
 const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 
@@ -1003,7 +1026,7 @@ function setBackdrop(canvasOrNull) { bgPrev = bgCur; bgCur = canvasOrNull; bgFad
 function drawBackdrop(dt, boost = 1) {
   if (!bgCur && !bgPrev) return;
   bgFade = Math.min(1, bgFade + dt / 1.6);
-  const night = state.theme === 'dark', base = (night ? 0.4 : 0.34) * boost;
+  const night = state.theme === 'dark', base = (night ? 0.36 : 0.2) * boost;
   const S = Math.max(W, H) * (1.18 + 0.04 * Math.sin(time * 0.05));
   const ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
   ctx.save();
@@ -1050,7 +1073,7 @@ function setCover(url) {
 
 btnSpotify.onclick = () => {
   if (!spConnected()) { spLogin(); return; }
-  sp.dismissed = false; spRender(); spLoop();
+  sp.dismissed = false; songEl.classList.add('force'); spRender(); spLoop();
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && spConnected()) spLoop(); });
 spButton();
@@ -1174,7 +1197,11 @@ function lvTick() {
   lvEl.hidden = !on; lvMeta.hidden = !on || !spConnected() || !sp.item;
   if (!on) return;
   const msg = lyricsMessage();
-  lvMsg.textContent = msg; lvMsg.hidden = !msg; lvStage.hidden = !!msg;
+  if (lvMsg.dataset.msg !== msg) {
+    lvMsg.dataset.msg = msg; lvMsg.textContent = msg;
+    if (msg && !spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar Spotify'; b.onclick = spLogin; lvMsg.appendChild(b); }
+  }
+  lvMsg.hidden = !msg; lvStage.hidden = !!msg;
   if (msg) { lvIndex = -2; lvCur.textContent = ''; return; }
   if (lvLyrics !== lyrics) { lvLyrics = lyrics; lvIndex = -2; lvCur.textContent = ''; }
   let i, text, next;
@@ -1207,7 +1234,7 @@ addEventListener('resize', () => { lvIndex = -2; });
 function lyricsTick() { subtitlesTick(); lvTick(); }
 setInterval(lyricsTick, 100);
 
-function lyricsButton() { btnLyrics.setAttribute('aria-pressed', lyricsOn); }
+function lyricsButton() { btnLyrics.setAttribute('aria-pressed', lyricsOn && spConnected()); }
 btnLyrics.onclick = () => {
   if (!spConnected()) { showSong('<div class="meta"><div class="title">Conecta Spotify</div><div class="note">La letra sigue la canción que suena en tu Spotify. Pulsa el botón Spotify para conectarlo.</div></div>'); return; }
   lyricsOn = !lyricsOn; store.set('lyrics', lyricsOn); lyricsButton();
