@@ -77,6 +77,7 @@
   .pop-note { margin: 0; font-size: 12px; color: var(--muted); line-height: 1.4; }
   .pop-note:empty { display: none; }
   .seg { display: flex; gap: 3px; flex-wrap: wrap; }
+  .lf-row input { flex: 1; min-width: 0; font: inherit; font-size: 13px; color: var(--fg); background: var(--chip); border: 1px solid var(--glass-line); border-radius: 10px; padding: 8px 10px; }
   .seg button { flex: 1; justify-content: center; }
   .row-set { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
   .row-set small { display: block; color: var(--muted); font-size: 11px; }
@@ -322,7 +323,17 @@
       <input id="file" type="file" accept="audio/*" hidden>
     </div>
   </div>
-  <button id="btnSpotify" type="button">Spotify</button>
+  <div class="pop-wrap">
+    <button id="btnSpotify" type="button" aria-haspopup="true" aria-expanded="false" title="De dónde sale la canción, la portada y la letra">Conectar música</button>
+    <div class="pop col" id="popMusic" hidden>
+      <div class="pop-title">Conectar tu música</div>
+      <p class="pop-note" style="display:block">Para ver la canción, la portada y la letra.</p>
+      <button id="btnSpConnect" type="button">Spotify</button>
+      <div class="row-set lf-row"><input id="lfUser" type="text" placeholder="Tu usuario de Last.fm" autocomplete="username" spellcheck="false"><button id="btnLfConnect" type="button">Last.fm</button></div>
+      <p class="pop-note" id="lfNote" style="display:block">Last.fm es gratis y sin límite de personas: conecta una vez tu Spotify a Last.fm (en last.fm → Ajustes → Aplicaciones).</p>
+      <p class="pop-note" style="display:block">Con un archivo (Conectar audio → Archivo) la letra va perfectamente sincronizada.</p>
+    </div>
+  </div>
   <button id="btnId" hidden>¿Qué suena?</button>
   <button id="btnLyrics" type="button" title="Letra sobre las animaciones">Subtítulos</button>
   <span class="sep"></span>
@@ -636,7 +647,7 @@ document.querySelectorAll('#modes button').forEach(b => {
   const img = document.createElement('img'); img.src = 'previews/' + b.dataset.mode + '.webp'; img.alt = ''; img.loading = 'lazy';
   const label = document.createElement('span'); label.textContent = b.textContent; b.textContent = ''; b.append(img, label);
 });
-bindPop('btnMode', 'popMode');
+bindPop('btnMode', 'popMode'); bindPop('btnSpotify', 'popMusic');
 document.getElementById('btnSee').onclick = e => { e.stopPropagation(); document.getElementById('btnMode').click(); }; bindPop('btnSettings', 'popSettings'); bindPop('btnRec', 'popRec');
 // Ajustes
 const sensEl = document.getElementById('sens'), noFlashEl = document.getElementById('noFlash');
@@ -737,6 +748,7 @@ function setupAnalyser() {
 }
 
 function useStream(stream, label) {
+  if (fileTrack) { clearInterval(fileTrack.timer); fileTrack = null; sp.item = null; spButton(); if (spotifyOn()) spLoop(); else if (lf.user) { lf.key = ''; lfLoop(); } }
   setupAnalyser();
   currentStream = stream;
   source = audioCtx.createMediaStreamSource(stream);
@@ -776,12 +788,14 @@ if (!navigator.mediaDevices?.getDisplayMedia) document.getElementById('btnSystem
 document.getElementById('btnFile').onclick = () => fileInput.click();
 fileInput.onchange = () => {
   const f = fileInput.files[0]; if (!f) return;
+  if (fileTrack) { clearInterval(fileTrack.timer); fileTrack = null; }
   setupAnalyser(); currentStream = null;
   audioEl = new Audio(URL.createObjectURL(f)); audioEl.loop = true;
   source = audioCtx.createMediaElementSource(audioEl);
   source.connect(analyser); source.connect(recDest); analyser.connect(audioCtx.destination);
   audioEl.play();
   setStatus('Reproduciendo ' + f.name, true); statusBase = 'Reproduciendo ' + f.name; setSource('Archivo');
+  fileStart(f);
   intro.hidden = true; wake();
 };
 
@@ -1211,7 +1225,7 @@ function esc(t) { const d = document.createElement('div'); d.textContent = t ?? 
 document.getElementById('btnId').onclick = async () => {
   if (identifying) return;
   if (spConnected()) { sp.dismissed = false; spRender(); spLoop(); return; }
-  if (!RECOGNIZE_URL) { showSong('<div class="meta"><div class="title">Conecta Spotify</div><div class="note">Pulsa el botón Spotify para ver aquí la canción que estás escuchando.</div></div>'); return; }
+  if (!RECOGNIZE_URL) { openMusic(); return; }
   if (!analyser || !recDest) { showSong('<div class="meta"><div class="title">Conecta primero el audio</div><div class="note">Pulsa Audio del PC, Micrófono o Archivo y vuelve a intentarlo.</div></div>'); return; }
   if (!window.MediaRecorder) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar audio</div></div>'); return; }
 
@@ -1258,11 +1272,18 @@ const sp = {
   item: null, playing: false, progress: 0, duration: 0, at: 0, dismissed: false, timer: null
 };
 const btnSpotify = document.getElementById('btnSpotify');
-const spConnected = () => !!sp.refresh;
+const spotifyOn = () => !!sp.refresh;
+const spConnected = () => !!(fileTrack || sp.refresh || (lf.user && LASTFM_KEY));
+const nowSource = () => fileTrack ? 'file' : sp.refresh ? 'spotify' : lf.user && LASTFM_KEY ? 'lastfm' : null;
 function spSave() { store.set('sp.token', sp.token); store.set('sp.refresh', sp.refresh); store.set('sp.expires', sp.expires); }
 function spButton() {
-  btnSpotify.setAttribute('aria-pressed', spConnected());
-  btnSpotify.textContent = spConnected() ? 'Spotify ✓' : 'Spotify';
+  const src = nowSource();
+  btnSpotify.setAttribute('aria-pressed', !!src);
+  btnSpotify.textContent = src === 'spotify' ? 'Spotify ✓' : src === 'lastfm' ? 'Last.fm ✓' : src === 'file' ? 'Archivo ✓' : 'Conectar música';
+  const spb = document.getElementById('btnSpConnect');
+  if (spb) { spb.textContent = spotifyOn() ? 'Desconectar Spotify' : 'Spotify'; spb.setAttribute('aria-pressed', spotifyOn()); }
+  const lb = document.getElementById('btnLfConnect');
+  if (lb) { lb.textContent = lf.user ? 'Salir' : 'Last.fm'; lb.setAttribute('aria-pressed', !!lf.user); document.getElementById('lfUser').value = lf.user || ''; }
   refreshChrome();
 }
 // Ajusta los textos de ayuda a lo que haya conectado
@@ -1338,13 +1359,14 @@ async function spPoll() {
 }
 async function spLoop() {
   clearTimeout(sp.timer);
-  if (!spConnected()) return;
+  if (!spotifyOn()) return;
   let delay;
   try { delay = await spPoll(); } catch (e) { delay = 15000; }
-  if (delay != null && spConnected()) sp.timer = setTimeout(spLoop, delay);
+  if (delay != null && spotifyOn()) sp.timer = setTimeout(spLoop, delay);
 }
 
-function spUpdate(d) {
+function spUpdate(d, src = 'spotify') {
+  if (src !== nowSource()) return;   // otra fuente con más prioridad está al mando
   const item = d && d.item;
   const changed = (item && item.id) !== (sp.item && sp.item.id);
   sp.item = item || null;
@@ -1365,6 +1387,7 @@ const fmt = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.fl
 const cornerEl = document.getElementById('corner');
 const artistImages = new Map(), artistInfo = new Map();
 async function spArtistData(id) {
+  if (!id || id.startsWith('name:')) return null;   // fuentes sin Spotify
   if (!artistInfo.has(id)) {
     artistInfo.set(id, (async () => {
       try {
@@ -1379,8 +1402,8 @@ async function loadArtistImage(item) {
   const id = item && item.artists && item.artists[0] && item.artists[0].id;
   if (!id) return;
   if (!artistImages.has(id)) {
-    const d = await spArtistData(id), im = (d && d.images) || [];
-    artistImages.set(id, (im[0] || {}).url || '');   // la más grande: también se usa en grande en la sección Artista
+    if (id.startsWith('name:')) { const w = await wikiArtist(id.slice(5)); artistImages.set(id, (w && w.thumb) || ''); }
+    else { const d = await spArtistData(id), im = (d && d.images) || []; artistImages.set(id, (im[0] || {}).url || ''); }   // la más grande
   }
   if (sp.item && sp.item.id === item.id) { spRender(); if (state.mode === 'artist') arApply(sp.item); }
 }
@@ -1404,22 +1427,29 @@ function spRender() {
   spCorner();
   if (!spConnected() || sp.dismissed) return;
   if (!sp.item) {
-    showSong('<div class="meta"><div class="title">Spotify conectado</div><div class="note">Ahora mismo no suena nada en tu Spotify.</div><div class="row"><button id="spOut">Desconectar</button></div></div>');
+    const srcName = { spotify: 'Spotify', lastfm: 'Last.fm', file: 'El archivo' }[nowSource()] || 'Tu música';
+    showSong(`<div class="meta"><div class="title">${srcName} conectado</div><div class="note">Ahora mismo no suena nada.</div><div class="row"><button id="spOut">Desconectar</button></div></div>`);
   } else {
     const it = sp.item;
     const artist = it.artists ? it.artists.map(a => a.name).join(', ') : (it.show?.name || '');
     const cover = it.album?.images?.[1]?.url || it.album?.images?.[0]?.url || it.images?.[0]?.url || '';
-    const link = it.external_urls?.spotify || '';
+    const link = it.external_urls?.spotify || it.external_urls?.lastfm || '';
+    const linkName = it.external_urls?.spotify ? 'Abrir en Spotify' : 'Ver en Last.fm';
     showSong(
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
       `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${artistImageOf(it) ? `<img class="av" src="${esc(artistImageOf(it))}" alt="">` : ''}${esc(artist)}${sp.playing ? '' : ' · en pausa'}</div>` +
       `<div class="bar"><i id="spBar"></i></div>` +
-      `<div class="row"><span class="time" id="spTime"></span>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Abrir en Spotify</a>` : ''}<button id="spOut">Desconectar</button></div></div>`
+      `<div class="row"><span class="time" id="spTime"></span>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${linkName}</a>` : ''}` +
+      (nowSource() === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
+      `<button id="spOut">Desconectar</button></div></div>`
     );
   }
   songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   const out = document.getElementById('spOut');
-  if (out) out.onclick = () => spLogout();
+  if (out) out.onclick = () => { const s_ = nowSource(); if (s_ === 'file') fileStop(); else if (s_ === 'lastfm') lfLogout(); else spLogout(); };
+  const e1 = document.getElementById('lfEarly'), e2 = document.getElementById('lfLate');
+  if (e1) e1.onclick = () => { sp.progress += 500; lf.offset += 500; lyricIndex = -2; lvIndex = -2; };
+  if (e2) e2.onclick = () => { sp.progress -= 500; lf.offset -= 500; lyricIndex = -2; lvIndex = -2; };
   spTick();
 }
 function spTick() {   // avanza la barra entre consultas, sin preguntar a Spotify
@@ -1510,13 +1540,134 @@ function setCover(url) {
   img.src = url;
 }
 
-btnSpotify.onclick = () => {
-  if (!spConnected()) { spLogin(); return; }
-  sp.dismissed = false; songEl.classList.add('force'); spRender(); spLoop();
+function openMusic() { document.getElementById('btnSpotify').click(); }
+document.getElementById('btnSpConnect').onclick = () => {
+  if (spotifyOn()) { spLogout(); return; }
+  spLogin();
 };
-document.addEventListener('visibilitychange', () => { if (!document.hidden && spConnected()) spLoop(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden && spotifyOn()) spLoop(); });
+
+// ================= Last.fm: gratis y sin límite de personas =================
+// Cada persona conecta una vez su Spotify (o Apple Music, YouTube Music…) a Last.fm y aquí
+// solo escribe su usuario. Last.fm dice qué suena pero no en qué segundo va: se toma como
+// inicio el momento en que se detecta la canción, y la letra se puede adelantar o atrasar.
+const LASTFM_KEY = '';   // clave gratuita de https://www.last.fm/api/account/create
+const lf = { user: store.get('lf.user', ''), timer: null, key: '', start: 0, offset: 0, item: null };
+const lfApi = params => fetch('https://ws.audioscrobbler.com/2.0/?' + new URLSearchParams({ ...params, api_key: LASTFM_KEY, format: 'json' })).then(r => r.ok ? r.json() : Promise.reject(new Error('Last.fm no respondió')));
+const LF_BLANK = '2a96cbd8b46e442fc41c2b86b821562f';   // imagen vacía de Last.fm (la estrella)
+const lfImage = imgs => { const u = ((imgs || []).slice(-1)[0] || {})['#text'] || ''; return !u || u.includes(LF_BLANK) ? '' : u.replace(/\/i\/u\/[^/]+\//, '/i/u/770x0/'); };
+async function lfPoll() {
+  const d = await lfApi({ method: 'user.getrecenttracks', user: lf.user, limit: 1 });
+  if (d.error) throw new Error(d.message || 'Usuario de Last.fm no encontrado');
+  const t = (d.recenttracks?.track || [])[0];
+  const playing = !!(t && t['@attr']?.nowplaying === 'true');
+  if (!playing) { if (nowSource() === 'lastfm') spUpdate({ item: lf.item, is_playing: false, progress_ms: performance.now() - lf.start + lf.offset }, 'lastfm'); return 12000; }
+  const artist = t.artist?.['#text'] || t.artist?.name || '', name = t.name || '', key = artist + '|' + name;
+  if (key !== lf.key) {
+    lf.key = key; lf.start = performance.now() - 3000; lf.offset = 0;   // se detecta unos segundos después de empezar
+    let dur = 0, cover = lfImage(t.image), albumName = t.album?.['#text'] || '';
+    try {
+      const info = await lfApi({ method: 'track.getInfo', artist, track: name });
+      dur = +(info.track?.duration || 0); cover = lfImage(info.track?.album?.image) || cover; albumName = info.track?.album?.title || albumName;
+    } catch (e) {}
+    lf.item = { id: 'lf:' + key, name, artists: [{ name: artist, id: 'name:' + artist }], album: { name: albumName, images: cover ? [{ url: cover }] : [] }, duration_ms: dur, external_urls: { lastfm: t.url } };
+  }
+  spUpdate({ item: lf.item, is_playing: true, progress_ms: performance.now() - lf.start + lf.offset }, 'lastfm');
+  return document.hidden ? 15000 : 5000;
+}
+async function lfLoop() {
+  clearTimeout(lf.timer);
+  if (!lf.user || !LASTFM_KEY) return;
+  let delay;
+  try { delay = await lfPoll(); } catch (e) { showSong(`<div class="meta"><div class="title">Last.fm</div><div class="note">${esc(e.message)}</div></div>`); delay = 30000; }
+  if (lf.user) lf.timer = setTimeout(lfLoop, delay);
+}
+function lfLogout() {
+  clearTimeout(lf.timer); lf.user = ''; lf.key = ''; lf.item = null; store.set('lf.user', '');
+  if (!fileTrack && !spotifyOn()) { sp.item = null; loadLyrics(null); setCover(''); spCorner(); songEl.hidden = true; }
+  spButton();
+}
+document.getElementById('btnLfConnect').onclick = () => {
+  if (lf.user) { lfLogout(); return; }
+  if (!LASTFM_KEY) { document.getElementById('lfNote').textContent = 'Last.fm aún no está configurado en esta página: falta su clave gratuita.'; return; }
+  const u = document.getElementById('lfUser').value.trim();
+  if (!u) { document.getElementById('lfUser').focus(); return; }
+  lf.user = u; store.set('lf.user', u); spButton(); lfLoop(); closePops();
+};
+document.getElementById('lfUser').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('btnLfConnect').click(); });
+
+// ================= Archivo: datos y letra perfecta =================
+// Se leen las etiquetas ID3 del MP3 (título, artista, álbum y portada); si no hay, el nombre
+// del archivo ("Artista - Título"). La posición sale del propio reproductor: sincronía exacta.
+let fileTrack = null;
+function id3Text(b, enc) {
+  if (enc === 0) return Array.from(b, c => String.fromCharCode(c)).join('').replace(/\0+$/, '');
+  if (enc === 3) return new TextDecoder('utf-8').decode(b).replace(/\0+$/, '');
+  return new TextDecoder(enc === 2 ? 'utf-16be' : (b[0] === 0xfe ? 'utf-16be' : 'utf-16le')).decode(b[0] === 0xff || b[0] === 0xfe ? b.subarray(2) : b).replace(/\0+$/, '');
+}
+async function readTags(file) {
+  const tags = {};
+  try {
+    const head = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+    if (head[0] === 0x49 && head[1] === 0x44 && head[2] === 0x33) {   // "ID3"
+      const ver = head[3], size = (head[6] << 21) | (head[7] << 14) | (head[8] << 7) | head[9];
+      const b = new Uint8Array(await file.slice(10, 10 + size).arrayBuffer());
+      let i = 0;
+      while (i + 10 < b.length) {
+        const id = String.fromCharCode(b[i], b[i + 1], b[i + 2], b[i + 3]);
+        if (!/^[A-Z0-9]{4}$/.test(id)) break;
+        const fs = ver === 4 ? (b[i + 4] << 21) | (b[i + 5] << 14) | (b[i + 6] << 7) | b[i + 7] : (b[i + 4] << 24) | (b[i + 5] << 16) | (b[i + 6] << 8) | b[i + 7];
+        const f = b.subarray(i + 10, i + 10 + fs);
+        if (id === 'TIT2') tags.title = id3Text(f.subarray(1), f[0]);
+        else if (id === 'TPE1') tags.artist = id3Text(f.subarray(1), f[0]).split('\0')[0];
+        else if (id === 'TALB') tags.album = id3Text(f.subarray(1), f[0]);
+        else if (id === 'APIC' && !tags.cover) {
+          const enc = f[0]; let j = 1;
+          while (f[j] !== 0) j++;
+          const mime = Array.from(f.subarray(1, j), c => String.fromCharCode(c)).join('') || 'image/jpeg';
+          j += 2;   // fin del tipo MIME y tipo de imagen
+          if (enc === 1 || enc === 2) { while (j + 1 < f.length && !(f[j] === 0 && f[j + 1] === 0)) j += 2; j += 2; } else { while (f[j] !== 0) j++; j++; }
+          tags.cover = URL.createObjectURL(new Blob([f.subarray(j)], { type: mime.includes('/') ? mime : 'image/' + mime.toLowerCase() }));
+        }
+        i += 10 + fs;
+      }
+    }
+  } catch (e) { console.warn('No se pudieron leer las etiquetas del archivo', e); }
+  if (!tags.title || !tags.artist) {   // "Artista - Título.mp3"
+    const base = file.name.replace(/\.[^.]+$/, ''), m = base.split(/\s+[-–—]\s+/);
+    if (m.length >= 2) { tags.artist = tags.artist || m[0].trim(); tags.title = tags.title || m.slice(1).join(' - ').trim(); }
+    else tags.title = tags.title || base;
+  }
+  return tags;
+}
+async function fileStart(file) {
+  const tags = await readTags(file);
+  // Se espera a conocer la duración: el servicio de letras la usa para elegir la versión correcta
+  if (audioEl && !(audioEl.duration > 0)) await new Promise(r => { audioEl.addEventListener('loadedmetadata', r, { once: true }); setTimeout(r, 4000); });
+  const artist = tags.artist || '';
+  fileTrack = { item: { id: 'file:' + file.name + file.size, name: tags.title, artists: artist ? [{ name: artist, id: 'name:' + artist }] : [{ name: 'Artista desconocido', id: '' }],
+    album: { name: tags.album || '', images: tags.cover ? [{ url: tags.cover }] : [] }, duration_ms: (audioEl && audioEl.duration > 0 ? audioEl.duration : 0) * 1000, external_urls: {} } };
+  spButton();
+  const push = () => {
+    if (!fileTrack || !audioEl) return;
+    fileTrack.item.duration_ms = (audioEl.duration || 0) * 1000;
+    sp.progress = audioEl.currentTime * 1000; sp.at = performance.now(); sp.playing = !audioEl.paused; sp.duration = fileTrack.item.duration_ms;
+  };
+  spUpdate({ item: fileTrack.item, is_playing: true, progress_ms: 0 }, 'file');
+  audioEl.addEventListener('loadedmetadata', push);
+  clearInterval(fileTrack.timer); fileTrack.timer = setInterval(push, 200);
+}
+function fileStop() {
+  if (!fileTrack) return;
+  clearInterval(fileTrack.timer); fileTrack = null;
+  if (audioEl) { audioEl.pause(); }
+  sp.item = null; loadLyrics(null); setCover(''); spCorner(); songEl.hidden = true;
+  spButton();
+  if (spotifyOn()) spLoop(); else if (lf.user) { lf.key = ''; lfLoop(); }
+}
+
 spButton();
-spHandleRedirect().then(() => { spButton(); spLoop(); });
+spHandleRedirect().then(() => { spButton(); spLoop(); lfLoop(); });
 
 // ================= Letra sincronizada (LRCLIB, gratis y abierto) =================
 const lyricsEl = document.getElementById('lyrics'), btnLyrics = document.getElementById('btnLyrics');
@@ -1535,15 +1686,17 @@ function parseLRC(text) {
 }
 async function fetchLyrics(item) {
   const artist = item.artists?.[0]?.name || '', title = item.name || '', dur = Math.round((item.duration_ms || 0) / 1000);
-  const q = new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur });
-  let r = await fetch('https://lrclib.net/api/get?' + q);
-  if (r.ok) return r.json();
+  let r;
+  if (dur) {   // coincidencia exacta solo si se conoce la duración
+    r = await fetch('https://lrclib.net/api/get?' + new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur }));
+    if (r.ok) return r.json();
+  }
   // Si no hay coincidencia exacta, se busca y se elige la de duración más parecida
   r = await fetch('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist }));
   if (!r.ok) return null;
   const list = (await r.json()).filter(x => x.syncedLyrics || x.plainLyrics);
   list.sort((a, b) => (!!b.syncedLyrics - !!a.syncedLyrics) || Math.abs(a.duration - dur) - Math.abs(b.duration - dur));
-  return list.find(x => Math.abs(x.duration - dur) <= 5) || null;
+  return (dur ? list.find(x => Math.abs(x.duration - dur) <= 5) : list[0]) || null;
 }
 async function loadLyrics(item) {
   lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null;
@@ -1563,8 +1716,8 @@ async function loadLyrics(item) {
   lyricIndex = -2;
 }
 function lyricsMessage() {
-  if (!spConnected()) return 'Conecta Spotify para ver aquí la letra de lo que escuchas';
-  if (!sp.item) return 'Pon algo en tu Spotify';
+  if (!spConnected()) return 'Conecta tu música para ver aquí la letra de lo que escuchas';
+  if (!sp.item) return 'Pon algo de música';
   if (!sp.item.artists) return 'Los podcasts no tienen letra';
   if (!lyrics || lyrics.loading) return 'Buscando la letra…';
   if (lyrics.error) return 'No se pudo conectar con el servicio de letras';
@@ -1638,7 +1791,7 @@ function lvTick() {
   const msg = lyricsMessage();
   if (lvMsg.dataset.msg !== msg) {
     lvMsg.dataset.msg = msg; lvMsg.textContent = msg;
-    if (msg && !spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar Spotify'; b.onclick = spLogin; lvMsg.appendChild(b); }
+    if (msg && !spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar música'; b.onclick = e => { e.stopPropagation(); openMusic(); }; lvMsg.appendChild(b); }
   }
   lvMsg.hidden = !msg; lvStage.hidden = !!msg;
   if (msg) { lvIndex = -2; lvCur.textContent = ''; return; }
@@ -1675,7 +1828,7 @@ setInterval(lyricsTick, 100);
 
 function lyricsButton() { btnLyrics.setAttribute('aria-pressed', lyricsOn && spConnected()); }
 btnLyrics.onclick = () => {
-  if (!spConnected()) { showSong('<div class="meta"><div class="title">Conecta Spotify</div><div class="note">La letra sigue la canción que suena en tu Spotify. Pulsa el botón Spotify para conectarlo.</div></div>'); return; }
+  if (!spConnected()) { openMusic(); return; }
   lyricsOn = !lyricsOn; store.set('lyrics', lyricsOn); lyricsButton();
   if (lyricsOn && !lyrics) loadLyrics(sp.item);
 };
@@ -1692,7 +1845,7 @@ function recNotes() {
   const n = [];
   if (!recSound) n.push('Consejo: en TikTok añade la canción desde su biblioteca de sonidos; suena perfecta y queda vinculada a la canción.');
   else if (!analyser) n.push('Sin audio conectado: el clip saldrá sin sonido. Conecta «Audio del PC» para grabarlo con la música.');
-  if (!spConnected()) n.push('Conecta Spotify para que el clip lleve la canción y la letra.');
+  if (!spConnected()) n.push('Conecta tu música (Spotify, Last.fm o un archivo) para que el clip lleve la canción y la letra.');
   recNote.textContent = n.join(' ');
 }
 btnRec.addEventListener('click', e => {
@@ -2076,7 +2229,7 @@ async function wikiArtist(name) {
         if (!sr.ok) continue;
         const d = await sr.json();
         if (d.type === 'disambiguation' || !d.extract || !MUSIC_WORDS.test(d.extract)) continue;
-        return { lang, extract: d.extract };
+        return { lang, extract: d.extract, thumb: d.originalimage?.source || d.thumbnail?.source || '' };
       }
     } catch (e) {}
   }
@@ -2163,10 +2316,10 @@ function arTick() {
   for (const el of [arPhoto, arEl.querySelector('.ar-info')]) el.hidden = !ok;
   arMsg.hidden = !!ok;
   if (!ok) {
-    const msg = !spConnected() ? 'Conecta Spotify para conocer al artista que escuchas' : !sp.item ? 'Pon algo en tu Spotify' : 'Los podcasts no tienen artista';
+    const msg = !spConnected() ? 'Conecta tu música para conocer al artista que escuchas' : !sp.item ? 'Pon algo de música' : 'Los podcasts no tienen artista';
     if (arMsg.dataset.msg !== msg) {
       arMsg.dataset.msg = msg; arMsg.textContent = msg;
-      if (!spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar Spotify'; b.onclick = spLogin; arMsg.appendChild(b); }
+      if (!spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar música'; b.onclick = e => { e.stopPropagation(); openMusic(); }; arMsg.appendChild(b); }
     }
     return;
   }
@@ -2704,7 +2857,7 @@ function drawCover(dt) {
   } else {
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = textFg(0.6); ctx.font = `600 ${Math.round(MIN * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
-    ctx.fillText(!spConnected() ? 'Conecta Spotify para ver la portada en 3D' : !sp.item ? 'Pon algo en tu Spotify' : 'Cargando la portada…', cx, cy);
+    ctx.fillText(!spConnected() ? 'Conecta tu música para ver la portada en 3D' : !sp.item ? 'Pon algo de música' : 'Cargando la portada…', cx, cy);
     ctx.restore();
   }
   // Título y artista bajo la portada
