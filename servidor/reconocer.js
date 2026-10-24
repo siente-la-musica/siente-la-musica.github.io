@@ -3,7 +3,7 @@
 //
 // Variables del Worker:
 //   AUDD_TOKEN   (secreta)  la clave de https://dashboard.audd.io
-//   ORIGEN       (opcional) la web que puede usarlo, p. ej. https://juanmanuelpinto2014-star.github.io
+//   ORIGEN       (opcional) la web que puede usarlo, p. ej. https://siente-la-musica.github.io
 
 const MAX_BYTES = 2 * 1024 * 1024;
 

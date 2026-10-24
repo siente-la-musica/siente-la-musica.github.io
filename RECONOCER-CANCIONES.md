@@ -19,7 +19,7 @@ Se usan dos servicios:
 3. Pulsa **Edit code**, borra lo que haya, pega el contenido de [`servidor/reconocer.js`](servidor/reconocer.js) y pulsa **Deploy**.
 4. En el Worker, ve a **Settings → Variables and Secrets** y añade:
    - `AUDD_TOKEN`, de tipo **Secret**, con tu clave de AudD.
-   - `ORIGEN`, de tipo **Text**, con `https://juanmanuelpinto2014-star.github.io`. Así solo tu página puede usarlo.
+   - `ORIGEN`, de tipo **Text**, con `https://siente-la-musica.github.io`. Así solo tu página puede usarlo.
 5. Copia la dirección del Worker. Tiene esta forma: `https://pulso-reconocer.TU-CUENTA.workers.dev`.
 
 ## 3. Conéctalo a la página
