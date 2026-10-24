@@ -390,8 +390,6 @@ function resize() {
     const kx = W / oldW, ky = H / oldH, km = Math.min(kx, ky);
     if (typeof lights !== 'undefined') for (const l of lights) { l.x *= kx; l.y *= ky; l.r *= km; l.vx *= kx; l.vy *= ky; }
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
-    if (typeof flowers !== 'undefined') for (const f of flowers) { f.x *= kx; f.y *= ky; f.R *= km; }
-    if (typeof fallen !== 'undefined') for (const q of fallen) { q.x *= kx; q.y *= ky; q.s *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
   }
 }
@@ -522,7 +520,6 @@ function setMode(m) {
   document.body.classList.toggle('mode-lyrics', m === 'lyrics');
   document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist');
   if (m === 'artist' && sp.item) arLoad(sp.item);
-  flowers.length = 0; fallen.length = 0;
   if (m === 'lyrics' && spConnected() && sp.item && !lyrics) loadLyrics(sp.item);
   refreshChrome();
   songEl.classList.remove('force');
@@ -683,9 +680,21 @@ function analyse(dt) {
   hits.bass = onset('bass', bass, dt); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
   if (hits.bass) { beat = Math.max(beat, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
   beat *= Math.pow(0.004, dt);
+  beatSoft += (beat - beatSoft) * (1 - Math.pow(beat > beatSoft ? 0.0005 : 0.08, dt));
+}
+// Muelle amortiguado: lleva cada valor hacia su objetivo con inercia, sin tirones ni temblores
+function springTo(x, v, target, dt, k = 140) {
+  const d = 2 * Math.sqrt(k) * 0.9;
+  for (let i = 0; i < x.length; i++) { v[i] += ((target[i] - x[i]) * k - v[i] * d) * dt; x[i] += v[i] * dt; }
+}
+// Suaviza un perfil entre vecinos para que no haya picos sueltos
+function smoothProfile(a, passes = 2) {
+  const n = a.length, t = new Float32Array(n);
+  for (let p = 0; p < passes; p++) { for (let i = 0; i < n; i++) t[i] = (a[Math.max(0, i - 1)] + a[i] * 2 + a[Math.min(n - 1, i + 1)]) / 4; a.set(t); }
+  return a;
 }
 const hits = { bass: 0, mid: 0, high: 0 };
-let beat = 0, lastBassHit = 0;
+let beat = 0, beatSoft = 0, lastBassHit = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
 function onset(name, value, dt) {
@@ -733,53 +742,65 @@ function specAt(x) {
 }
 
 // ================= Escena: Barras =================
-function drawBars() {
+// Un ecualizador sereno: barras redondeadas que crecen desde una línea con su reflejo
+// debajo; cada barra va con un muelle, así suben y bajan con suavidad y sin parpadeos.
+let barX = null, barV = null, barT = null;
+function drawBars(dt) {
   const night = state.theme === 'dark';
-  lctx.clearRect(0, 0, W, H);
-  const n = Math.max(24, Math.min(72, Math.round(W / DPR / 24)));
-  const slot = W * 0.86 / n, bw = slot * 0.5, x0 = W * 0.07 + (slot - bw) / 2;
-  const cy = H * 0.5, maxH = H * 0.36;
+  const n = Math.max(20, Math.min(48, Math.round(W / DPR / 34)));
+  if (!barX || barX.length !== n) { barX = new Float32Array(n); barV = new Float32Array(n); barT = new Float32Array(n); }
   for (let i = 0; i < n; i++) {
-    const t = (i + 0.5) / n, v = specAt(t);
-    const h = bw + Math.pow(v, 1.15) * maxH;
-    const x = x0 + i * slot, c = mix(t);
-    const g = lctx.createLinearGradient(0, cy - h, 0, cy + h);
-    g.addColorStop(0, rgba(c, 0));
-    g.addColorStop(0.3, rgba(c, night ? 0.85 : 0.9));
-    g.addColorStop(0.5, rgba(c, 1));
-    g.addColorStop(0.7, rgba(c, night ? 0.85 : 0.9));
-    g.addColorStop(1, rgba(c, 0));
+    // Graves a la izquierda y agudos a la derecha, en escala logarítmica
+    const f = i / (n - 1) * (BANDS - 1), a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
+    barT[i] = spec[a] * (1 - (f - a)) + spec[b] * (f - a);
+  }
+  smoothProfile(barT, 1);
+  springTo(barX, barV, barT, dt, 160);
+  lctx.clearRect(0, 0, W, H);
+  const slot = W * 0.8 / n, bw = slot * 0.56, x0 = W * 0.1 + (slot - bw) / 2;
+  const base = H * 0.62, maxH = H * 0.42;
+  for (let i = 0; i < n; i++) {
+    const v = Math.max(0, Math.min(1.1, barX[i]));
+    const h = bw + Math.pow(v, 1.1) * maxH, x = x0 + i * slot, c = mix(i / (n - 1));
+    const g = lctx.createLinearGradient(0, base - h, 0, base);
+    g.addColorStop(0, rgba(c, night ? 0.55 : 0.6)); g.addColorStop(1, rgba(c, 1));
     lctx.fillStyle = g;
-    lctx.beginPath(); lctx.roundRect(x, cy - h, bw, h * 2, bw / 2); lctx.fill();
+    lctx.beginPath(); lctx.roundRect(x, base - h, bw, h, [bw / 2, bw / 2, bw * 0.2, bw * 0.2]); lctx.fill();
+    // Reflejo que se desvanece
+    const rh = h * 0.45, gr = lctx.createLinearGradient(0, base + bw * 0.35, 0, base + bw * 0.35 + rh);
+    gr.addColorStop(0, rgba(c, night ? 0.28 : 0.22)); gr.addColorStop(1, rgba(c, 0));
+    lctx.fillStyle = gr;
+    lctx.beginPath(); lctx.roundRect(x, base + bw * 0.35, bw, rh, [bw * 0.2, bw * 0.2, bw / 2, bw / 2]); lctx.fill();
   }
   ambient();
-  bloom(layer, (night ? 0.9 : 0.55) + beat * 0.5);
-  ctx.globalAlpha = night ? 0.9 : 0.85; ctx.drawImage(layer, 0, 0); ctx.globalAlpha = 1;
+  bloom(layer, (night ? 0.7 : 0.4) + beatSoft * 0.35);
+  ctx.drawImage(layer, 0, 0);
 }
 
 // ================= Escena: Montañas =================
-const ridges = [0, 1, 2, 3].map(() => new Float32Array(120));
+const ridges = [0, 1, 2, 3].map(() => new Float32Array(120)), ridgeV = [0, 1, 2, 3].map(() => new Float32Array(120)), ridgeT = new Float32Array(120);
 function drawMountains(dt) {
   const night = state.theme === 'dark';
   lctx.clearRect(0, 0, W, H);
   const P = ridges[0].length;
   const cfg = [ // de atrás hacia delante
-    { hMax: 0.62, base: 0.28, alpha: 0.35, color: 0.85, lag: 0.12, shift: 0.07 },
-    { hMax: 0.50, base: 0.22, alpha: 0.5,  color: 0.6,  lag: 0.2,  shift: -0.05 },
-    { hMax: 0.40, base: 0.16, alpha: 0.7,  color: 0.35, lag: 0.35, shift: 0.03 },
-    { hMax: 0.30, base: 0.10, alpha: 0.95, color: 0.1,  lag: 0.6,  shift: 0 },
+    { hMax: 0.62, base: 0.28, alpha: 0.35, color: 0.85, k: 40,  shift: 0.07 },   // las del fondo, más perezosas
+    { hMax: 0.50, base: 0.22, alpha: 0.5,  color: 0.6,  k: 70,  shift: -0.05 },
+    { hMax: 0.40, base: 0.16, alpha: 0.7,  color: 0.35, k: 110, shift: 0.03 },
+    { hMax: 0.30, base: 0.10, alpha: 0.95, color: 0.1,  k: 160, shift: 0 },
   ];
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [];
+    for (let p = 0; p < P; p++) ridgeT[p] = specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1);
+    smoothProfile(ridgeT, 3);
+    springTo(r, ridgeV[li], ridgeT, dt, L.k);
     for (let p = 0; p < P; p++) {
       const x = p / (P - 1);
-      const target = specAt(((x + L.shift) % 1 + 1) % 1);
-      r[p] += (target - r[p]) * (1 - Math.pow(1 - Math.min(0.95, L.lag * 1.6), dt * 60));
       const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.02;
-      pts.push([x * W, H - H * (L.base + wob + Math.pow(r[p], 1.2) * (L.hMax - L.base) * (1 + beat * 0.12))]);
+      pts.push([x * W, H - H * (L.base + wob + Math.pow(Math.max(0, r[p]), 1.2) * (L.hMax - L.base))]);
     }
     const c = mix(L.color);
-    const top = Math.min(...pts.map(p => p[1]));
+    const top = H - H * L.hMax;   // degradado fijo: el brillo de la capa no vibra cuando cambian los picos
     const g = lctx.createLinearGradient(0, top, 0, H);
     g.addColorStop(0, rgba(c, L.alpha));
     g.addColorStop(0.55, rgba(c, L.alpha * 0.35));
@@ -801,14 +822,14 @@ function drawMountains(dt) {
     lctx.stroke();
   });
   ambient();
-  bloom(layer, (night ? 0.8 : 0.45) + beat * 0.4);
+  bloom(layer, (night ? 0.75 : 0.42) + beatSoft * 0.3);
   ctx.drawImage(layer, 0, 0);
 }
 
 // ================= Escena: Tinta (estilo "La llegada") =================
 const blobs = [];
 let inkFade = 0;
-function spawnBlob(size, strength) {
+function spawnBlob(size, strength, flower) {
   const big = size === 'big', medium = size === 'mid';
   const maxR = MIN * (big ? 0.12 + Math.random() * 0.13 : medium ? 0.06 + Math.random() * 0.08 : 0.02 + Math.random() * 0.04) * (0.7 + strength * 0.6);
   const m = maxR * 1.1;
@@ -821,19 +842,26 @@ function spawnBlob(size, strength) {
     x: m + Math.random() * (W - 2 * m), y: m + Math.random() * (H - 2 * m),
     maxR, age: 0, life: big ? 4 + Math.random() * 3 : medium ? 2.5 + Math.random() * 2 : 1.4 + Math.random() * 1.2,
     harm, tendrils, gap: Math.random() * 6.28, gapK: 1 + Math.floor(Math.random() * 3),
-    sprite: Math.floor(Math.random() * 3), strength
+    sprite: Math.floor(Math.random() * 3), strength,
+    // Flor: número de pétalos, giro y una segunda corona interior
+    flower: flower ? { k: 4 + Math.floor(Math.random() * 4), rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 0.25, inner: Math.random() < 0.6 } : null
   });
+  if (flower) { const b = blobs[blobs.length - 1]; b.tendrils.forEach((t, j) => { t.a = b.flower.rot + j * Math.PI * 2 / b.flower.k; t.curl *= 0.5; }); b.harm.forEach(h => h.a *= 0.4); }
   if (blobs.length > 60) blobs.shift();
 }
 
-function drawInk(dt) {
+function petalShape(fl, a) {   // |cos| elevado da pétalos redondeados; el 0.4 de base deja el centro lleno
+  return 0.4 + 0.6 * Math.pow(Math.abs(Math.cos(fl.k * (a - fl.rot) / 2)), 0.75);
+}
+function drawFlowers(dt) { drawInk(dt, true); }
+function drawInk(dt, flowerMode = false) {
   const night = state.theme === 'dark';
   // Detecta golpes y decide cuántos círculos aparecen
   const ob = hits.bass, om = hits.mid, oh = hits.high;
-  if (ob) spawnBlob('big', ob);
-  if (om) for (let k = 0; k < 1 + Math.floor(om * 2); k++) spawnBlob('mid', om);
-  if (oh) for (let k = 0; k < 1 + Math.floor(oh * 3); k++) spawnBlob('small', oh);
-  if (Math.random() < energy * dt * 3) spawnBlob(Math.random() < 0.7 ? 'small' : 'mid', energy);
+  if (ob) spawnBlob('big', ob, flowerMode);
+  if (om) for (let k = 0; k < 1 + Math.floor(om * 2); k++) spawnBlob('mid', om, flowerMode);
+  if (oh) for (let k = 0; k < 1 + Math.floor(oh * (flowerMode ? 2 : 3)); k++) spawnBlob('small', oh, flowerMode);
+  if (Math.random() < energy * dt * 3) spawnBlob(Math.random() < 0.7 ? 'small' : 'mid', energy, flowerMode);
 
   // La tinta se disipa poco a poco
   // (en pasos más grandes cada pocos fotogramas para que no queden restos grises)
@@ -855,15 +883,27 @@ function drawInk(dt) {
     const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5);
     const th = r * 0.14 + 3 * DPR;
     const spr = SPRITES[b.sprite];
-    const M = Math.max(28, Math.min(150, Math.round(r / DPR * 0.9)));
-    for (let i = 0; i < M; i++) {
-      const a = (i / M) * 6.283 + Math.random() * 0.05;
-      let n = 0; for (const h of b.harm) n += h.a * Math.sin(h.k * a + h.p + b.age * h.s);
-      const gapMask = 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(a * b.gapK + b.gap), 0.6);
-      const rr = r * (1 + n) + (Math.random() - 0.5) * th * 0.8;
-      const s = th * (0.7 + Math.random() * 0.9);
-      ictx.globalAlpha = fadeA * gapMask * (night ? 0.16 : 0.2);
-      ictx.drawImage(spr, b.x + Math.cos(a) * rr - s, b.y + Math.sin(a) * rr - s, s * 2, s * 2);
+    const fl = b.flower;
+    if (fl) fl.rot += fl.spin * dt;
+    const M = Math.max(28, Math.min(fl ? 220 : 150, Math.round(r / DPR * (fl ? 1.4 : 0.9))));
+    // Corona exterior y, en las flores, una interior más pequeña con los pétalos intercalados
+    for (const ring of fl && fl.inner ? [1, 0.55] : [1]) {
+      for (let i = 0; i < M * ring; i++) {
+        const a = (i / (M * ring)) * 6.283 + Math.random() * 0.05;
+        let n = 0; for (const h of b.harm) n += h.a * Math.sin(h.k * a + h.p + b.age * h.s);
+        const shape = fl ? (ring === 1 ? petalShape(fl, a) : petalShape({ k: fl.k, rot: fl.rot + Math.PI / fl.k }, a)) * ring : 1;
+        const gapMask = fl ? 1 : 0.35 + 0.65 * Math.pow(0.5 + 0.5 * Math.sin(a * b.gapK + b.gap), 0.6);
+        const tk = fl ? th * (0.55 + 0.45 * shape) : th;   // trazo más fino hacia el centro de la flor
+        const rr = r * shape * (1 + n) + (Math.random() - 0.5) * tk * 0.8;
+        const s = tk * (0.7 + Math.random() * 0.9);
+        ictx.globalAlpha = fadeA * gapMask * (night ? 0.16 : 0.2) * (ring === 1 ? 1 : 0.8);
+        ictx.drawImage(spr, b.x + Math.cos(a) * rr - s, b.y + Math.sin(a) * rr - s, s * 2, s * 2);
+      }
+    }
+    if (fl && p > 0.08) {   // corazón de la flor
+      const s = r * 0.12 * (1 + beatSoft * 0.3);
+      ictx.globalAlpha = fadeA * 0.25;
+      ictx.drawImage(SPRITES[(b.sprite + 1) % 3], b.x - s, b.y - s, s * 2, s * 2);
     }
     // Zarcillos que se escapan del anillo
     for (const t of b.tendrils) {
@@ -1672,6 +1712,7 @@ function arTick() {
   if (arFactIdx < 0 || now - arFactAt > 12000 || (now - arFactAt > 7000 && lastBassHit > arFactAt + 7000)) arShowNext();
 }
 const arWaves = [];
+let arRing = null, arRingV = null, arRingT = null;
 function drawArtistScene(dt) {
   const night = state.theme === 'dark';
   ambient();
@@ -1680,119 +1721,44 @@ function drawArtistScene(dt) {
   const cx = (rect.left + rect.width / 2) * k, cy = (rect.top + rect.height / 2) * k, R = rect.width / 2 * k;
   if (hits.bass) arWaves.push({ r: R, a: 0.5 + hits.bass * 0.5 });
   lctx.clearRect(0, 0, W, H);
-  lctx.lineCap = 'round';
-  // Anillo de frecuencias alrededor de la foto
-  const N = 120, gap = R * 0.08;
-  for (let i = 0; i < N; i++) {
-    const t = i / N, v = specAt(t), a = t * Math.PI * 2 - Math.PI / 2;
-    const r0 = R + gap, r1 = r0 + R * 0.04 + v * R * 0.45;
-    lctx.strokeStyle = rgba(mix(t < 0.5 ? t * 2 : 2 - t * 2), 0.55 + v * 0.45);
-    lctx.lineWidth = Math.max(DPR, (Math.PI * 2 * r0 / N) * 0.45);
-    lctx.beginPath(); lctx.moveTo(cx + Math.cos(a) * r0, cy + Math.sin(a) * r0); lctx.lineTo(cx + Math.cos(a) * r1, cy + Math.sin(a) * r1); lctx.stroke();
+  lctx.lineCap = 'round'; lctx.lineJoin = 'round';
+  // Aura fina: un contorno luminoso que ondula suave con la música, con dos ecos más tenues
+  const N = 160, gap = R * 0.07;
+  if (!arRing || arRing.length !== N) { arRing = new Float32Array(N); arRingV = new Float32Array(N); arRingT = new Float32Array(N); }
+  for (let i = 0; i < N; i++) arRingT[i] = specAt(i / N);
+  smoothProfile(arRingT, 4);
+  springTo(arRing, arRingV, arRingT, dt, 90);
+  const cg = lctx.createConicGradient(time * 0.15, cx, cy);
+  COLORS.concat(COLORS[0]).forEach((c, i, a) => cg.addColorStop(i / (a.length - 1), c));
+  lctx.strokeStyle = cg;
+  for (const [amp, wide, alpha] of [[1, 0.006, 0.95], [1.5, 0.018, 0.35], [2.2, 0.04, 0.14]]) {
+    lctx.globalAlpha = Math.min(1, alpha * (1 + beatSoft * 0.6));
+    lctx.lineWidth = Math.max(DPR, R * wide);
+    lctx.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const a = i / N * Math.PI * 2 - Math.PI / 2, v = Math.max(0, arRing[i % N]);
+      const rr = R + gap + R * 0.02 * amp + v * R * 0.16 * amp + Math.sin(a * 3 + time * 0.8) * R * 0.008 * amp;
+      i ? lctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : lctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    lctx.closePath(); lctx.stroke();
   }
+  lctx.globalAlpha = 1;
   // Ondas que salen de la foto con cada golpe
   for (let i = arWaves.length - 1; i >= 0; i--) {
     const w = arWaves[i]; w.r += dt * R * 1.6; w.a *= Math.pow(0.15, dt);
     if (w.a < 0.02) { arWaves.splice(i, 1); continue; }
-    lctx.strokeStyle = rgba(mix(0.5), w.a); lctx.lineWidth = Math.max(DPR, R * 0.02);
+    lctx.strokeStyle = rgba(mix(0.5), w.a * 0.6); lctx.lineWidth = Math.max(DPR, R * 0.006);
     lctx.beginPath(); lctx.arc(cx, cy, w.r + gap, 0, Math.PI * 2); lctx.stroke();
   }
-  glowSpot(cx, cy, R * (1.6 + beat * 0.25), mix(0.5), (night ? 0.25 : 0.18) + beat * 0.25);
-  bloom(layer, (night ? 0.8 : 0.45) + beat * 0.4);
+  glowSpot(cx, cy, R * (1.7 + beatSoft * 0.2), mix(0.5), (night ? 0.22 : 0.15) + beatSoft * 0.2);
+  bloom(layer, (night ? 0.9 : 0.5) + beatSoft * 0.35);
   ctx.drawImage(layer, 0, 0);
 }
 function arFrame() {
   if (state.mode !== 'artist' || arEl.hidden) return;
-  arPhoto.style.setProperty('--pulse', (1 + bass * 0.025 + beat * 0.035).toFixed(4));
+  arPhoto.style.setProperty('--pulse', (1 + bass * 0.015 + beatSoft * 0.03).toFixed(4));
 }
 setInterval(arTick, 150);
-
-// ================= Escena: Flores =================
-// Brotan con los golpes: graves → flores grandes, medios → medianas, agudos → pequeñas.
-// Se abren con un pequeño rebote, respiran con su banda y sueltan pétalos con los platillos.
-const flowers = [], fallen = [];
-const easeOutBack = t => 1 + 2.70158 * Math.pow(t - 1, 3) + 1.70158 * Math.pow(t - 1, 2);
-function spawnFlower(size, strength) {
-  const k = size === 'big' ? [0.06, 0.06] : size === 'mid' ? [0.032, 0.026] : [0.014, 0.012];
-  const R = MIN * (k[0] + Math.random() * k[1]) * (0.75 + strength * 0.5), m = R * 1.2;
-  const kind = Math.floor(Math.random() * 3);
-  const c1 = Math.floor(Math.random() * 3);
-  flowers.push({
-    x: m + Math.random() * (W - 2 * m), y: m + Math.random() * (H - 2 * m), R, kind,
-    n: kind === 1 ? 9 + Math.floor(Math.random() * 6) : 5 + Math.floor(Math.random() * 3),
-    rot: Math.random() * 6.28, spin: (Math.random() - 0.5) * 0.3, age: 0,
-    life: (size === 'big' ? 6 : size === 'mid' ? 4.5 : 3) + Math.random() * 2.5,
-    c1, c2: (c1 + 1 + Math.floor(Math.random() * 2)) % 3, band: size === 'big' ? 'bass' : size === 'mid' ? 'mid' : 'high', strength
-  });
-  if (flowers.length > 45) flowers.shift();
-}
-function petalPath(c, L, w) {
-  c.beginPath(); c.moveTo(0, 0);
-  c.bezierCurveTo(w, -L * 0.3, w * 0.85, -L * 0.85, 0, -L);
-  c.bezierCurveTo(-w * 0.85, -L * 0.85, -w, -L * 0.3, 0, 0);
-}
-function drawFlowers(dt) {
-  const night = state.theme === 'dark';
-  if (hits.bass) spawnFlower('big', hits.bass);
-  if (hits.mid) for (let i = 0; i < 1 + Math.floor(hits.mid * 2); i++) spawnFlower('mid', hits.mid);
-  if (hits.high) {
-    for (let i = 0; i < 1 + Math.floor(hits.high * 2); i++) spawnFlower('small', hits.high);
-    // Algunas flores sueltan pétalos que caen girando
-    const open = flowers.filter(f => f.age / f.life > 0.3);
-    for (let i = 0; i < 3 && open.length; i++) {
-      const f = open[Math.floor(Math.random() * open.length)];
-      fallen.push({ x: f.x, y: f.y, s: f.R * 0.45, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 3, vx: (Math.random() - 0.5) * 40 * DPR, vy: (20 + Math.random() * 40) * DPR, c: f.c1, a: 1 });
-    }
-    if (fallen.length > 140) fallen.splice(0, fallen.length - 140);
-  }
-  if (Math.random() < (0.25 + energy * 2.5) * dt) spawnFlower(Math.random() < 0.65 ? 'small' : 'mid', energy);
-
-  lctx.clearRect(0, 0, W, H);
-  const level = { bass, mid, high };
-  for (let i = flowers.length - 1; i >= 0; i--) {
-    const f = flowers[i];
-    f.age += dt; const p = f.age / f.life;
-    if (p >= 1) { flowers.splice(i, 1); continue; }
-    f.rot += f.spin * dt;
-    const open = p < 0.22 ? easeOutBack(p / 0.22) : 1;
-    const fade = p > 0.72 ? 1 - (p - 0.72) / 0.28 : 1;
-    const L = f.R * open * (1 + level[f.band] * 0.18 + beat * 0.08);
-    if (L <= 0) continue;
-    const C1 = RGB[f.c1], C2 = RGB[f.c2];
-    lctx.save(); lctx.translate(f.x, f.y); lctx.rotate(f.rot);
-    lctx.globalAlpha = fade * (night ? 0.92 : 0.88);
-    const g = lctx.createRadialGradient(0, 0, L * 0.05, 0, 0, L);
-    g.addColorStop(0, rgba(C2, 0.95)); g.addColorStop(0.55, rgba(C1, 0.85)); g.addColorStop(1, rgba(C1, night ? 0.3 : 0.55));
-    lctx.fillStyle = g;
-    const w = L * (f.kind === 1 ? 0.22 : 0.42);
-    for (let k = 0; k < f.n; k++) { lctx.rotate(Math.PI * 2 / f.n); petalPath(lctx, L, w); lctx.fill(); }
-    if (f.kind === 2) {   // segunda corona de pétalos, más pequeña y con los colores invertidos
-      const g2 = lctx.createRadialGradient(0, 0, 0, 0, 0, L * 0.62);
-      g2.addColorStop(0, rgba(C1, 0.95)); g2.addColorStop(1, rgba(C2, 0.7));
-      lctx.fillStyle = g2; lctx.rotate(Math.PI / f.n);
-      for (let k = 0; k < f.n; k++) { lctx.rotate(Math.PI * 2 / f.n); petalPath(lctx, L * 0.62, w * 0.8); lctx.fill(); }
-    }
-    // Centro con estambres
-    const cg = lctx.createRadialGradient(0, 0, 0, 0, 0, L * 0.2);
-    cg.addColorStop(0, `rgba(255,240,200,${0.95})`); cg.addColorStop(1, rgba(C2, 0.9));
-    lctx.fillStyle = cg; lctx.beginPath(); lctx.arc(0, 0, L * (0.16 + beat * 0.03), 0, Math.PI * 2); lctx.fill();
-    lctx.fillStyle = 'rgba(255,245,215,.9)';
-    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; lctx.beginPath(); lctx.arc(Math.cos(a) * L * 0.24, Math.sin(a) * L * 0.24, Math.max(DPR, L * 0.025), 0, Math.PI * 2); lctx.fill(); }
-    lctx.restore();
-  }
-  // Pétalos que caen
-  for (let i = fallen.length - 1; i >= 0; i--) {
-    const q = fallen[i];
-    q.x += (q.vx + Math.sin(time * 1.5 + i) * 25 * DPR) * dt; q.y += q.vy * dt; q.rot += q.vr * dt; q.a -= dt * 0.25;
-    if (q.a <= 0 || q.y > H + q.s) { fallen.splice(i, 1); continue; }
-    lctx.save(); lctx.translate(q.x, q.y); lctx.rotate(q.rot); lctx.globalAlpha = q.a * 0.85;
-    lctx.fillStyle = rgba(RGB[q.c], 0.9); petalPath(lctx, q.s, q.s * 0.45); lctx.fill(); lctx.restore();
-  }
-  lctx.globalAlpha = 1;
-  ambient();
-  bloom(layer, (night ? 0.55 : 0.3) + beat * 0.35);
-  ctx.drawImage(layer, 0, 0);
-}
 
 // ================= Escena: Nubes =================
 // Siempre las mismas nubes, desfilando de lado y reapareciendo por el otro, como un salvapantallas.
@@ -1811,37 +1777,49 @@ const CLOUDS = (() => {
   return list;
 })();
 let cloudSprites = null, cloudKey = '';
+// Cada nube es como una lámpara: esferas unidas con base redondeada, un núcleo de luz por
+// dentro, relieve en cada bulto y bordes suaves. Se dibuja una vez y se reutiliza.
 function buildCloud(cl) {
-  const cw = MIN * cl.size, ch = cw * 0.5;
-  const rnd = seeded(cl.seed), raw_ = [];
-  // Bolitas en coordenadas de la nube: más altas en el centro y con la base casi plana
-  for (let i = 0; i < 22; i++) {
-    const px = 0.1 + rnd() * 0.8, bump = Math.sin(Math.PI * px);
-    const r = ch * (0.14 + rnd() * 0.16) * (0.55 + 0.75 * bump);
-    raw_.push([px * cw, ch * 0.72 - rnd() * ch * 0.45 * bump, r]);
+  const cw = MIN * cl.size, rnd = seeded(cl.seed);
+  const sc = Math.min(1, 900 / cw), w = Math.ceil(cw * 1.1 * sc), h = Math.ceil(cw * 0.62 * sc);
+  const baseY = h * 0.8, spheres = [];
+  const count = 4 + Math.floor(rnd() * 3);
+  for (let i = 0; i < count; i++) {
+    const t = (i + 0.5) / count, bump = Math.sin(Math.PI * (0.15 + t * 0.7));
+    const r = h * (0.2 + 0.2 * bump) * (0.85 + rnd() * 0.3);
+    spheres.push([w * (0.12 + t * 0.76) + (rnd() - 0.5) * w * 0.04, baseY - r * (0.55 + 0.35 * bump), r]);
   }
-  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-  for (const [px, py, r] of raw_) { x0 = Math.min(x0, px - r); y0 = Math.min(y0, py - r); x1 = Math.max(x1, px + r); y1 = Math.max(y1, py + r); }
-  const sc = Math.min(1, 1024 / (x1 - x0));
-  const w = Math.ceil((x1 - x0) * sc) + 4, h = Math.ceil((y1 - y0) * sc) + 4;
-  const puffs = raw_.map(([px, py, r]) => [(px - x0) * sc + 2, (py - y0) * sc + 2, r * sc]);
-  const paint = (color, shade) => {
-    const c = document.createElement('canvas'); c.width = w; c.height = h;
-    const x = c.getContext('2d');
-    for (const [px, py, r] of puffs) {
-      const g = x.createRadialGradient(px, py, 0, px, py, r);
-      g.addColorStop(0, rgba(color, 1)); g.addColorStop(0.55, rgba(color, 0.9)); g.addColorStop(1, rgba(color, 0));
-      x.fillStyle = g; x.beginPath(); x.arc(px, py, r, 0, Math.PI * 2); x.fill();
-    }
-    if (shade) {   // la parte de abajo un poco más oscura, como una nube de verdad
-      x.globalCompositeOperation = 'source-atop';
-      const g = x.createLinearGradient(0, h * 0.3, 0, h);
-      g.addColorStop(0, 'rgba(120,130,160,0)'); g.addColorStop(1, 'rgba(120,130,160,.45)');
-      x.fillStyle = g; x.fillRect(0, 0, w, h);
-    }
-    return c;
+  const col = RGB[cl.c], lamp = col.map(c => c + (255 - c) * 0.35);
+  const shape = (x, fill) => {
+    x.fillStyle = fill; x.beginPath();
+    for (const [cx, cy, r] of spheres) { x.moveTo(cx + r, cy); x.arc(cx, cy, r, 0, Math.PI * 2); }
+    const bh = h * 0.2; x.roundRect(w * 0.1, baseY - bh, w * 0.8, bh, bh / 2);   // base plana y redondeada
+    x.fill();
   };
-  return { base: paint([255, 255, 255], true), glow: paint(RGB[cl.c], false), w: w / sc, h: h / sc };
+  const tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
+  const x = tmp.getContext('2d');
+  shape(x, rgba(lamp, 1));
+  x.globalCompositeOperation = 'source-atop';
+  // Núcleo de luz: más claro en el centro de la nube
+  const core = x.createRadialGradient(w / 2, baseY - h * 0.25, 0, w / 2, baseY - h * 0.25, w * 0.45);
+  core.addColorStop(0, 'rgba(255,255,255,.6)'); core.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = core; x.fillRect(0, 0, w, h);
+  // Relieve: cada bulto con su brillo arriba a la izquierda
+  for (const [cx, cy, r] of spheres) {
+    const hl = x.createRadialGradient(cx - r * 0.35, cy - r * 0.4, 0, cx - r * 0.35, cy - r * 0.4, r * 1.1);
+    hl.addColorStop(0, 'rgba(255,255,255,.4)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+    x.fillStyle = hl; x.fillRect(0, 0, w, h);
+  }
+  // Base algo más oscura, como el plástico de la lámpara
+  const sh = x.createLinearGradient(0, baseY - h * 0.35, 0, baseY);
+  sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, rgba(col.map(c => c * 0.55), 0.45));
+  x.fillStyle = sh; x.fillRect(0, 0, w, h);
+  // Bordes suaves
+  const out = document.createElement('canvas'); out.width = w; out.height = h;
+  const o = out.getContext('2d');
+  if (CAN_BLUR) o.filter = `blur(${Math.max(1, w / 260).toFixed(1)}px)`;
+  o.drawImage(tmp, 0, 0);
+  return { img: out, w: w / sc, h: h / sc };
 }
 function drawClouds(dt) {
   const night = state.theme === 'dark';
@@ -1849,34 +1827,40 @@ function drawClouds(dt) {
   if (cloudKey !== key) { cloudKey = key; cloudSprites = CLOUDS.map(buildCloud); }
   // Cielo: un leve tono de la paleta arriba
   const sky = ctx.createLinearGradient(0, 0, 0, H), c = mix(0.5);
-  sky.addColorStop(0, rgba(c, night ? 0.16 + energy * 0.1 : 0.2 + energy * 0.08)); sky.addColorStop(1, rgba(c, 0));
+  sky.addColorStop(0, rgba(c, night ? 0.12 + energy * 0.08 : 0.16 + energy * 0.06)); sky.addColorStop(1, rgba(c, 0));
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-  // Relámpagos: los golpes encienden una nube cercana; los agudos, una lejana
+  // Destellos: los golpes encienden una nube cercana; los agudos, una lejana
   const pick = layer => { const cs = CLOUDS.filter(x => x.layer === layer); return cs[Math.floor(Math.random() * cs.length)]; };
   if (hits.bass) { pick(2).flash = 1; if (hits.bass > 0.6) pick(1).flash = 0.8; }
   if (hits.mid) pick(1).flash = Math.max(0.6, hits.mid);
   if (hits.high) pick(0).flash = 0.7;
-  ctx.save();
+  lctx.clearRect(0, 0, W, H);
   for (let layer = 0; layer < 3; layer++) {
     CLOUDS.forEach((cl, i) => {
       if (cl.layer !== layer) return;
       const sp_ = cloudSprites[i];
       const v = avg(spec, cl.band[0], cl.band[1]);
-      cl.level += (v - cl.level) * (1 - Math.pow(v > cl.level ? 0.0001 : 0.02, dt));
-      cl.flash *= Math.pow(0.02, dt);
+      cl.level += (v - cl.level) * (1 - Math.pow(v > cl.level ? 0.0002 : 0.03, dt));
+      cl.flash *= Math.pow(0.03, dt);
       cl.phase += dt * cl.speed;
       const span = W + sp_.w * 2;
       const x = (((cl.u + cl.phase) % 1 + 1) % 1) * span - sp_.w;
       const y = cl.v * H + Math.sin(time * 0.3 + i) * MIN * 0.006 - sp_.h / 2;
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = night ? [0.16, 0.24, 0.32][layer] : [0.75, 0.88, 0.97][layer];
-      ctx.drawImage(sp_.base, x, y, sp_.w, sp_.h);
-      ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-      ctx.globalAlpha = Math.min(1, (night ? 0.08 + cl.level * 0.75 : 0.04 + cl.level * 0.5) + cl.flash * (night ? 0.8 : 0.55));
-      ctx.drawImage(sp_.glow, x, y, sp_.w, sp_.h);
+      const depth = [0.55, 0.8, 1][layer];
+      // La lámpara se enciende con su banda y destella con los golpes
+      lctx.globalCompositeOperation = 'source-over';
+      lctx.globalAlpha = Math.min(1, depth * (night ? 0.3 + cl.level * 0.7 + cl.flash * 0.35 : 0.55 + cl.level * 0.45));
+      lctx.drawImage(sp_.img, x, y, sp_.w, sp_.h);
+      if (night) {
+        lctx.globalCompositeOperation = 'lighter';
+        lctx.globalAlpha = Math.min(1, depth * (cl.level * 0.35 + cl.flash * 0.55));
+        lctx.drawImage(sp_.img, x, y, sp_.w, sp_.h);
+      }
     });
   }
-  ctx.restore();
+  lctx.globalCompositeOperation = 'source-over'; lctx.globalAlpha = 1;
+  bloom(layer, night ? 0.85 + beatSoft * 0.3 : 0.4);
+  ctx.drawImage(layer, 0, 0);
 }
 
 function drawLyricsScene(dt) {
