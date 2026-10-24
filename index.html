@@ -348,7 +348,8 @@
         <button data-mode="magnet">Partículas</button>
         <button data-mode="flowers">Flores</button>
         <button data-mode="bokeh">Focos</button>
-        <button data-mode="clouds">Nubes</button>
+        <button data-mode="clouds">Nebulosa</button>
+        <button data-mode="stars">Estrellas</button>
         <button data-mode="rain">Lluvia</button>
         <button data-mode="light">Luz</button>
         <button data-mode="aura">Aura</button>
@@ -368,6 +369,9 @@
       <div class="seg" role="group" aria-label="Formato"><button data-fmt="v" aria-pressed="true">Vertical · TikTok</button><button data-fmt="h">Horizontal</button></div>
       <div class="seg" role="group" aria-label="Sonido"><button data-snd="1" aria-pressed="true">Con el sonido del PC</button><button data-snd="0">Sin sonido</button></div>
       <div class="seg" role="group" aria-label="Duración"><button data-dur="15" aria-pressed="true">15 s</button><button data-dur="30">30 s</button><button data-dur="60">60 s</button><button data-dur="0">Libre</button></div>
+      <div class="row-set"><span>Estilo de la letra</span>
+        <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button></div>
+      </div>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
     </div>
@@ -426,7 +430,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -1074,13 +1078,13 @@ function drawMountains(dt) {
   ];
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [];
-    for (let p = 0; p < P; p++) ridgeT[p] = Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 0.8) * 1.15;   // exagera los picos
+    for (let p = 0; p < P; p++) ridgeT[p] = Math.max(0, Math.min(1.25, (Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 0.85) - 0.12) * 1.55));   // valles hondos, picos altos
     smoothProfile(ridgeT, 1);
     if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (2.5 + li * 1.5) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
     springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.45);
     for (let p = 0; p < P; p++) {
       const x = p / (P - 1);
-      const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.02;
+      const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.01;
       pts.push([x * W, H - H * (L.base + wob + Math.min(1.2, Math.max(0, r[p])) * (L.hMax - L.base))]);
     }
     const c = mix(L.color);
@@ -1854,6 +1858,9 @@ btnRec.addEventListener('click', e => {
 }, true);
 document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { recFmt = b.dataset.fmt; document.querySelectorAll('[data-fmt]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { recSound = b.dataset.snd === '1'; document.querySelectorAll('[data-snd]').forEach(x => x.setAttribute('aria-pressed', x === b)); recNotes(); });
+const markStyle = () => document.querySelectorAll('[data-lstyle]').forEach(x => x.setAttribute('aria-pressed', x.dataset.lstyle === state.lyricStyle));
+document.querySelectorAll('[data-lstyle]').forEach(b => b.onclick = () => { state.lyricStyle = b.dataset.lstyle; store.set('lyricStyle', state.lyricStyle); markStyle(); });
+markStyle();
 document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => { recDur = +b.dataset.dur; document.querySelectorAll('[data-dur]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 document.getElementById('btnRecStart').onclick = async () => {
   closePops();
@@ -1940,6 +1947,53 @@ function drawWordLines(words, lit, size, cx, cy, maxW, weight = 800) {
   return lines.length * lh;
 }
 function textFg(a = 1) { return state.theme === 'dark' ? `rgba(255,255,255,${a})` : `rgba(20,20,26,${a})`; }
+// Letra del clip en el estilo elegido
+function drawLyricStyled(ly, size, cx, cy, maxW) {
+  const st = state.lyricStyle, fam = '-apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif';
+  if (st === 'word') {   // una palabra enorme que salta al entrar
+    const k = ly.shown - 1, w = ly.words[k] || '', since = ly.pos - (ly.at[k] || ly.start);
+    const pop = 1 + 0.18 * Math.max(0, 1 - since / 220);
+    let fs = size * 2.4; ctx.font = `900 ${fs}px ${fam}`;
+    while (ctx.measureText(w).width > maxW && fs > size) { fs *= 0.9; ctx.font = `900 ${fs}px ${fam}`; }
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(pop, pop);
+    ctx.textAlign = 'center'; ctx.fillStyle = COLORS[k % 3]; ctx.fillText(w, 0, 0); ctx.restore();
+    ctx.textAlign = 'left';
+    return;
+  }
+  if (st === 'type') {   // máquina de escribir, letra a letra, con cursor
+    const prog = Math.max(0, Math.min(1, (ly.pos - ly.start) / Math.max(400, (ly.end - ly.start) * 0.8)));
+    const shown = ly.text.slice(0, Math.round(ly.text.length * prog));
+    ctx.font = `600 ${size * 0.9}px ui-monospace, "SF Mono", Menlo, Consolas, monospace`;
+    const lines = wrapWords(shown.split(' '), maxW), lh = size * 1.15;
+    lines.forEach((ln, i) => {
+      const t = ln.join(' ') + (i === lines.length - 1 && Math.floor(time * 2.2) % 2 === 0 ? '▌' : '');
+      ctx.fillStyle = textFg(); ctx.fillText(t, cx - maxW / 2, cy - (lines.length - 1) * lh / 2 + i * lh);
+    });
+    return;
+  }
+  if (st === 'neon') {   // contorno de neón; las palabras dichas se encienden
+    ctx.font = `800 ${size}px ${fam}`;
+    const lines = wrapWords(ly.words, maxW), lh = size * 1.15, space = ctx.measureText(' ').width;
+    let k = 0;
+    lines.forEach((ln, li) => {
+      const lw = ln.reduce((a, w, i) => a + ctx.measureText(w).width + (i ? space : 0), 0);
+      let x = cx - lw / 2; const y = cy - (lines.length - 1) * lh / 2 + li * lh;
+      for (const w of ln) {
+        const on = k < ly.shown, c = COLORS[k % 3];
+        ctx.save();
+        ctx.lineWidth = Math.max(1.5, size * 0.035); ctx.strokeStyle = c;
+        ctx.shadowColor = c; ctx.shadowBlur = on ? size * 0.45 : size * 0.1;
+        ctx.globalAlpha = on ? 1 : 0.45;
+        ctx.strokeText(w, x, y);
+        if (on) { ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.shadowBlur = size * 0.25; ctx.fillText(w, x, y); }
+        ctx.restore();
+        x += ctx.measureText(w).width + space; k++;
+      }
+    });
+    return;
+  }
+  drawWordLines(ly.words, ly.shown, size, cx, cy, maxW);   // karaoke
+}
 function drawRecOverlay() {
   if (!recording || state.mode === 'strobe') return;
   const u = MIN / 1080, vertical = H > W;
@@ -1964,7 +2018,7 @@ function drawRecOverlay() {
   ctx.textAlign = 'left';
   const ly = currentLyric();
   if (state.mode === 'lyrics' && it) {
-    if (ly) drawWordLines(ly.words, ly.shown, (vertical ? 92 : 104) * u, W / 2, H * 0.5, W * 0.84);
+    if (ly) drawLyricStyled(ly, (vertical ? 92 : 104) * u, W / 2, H * 0.5, W * 0.84);
     else drawWordLines([lyricsMessage() || '♪'], undefined, 56 * u, W / 2, H * 0.5, W * 0.84, 600);
   } else if (state.mode === 'artist' && it && arCenter) {
     const a = it.artists[0];
@@ -1987,7 +2041,7 @@ function drawRecOverlay() {
     }
   } else if (lyricsOn && ly) {
     // Subtítulos en el tercio inferior, por encima de la zona de texto de TikTok
-    drawWordLines(ly.words, ly.shown, (vertical ? 64 : 58) * u, W / 2, H * (vertical ? 0.68 : 0.82), W * 0.8);
+    drawLyricStyled(ly, (vertical ? 64 : 58) * u, W / 2, H * (vertical ? 0.66 : 0.8), W * 0.8);
   }
   // Firma discreta
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
@@ -2003,7 +2057,7 @@ function autoDirector(dt) {
   if (!state.auto || recording) return;
   autoT += dt;
   if (!(dropHit || (autoT > 40 && hits.bass > 0.5))) return;
-  const pool = ['bars', 'mountains', 'ink', 'fluid', 'magnet', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
+  const pool = ['bars', 'mountains', 'ink', 'fluid', 'magnet', 'stars', 'flowers', 'bokeh', 'clouds', 'rain', 'light', 'aura', 'infinity'];
   if (!state.noFlash) pool.push('strobe');
   if (spConnected() && sp.item) pool.push('lyrics', 'artist', 'cover');
   const options = pool.filter(m => m !== state.mode);
@@ -2529,13 +2583,20 @@ function glBlit(target, w, h) { const gl = GLX.gl; gl.bindFramebuffer(gl.FRAMEBU
 // Un cielo de nubes hecho con ruido fractal deformado (domain warping): suaves, con volumen y
 // cambiando de forma sin parar. Tres luces de colores pasean por dentro siguiendo graves,
 // medios y agudos; los golpes encienden relámpagos y el ratón es una linterna.
-const sky = { prog: null, flashes: [], pointer: [0.5, 0.5], pointerLv: 0, pointerAt: 0, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3), t: 0 };
+const sky = { prog: null, flashes: [], pointer: [0.5, 0.5], pointerLv: 0, pointerAt: 0, swirl: 0, last: null, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3), t: 0 };
 addEventListener('pointermove', e => {
   if (state.mode !== 'clouds') return;
-  sky.pointer = [e.clientX / innerWidth, 1 - e.clientY / innerHeight]; sky.pointerAt = performance.now();
+  const p = [e.clientX / innerWidth, 1 - e.clientY / innerHeight];
+  if (sky.last) sky.swirl = Math.min(3, sky.swirl + Math.hypot(p[0] - sky.last[0], p[1] - sky.last[1]) * 18);   // moverse rápido revuelve más
+  sky.last = p; sky.pointer = p; sky.pointerAt = performance.now();
+});
+addEventListener('pointerdown', e => {
+  if (state.mode !== 'clouds' || e.target.closest('.dock, .pop, .song')) return;
+  sky.flashes.push({ x: e.clientX / innerWidth, y: 1 - e.clientY / innerHeight, k: state.noFlash ? 0.4 : 0.9, c: Math.floor(Math.random() * 3) });
+  if (sky.flashes.length > 3) sky.flashes.shift();
 });
 function skySetup() {
-  sky.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uScroll;
+  sky.prog = glProgram(`uniform vec2 uRes, uPtr; uniform float uTime, uNight, uScroll, uSwirl;
     uniform vec3 uC0, uC1, uC2;
     uniform vec4 uL[7];   // x, y, intensidad, color (0-2; 3 = blanco)
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -2543,6 +2604,9 @@ function skySetup() {
       return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
     float fbm(vec2 p) { float v = 0., a = .5; mat2 m = mat2(1.6, 1.2, -1.2, 1.6); for (int i = 0; i < 6; i++) { v += a * n(p); p = m * p; a *= .5; } return v; }
     float dens(vec2 p) {
+      // Remolino alrededor del ratón
+      vec2 d0 = p - uPtr; float f = uSwirl * exp(-dot(d0, d0) * 2.5);
+      p = uPtr + mat2(cos(f), -sin(f), sin(f), cos(f)) * d0;
       vec2 q = vec2(fbm(p + vec2(0., uTime * .03)), fbm(p + vec2(5.2, 1.3) - uTime * .025));
       float d = fbm(p + 1.7 * q + vec2(uScroll, 0.));
       return smoothstep(.36, .78, d);
@@ -2598,6 +2662,8 @@ function drawSkyClouds(dt) {
   const p = sky.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, sky.t); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uScroll, -sky.t * 0.035);
+  sky.swirl *= Math.pow(0.35, dt);
+  gl.uniform2f(p.u.uPtr, sky.pointer[0] * cw / ch * 2.2, sky.pointer[1] * 2.2); gl.uniform1f(p.u.uSwirl, sky.swirl + (hits.bass || 0) * 0.3);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform4fv(p.u['uL[0]'], new Float32Array(L));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
@@ -2944,9 +3010,65 @@ function drawMagnet(dt) {
   ctx.drawImage(mag.trail, 0, 0);
 }
 
+// ================= Escena: Estrellas =================
+// Un cielo de estrellas separadas, a distintas profundidades. Cada estrella escucha una
+// frecuencia y brilla con ella; los golpes lanzan estrellas fugaces y el ratón hace brillar
+// las que tiene cerca. El cielo avanza despacio, como si viajaras.
+const starSky = { list: null, key: '', shooting: [], ptr: null };
+addEventListener('pointermove', e => { if (state.mode === 'stars') starSky.ptr = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, at: performance.now() }; });
+function starsInit() {
+  const n = Math.round(Math.min(1400, 700 * (W * H) / (1920 * 1080 * DPR * DPR) + 300));
+  starSky.list = Array.from({ length: n }, () => {
+    const z = Math.pow(Math.random(), 1.8);   // muchas lejanas, pocas cercanas
+    return { x: Math.random(), y: Math.random(), z, band: Math.floor(Math.random() * BANDS), ph: Math.random() * 6.28, tw: 0.5 + Math.random() * 2,
+      base: 0.15 + Math.random() * 0.35, c: Math.random() < 0.65 ? -1 : Math.floor(Math.random() * 3) };
+  });
+  starSky.key = W + 'x' + H;
+}
+function drawStars(dt) {
+  const night = state.theme === 'dark';
+  if (!starSky.list || starSky.key !== W + 'x' + H) starsInit();
+  if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  ambient();
+  const speed = 0.004 + energy * 0.02;
+  const p = starSky.ptr && performance.now() - starSky.ptr.at < 2500 ? starSky.ptr : null;
+  ctx.save(); ctx.globalCompositeOperation = 'lighter';
+  for (const s_ of starSky.list) {
+    s_.x -= speed * (0.2 + s_.z) * dt; if (s_.x < -0.02) { s_.x = 1.02; s_.y = Math.random(); }
+    const x = s_.x * W, y = s_.y * H;
+    const lv = Math.pow(spec[s_.band], 1.4);
+    let near = 0;
+    if (p) { const dx = s_.x - p.x, dy = (s_.y - p.y) * H / W; near = Math.exp(-(dx * dx + dy * dy) * 160); }
+    const tw = 0.6 + 0.4 * Math.sin(time * s_.tw + s_.ph);
+    const b = Math.min(1.4, s_.base * tw + lv * (0.6 + s_.z * 1.4) + near * 0.9 + beatSoft * 0.15 * s_.z);
+    const col = s_.c < 0 ? [235, 238, 255] : RGB[s_.c];
+    const r = DPR * (0.5 + s_.z * 1.6) * (1 + lv * 1.2 + near);
+    ctx.globalAlpha = Math.min(1, b);
+    ctx.fillStyle = rgba(col, 1); ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+    if (b > 0.55) {   // las que brillan fuerte, con halo
+      const hr = r * (4 + b * 6);
+      ctx.globalAlpha = Math.min(0.9, (b - 0.55) * 0.9);
+      ctx.drawImage(SPRITES[s_.c < 0 ? 1 : s_.c], x - hr, y - hr, hr * 2, hr * 2);
+    }
+  }
+  // Estrellas fugaces con los golpes
+  if (hits.bass && Math.random() < 0.7) starSky.shooting.push({ x: Math.random() * W * 0.8 + W * 0.2, y: Math.random() * H * 0.4, vx: -(0.6 + Math.random() * 0.5) * MIN, vy: (0.25 + Math.random() * 0.25) * MIN, life: 0.9, t: 0, c: Math.floor(Math.random() * 3) });
+  for (let i = starSky.shooting.length - 1; i >= 0; i--) {
+    const sh = starSky.shooting[i]; sh.t += dt;
+    if (sh.t > sh.life) { starSky.shooting.splice(i, 1); continue; }
+    const x = sh.x + sh.vx * sh.t, y = sh.y + sh.vy * sh.t, a = 1 - sh.t / sh.life;
+    const g = ctx.createLinearGradient(x, y, x - sh.vx * 0.18, y - sh.vy * 0.18);
+    g.addColorStop(0, rgba(RGB[sh.c].map(v => v + (255 - v) * 0.6), a)); g.addColorStop(1, rgba(RGB[sh.c], 0));
+    ctx.globalAlpha = 1; ctx.strokeStyle = g; ctx.lineWidth = DPR * 2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - sh.vx * 0.18, y - sh.vy * 0.18); ctx.stroke();
+  }
+  ctx.restore();
+}
+
 // ================= Escena: Luz =================
 // Una luz suave en el centro, en tres capas: el halo sigue a los graves, la luz media a los
 // medios y el núcleo a los agudos. No se mueve de sitio: crece, se encoge y respira.
+const lightRings = [];
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
 function drawLight(dt) {
   const night = state.theme === 'dark';
@@ -2965,11 +3087,20 @@ function drawLight(dt) {
     // Núcleo discreto: solo brilla de verdad con los agudos
     glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), mix(drift).map(x => x + (255 - x) * 0.6), 0.15 + Lh * 0.6);
   } else {
-    // De día: color saturado sobre blanco, con suficiente presencia
-    const sat = c => { const [h, s_, l] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(70, s_), 55)); };
-    glowSpot(W / 2, H / 2, MIN * (0.3 + Lb * 1.0 + beat * 0.2), sat(mix(drift)), 0.3 + Lb * 0.5);
-    glowSpot(W / 2, H / 2, MIN * (0.14 + Lm * 0.45), sat(mix(1 - drift)), 0.35 + Lm * 0.5);
-    glowSpot(W / 2, H / 2, MIN * (0.04 + Lh * 0.1), sat(mix(drift)), 0.4 + Lh * 0.5);
+    // De día: color saturado sobre blanco; tamaño y fuerza cambian mucho con la música
+    const sat = c => { const [h, s_, l] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(75, s_), 52)); };
+    glowSpot(W / 2, H / 2, MIN * (0.18 + Lb * 1.25 + beat * 0.25), sat(mix(drift)), 0.15 + Lb * 0.75);
+    glowSpot(W / 2, H / 2, MIN * (0.08 + Lm * 0.55), sat(mix(1 - drift)), 0.2 + Lm * 0.7);
+    glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), sat(mix(drift)), 0.25 + Lh * 0.7);
+  }
+  // Ondas de luz que salen del centro con cada golpe
+  if (hits.bass) lightRings.push({ r: MIN * 0.05, a: 0.5 + hits.bass * 0.5, c: Math.floor(Math.random() * 3) });
+  ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (let i = lightRings.length - 1; i >= 0; i--) {
+    const w = lightRings[i]; w.r += dt * MIN * (0.45 + energy * 0.5); w.a *= Math.pow(0.3, dt);
+    if (w.a < 0.02 || w.r > Math.max(W, H)) { lightRings.splice(i, 1); continue; }
+    ctx.strokeStyle = rgba(RGB[w.c], w.a * (night ? 0.5 : 0.65)); ctx.lineWidth = MIN * 0.006 * (1 + w.a);
+    ctx.beginPath(); ctx.arc(W / 2, H / 2, w.r, 0, Math.PI * 2); ctx.stroke();
   }
   ctx.restore();
 }
@@ -3107,7 +3238,7 @@ function currentLyric() {
   if (i < 0 || !Ls[i].text) return null;
   const words = Ls[i].text.split(/\s+/).filter(Boolean);
   const at = wordTimes(Ls[i].text, Ls[i].t, Ls[i + 1] ? Ls[i + 1].t : Ls[i].t + 4000);
-  return { text: Ls[i].text, words, shown: Math.max(1, at.filter(t => pos >= t).length) };
+  return { text: Ls[i].text, words, at, pos, start: Ls[i].t, end: Ls[i + 1] ? Ls[i + 1].t : Ls[i].t + 4000, shown: Math.max(1, at.filter(t => pos >= t).length) };
 }
 function strobeColors() {
   const night = state.theme === 'dark';
@@ -3167,7 +3298,7 @@ function drawLyricsScene(dt) {
   for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
-const scenes = { magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
