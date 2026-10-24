@@ -109,6 +109,10 @@
   .song .note { white-space: normal; }
   .song a { color: inherit; font-size: 13px; font-weight: 600; }
   .song .close { padding: 4px 8px; font-size: 16px; line-height: 1; align-self: flex-start; }
+  .song .row { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .song .row button { font-size: 12px; padding: 4px 8px; }
+  .song .time { font-variant-numeric: tabular-nums; }
+  .swatch.cover-swatch { background-size: cover; background-position: center; }
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
   .song .bar i { display: block; height: 100%; width: 0; background: var(--fg); transition: width .2s linear; }
 
@@ -134,6 +138,7 @@
     <button id="btnSystem">Audio del PC</button>
     <button id="btnMic">Micrófono</button>
     <button id="btnFile" type="button">Archivo</button>
+    <button id="btnSpotify" type="button">Spotify</button>
     <input id="file" type="file" accept="audio/*" hidden>
   </div>
   <span class="sep"></span>
@@ -162,6 +167,10 @@
 // Dirección del servicio que reconoce canciones (ver RECONOCER-CANCIONES.md).
 // Mientras esté vacía, el botón "¿Qué suena?" explica que falta configurarlo.
 const RECOGNIZE_URL = '';
+
+// App de Spotify (el ID de cliente es público; no hay ningún secreto en la página).
+const SPOTIFY_CLIENT_ID = '6b262489f16543999aec94cfc8cb37db';
+const SPOTIFY_REDIRECT = 'https://siente-la-musica.github.io/';
 
 // ================= Ajustes guardados =================
 const store = {
@@ -241,9 +250,16 @@ function paletteColors() {
     const L = night ? Math.max(l, 58) : Math.min(l, 50);
     return [hsl(h - 28, s, L), hsl(h, s, L), hsl(h + 28, s, L)];
   }
+  if (state.palette === 'cover' && coverColors) {
+    return coverColors.map(hex => {
+      const [h, s, l] = hexToHsl(hex);
+      return hsl(h, Math.max(s, 55), night ? Math.min(74, Math.max(l, 58)) : Math.min(52, Math.max(l, 36)));
+    });
+  }
   const p = PALETTES.find(p => p.id === state.palette) || PALETTES[0];
   return night ? p.night : p.day;
 }
+let coverColors = null, coverUrl = '';
 let COLORS = [], RGB = [], SPRITES = [], BOKEH = [];
 function makeSprite(hex) {
   const s = document.createElement('canvas'); s.width = s.height = 256;
@@ -280,6 +296,14 @@ function buildSwatches() {
     b.className = 'swatch'; b.dataset.palette = p.id; b.setAttribute('aria-label', 'Color ' + p.id);
     b.style.background = `linear-gradient(135deg, ${c[0]}, ${c[1]} 55%, ${c[2]})`;
     b.onclick = () => { state.palette = p.id; store.set('palette', p.id); applyAll(); };
+    swatchBox.appendChild(b);
+  }
+  if (coverUrl) {
+    const b = document.createElement('button');
+    b.className = 'swatch cover-swatch'; b.dataset.palette = 'cover';
+    b.setAttribute('aria-label', 'Colores de la portada'); b.title = 'Colores de la portada';
+    b.style.backgroundImage = `url("${coverUrl}")`;
+    b.onclick = () => { state.palette = 'cover'; store.set('palette', 'cover'); applyAll(); };
     swatchBox.appendChild(b);
   }
   const wrap = document.createElement('label');
@@ -671,8 +695,9 @@ function esc(t) { const d = document.createElement('div'); d.textContent = t ?? 
 
 document.getElementById('btnId').onclick = async () => {
   if (identifying) return;
+  if (spConnected()) { sp.dismissed = false; spRender(); spLoop(); return; }
+  if (!RECOGNIZE_URL) { showSong('<div class="meta"><div class="title">Conecta Spotify</div><div class="note">Pulsa el botón Spotify para ver aquí la canción que estás escuchando.</div></div>'); return; }
   if (!analyser || !recDest) { showSong('<div class="meta"><div class="title">Conecta primero el audio</div><div class="note">Pulsa Audio del PC, Micrófono o Archivo y vuelve a intentarlo.</div></div>'); return; }
-  if (!RECOGNIZE_URL) { showSong('<div class="meta"><div class="title">Reconocimiento sin configurar</div><div class="note">Falta conectar el servicio que identifica canciones.</div></div>'); return; }
   if (!window.MediaRecorder) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar audio</div></div>'); return; }
 
   identifying = true;
@@ -710,6 +735,172 @@ document.getElementById('btnId').onclick = async () => {
     showSong(`<div class="meta"><div class="title">No se pudo identificar</div><div class="note">${esc(e.message)}</div></div>`);
   } finally { identifying = false; }
 };
+
+// ================= Spotify: lo que está sonando =================
+// Inicio de sesión con PKCE (sin servidor). Solo se pide permiso para leer qué suena.
+const sp = {
+  token: store.get('sp.token', null), refresh: store.get('sp.refresh', null), expires: store.get('sp.expires', 0),
+  item: null, playing: false, progress: 0, duration: 0, at: 0, dismissed: false, timer: null
+};
+const btnSpotify = document.getElementById('btnSpotify');
+const spConnected = () => !!sp.refresh;
+function spSave() { store.set('sp.token', sp.token); store.set('sp.refresh', sp.refresh); store.set('sp.expires', sp.expires); }
+function spButton() {
+  btnSpotify.setAttribute('aria-pressed', spConnected());
+  btnSpotify.textContent = spConnected() ? 'Spotify ✓' : 'Spotify';
+}
+const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+
+async function spLogin() {
+  const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+  const challenge = b64url(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier))));
+  const st = b64url(crypto.getRandomValues(new Uint8Array(12)));
+  store.set('sp.verifier', verifier); store.set('sp.state', st);
+  location.href = 'https://accounts.spotify.com/authorize?' + new URLSearchParams({
+    response_type: 'code', client_id: SPOTIFY_CLIENT_ID, redirect_uri: SPOTIFY_REDIRECT,
+    scope: 'user-read-currently-playing user-read-playback-state',
+    code_challenge_method: 'S256', code_challenge: challenge, state: st
+  });
+}
+function spLogout(message) {
+  clearTimeout(sp.timer);
+  Object.assign(sp, { token: null, refresh: null, expires: 0, item: null });
+  spSave(); spButton(); setCover('');
+  if (message) showSong(message); else songEl.hidden = true;
+}
+async function spToken(params) {
+  const r = await fetch('https://accounts.spotify.com/api/token', {
+    method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: SPOTIFY_CLIENT_ID, ...params })
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(d.error_description || d.error || 'Spotify no respondió'); e.code = d.error; throw e; }
+  sp.token = d.access_token; sp.expires = Date.now() + (d.expires_in - 60) * 1000;
+  if (d.refresh_token) sp.refresh = d.refresh_token;
+  spSave();
+}
+async function spHandleRedirect() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has('code') && !q.has('error')) return;
+  history.replaceState(null, '', location.pathname);
+  if (q.has('error')) { showSong('<div class="meta"><div class="title">No se conectó Spotify</div><div class="note">Cancelaste el permiso o Spotify no lo permitió.</div></div>'); return; }
+  if (q.get('state') !== store.get('sp.state', '')) { showSong('<div class="meta"><div class="title">No se conectó Spotify</div><div class="note">El inicio de sesión caducó. Pulsa Spotify otra vez.</div></div>'); return; }
+  try {
+    await spToken({ grant_type: 'authorization_code', code: q.get('code'), redirect_uri: SPOTIFY_REDIRECT, code_verifier: store.get('sp.verifier', '') });
+  } catch (e) { showSong(`<div class="meta"><div class="title">No se conectó Spotify</div><div class="note">${esc(e.message)}</div></div>`); }
+}
+
+async function spPoll() {
+  if (Date.now() > sp.expires) {
+    try { await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); }
+    catch (e) {
+      if (e.code === 'invalid_grant') { spLogout('<div class="meta"><div class="title">Spotify se desconectó</div><div class="note">Pulsa Spotify para volver a conectar.</div></div>'); return null; }
+      return 20000;
+    }
+  }
+  const r = await fetch('https://api.spotify.com/v1/me/player/currently-playing?additional_types=episode', { headers: { Authorization: 'Bearer ' + sp.token } });
+  if (r.status === 204) { spUpdate(null); return document.hidden ? 20000 : 8000; }
+  if (r.status === 401) { sp.expires = 0; return 500; }
+  if (r.status === 403) {
+    spLogout('<div class="meta"><div class="title">Tu cuenta no tiene acceso</div><div class="note">Pide a quien creó la página que añada tu correo de Spotify a la lista de usuarios.</div></div>');
+    return null;
+  }
+  if (r.status === 429) return (Number(r.headers.get('Retry-After')) || 30) * 1000;
+  if (!r.ok) return 15000;
+  const d = await r.json();
+  spUpdate(d);
+  if (document.hidden) return 15000;
+  // Si suena, se vuelve a preguntar justo al terminar la canción (o cada 5 s como mucho)
+  return sp.playing && sp.duration ? Math.max(1000, Math.min(5000, sp.duration - sp.progress + 800)) : 8000;
+}
+async function spLoop() {
+  clearTimeout(sp.timer);
+  if (!spConnected()) return;
+  let delay;
+  try { delay = await spPoll(); } catch (e) { delay = 15000; }
+  if (delay != null && spConnected()) sp.timer = setTimeout(spLoop, delay);
+}
+
+function spUpdate(d) {
+  const item = d && d.item;
+  const changed = (item && item.id) !== (sp.item && sp.item.id);
+  sp.item = item || null;
+  sp.playing = !!(d && d.is_playing);
+  sp.progress = (d && d.progress_ms) || 0;
+  sp.duration = (item && item.duration_ms) || 0;
+  sp.at = performance.now();
+  if (changed) {
+    sp.dismissed = false;
+    setCover(item ? (item.album?.images?.[0]?.url || item.images?.[0]?.url || '') : '');
+  }
+  spRender();
+}
+const fmt = ms => { const t = Math.max(0, Math.floor(ms / 1000)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+function spRender() {
+  if (!spConnected() || sp.dismissed) return;
+  if (!sp.item) {
+    showSong('<div class="meta"><div class="title">Spotify conectado</div><div class="note">Ahora mismo no suena nada en tu Spotify.</div><div class="row"><button id="spOut">Desconectar</button></div></div>');
+  } else {
+    const it = sp.item;
+    const artist = it.artists ? it.artists.map(a => a.name).join(', ') : (it.show?.name || '');
+    const cover = it.album?.images?.[1]?.url || it.album?.images?.[0]?.url || it.images?.[0]?.url || '';
+    const link = it.external_urls?.spotify || '';
+    showSong(
+      (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
+      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="artist">${esc(artist)}${sp.playing ? '' : ' · en pausa'}</div>` +
+      `<div class="bar"><i id="spBar"></i></div>` +
+      `<div class="row"><span class="time" id="spTime"></span>${link ? `<a href="${esc(link)}" target="_blank" rel="noopener">Abrir en Spotify</a>` : ''}<button id="spOut">Desconectar</button></div></div>`
+    );
+  }
+  songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
+  const out = document.getElementById('spOut');
+  if (out) out.onclick = () => spLogout();
+  spTick();
+}
+function spTick() {   // avanza la barra entre consultas, sin preguntar a Spotify
+  const bar = document.getElementById('spBar'), tm = document.getElementById('spTime');
+  if (!bar || !sp.duration) return;
+  const pos = Math.min(sp.duration, sp.progress + (sp.playing ? performance.now() - sp.at : 0));
+  bar.style.width = (pos / sp.duration * 100).toFixed(2) + '%';
+  if (tm) tm.textContent = fmt(pos) + ' / ' + fmt(sp.duration);
+}
+setInterval(spTick, 500);
+
+// Colores de la portada: los tonos más vivos y abundantes del disco
+function setCover(url) {
+  coverUrl = url; coverColors = null;
+  if (!url) { if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try {
+      const c = document.createElement('canvas'); c.width = c.height = 40;
+      const x = c.getContext('2d'); x.drawImage(img, 0, 0, 40, 40);
+      const data = x.getImageData(0, 0, 40, 40).data, bins = [];
+      for (let i = 0; i < data.length; i += 4) {
+        const hex = rgbToHex(data[i], data[i + 1], data[i + 2]), [h, s, l] = hexToHsl(hex);
+        if (s < 22 || l < 12 || l > 92) continue;
+        const k = Math.floor(h / 30) % 12, b = bins[k] || (bins[k] = { w: 0, r: 0, g: 0, b: 0 }), w = s / 100;
+        b.w += w; b.r += data[i] * w; b.g += data[i + 1] * w; b.b += data[i + 2] * w;
+      }
+      const top = bins.filter(Boolean).sort((a, b) => b.w - a.w).slice(0, 3).map(b => rgbToHex(b.r / b.w, b.g / b.w, b.b / b.w));
+      if (top.length) {
+        while (top.length < 3) { const [h, s, l] = hexToHsl(top[0]); top.push(hsl(h + (top.length === 1 ? 35 : -35), s, l)); }
+        coverColors = top;
+      } else coverColors = ['#f2f2f7', '#c9cbe0', '#9da3c7'];   // portada en blanco y negro
+    } catch (e) { coverColors = null; }   // la imagen no permite leer sus colores
+    buildSwatches(); applyAll(false);
+  };
+  img.onerror = () => { buildSwatches(); applyAll(false); };
+  img.src = url;
+}
+
+btnSpotify.onclick = () => {
+  if (!spConnected()) { spLogin(); return; }
+  sp.dismissed = false; spRender(); spLoop();
+};
+document.addEventListener('visibilitychange', () => { if (!document.hidden && spConnected()) spLoop(); });
+spButton();
+spHandleRedirect().then(() => { spButton(); spLoop(); });
 
 // ================= Bucle principal =================
 // ================= Escena: Focos (luces desenfocadas a lo lejos) =================
