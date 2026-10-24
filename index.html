@@ -214,6 +214,8 @@ function resize() {
   for (const c of [ctx, lctx, ictx, g1c, g2c]) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; }
 }
 addEventListener('resize', resize); resize();
+// Si la tarjeta gráfica se reinicia (pasa con lienzos muy grandes), se reconstruye todo
+canvas.addEventListener('contextrestored', () => { resize(); refreshColors(); });
 
 // ================= Colores =================
 function hexToRgb(h) { const n = parseInt(h.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
@@ -370,7 +372,10 @@ function useStream(stream, label) {
   currentStream = stream;
   source = audioCtx.createMediaStreamSource(stream);
   source.connect(analyser); source.connect(recDest); // sin conectar a los altavoces: evita eco
-  stream.getAudioTracks()[0].addEventListener('ended', () => { setStatus('Captura detenida'); analyser = null; });
+  const track = stream.getAudioTracks()[0];
+  track.addEventListener('ended', () => { setStatus('Captura detenida. Pulsa Audio del PC para volver a conectar.'); analyser = null; document.body.classList.remove('idle'); });
+  track.addEventListener('mute', () => setStatus('Sin señal de audio por ahora', true));
+  track.addEventListener('unmute', () => setStatus(label, true));
   setStatus(label, true);
   intro.hidden = true; wake();
 }
@@ -408,6 +413,16 @@ fileInput.onchange = () => {
   setStatus('Reproduciendo ' + f.name, true);
   intro.hidden = true; wake();
 };
+
+// Chrome puede suspender el audio (cambio de altavoces, reposo, otra pestaña):
+// se reanuda solo y, si la captura se corta, se avisa en vez de quedarse congelado.
+let audioCheck = 0;
+function keepAudioAlive(dt) {
+  if (!audioCtx || (audioCheck += dt) < 1) return;
+  audioCheck = 0;
+  if (audioCtx.state !== 'running' && audioCtx.state !== 'closed') audioCtx.resume().catch(() => {});
+}
+addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); });
 
 // ================= Análisis =================
 let bass = 0, mid = 0, high = 0, energy = 0, time = 0;
@@ -798,8 +813,8 @@ function drawAura(dt) {
 let camZ = 0, camSpeed = 1.6;
 const streaks = [], pulses = [];
 const tunnelPath = z => [
-  Math.sin(z * 0.13) * 1.5 + Math.sin(z * 0.051) * 1.1 + Math.sin(z * 0.0173) * 0.8,
-  Math.cos(z * 0.11) * 0.9 + Math.sin(z * 0.037) * 0.7 + Math.cos(z * 0.0211) * 0.6
+  Math.sin(z * 0.09) * 0.7 + Math.sin(z * 0.037) * 0.6,
+  Math.cos(z * 0.08) * 0.45 + Math.sin(z * 0.029) * 0.4
 ];
 const tunnelRadius = z => 1 + 0.22 * Math.sin(z * 0.07) + 0.14 * Math.sin(z * 0.023 + 1.3);
 const ZONE = 22;                                          // anillos por tramo
@@ -821,10 +836,14 @@ function drawInfinity(dt) {
   // La cámara sigue el camino y mira en la dirección en que avanza
   const cam = tunnelPath(camZ), ahead = tunnelPath(camZ + 0.5);
   const hx = (ahead[0] - cam[0]) / 0.5, hy = (ahead[1] - cam[1]) / 0.5;
-  const roll = Math.sin(camZ * 0.05) * 0.25;
+  const roll = Math.sin(camZ * 0.04) * 0.06;
   const cr = Math.cos(roll), sr = Math.sin(roll);
   const project = (x, y, z) => {
-    const dz = z - camZ, rx = x - cam[0] - hx * dz, ry = y - cam[1] - hy * dz;
+    const dz = z - camZ;
+    let rx = x - cam[0] - hx * dz, ry = y - cam[1] - hy * dz;
+    // Limita cuánto se desvía lo lejano para que el fondo del túnel no se vaya a un lado
+    const lim = 0.18 * dz + 1.2, m = Math.hypot(rx, ry);
+    if (m > lim) { rx *= lim / m; ry *= lim / m; }
     const X = rx * cr - ry * sr, Y = rx * sr + ry * cr;
     return [W / 2 + X * F / dz, H / 2 + Y * F / dz, F / dz];
   };
@@ -899,9 +918,21 @@ function adapt(dt) {
   else if (fastFor > 8 && coolDown <= 0 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.15); fastFor = 0; resize(); }
 }
 
+let frameErrors = 0;
 function frame(now) {
+  requestAnimationFrame(frame);   // se programa primero: un fallo no puede parar la animación
+  try { render(now); frameErrors = 0; }
+  catch (e) {
+    console.error(e);
+    // Si una escena falla, se limpia su estado para que el siguiente fotograma arranque limpio
+    if (++frameErrors > 3) { blobs.length = 0; lights.length = 0; streaks.length = 0; pulses.length = 0; spec.fill(0); frameErrors = 0; }
+    for (const c of [ctx, lctx, ictx]) { c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none'; c.setLineDash([]); }
+  }
+}
+function render(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; time += dt;
   if (!document.hidden) adapt(dt);
+  keepAudioAlive(dt);
   analyse(dt);
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   ctx.fillStyle = state.theme === 'dark' ? '#000000' : '#ffffff';
@@ -911,7 +942,6 @@ function frame(now) {
   ctx.globalAlpha = state.theme === 'dark' ? 0.022 : 0.03;
   ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H);
   ctx.globalAlpha = 1;
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 </script>
