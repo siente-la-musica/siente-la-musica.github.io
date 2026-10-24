@@ -195,8 +195,6 @@ const g1 = document.createElement('canvas'), g1c = g1.getContext('2d');   // res
 const g2 = document.createElement('canvas'), g2c = g2.getContext('2d');   // resplandor amplio
 const CAN_BLUR = typeof g1c.filter === 'string';   // Chrome, Edge, Firefox, Safari 18+
 
-const auraC = document.createElement('canvas'), actx = auraC.getContext('2d');      // aura (todo desenfocado)
-const auraTmp = document.createElement('canvas'), atmp = auraTmp.getContext('2d');
 
 // Se dibuja a la resolución real de la pantalla (hasta 8K). Si el equipo no llega
 // a ~40 fps, renderScale baja un poco y vuelve a subir cuando hay margen.
@@ -213,9 +211,7 @@ function resize() {
   // limitado y se amplía con suavizado, sin diferencia visible y mucho más rápido.
   const k1 = CAN_BLUR ? Math.min(0.5, 1600 / W) : 0.25, k2 = CAN_BLUR ? Math.min(0.25, 640 / W) : 1 / 16;
   sizeTo(g1, W * k1, H * k1); sizeTo(g2, W * k2, H * k2);
-  const ka = Math.min(0.5, 1280 / W);
-  sizeTo(auraC, W * ka, H * ka); sizeTo(auraTmp, W * ka, H * ka);
-  for (const c of [ctx, lctx, ictx, g1c, g2c, actx, atmp]) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; }
+  for (const c of [ctx, lctx, ictx, g1c, g2c]) { c.imageSmoothingEnabled = true; c.imageSmoothingQuality = 'high'; }
 }
 addEventListener('resize', resize); resize();
 
@@ -754,108 +750,129 @@ function drawBokeh(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 
-// ================= Escena: Aura (resplandor suave en los bordes) =================
-// El borde sigue una superelipse (rectángulo de esquinas muy redondeadas) y se
-// desenfoca dos veces: un halo ancho y un filo fino y luminoso, como el de iOS.
-function auraStrokes(wBase, wGain, aBase, aGain) {
-  const aw = auraC.width, ah = auraC.height, cx = aw / 2, cy = ah / 2;
-  const N = 260, n = 7, e = 2 / n;
-  const cg = atmp.createConicGradient(time * 0.12, cx, cy);
-  COLORS.concat(COLORS[0]).forEach((c, i, a) => cg.addColorStop(i / (a.length - 1), c));
-  atmp.strokeStyle = cg; atmp.lineCap = 'round';
-  const breath = 0.92 + 0.08 * Math.sin(time * 0.7);
-  let px, py;
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, a = -Math.PI / 2 + t * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
-    const x = cx + cx * Math.sign(ca) * Math.pow(Math.abs(ca), e);
-    const y = cy + cy * Math.sign(sa) * Math.pow(Math.abs(sa), e);
-    if (i > 0) {
-      const v = specAt(t);   // graves abajo, agudos arriba
-      atmp.globalAlpha = Math.min(1, aBase + v * aGain);
-      atmp.lineWidth = Math.min(aw, ah) * (wBase + v * wGain) * breath;
-      atmp.beginPath(); atmp.moveTo(px, py); atmp.lineTo(x, y); atmp.stroke();
-    }
-    px = x; py = y;
-  }
-  atmp.globalAlpha = 1;
+// ================= Escena: Aura (luz de color que respira en los bordes) =================
+// Grandes manchas de luz muy suaves que pasean despacio por fuera de los bordes.
+// Son degradados nativos con caída gaussiana: nítidos a cualquier resolución.
+const AURA = [
+  { band: [0, 6],   speed: 0.011, off: 0.08, size: 0.75, c: 0 },
+  { band: [0, 10],  speed: -0.008, off: 0.58, size: 0.7,  c: 1 },
+  { band: [6, 18],  speed: 0.014, off: 0.33, size: 0.6,  c: 2 },
+  { band: [12, 28], speed: -0.012, off: 0.83, size: 0.55, c: 0 },
+  { band: [20, 40], speed: 0.017, off: 0.2,  size: 0.5,  c: 1 },
+  { band: [32, 64], speed: -0.015, off: 0.7,  size: 0.45, c: 2 },
+];
+const auraLevel = AURA.map(() => 0);
+function glowSpot(x, y, r, col, a) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  for (let i = 0; i <= 8; i++) { const t = i / 8; g.addColorStop(t, rgba(col, a * Math.exp(-4.2 * t * t) * (1 - t))); }
+  ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
 }
-function drawAura() {
+function drawAura(dt) {
   const night = state.theme === 'dark';
-  const aw = auraC.width, ah = auraC.height, m = Math.min(aw, ah);
-  actx.clearRect(0, 0, aw, ah);
-  // Halo ancho
-  atmp.clearRect(0, 0, aw, ah);
-  auraStrokes(0.05, 0.16, 0.25, 0.6);
-  actx.filter = CAN_BLUR ? `blur(${(m * 0.06).toFixed(1)}px)` : 'none';
-  actx.globalAlpha = night ? 0.75 : 0.55; actx.drawImage(auraTmp, 0, 0);
-  // Filo fino
-  atmp.clearRect(0, 0, aw, ah);
-  auraStrokes(0.006, 0.03, 0.3, 0.7);
-  actx.filter = CAN_BLUR ? `blur(${(m * 0.012).toFixed(1)}px)` : 'none';
-  actx.globalAlpha = night ? 0.8 : 0.6; actx.drawImage(auraTmp, 0, 0);
-  actx.filter = 'none'; actx.globalAlpha = 1;
-
-  // Luz leve en el centro
-  const c = mix(0.5), R = Math.max(W, H) * 0.6;
-  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R);
-  g.addColorStop(0, rgba(c, (night ? 0.04 : 0.03) + energy * (night ? 0.12 : 0.08)));
-  g.addColorStop(1, rgba(c, 0));
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.save();
-  ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  ctx.drawImage(auraC, 0, 0, W, H);
+  ctx.globalCompositeOperation = night ? 'lighter' : 'multiply';
+  const per = 2 * (W + H);
+  AURA.forEach((b, i) => {
+    const v = avg(spec, b.band[0], b.band[1]);
+    auraLevel[i] += (v - auraLevel[i]) * (1 - Math.pow(0.05, dt));
+    const L = auraLevel[i];
+    // Posición sobre el contorno, un poco por fuera de la pantalla
+    let d = (((b.off + time * b.speed) % 1 + 1) % 1) * per, x, y, nx, ny;
+    if (d < W) { x = d; y = 0; nx = 0; ny = -1; }
+    else if (d < W + H) { x = W; y = d - W; nx = 1; ny = 0; }
+    else if (d < 2 * W + H) { x = W - (d - W - H); y = H; nx = 0; ny = 1; }
+    else { x = 0; y = H - (d - 2 * W - H); nx = -1; ny = 0; }
+    const r = MIN * b.size * (0.85 + L * 0.5);
+    x += nx * r * 0.18; y += ny * r * 0.18;
+    const col = night ? RGB[b.c] : RGB[b.c].map(c => 255 - (255 - c) * 0.9);
+    glowSpot(x, y, r, col, night ? 0.38 + L * 0.6 : 0.25 + L * 0.5);
+  });
+  // Luz leve en el centro
+  glowSpot(W / 2, H / 2, Math.max(W, H) * 0.6, mix(0.5), night ? 0.07 + energy * 0.16 : 0.06 + energy * 0.12);
   ctx.restore();
 }
 
 // ================= Escena: Infinito (viaje sin fin por un túnel de luz) =================
-let camZ = 0;
-const streaks = [];
-const tunnelPath = z => [Math.sin(z * 0.13) * 1.5 + Math.sin(z * 0.051) * 1.1, Math.cos(z * 0.11) * 0.9 + Math.sin(z * 0.037) * 0.7];
+// El túnel se divide en tramos; cada tramo tiene su estilo de anillo, su giro y
+// su tono, así el viaje nunca se repite igual.
+let camZ = 0, camSpeed = 1.6;
+const streaks = [], pulses = [];
+const tunnelPath = z => [
+  Math.sin(z * 0.13) * 1.5 + Math.sin(z * 0.051) * 1.1 + Math.sin(z * 0.0173) * 0.8,
+  Math.cos(z * 0.11) * 0.9 + Math.sin(z * 0.037) * 0.7 + Math.cos(z * 0.0211) * 0.6
+];
+const tunnelRadius = z => 1 + 0.22 * Math.sin(z * 0.07) + 0.14 * Math.sin(z * 0.023 + 1.3);
+const ZONE = 22;                                          // anillos por tramo
+const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+// Estilo de cada tramo: 0 continuo, 1 discontinuo, 2 puntos, 3 doble
+const zoneInfo = z => ({ style: Math.floor(hash(z) * 4), twist: (hash(z + 5) - 0.5) * 0.6, hue: hash(z + 7) });
+const smooth = t => t * t * (3 - 2 * t);
+
 function drawInfinity(dt) {
   const night = state.theme === 'dark';
-  camZ += dt * (1.4 + energy * 4.5 + bass * 2.5);
-  const F = MIN * 0.55, FAR = 28, SP = 0.85, AIM = 3;
-  const cam = tunnelPath(camZ), aim = tunnelPath(camZ + AIM);
+  // Velocidad suavizada: acelera con la música sin tirones
+  const target = 1.5 + energy * 4 + bass * 2;
+  camSpeed += (target - camSpeed) * (1 - Math.pow(0.15, dt));
+  camZ += dt * camSpeed;
+  if (onset('bass', bass, dt)) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
+  for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
+
+  const F = MIN * 0.55, FAR = 24, SP = 0.8;
+  // La cámara sigue el camino y mira en la dirección en que avanza
+  const cam = tunnelPath(camZ), ahead = tunnelPath(camZ + 0.5);
+  const hx = (ahead[0] - cam[0]) / 0.5, hy = (ahead[1] - cam[1]) / 0.5;
+  const roll = Math.sin(camZ * 0.05) * 0.25;
+  const cr = Math.cos(roll), sr = Math.sin(roll);
   const project = (x, y, z) => {
-    const dz = z - camZ, k = Math.min(1, dz / AIM);
-    return [W / 2 + (x - cam[0] - (aim[0] - cam[0]) * k) * F / dz, H / 2 + (y - cam[1] - (aim[1] - cam[1]) * k) * F / dz, F / dz];
+    const dz = z - camZ, rx = x - cam[0] - hx * dz, ry = y - cam[1] - hy * dz;
+    const X = rx * cr - ry * sr, Y = rx * sr + ry * cr;
+    return [W / 2 + X * F / dz, H / 2 + Y * F / dz, F / dz];
   };
+
   lctx.clearRect(0, 0, W, H);
   lctx.lineCap = 'round'; lctx.lineJoin = 'round';
-  const k0 = Math.ceil((camZ + 0.25) / SP), k1 = Math.floor((camZ + FAR) / SP);
+  const k0 = Math.ceil((camZ + 0.3) / SP), k1 = Math.floor((camZ + FAR) / SP);
   for (let k = k1; k >= k0; k--) {
     const z = k * SP, dz = z - camZ;
-    const alpha = Math.pow(1 - dz / FAR, 1.6) * Math.min(1, (dz - 0.25) / 1.2);
-    if (alpha <= 0.005) continue;
-    const v = spec[((k * 5) % BANDS + BANDS) % BANDS];
+    let alpha = Math.pow(1 - dz / FAR, 2) * smooth(Math.min(1, (dz - 0.3) / 1.4));
+    if (alpha <= 0.004) continue;
+    const zi = Math.floor(k / ZONE), f = smooth(Math.max(0, (k % ZONE) / ZONE * 4 - 3));
+    const A = zoneInfo(zi), B = zoneInfo(zi + 1);
+    // Cerca reaccionan los graves; lejos, los agudos
+    const band = Math.min(BANDS - 1, Math.floor((dz / FAR) * BANDS * 0.85));
+    const v = spec[band];
+    let glow = 0; for (const pz of pulses) glow += Math.exp(-((z - pz) ** 2) / 0.8);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
-    const tri = 1 - Math.abs(((k * 0.045) % 2 + 2) % 2 - 1);
-    lctx.strokeStyle = rgba(mix(tri), alpha * (night ? 0.9 : 0.85));
-    lctx.lineWidth = Math.max(DPR * 0.8, sc * 0.008 * (1 + v * 3));
-    const rot = k * 0.12 + time * 0.15, STEPS = 120;
-    lctx.beginPath();
-    for (let j = 0; j <= STEPS; j++) {
-      const a = j / STEPS * Math.PI * 2;
-      const r = sc * (1 + v * 0.09 * Math.sin(a * 6 + rot * 3));
-      const X = sx + Math.cos(a + rot) * r, Y = sy + Math.sin(a + rot) * r;
-      j ? lctx.lineTo(X, Y) : lctx.moveTo(X, Y);
-    }
-    lctx.stroke();
+    const R = sc * tunnelRadius(z) * (1 + v * 0.12);
+    const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
+    lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2)));
+    const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
+    // Las líneas de menos de un píxel parpadean: se mantienen a 1 px y se atenúan en su lugar
+    lctx.lineWidth = Math.max(DPR, lw);
+    if (lw < DPR) lctx.globalAlpha = Math.max(0.15, lw / DPR);
+    const rot = k * (A.twist * (1 - f) + B.twist * f) + time * 0.25;
+    const C = Math.PI * 2 * R;
+    if (A.style === 1) { lctx.setLineDash([C / 24, C / 48]); lctx.lineDashOffset = rot * R; }
+    else if (A.style === 2) { lctx.setLineDash([0.001, C / 64]); lctx.lineDashOffset = rot * R; lctx.lineWidth *= 1.8; }
+    lctx.beginPath(); lctx.arc(sx, sy, R, 0, Math.PI * 2); lctx.stroke();
+    if (A.style === 3) { lctx.beginPath(); lctx.arc(sx, sy, R * 0.93, 0, Math.PI * 2); lctx.stroke(); }
+    lctx.setLineDash([]);
+    lctx.globalAlpha = 1;
   }
   // Destellos que pasan junto a las paredes y dan sensación de velocidad
-  const want = 4 + (high + energy) * 40;
-  if (streaks.length < want && Math.random() < 0.6) streaks.push({ a: Math.random() * Math.PI * 2, r: 0.75 + Math.random() * 0.2, z: camZ + FAR * (0.6 + Math.random() * 0.4), len: 0.6 + Math.random() * 1.4, c: Math.random() });
+  const want = 3 + (high + energy) * 30;
+  if (streaks.length < want && Math.random() < 0.5) streaks.push({ a: Math.random() * Math.PI * 2, r: 0.7 + Math.random() * 0.2, z: camZ + FAR * (0.5 + Math.random() * 0.5), len: 0.5 + Math.random() * 1.2, c: Math.random() });
   for (let i = streaks.length - 1; i >= 0; i--) {
     const st = streaks[i];
-    if (st.z - camZ < 0.3) { streaks.splice(i, 1); continue; }
+    if (st.z - camZ < 0.4) { streaks.splice(i, 1); continue; }
     const zb = Math.min(st.z + st.len, camZ + FAR);
-    const pa = tunnelPath(st.z), pb = tunnelPath(zb);
-    const A = project(pa[0] + Math.cos(st.a) * st.r, pa[1] + Math.sin(st.a) * st.r, st.z);
-    const B = project(pb[0] + Math.cos(st.a) * st.r, pb[1] + Math.sin(st.a) * st.r, zb);
-    const alpha = Math.pow(1 - (st.z - camZ) / FAR, 1.4);
-    lctx.strokeStyle = rgba(mix(st.c), alpha * 0.9);
-    lctx.lineWidth = Math.max(DPR * 0.8, A[2] * 0.006);
-    lctx.beginPath(); lctx.moveTo(A[0], A[1]); lctx.lineTo(B[0], B[1]); lctx.stroke();
+    const pa = tunnelPath(st.z), pb = tunnelPath(zb), ra = tunnelRadius(st.z) * st.r, rb = tunnelRadius(zb) * st.r;
+    const P = project(pa[0] + Math.cos(st.a) * ra, pa[1] + Math.sin(st.a) * ra, st.z);
+    const Q = project(pb[0] + Math.cos(st.a) * rb, pb[1] + Math.sin(st.a) * rb, zb);
+    const alpha = Math.pow(1 - (st.z - camZ) / FAR, 1.5) * smooth(Math.min(1, (st.z - camZ - 0.4) / 1));
+    lctx.strokeStyle = rgba(mix(st.c), alpha * 0.85);
+    lctx.lineWidth = Math.max(DPR, P[2] * 0.005);
+    lctx.beginPath(); lctx.moveTo(P[0], P[1]); lctx.lineTo(Q[0], Q[1]); lctx.stroke();
   }
   ambient();
   bloom(layer, night ? 0.75 : 0.4);
