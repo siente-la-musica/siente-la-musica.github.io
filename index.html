@@ -72,6 +72,8 @@
     background: var(--pop-bg); border: 1px solid var(--glass-line); border-radius: 16px; box-shadow: var(--shadow);
     -webkit-backdrop-filter: blur(24px) saturate(1.6); backdrop-filter: blur(24px) saturate(1.6);
   }
+  #popSource { flex-wrap: wrap; justify-content: center; white-space: normal; width: max-content; max-width: min(340px, 90vw); }
+  #popSource .pop-note { flex-basis: 100%; text-align: center; }
   #popColor .group { gap: 8px; padding: 2px 4px; }
   #btnColor { width: 26px; height: 26px; margin: 0 2px; }
   .pop.grid { padding: 12px; flex-direction: column; gap: 12px; }
@@ -117,6 +119,11 @@
   body.recording #btnRec { background: #ff3b30; color: #fff; }
   body.recording :is(.lyricsView, .lyrics, .artistView, .lv-meta, .corner, .song, .lib, .status, .intro) { display: none !important; }
   body.recording canvas { box-shadow: 0 0 0 1px var(--glass-line), 0 30px 80px rgba(0,0,0,.4); }
+  .tapper { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 21; display: grid; justify-items: center; gap: 14px; }
+  .tapper[hidden] { display: none; }
+  .tapper button { width: 132px; height: 132px; border-radius: 50%; font-size: 54px; background: var(--fg); color: var(--bg); box-shadow: 0 10px 40px rgba(0,0,0,.35), 0 0 0 10px color-mix(in srgb, var(--fg) 12%, transparent); }
+  .tapper button:active { transform: scale(.9); }
+  .tapper small { font-size: 14px; color: var(--fg); text-shadow: 0 0 .8em var(--bg); text-align: center; max-width: 80vw; }
   .countdown .cd-wait { font-size: clamp(18px, 2.4vw, 32px); font-weight: 600; opacity: .85; }
   .countdown { position: fixed; inset: 0; display: grid; place-items: center; font-size: clamp(80px, 18vmin, 400px); font-weight: 800; color: var(--fg); text-shadow: 0 0 .3em var(--bg); pointer-events: none; z-index: 20; }
   body.recording #btnRec .rec-dot { background: #fff; animation: recBlink 1s steps(2) infinite; }
@@ -445,6 +452,7 @@
   <div class="lib-list" id="libList"></div>
 </aside>
 <div class="countdown" id="countdown" hidden></div>
+<div class="tapper" id="tapper" hidden><button id="tapBtn" type="button">♩</button><small id="tapInfo"></small></div>
 <div class="lyricsView" id="lyricsView" hidden>
   <div class="lv-stage" id="lvStage"><span class="lv-cur" id="lvCur"></span><div class="lv-next" id="lvNext"></div></div>
   <div class="lv-msg" id="lvMsg"></div>
@@ -475,6 +483,7 @@
       <button id="btnMic">Micrófono</button>
       <button id="btnFile" type="button">Archivo</button>
       <input id="file" type="file" accept="audio/*" hidden>
+      <p class="pop-note" id="mobileNote" hidden>En el celular una página no puede oír el sonido de otras apps. Con Spotify conectado, las animaciones siguen el ritmo de la canción; si suena en voz alta (parlante, TV), pulsa Micrófono para que reaccionen al sonido real.</p>
     </div>
   </div>
   <div class="pop-wrap">
@@ -1025,7 +1034,7 @@ document.getElementById('btnMic').onclick = async () => {
 
 const fileInput = document.getElementById('file');
 // En móviles no se puede capturar el audio del sistema: se oculta el botón
-if (!navigator.mediaDevices?.getDisplayMedia) document.getElementById('btnSystem').hidden = true;
+if (!navigator.mediaDevices?.getDisplayMedia) { document.getElementById('btnSystem').hidden = true; document.getElementById('mobileNote').hidden = false; }
 document.getElementById('btnFile').onclick = () => fileInput.click();
 fileInput.onchange = () => {
   const f = fileInput.files[0]; if (!f) return;
@@ -1072,6 +1081,8 @@ function analyse(dt) {
     peak = Math.max(peak * Math.pow(0.92, dt), mx, 0.2);
     const gain = Math.pow(state.sens, 0.8);   // sensibilidad elegida por la persona
     for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak * gain);
+  } else if (songBeatOn()) {
+    songBeatSynth();
   } else {
     // Demo: espectro sintético con un "bombo" cada medio segundo
     const kick = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2)), 12);
@@ -1230,6 +1241,109 @@ function onset(name, value, dt) {
   f.cd -= dt;
   if (d > (f.avg * 2.4 + 0.035) / Math.sqrt(state.sens) && f.cd <= 0) { f.cd = name === 'bass' ? 0.18 : name === 'mid' ? 0.12 : 0.08; return Math.min(1, d * 4); }
   return 0;
+}
+
+
+// ================= Ritmo de la canción (sin audio) =================
+// En el celular una página no puede escuchar el sonido de otras apps. Así que, si suena una canción
+// en Spotify (o Last.fm) y no hay audio conectado, las animaciones laten con el tempo real de esa
+// canción: el BPM se busca gratis en Deezer (por su código ISRC o por título) y se sincroniza con la
+// posición que da Spotify. El pulso se alinea con la letra; y si hace falta, se ajusta tocando al ritmo.
+const songBeat = { id: null, bpm: 0, offset: null, user: false, cache: new Map(), lastIdx: -1, lyr: null };
+function jsonp(url, ms = 7000) {
+  return new Promise(res => {
+    const cb = '__dz' + Math.random().toString(36).slice(2), sc = document.createElement('script');
+    const done = v => { clearTimeout(t); delete window[cb]; sc.remove(); res(v); };
+    const t = setTimeout(() => done(null), ms);
+    window[cb] = d => done(d); sc.onerror = () => done(null);
+    sc.src = url + (url.includes('?') ? '&' : '?') + 'output=jsonp&callback=' + cb;
+    document.head.append(sc);
+  });
+}
+function songBpmFor(item) {
+  const key = item.id || item.name;
+  if (!songBeat.cache.has(key)) songBeat.cache.set(key, (async () => {
+    let tr = null; const isrc = item.external_ids?.isrc;
+    if (isrc) tr = await jsonp('https://api.deezer.com/track/isrc:' + encodeURIComponent(isrc));
+    if (!tr || tr.error || !(tr.bpm > 40)) {
+      const artist = item.artists?.[0]?.name || '';
+      const sr = await jsonp('https://api.deezer.com/search?limit=5&q=' + encodeURIComponent(`artist:"${artist}" track:"${item.name}"`));
+      const hit = (sr?.data || []).find(x => norm(x.title).startsWith(norm(item.name).slice(0, 10))) || sr?.data?.[0];
+      if (hit) tr = await jsonp('https://api.deezer.com/track/' + hit.id);
+    }
+    return tr && tr.bpm > 40 ? Math.round(tr.bpm * 10) / 10 : 0;
+  })());
+  return songBeat.cache.get(key);
+}
+async function songBeatLoad(item) {
+  Object.assign(songBeat, { id: item ? item.id : null, bpm: 0, offset: null, user: false, lyr: null, lastIdx: -1 });
+  if (!item) return;
+  const saved = store.get('beat.' + item.id, null);   // si la persona marcó el ritmo de esta canción antes
+  if (saved) Object.assign(songBeat, { bpm: saved.bpm, offset: saved.offset, user: true });
+  const bpm = await songBpmFor(item);
+  if (songBeat.id !== item.id || songBeat.user) return;
+  songBeat.bpm = bpm; refreshChrome();
+}
+// El pulso cae donde empiezan las líneas de la letra (la media circular de sus tiempos)
+function lyricPhase(P) {
+  const L = lyrics && lyrics.lines; if (!L || L.length < 6) return null;
+  let cx = 0, cy = 0, n = 0;
+  for (const l of L) { if (!l.text) continue; const a = (l.t % P) / P * Math.PI * 2; cx += Math.cos(a); cy += Math.sin(a); n++; }
+  if (!n || Math.hypot(cx, cy) / n < 0.25) return null;
+  return ((Math.atan2(cy, cx) / (Math.PI * 2)) * P + P) % P;
+}
+const songBeatOn = () => !analyser && spConnected() && sp.item && songBeat.id === sp.item.id && songBeat.bpm > 0;
+function songBeatSynth() {
+  const P = 60000 / songBeat.bpm;
+  if (songBeat.offset == null && songBeat.lyr !== lyrics) { songBeat.lyr = lyrics; songBeat.lyrOff = lyricPhase(P); }
+  const off = songBeat.offset ?? songBeat.lyrOff ?? 0;
+  const pos = sp.progress + (sp.playing ? performance.now() - sp.at : 0) - off + 45;   // +45 ms: compensa lo que tarda el detector
+  const b = pos / P, idx = Math.floor(b), tms = (b - idx) * P;
+  beatTick = sp.playing && idx !== songBeat.lastIdx; songBeat.lastIdx = idx;
+  if (!sp.playing) { for (let i = 0; i < BANDS; i++) raw[i] = 0.015; return; }   // en pausa, quieto
+  const n4 = ((idx % 4) + 4) % 4;
+  const kick = Math.exp(-tms / 110) * (n4 === 0 ? 1 : 0.8);
+  const snare = n4 % 2 === 1 ? Math.exp(-tms / 150) : 0;
+  const hat = Math.exp(-(((b * 2) % 1) * P / 2) / 55) * 0.6;
+  const sing = currentLyric() ? 0.4 : 0.08;
+  const phrase = 0.5 + 0.5 * Math.sin(pos / (P * 16) * Math.PI * 2);   // sube y baja cada 16 tiempos
+  for (let i = 0; i < BANDS; i++) {
+    const x = i / BANDS;
+    let v = (0.28 - x * 0.16) * (0.7 + 0.3 * phrase);
+    v += kick * Math.max(0, 1 - x * 4) * 0.85;
+    v += snare * Math.exp(-Math.pow((x - 0.38) / 0.16, 2)) * 0.6;
+    v += hat * Math.max(0, x - 0.6) * 1.3;
+    v += sing * Math.exp(-Math.pow((x - 0.28) / 0.12, 2)) * (0.6 + 0.4 * Math.sin(time * 9 + i * 0.7));
+    raw[i] = Math.max(0, Math.min(1, v * (0.88 + Math.random() * 0.12)));
+  }
+  tempo.bpm = songBeat.bpm; tempo.period = P / 1000; tempo.conf = 1;
+}
+// Marcar el ritmo tocando: con 4 toques o más se calcula el tempo y dónde cae el pulso
+const tapper = { taps: [], timer: 0 };
+function tapOpen() {
+  closePops(); if (!sp.item) return;
+  const el = document.getElementById('tapper'); el.hidden = false; tapper.taps = [];
+  document.getElementById('tapInfo').textContent = 'Toca el botón con cada golpe de la canción (4 veces o más)';
+}
+function tapHit() {
+  const pos = sp.progress + (sp.playing ? performance.now() - sp.at : 0);
+  tapper.taps.push(pos); if (tapper.taps.length > 12) tapper.taps.shift();
+  const T = tapper.taps, info = document.getElementById('tapInfo');
+  clearTimeout(tapper.timer);
+  tapper.timer = setTimeout(() => { document.getElementById('tapper').hidden = true; }, 3500);
+  if (T.length < 4) { info.textContent = `${T.length}… sigue tocando`; return; }
+  const d = T.slice(1).map((t, i) => t - T[i]).sort((a, b) => a - b), med = d[Math.floor(d.length / 2)];
+  let bpm = 60000 / med;
+  if (songBeat.bpm) {   // si Deezer dio el tempo y se parece (o es el doble/la mitad), se respeta el de Deezer
+    for (const k of [1, 2, 0.5]) if (Math.abs(songBeat.bpm * k / bpm - 1) < 0.08) { bpm = songBeat.bpm * k; break; }
+  }
+  const P = 60000 / bpm; let cx = 0, cy = 0;
+  for (const t of T) { const a = (t % P) / P * Math.PI * 2; cx += Math.cos(a); cy += Math.sin(a); }
+  const offset = ((Math.atan2(cy, cx) / (Math.PI * 2)) * P + P) % P;
+  Object.assign(songBeat, { bpm: Math.round(bpm * 10) / 10, offset, user: true, id: sp.item.id });
+  store.set('beat.' + sp.item.id, { bpm: songBeat.bpm, offset });
+  info.textContent = `¡Listo! ${Math.round(songBeat.bpm)} BPM · sigue tocando para afinar`;
+  refreshChrome();
 }
 
 // ================= Resplandor =================
@@ -1538,7 +1652,11 @@ function spButton() {
 // Ajusta los textos de ayuda a lo que haya conectado
 function refreshChrome() {
   intro.hidden = !!analyser || spConnected() || ['lyrics', 'artist', 'cover'].includes(state.mode);
-  if (!analyser) setStatus(spConnected() ? 'Muestra · pulsa Audio del PC para que las animaciones sigan tu música' : 'Sin audio · vista de demostración');
+  if (!analyser) {
+    const mobile = !navigator.mediaDevices?.getDisplayMedia;
+    if (typeof songBeat !== 'undefined' && songBeatOn()) setStatus(`Ritmo de la canción · ${Math.round(songBeat.bpm)} BPM` + (songBeat.user ? ' (marcado por ti)' : '') + ' · sin audio', true);
+    else setStatus(spConnected() ? (mobile ? 'Buscando el ritmo de la canción… o pulsa Micrófono si suena en voz alta' : 'Muestra · pulsa Audio del PC para que las animaciones sigan tu música') : 'Sin audio · vista de demostración');
+  }
   try { lyricsButton(); } catch (e) {}   // aún no existe durante la carga inicial
 }
 const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -1695,6 +1813,7 @@ function spUpdate(d, src = 'spotify') {
     sp.dismissed = false;
     setCover(item ? (item.album?.images?.[0]?.url || item.images?.[0]?.url || '') : '');
     loadLyrics(item);
+    songBeatLoad(item);
     loadArtistImage(item);
     if (state.mode === 'artist') arLoad(item);
     if (state.mode === 'cover') loadAltArt(item);
@@ -1779,12 +1898,14 @@ function spRender() {
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
         (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button>` : '') +
+        (!analyser ? `<button id="spTap"><span style="width:16px;text-align:center">♩</span>Marcar el ritmo (tocando)</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
         (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
         `<button id="spOut">${ICON.power}Desconectar</button>` +
       `</div>`,
       true
     );
+    const tp = document.getElementById('spTap'); if (tp) tp.onclick = e => { e.stopPropagation(); sp.more = false; songEl.classList.remove('open-more'); tapOpen(); };
     const vol = document.getElementById('spVol');
     if (vol) vol.oninput = () => spSetVolume(+vol.value);
     songEl.classList.toggle('open-more', !!sp.more);
@@ -2219,6 +2340,7 @@ addEventListener('resize', layoutBottom);
 addEventListener('pointerdown', e => { if (sp.more && !e.target.closest('#song')) { sp.more = false; songEl.classList.remove('open-more'); const m = document.getElementById('spMore'); if (m) m.setAttribute('aria-expanded', false); } });
 new ResizeObserver(layoutBottom).observe(document.getElementById('dock'));
 new MutationObserver(layoutBottom).observe(songEl, { attributes: true, attributeFilter: ['hidden', 'class'] });
+document.getElementById('tapBtn').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); tapHit(); });
 function openMusic() { document.getElementById('btnSpotify').click(); }
 document.getElementById('btnLib').onclick = e => { e.stopPropagation(); libOpen(); };
 document.getElementById('btnSpConnect').onclick = () => {
