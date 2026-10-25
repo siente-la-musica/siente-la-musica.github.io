@@ -515,7 +515,7 @@
         <button data-mode="infinity">Infinito</button>
         <button data-mode="strobe">Estrobo</button>
         <button data-mode="tiles">Cuadros</button>
-        <button data-mode="dancers">Sombras</button>
+        <button data-mode="tubes">Inflables</button>
         <button data-mode="vinyl">Vinilo</button>
         <button data-mode="cover">Portada</button>
         <button data-mode="lyrics">Letra</button>
@@ -598,7 +598,7 @@ const PALETTES = [
 ];
 
 const state = {
-  mode: store.get('mode', 'bars'),
+  mode: ((m) => m === 'dancers' ? 'tubes' : m)(store.get('mode', 'bars')),
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -2955,8 +2955,8 @@ const artistClean = new Map();
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
   calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'dancers'] },
-  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'dancers'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes'] },
+  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
 function moodTick(dt) {
@@ -4594,186 +4594,148 @@ function drawTile(t, gap, night, pop) {
 }
 
 
-// ================= Escena: Sombras =================
-// Dos siluetas (ella y él, separados) que bailan con la canción. Cada una es un esqueleto con
-// proporciones humanas (cabeza, torso, brazos con codo, piernas con rodilla) dibujado como una sola
-// sombra; ella con pelo y falda que se balancean con inercia. Un repertorio de pasos (rebote, paso
-// lateral, brazos arriba, cadera, palmas, el «punto» disco) cambia de pose en cada golpe; cada una
-// elige pasos distintos cada pocos compases y en silencio solo se mece. Dejan una estela arrastrada.
-const DZ_NEUTRAL = { lean: 0, hipX: 0, k: 0.12, head: 0, la: -0.24, le: 0.3, ra: 0.24, re: -0.3, lh: 0, rh: 0 };
-const DZ_MOVES = {
-  bounce:  [{ k: 0.55, la: -0.5, le: 1.5, ra: 0.5, re: -1.5, head: 0.08 }, { k: 0.12, la: -0.35, le: 1.1, ra: 0.35, re: -1.1, head: -0.05 }],
-  step:    [{ hipX: -0.05, lean: 0.07, lh: -0.28, k: 0.25, la: -0.75, le: 0.4, ra: 0.25, re: -1.5, head: 0.08 }, { hipX: 0.05, lean: -0.07, rh: 0.28, k: 0.25, la: -0.25, le: 1.5, ra: 0.75, re: -0.4, head: -0.08 }],
-  arms:    [{ k: 0.18, la: -2.65, le: 0.25, ra: 2.65, re: -0.25, head: -0.1 }, { k: 0.5, la: -2.1, le: 0.9, ra: 2.1, re: -0.9, head: 0.06 }],
-  sway:    [{ hipX: 0.07, lean: -0.11, head: 0.12, la: -0.35, le: 0.7, ra: 0.95, re: -1.9, k: 0.2 }, { hipX: -0.07, lean: 0.11, head: -0.12, la: -0.95, le: 1.9, ra: 0.35, re: -0.7, k: 0.2 }],
-  clap:    [{ k: 0.15, la: -2.85, le: -0.35, ra: 2.85, re: 0.35, head: -0.08 }, { k: 0.45, la: -1.5, le: 0.3, ra: 1.5, re: -0.3, head: 0.06 }],
-  point:   [{ hipX: 0.05, lean: -0.06, ra: 2.55, re: 0, la: -0.55, le: 1.7, k: 0.18, lh: -0.12 }, { hipX: -0.04, lean: 0.04, ra: 0.55, re: 0, la: -0.55, le: 1.7, k: 0.42 }],
-};
-const dz = { trail: null, tctx: null, key: '', last: 0, steps: 0, dancers: null };
-function dzMake(woman, side) {
-  return { woman, side, move: woman ? 'sway' : 'bounce', step: 0, from: { ...DZ_NEUTRAL }, to: { ...DZ_NEUTRAL }, p: 1, dur: 0.5, pose: { ...DZ_NEUTRAL },
-    hair: [0, 0], hairV: [0, 0], skirt: 0, skirtV: 0, prevHead: null, prevHip: 0 };
+// ================= Escena: Inflables =================
+// Los muñecos inflables de los concesionarios. Su baile es física: cada uno es una cadena de
+// puntos con gravedad, y la música es el aire del ventilador. Con la canción fuerte se inflan
+// y se estiran; cada golpe es un latigazo; los brazos se agitan con los agudos; la boca se abre
+// con la voz. En silencio se desinflan y se doblan; en un drop se levantan de golpe y cae confeti.
+const tube = { men: [], key: '', confetti: [] };
+function tubeChain(x, y, n, len, dirX, dirY) { return Array.from({ length: n }, (_, i) => ({ x: x + dirX * len * i, y: y + dirY * len * i, px: x + dirX * len * i, py: y + dirY * len * i })); }
+function tubeInit() {
+  const vertical = H > W, count = vertical ? 2 : 3, ground = H * (vertical ? 0.8 : 0.88);
+  const FH0 = Math.min(H * (vertical ? 0.46 : 0.56), W * (vertical ? 0.6 : 0.36));
+  tube.men = Array.from({ length: count }, (_, k) => {
+    const FH = FH0 * (0.9 + ((k * 37) % 10) / 60), N = 16, L = FH / (N - 1);
+    const x = W * (count === 2 ? [0.3, 0.7][k] : [0.22, 0.5, 0.78][k]);
+    const body = tubeChain(x, ground - FH * 0.06, N, L, 0, -1);
+    const sh = body[N - 5], armLen = FH * 0.3 / 5;
+    return { k, FH, N, L, x, ground, body, arms: [tubeChain(sh.x, sh.y, 6, armLen, -1, 0), tubeChain(sh.x, sh.y, 6, armLen, 1, 0)], armLen,
+      air: 1, ph: Math.random() * 100, mouth: 0, blink: 0 };
+  });
+  tube.key = W + 'x' + H;
 }
-const ease = t => 1 - Math.pow(1 - t, 3);   // llega rápido a la pose (el acento cae en el golpe) y se asienta suave
-function dzMirror(q) { return { ...q, lean: -(q.lean || 0), hipX: -(q.hipX || 0), head: -(q.head || 0), la: -(q.ra ?? DZ_NEUTRAL.ra), le: -(q.re ?? DZ_NEUTRAL.re), ra: -(q.la ?? DZ_NEUTRAL.la), re: -(q.le ?? DZ_NEUTRAL.le), lh: -(q.rh || 0), rh: -(q.lh || 0) }; }
-function dzStep(d, amp, dur) {
-  d.from = { ...d.pose }; d.p = 0; d.dur = dur;
-  if (d.step % 8 === 0) {   // cada 8 pasos, otro paso de baile (distinto al de la otra silueta)
-    const names = Object.keys(DZ_MOVES).filter(n => n !== d.move && n !== (d.other && d.other.move));
-    d.move = names[Math.floor(Math.random() * names.length)];
-    d.flip = Math.random() < 0.5;
+function tubeStep(m, dt, air) {
+  const g = m.FH * 3, lift = air * m.FH * 6, B = m.body, N = m.N;
+  const turb = m.FH * (0.35 + energy * 1.5 + beatSoft * 1.1);
+  const t = time + m.ph;
+  for (let i = 2; i < N; i++) {
+    const p = B[i], h = i / (N - 1);
+    const vx = (p.x - p.px) * 0.985, vy = (p.y - p.py) * 0.985;
+    p.px = p.x; p.py = p.y;
+    // aire hacia arriba (más fuerte arriba), gravedad y remolinos de aire que cambian solos
+    const nx = Math.sin(t * 2.3 + i * 0.55) + 0.6 * Math.sin(t * 5.1 - i * 0.9) + 0.3 * Math.sin(t * 11 + i * 1.7);
+    const ax = nx * turb * Math.pow(h, 1.6) * 0.5, ay = g - lift * (0.7 + 0.3 * h);   // abajo casi quieto, arriba se agita
+    p.x += vx + ax * dt * dt; p.y += vy + ay * dt * dt;
   }
-  let key = DZ_MOVES[d.move][d.step % DZ_MOVES[d.move].length];
-  key = { ...DZ_NEUTRAL, ...key }; if (d.flip) key = dzMirror(key);
-  d.to = {}; for (const k in DZ_NEUTRAL) d.to[k] = DZ_NEUTRAL[k] + (key[k] - DZ_NEUTRAL[k]) * amp;
-  d.step++;
-}
-// Articulaciones de una silueta: todo en unidades de su altura; los pies se apoyan en el suelo
-function dzJoints(d, x0, ground, FH) {
-  const q = d.pose, u = FH, W_ = d.woman;
-  const torso = 0.29 * u, neck = 0.04 * u, headR = 0.068 * u, shW = (W_ ? 0.19 : 0.23) * u, hipW = (W_ ? 0.17 : 0.15) * u;
-  const ua = 0.165 * u, fa = 0.155 * u, th = 0.235 * u, sh = 0.235 * u;
-  const dir = [Math.sin(q.lean), -Math.cos(q.lean)], per = [Math.cos(q.lean), Math.sin(q.lean)];
-  const P = [x0 + q.hipX * u, 0];
-  const N = [P[0] + dir[0] * torso, P[1] + dir[1] * torso];
-  const hd = q.lean + q.head, H_ = [N[0] + Math.sin(hd) * (neck + headR), N[1] - Math.cos(hd) * (neck + headR)];
-  const SL = [N[0] - per[0] * shW / 2, N[1] - per[1] * shW / 2], SR = [N[0] + per[0] * shW / 2, N[1] + per[1] * shW / 2];
-  const HL = [P[0] - per[0] * hipW / 2, P[1] - per[1] * hipW / 2], HR = [P[0] + per[0] * hipW / 2, P[1] + per[1] * hipW / 2];
-  const limb = (o, a1, a2, l1, l2) => { const m = [o[0] + Math.sin(a1) * l1, o[1] + Math.cos(a1) * l1]; return [m, [m[0] + Math.sin(a1 + a2) * l2, m[1] + Math.cos(a1 + a2) * l2]]; };
-  const [EL, HaL] = limb(SL, q.la, q.le, ua, fa), [ER, HaR] = limb(SR, q.ra, q.re, ua, fa);
-  const k = Math.max(0, q.k);
-  const [KL, FL] = limb(HL, -0.06 - k * 0.42 + q.lh, k * 0.84, th, sh), [KR, FR] = limb(HR, 0.06 + k * 0.42 + q.rh, -k * 0.84, th, sh);
-  const lift = ground - Math.max(FL[1], FR[1]);   // baja todo hasta que el pie más bajo toca el suelo
-  const J = { P, N, H: H_, SL, SR, HL, HR, EL, HaL, ER, HaR, KL, FL, KR, FR };
-  for (const n in J) J[n] = [J[n][0], J[n][1] + lift];
-  Object.assign(J, { headR, u, per, dir });
-  return J;
-}
-function dzDraw(g, d, J, fill) {
-  const u = J.u; g.fillStyle = fill; g.strokeStyle = fill; g.lineCap = 'round'; g.lineJoin = 'round';
-  // Un tramo del cuerpo que se afina (más grueso cerca del tronco), con las articulaciones redondeadas
-  const seg = (a, b, w1, w2 = w1) => {
-    const dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
-    g.beginPath();
-    g.moveTo(a[0] + nx * w1 / 2, a[1] + ny * w1 / 2); g.lineTo(b[0] + nx * w2 / 2, b[1] + ny * w2 / 2);
-    g.lineTo(b[0] - nx * w2 / 2, b[1] - ny * w2 / 2); g.lineTo(a[0] - nx * w1 / 2, a[1] - ny * w1 / 2); g.closePath(); g.fill();
-    g.beginPath(); g.arc(a[0], a[1], w1 / 2, 0, Math.PI * 2); g.arc(b[0], b[1], w2 / 2, 0, Math.PI * 2); g.fill();
-  };
-  // Pelo de ella (detrás): cuelga de la cabeza y se queda atrás con el movimiento
-  if (d.woman) {
-    const tip = [J.H[0] + d.hair[0] * u, J.H[1] + 0.2 * u + d.hair[1] * u];
-    g.beginPath(); g.moveTo(J.H[0] - J.headR * 0.95, J.H[1] - J.headR * 0.2);
-    g.quadraticCurveTo(J.H[0] - J.headR * 1.2, (J.H[1] + tip[1]) / 2, tip[0] - J.headR * 0.5, tip[1]);
-    g.quadraticCurveTo(tip[0], tip[1] + J.headR * 0.3, tip[0] + J.headR * 0.5, tip[1]);
-    g.quadraticCurveTo(J.H[0] + J.headR * 1.2, (J.H[1] + tip[1]) / 2, J.H[0] + J.headR * 0.95, J.H[1] - J.headR * 0.2);
-    g.closePath(); g.fill();
-  }
-  // Piernas
-  const thW = d.woman ? 0.1 : 0.095;
-  seg(J.HL, J.KL, thW * u, 0.06 * u); seg(J.KL, J.FL, 0.058 * u, 0.036 * u); seg(J.HR, J.KR, thW * u, 0.06 * u); seg(J.KR, J.FR, 0.058 * u, 0.036 * u);
-  for (const [F, sgn] of [[J.FL, -1], [J.FR, 1]]) { g.beginPath(); g.ellipse(F[0] + sgn * 0.025 * u, F[1] - 0.012 * u, 0.055 * u, 0.022 * u, 0, 0, Math.PI * 2); g.fill(); }
-  // Torso: hombros anchos, cintura y caderas (más marcadas en ella)
-  const waistK = d.woman ? 0.36 : 0.44;
-  const WL = [J.N[0] + (J.P[0] - J.N[0]) * 0.62 - J.per[0] * waistK * 0.2 * u, J.N[1] + (J.P[1] - J.N[1]) * 0.62 - J.per[1] * waistK * 0.2 * u];
-  const WR = [J.N[0] + (J.P[0] - J.N[0]) * 0.62 + J.per[0] * waistK * 0.2 * u, J.N[1] + (J.P[1] - J.N[1]) * 0.62 + J.per[1] * waistK * 0.2 * u];
-  const hipOut = d.woman ? 0.025 * u : 0.012 * u;
-  g.beginPath();
-  g.moveTo(J.SL[0], J.SL[1]);
-  g.bezierCurveTo(J.SL[0] + J.per[0] * 0.04 * u, J.SL[1] - 0.035 * u, J.SR[0] - J.per[0] * 0.04 * u, J.SR[1] - 0.035 * u, J.SR[0], J.SR[1]);
-  g.quadraticCurveTo(WR[0] + J.per[0] * 0.02 * u, (J.SR[1] + WR[1]) / 2, WR[0], WR[1]);
-  g.quadraticCurveTo(J.HR[0] + J.per[0] * hipOut * 1.6, J.HR[1] - 0.04 * u, J.HR[0] + J.per[0] * hipOut, J.HR[1] + 0.03 * u);
-  g.lineTo(J.HL[0] - J.per[0] * hipOut, J.HL[1] + 0.03 * u);
-  g.quadraticCurveTo(J.HL[0] - J.per[0] * hipOut * 1.6, J.HL[1] - 0.04 * u, WL[0], WL[1]);
-  g.quadraticCurveTo(WL[0] - J.per[0] * 0.02 * u, (J.SL[1] + WL[1]) / 2, J.SL[0], J.SL[1]);
-  g.closePath(); g.fill();
-  // Falda de ella: se abre y se balancea con la cadera
-  if (d.woman) {
-    const hemY = (J.KL[1] + J.KR[1]) / 2 - 0.05 * u, sw = d.skirt * u, half = 0.19 * u + Math.abs(sw) * 0.5 + d.pose.k * 0.04 * u;
-    g.beginPath(); g.moveTo(WL[0], WL[1]); g.lineTo(WR[0], WR[1]);
-    g.quadraticCurveTo(J.HR[0] + 0.06 * u + sw, (WR[1] + hemY) / 2, J.P[0] + half + sw, hemY);
-    g.quadraticCurveTo(J.P[0] + sw, hemY + 0.03 * u, J.P[0] - half + sw, hemY);
-    g.quadraticCurveTo(J.HL[0] - 0.06 * u + sw, (WL[1] + hemY) / 2, WL[0], WL[1]);
-    g.closePath(); g.fill();
-  }
-  // Brazos, cuello y cabeza
-  const aw = d.woman ? 0.05 : 0.06;
-  seg(J.SL, J.EL, aw * u, aw * 0.78 * u); seg(J.EL, J.HaL, aw * 0.74 * u, aw * 0.5 * u); seg(J.SR, J.ER, aw * u, aw * 0.78 * u); seg(J.ER, J.HaR, aw * 0.74 * u, aw * 0.5 * u);
-  for (const Hh of [J.HaL, J.HaR]) { g.beginPath(); g.arc(Hh[0], Hh[1], 0.026 * u, 0, Math.PI * 2); g.fill(); }
-  seg(J.N, [J.N[0] + (J.H[0] - J.N[0]) * 0.55, J.N[1] + (J.H[1] - J.N[1]) * 0.55], (d.woman ? 0.04 : 0.05) * u);
-  g.beginPath(); g.ellipse(J.H[0], J.H[1], J.headR * 0.86, J.headR, J.dir[0] * 0.3 + d.pose.head, 0, Math.PI * 2); g.fill();
-  if (d.woman) { g.beginPath(); g.ellipse(J.H[0], J.H[1] - J.headR * 0.25, J.headR * 1.05, J.headR * 0.9, 0, 0, Math.PI * 2); g.fill(); }   // volumen del pelo
-}
-function drawDancers(dt) {
-  const night = state.theme === 'dark', vertical = H > W;
-  // La estela va a media resolución: ya se ve desenfocada y cuesta cuatro veces menos
-  if (!dz.trail || dz.key !== W + 'x' + H) { dz.trail = document.createElement('canvas'); dz.trail.width = Math.ceil(W / 2); dz.trail.height = Math.ceil(H / 2); dz.tctx = dz.trail.getContext('2d'); dz.key = W + 'x' + H; dz.tmp = null; }
-  if (!dz.dancers) { const a = dzMake(true, -1), b = dzMake(false, 1); a.other = b; b.other = a; dz.dancers = [a, b]; }
-  const now = performance.now(), period = tempo.conf > 0.3 && tempo.bpm ? 60 / tempo.bpm : 0.5;
-  const live = now - lastBassHit < 1600;   // hay golpes de verdad
-  const beatNow = hits.bass || (beatTick && live && tempo.conf > 0.35);
-  const amp = Math.min(1, 0.35 + energy * 0.9 + (dropHit ? 0.3 : 0));
-  if (beatNow && now - dz.last > period * 1000 * 0.55) {
-    dz.last = now;
-    dz.dancers.forEach(d => { if (dropHit) { d.move = 'arms'; d.step = 1; } dzStep(d, amp, Math.max(0.16, Math.min(0.5, period * 0.7))); });
-  } else if (!live && now - dz.last > 1400) {   // en silencio o sin ritmo: se mecen despacio
-    dz.last = now;
-    dz.dancers.forEach(d => { d.from = { ...d.pose }; d.p = 0; d.dur = 1.3; d.to = { ...DZ_NEUTRAL, hipX: (Math.random() - 0.5) * 0.04 * (0.4 + energy), head: (Math.random() - 0.5) * 0.12, k: 0.1 + Math.random() * 0.08 }; });
-  }
-  const FH = Math.min(H * (vertical ? 0.42 : 0.62), W * (vertical ? 0.62 : 0.4)), ground = H * (vertical ? 0.78 : 0.86);
-  const g = dz.tctx;
-  g.globalCompositeOperation = 'destination-out'; g.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 2.6)})`; g.fillRect(0, 0, dz.trail.width, dz.trail.height);
-  g.globalCompositeOperation = 'source-over';
-  ambient();
-  // Suelo: una línea de luz y el reflejo de cada sombra
-  const fl = ctx.createLinearGradient(0, ground, 0, ground + H * 0.08); fl.addColorStop(0, rgba(mix(0.5), night ? 0.1 + bass * 0.1 : 0.07)); fl.addColorStop(1, rgba(mix(0.5), 0));
-  ctx.fillStyle = fl; ctx.fillRect(0, ground, W, H * 0.08);
-  const shapes = [];
-  dz.dancers.forEach((d, i) => {
-    d.p = Math.min(1, d.p + dt / d.dur);
-    const e = ease(d.p);
-    for (const k in DZ_NEUTRAL) d.pose[k] = d.from[k] + (d.to[k] - d.from[k]) * e;
-    d.pose.lean += Math.sin(time * 1.3 + i * 2) * 0.012;   // respira
-    const x0 = W / 2 + d.side * Math.min(W * 0.2, FH * 0.55);
-    const J = dzJoints(d, x0, ground, FH);
-    // Pelo y falda: siguen a la cabeza y la cadera con retraso (muelles)
-    if (d.prevHead) {
-      const vx = (J.H[0] - d.prevHead[0]) / FH / Math.max(dt, 1e-3), vy = (J.H[1] - d.prevHead[1]) / FH / Math.max(dt, 1e-3);
-      d.hairV[0] += (-vx * 0.05 - d.hair[0] * 60) * dt; d.hairV[1] += (-vy * 0.03 - d.hair[1] * 60) * dt;
-      d.hairV[0] *= Math.pow(0.08, dt); d.hairV[1] *= Math.pow(0.08, dt);
-      d.hair[0] = Math.max(-0.08, Math.min(0.08, d.hair[0] + d.hairV[0] * dt)); d.hair[1] = Math.max(-0.06, Math.min(0.04, d.hair[1] + d.hairV[1] * dt));
-      const hv = (J.P[0] - d.prevHip) / FH / Math.max(dt, 1e-3);
-      d.skirtV += (-hv * 0.06 - d.skirt * 70) * dt; d.skirtV *= Math.pow(0.1, dt); d.skirt = Math.max(-0.06, Math.min(0.06, d.skirt + d.skirtV * dt));
+  // golpe: latigazo de lado en la parte de arriba
+  if (hits.bass) { const dir = Math.random() < 0.5 ? -1 : 1, kk = m.FH * (0.008 + hits.bass * 0.018); for (let i = N - 6; i < N; i++) B[i].px -= dir * kk * (i - N + 7) / 6; }
+  for (const arm of m.arms) {
+    const side = arm === m.arms[0] ? -1 : 1;
+    for (let i = 1; i < arm.length; i++) {
+      const p = arm[i], vx = (p.x - p.px) * 0.97, vy = (p.y - p.py) * 0.97;
+      p.px = p.x; p.py = p.y;
+      const fl = Math.sin(t * (7 + side) + i * 0.8) * (0.5 + high * 3 + mid * 1.5) * m.FH * 3;
+      p.x += vx + (side * air * m.FH * 2.2 + fl * 0.6) * dt * dt;
+      p.y += vy + (g * 0.9 - air * m.FH * 3.2 + fl) * dt * dt;
     }
-    d.prevHead = J.H; d.prevHip = J.P[0];
-    shapes.push([d, J]);
-    // reflejo en el suelo
-    const sh = ctx.createRadialGradient(J.P[0], ground, 0, J.P[0], ground, FH * 0.22);
-    sh.addColorStop(0, night ? `rgba(0,0,0,.45)` : `rgba(0,0,0,.18)`); sh.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.save(); ctx.translate(J.P[0], ground); ctx.scale(1, 0.18); ctx.translate(-J.P[0], -ground); ctx.fillStyle = sh; ctx.fillRect(J.P[0] - FH * 0.22, ground - FH * 0.22, FH * 0.44, FH * 0.44); ctx.restore();
+    if (hits.mid) arm[arm.length - 1].py += m.FH * 0.02 * hits.mid;
+  }
+  // restricciones: largo de cada tramo, rigidez según el aire, el suelo
+  const stiff = Math.max(0.05, Math.min(1, (air - 0.3) * 1.1));   // inflado = recto; desinflado = se dobla
+  for (let it = 0; it < 10; it++) {
+    B[0].x = m.x; B[0].y = m.ground - m.FH * 0.06; B[1].x = m.x; B[1].y = B[0].y - m.L;
+    for (let i = 1; i < N - 1; i++) {
+      const a = B[i], b = B[i + 1], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, f = (d - m.L) / d;
+      if (i === 1) { b.x -= dx * f; b.y -= dy * f; } else { a.x += dx * f * 0.5; a.y += dy * f * 0.5; b.x -= dx * f * 0.5; b.y -= dy * f * 0.5; }
+    }
+    for (const span of [2, 3]) for (let i = 1; i < N - span; i++) {   // inflado: tiende a quedar recto (no se enrolla)
+      const a = B[i], c = B[i + span], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) || 1, rest = m.L * span * 0.995;
+      if (d < rest) { const f = (d - rest) / d * stiff * 0.5; if (i > 1) { a.x += dx * f; a.y += dy * f; } c.x -= dx * f; c.y -= dy * f; }
+    }
+    for (const arm of m.arms) {
+      arm[0].x = B[N - 5].x; arm[0].y = B[N - 5].y;
+      for (let i = 0; i < arm.length - 1; i++) {
+        const a = arm[i], b = arm[i + 1], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1, f = (d - m.armLen) / d;
+        if (i === 0) { b.x -= dx * f; b.y -= dy * f; } else { a.x += dx * f * 0.5; a.y += dy * f * 0.5; b.x -= dx * f * 0.5; b.y -= dy * f * 0.5; }
+      }
+    }
+    const floor = m.ground - m.FH * 0.04;
+    for (const p of B) if (p.y > floor) p.y = floor;
+    for (const arm of m.arms) for (const p of arm) if (p.y > floor) p.y = floor;
+  }
+}
+function tubePath(g, pts, off = 0, w = 0) {   // curva suave por los puntos (desplazada a un lado para el brillo)
+  const P = pts.map((p, i) => {
+    if (!off) return [p.x, p.y];
+    const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 1;
+    return [p.x - dy / d * off * w, p.y + dx / d * off * w];
   });
-  // Estela: la sombra se queda arrastrada un momento
-  // (cada silueta se pinta opaca en un lienzo aparte y se aplica la transparencia entera: sin solapes más oscuros)
-  if (!dz.tmp) { dz.tmp = document.createElement('canvas'); dz.tmp.width = dz.trail.width; dz.tmp.height = dz.trail.height; dz.tmpc = dz.tmp.getContext('2d'); dz.tmpc.scale(dz.tmp.width / W, dz.tmp.height / H); }
-  shapes.forEach(([d, J]) => {
-    dz.tmpc.clearRect(0, 0, W, H); dzDraw(dz.tmpc, d, J, rgba(RGB[d.woman ? 0 : 2], 1));
-    g.globalAlpha = night ? 0.22 : 0.18; g.drawImage(dz.tmp, 0, 0); g.globalAlpha = 1;
-  });
-  ctx.save(); ctx.imageSmoothingQuality = 'high';
-  ctx.globalAlpha = night ? 0.9 : 0.75; ctx.drawImage(dz.trail, 0, 0, W, H);
-  ctx.restore();
-  // Silueta actual: en la noche, luz de color con resplandor; en el día, sombra oscura
-  lctx.clearRect(0, 0, W, H);
-  shapes.forEach(([d, J]) => {
-    let fill;
-    if (night) { const gr = lctx.createLinearGradient(0, J.H[1] - FH * 0.1, 0, ground); const c1 = RGB[d.woman ? 0 : 1], c2 = RGB[d.woman ? 2 : 2]; gr.addColorStop(0, rgba(c1.map(v => v * 0.5 + 40), 1)); gr.addColorStop(1, rgba(c2.map(v => v * 0.35 + 20), 1)); fill = gr; }
-    else fill = '#18181f';
-    dzDraw(lctx, d, J, fill);
-  });
-  if (night) bloom(layer, 0.35 + beatSoft * 0.4);
-  ctx.save(); if (CAN_BLUR) ctx.filter = `blur(${(FH * 0.0025).toFixed(1)}px)`; ctx.globalAlpha = night ? 1 : 0.86; ctx.drawImage(layer, 0, 0); ctx.restore();
+  g.beginPath(); g.moveTo(P[0][0], P[0][1]);
+  for (let i = 1; i < P.length - 1; i++) g.quadraticCurveTo(P[i][0], P[i][1], (P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2);
+  g.lineTo(P[P.length - 1][0], P[P.length - 1][1]);
+}
+function tubeStroke(g, pts, w, c) {
+  const dark = c.map(v => v * 0.5), light = c.map(v => v + (255 - v) * 0.55);
+  g.lineCap = 'round'; g.lineJoin = 'round';
+  tubePath(g, pts); g.strokeStyle = rgba(dark, 1); g.lineWidth = w * 1.12; g.stroke();
+  tubePath(g, pts); g.strokeStyle = rgba(c, 1); g.lineWidth = w; g.stroke();
+  tubePath(g, pts, 0.36, w); g.strokeStyle = rgba(c.map(v => v * 0.78), 0.9); g.lineWidth = w * 0.22; g.stroke();   // sombra de un lado
+  tubePath(g, pts, -0.22, w); g.strokeStyle = rgba(light, 0.75); g.lineWidth = w * 0.2; g.stroke();   // brillo del plástico
+}
+function drawTubes(dt) {
+  const night = state.theme === 'dark';
+  if (tube.key !== W + 'x' + H) tubeInit();
+  ambient();
+  const ground = tube.men[0].ground;
+  const fl = ctx.createLinearGradient(0, ground, 0, H); fl.addColorStop(0, rgba(mix(0.5), night ? 0.12 : 0.08)); fl.addColorStop(1, rgba(mix(0.5), 0));
+  ctx.fillStyle = fl; ctx.fillRect(0, ground, W, H - ground);
+  if (dropHit) for (let i = 0; i < 140; i++) tube.confetti.push({ x: Math.random() * W, y: -Math.random() * H * 0.3, vx: (Math.random() - 0.5) * MIN * 0.2, vy: MIN * (0.15 + Math.random() * 0.25), r: Math.random() * 6, vr: (Math.random() - 0.5) * 10, c: Math.floor(Math.random() * 3), s: MIN * (0.006 + Math.random() * 0.008) });
+  for (const m of tube.men) {
+    // el aire: la música; en silencio se desinflan, en un drop se levantan de golpe
+    const goal = Math.min(1.6, 0.15 + Math.pow(energy, 0.9) * 1.25 + beatSoft * 0.7 + (dropHit ? 1 : 0));
+    m.air += (goal - m.air) * (1 - Math.pow(goal > m.air ? 0.02 : 0.3, dt));
+    const sub = 3; for (let k = 0; k < sub; k++) tubeStep(m, Math.min(dt, 0.04) / sub, m.air);
+    m.mouth += ((0.15 + mid * 1.1 + beatSoft * 0.3) - m.mouth) * Math.min(1, dt * 14);
+    const c = RGB[m.k % 3], c2 = RGB[(m.k + 1) % 3], w = m.FH * 0.11, B = m.body, N = m.N;
+    // sombra en el suelo
+    const top = B[N - 1], sx = (B[0].x + top.x) / 2;
+    const sh = ctx.createRadialGradient(sx, ground, 0, sx, ground, m.FH * 0.25);
+    sh.addColorStop(0, night ? 'rgba(0,0,0,.5)' : 'rgba(0,0,0,.18)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save(); ctx.translate(sx, ground); ctx.scale(1, 0.15); ctx.translate(-sx, -ground); ctx.fillStyle = sh; ctx.fillRect(sx - m.FH * 0.25, ground - m.FH * 0.25, m.FH * 0.5, m.FH * 0.5); ctx.restore();
+    // brazos detrás, luego el cuerpo
+    for (const arm of m.arms) tubeStroke(ctx, arm, w * 0.55, c);
+    tubeStroke(ctx, B, w, c);
+    // mechón de pelo arriba (el de los inflables), que aletea
+    const hx = top.x, hy = top.y, dx = top.x - B[N - 3].x, dy = top.y - B[N - 3].y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, nx = -uy, ny = ux;
+    for (let j = -3; j <= 3; j++) {
+      const a = j * 0.28 + Math.sin(time * 14 + j + m.ph) * (0.1 + high * 0.5), L = w * (0.9 + Math.abs(Math.sin(j * 1.7)) * 0.6);
+      const ex = hx + (ux * Math.cos(a) - nx * Math.sin(a)) * L, ey = hy + (uy * Math.cos(a) - ny * Math.sin(a)) * L;
+      ctx.strokeStyle = rgba(c2, 1); ctx.lineWidth = w * 0.16; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
+    }
+    // cara: ojos saltones que se mueven con el cuerpo y una boca que «canta»
+    const fx = top.x - ux * w * 0.9, fy = top.y - uy * w * 0.9;
+    const vx = (top.x - top.px), vy = (top.y - top.py), vm = Math.hypot(vx, vy) || 1, look = Math.min(1, vm / (w * 0.08));
+    for (const sgn of [-1, 1]) {
+      const ex = fx + nx * w * 0.22 * sgn, ey = fy + ny * w * 0.22 * sgn;
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, ey, w * 0.19, w * 0.22, Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex - vx / vm * w * 0.08 * look, ey - vy / vm * w * 0.08 * look, w * 0.085, 0, Math.PI * 2); ctx.fill();
+    }
+    const mx = fx - ux * w * 0.42, my = fy - uy * w * 0.42;
+    ctx.fillStyle = '#2a0b12'; ctx.beginPath(); ctx.ellipse(mx, my, w * 0.24, w * (0.05 + m.mouth * 0.17), Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+    // ventilador en el suelo: tiembla con los graves
+    const bw = w * 2.4, bh = m.FH * 0.075, shake = (Math.random() - 0.5) * bass * w * 0.04;
+    ctx.fillStyle = night ? '#2b2b33' : '#3a3a44'; ctx.beginPath(); ctx.roundRect(m.x - bw / 2 + shake, ground - bh, bw, bh, bh * 0.25); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = Math.max(1, bh * 0.06);
+    for (let j = 1; j < 6; j++) { const x = m.x - bw / 2 + bw * j / 6 + shake; ctx.beginPath(); ctx.moveTo(x, ground - bh * 0.8); ctx.lineTo(x, ground - bh * 0.2); ctx.stroke(); }
+  }
+  // confeti
+  for (const p of tube.confetti) { p.vy += MIN * 0.4 * dt; p.vx *= Math.pow(0.6, dt); p.x += p.vx * dt + Math.sin(time * 3 + p.r) * MIN * 0.03 * dt; p.y += p.vy * dt; p.r += p.vr * dt;
+    ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = COLORS[p.c]; ctx.fillRect(-p.s, -p.s * 0.45, p.s * 2, p.s * 0.9); ctx.restore(); }
+  tube.confetti = tube.confetti.filter(p => p.y < H + 20);
 }
 
-const scenes = { dancers: drawDancers, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
