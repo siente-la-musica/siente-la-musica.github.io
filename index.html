@@ -117,6 +117,7 @@
   body.recording #btnRec { background: #ff3b30; color: #fff; }
   body.recording :is(.lyricsView, .lyrics, .artistView, .lv-meta, .corner, .song, .lib, .status, .intro) { display: none !important; }
   body.recording canvas { box-shadow: 0 0 0 1px var(--glass-line), 0 30px 80px rgba(0,0,0,.4); }
+  .countdown .cd-wait { font-size: clamp(18px, 2.4vw, 32px); font-weight: 600; opacity: .85; }
   .countdown { position: fixed; inset: 0; display: grid; place-items: center; font-size: clamp(80px, 18vmin, 400px); font-weight: 800; color: var(--fg); text-shadow: 0 0 .3em var(--bg); pointer-events: none; z-index: 20; }
   body.recording #btnRec .rec-dot { background: #fff; animation: recBlink 1s steps(2) infinite; }
   @keyframes recBlink { 50% { opacity: .2; } }
@@ -554,6 +555,7 @@
       <div class="pop-title">Ajustes</div>
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
       <label class="row-set" for="coverBg"><span>Portada de fondo <small>La portada de la canción, suave detrás de la animación</small></span> <input type="checkbox" id="coverBg"></label>
+      <label class="row-set" for="coverGray"><span>Portada en blanco y negro <small>El fondo en grises; las animaciones siguen tomando los colores de la portada</small></span> <input type="checkbox" id="coverGray"></label>
       <label class="row-set" for="wakeLock"><span>No bloquear la pantalla <small>Mientras la página está abierta, la pantalla no se apaga ni se bloquea</small></span> <input type="checkbox" id="wakeLock"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
       <div class="row-set" id="installRow" hidden><span>Instalar como app <small id="installNote">Ábrela desde el escritorio o la pantalla de inicio, sin barra del navegador</small></span> <button class="primary keep" id="btnInstall">Instalar</button></div>
@@ -598,7 +600,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), coverBg: store.get('coverBg', true), wake: store.get('wake', true), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), coverBg: store.get('coverBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -631,7 +633,7 @@ function resize() {
     W = recSize.w; H = recSize.h; MIN = Math.min(W, H);
     const sc = Math.min(iw / W, ih / H), cw = W * sc, chh = H * sc;
     Object.assign(canvas.style, { width: cw + 'px', height: chh + 'px', left: (iw - cw) / 2 + 'px', top: (ih - chh) / 2 + 'px' });
-    DPR = W / cw;
+    DPR = MIN / 700;   // grosores y tamaños como en una pantalla real, no según la ventana del PC
   } else {
     Object.assign(canvas.style, { width: '', height: '', left: '', top: '' });
     DPR = (window.devicePixelRatio || 1) * renderScale;
@@ -827,6 +829,9 @@ document.getElementById('btnSee').onclick = e => { e.stopPropagation(); document
 const sensEl = document.getElementById('sens'), noFlashEl = document.getElementById('noFlash');
 sensEl.value = state.sens; noFlashEl.checked = state.noFlash;
 sensEl.oninput = () => { state.sens = +sensEl.value; store.set('sens', state.sens); };
+const coverGrayEl = document.getElementById('coverGray');
+coverGrayEl.checked = state.coverGray;
+coverGrayEl.onchange = () => { state.coverGray = coverGrayEl.checked; store.set('coverGray', state.coverGray); const u = coverUrl; coverUrl = ''; setCover(u); if (typeof altArt !== 'undefined') { altArt.key = ''; if (sp.item && state.mode === 'cover') loadAltArt(sp.item); } };
 const coverBgEl = document.getElementById('coverBg');
 coverBgEl.checked = state.coverBg;
 coverBgEl.onchange = () => { state.coverBg = coverBgEl.checked; store.set('coverBg', state.coverBg); };
@@ -1853,6 +1858,11 @@ function makeCoverBg(img) {
   x.imageSmoothingQuality = 'high';
   if (CAN_BLUR) x.filter = 'blur(2px)';     // apenas suavizada: se reconoce la portada
   x.drawImage(img, -6, -6, 652, 652);       // un poco más grande para que el borde no se aclare
+  x.filter = 'none';
+  if (state.coverGray) {   // en blanco y negro: el color lo ponen las animaciones
+    x.globalCompositeOperation = 'saturation'; x.fillStyle = '#808080'; x.fillRect(0, 0, 640, 640);
+    x.globalCompositeOperation = 'source-over';
+  }
   return c;
 }
 function setBackdrop(canvasOrNull) { bgPrev = bgCur; bgCur = canvasOrNull; bgFade = 0; }
@@ -2580,54 +2590,75 @@ function recWhenSetup() {
 recStartEl.oninput = () => { recStartAt = recStartEl.value * 1000; recWhenShow(recStartAt); };
 document.getElementById('recNow').onclick = () => { recStartAt = null; recStartEl.value = (lyricPos() / 1000).toFixed(1); recWhenShow(null); };
 document.getElementById('recChorus').onclick = () => { const t = chorusAt(); if (t == null) return; recStartAt = t; recStartEl.value = (t / 1000).toFixed(1); recWhenShow(t); };
-async function seekForClip(ms) {
-  if (nowSource() === 'file' && audioEl) { audioEl.currentTime = ms / 1000; if (audioEl.paused) audioEl.play().catch(() => {}); }
-  else if (nowSource() === 'spotify') { await spControl('seek', Math.round(ms)); if (!sp.playing) spControl('play'); }
-}
 document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { recFmt = b.dataset.fmt; document.querySelectorAll('[data-fmt]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { recSound = b.dataset.snd === '1'; document.querySelectorAll('[data-snd]').forEach(x => x.setAttribute('aria-pressed', x === b)); recNotes(); });
 const markStyle = () => document.querySelectorAll('[data-lstyle]').forEach(x => x.setAttribute('aria-pressed', x.dataset.lstyle === state.lyricStyle));
 document.querySelectorAll('[data-lstyle]').forEach(b => b.onclick = () => { state.lyricStyle = b.dataset.lstyle; store.set('lyricStyle', state.lyricStyle); markStyle(); });
 markStyle();
 document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => { recDur = +b.dataset.dur; document.querySelectorAll('[data-dur]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
-document.getElementById('btnRecStart').onclick = async () => {
-  closePops();
-  if (!window.MediaRecorder || !HTMLCanvasElement.prototype.captureStream) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div><div class="note">Prueba con Chrome o Edge en un ordenador.</div></div>'); return; }
-  const cd = document.getElementById('countdown');
-  if (recStartAt != null && canSeek()) { await seekForClip(Math.max(0, recStartAt - 2400)); recStartAt = null; }
-  for (const n of [3, 2, 1]) { cd.textContent = n; cd.hidden = false; await new Promise(r => setTimeout(r, 800)); }
-  cd.hidden = true;
-  startRecording();
-};
 function freshCanvas() {   // un lienzo nuevo, sin imágenes de otros sitios, para poder grabarlo
   const c = document.createElement('canvas'); c.id = 'c';
   canvas.replaceWith(c); canvas = c; ctx = c.getContext('2d');
   canvas.addEventListener('dblclick', toggleFull);
   canvas.addEventListener('contextrestored', () => { resize(); refreshColors(); });
 }
-function startRecording() {
-  recording = true; document.body.classList.add('recording'); document.body.classList.remove('idle');
+// ================= Grabar el clip =================
+// Con WebCodecs (Chrome, Edge, Safari reciente) se codifica cada fotograma en H.264 de alta calidad,
+// a 30 fotogramas exactos por segundo, y el sonido original en AAC; un archivo MP4 listo para TikTok
+// e Instagram. Si el navegador no puede, se usa su grabadora integrada (MediaRecorder).
+let rec = null;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const nextFrame = () => new Promise(r => requestAnimationFrame(r));
+function loadScript(src) { return new Promise((res, rej) => { const s_ = document.createElement('script'); s_.src = src; s_.onload = res; s_.onerror = rej; document.head.append(s_); }); }
+function recAudioTrack() {
+  let t = null;
+  if (currentStream) t = currentStream.getAudioTracks().find(x => x.readyState === 'live');
+  else if (audioEl && audioEl.captureStream) t = audioEl.captureStream().getAudioTracks()[0];
+  if (!t && analyser && recDest) t = recDest.stream.getAudioTracks()[0];
+  return t || null;
+}
+async function pickVideoConfig(w, h) {
+  for (const codec of ['avc1.640033', 'avc1.640032', 'avc1.4d0033', 'avc1.42e033'])
+    for (const hardwareAcceleration of ['prefer-hardware', 'no-preference']) {
+      const c = { codec, width: w, height: h, framerate: 30, bitrate: 18e6, bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration, avc: { format: 'avc' } };
+      try { if ((await VideoEncoder.isConfigSupported(c)).supported) return c; } catch (e) {}
+    }
+  return null;
+}
+// Prepara la grabación (mientras corre la cuenta atrás): elige el códec y mira el formato del sonido
+async function recPrepare() {
   recSize = recFmt === 'v' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+  if (!('VideoEncoder' in window) || !('VideoFrame' in window)) return null;
+  try { if (!window.Mp4Muxer) await loadScript('lib/mp4-muxer.js'); } catch (e) {}
+  if (!window.Mp4Muxer) return null;   // sin la librería: la grabadora del navegador
+  const vcfg = await pickVideoConfig(recSize.w, recSize.h);
+  if (!vcfg) return null;
+  const prep = { vcfg, track: null, acfg: null };
+  if (!recSound) return prep;
+  const track = recAudioTrack();
+  if (!track) return prep;
+  if (!('MediaStreamTrackProcessor' in window) || !('AudioEncoder' in window)) return null;   // sonido: con la grabadora del navegador
+  // Formato real del sonido: se lee una muestra de una copia de la pista
+  const probe = track.clone(); let sampleRate = 48000, numberOfChannels = 2;
+  try {
+    const rd = new MediaStreamTrackProcessor({ track: probe }).readable.getReader();
+    const r = await Promise.race([rd.read(), sleep(1500).then(() => null)]);
+    if (r && r.value) { sampleRate = r.value.sampleRate; numberOfChannels = r.value.numberOfChannels; r.value.close(); }
+    rd.cancel().catch(() => {});
+  } catch (e) {}
+  probe.stop();
+  for (const [codec, mux] of [['mp4a.40.2', 'aac'], ['opus', 'opus']]) {
+    const c = { codec, sampleRate, numberOfChannels, bitrate: 256000 };
+    try { if ((await AudioEncoder.isConfigSupported(c)).supported) { prep.acfg = { cfg: c, mux }; break; } } catch (e) {}
+  }
+  if (!prep.acfg) return null;
+  prep.track = track;
+  return prep;
+}
+function recUiStart() {
+  recording = true; document.body.classList.add('recording'); document.body.classList.remove('idle');
   freshCanvas(); resize();
   blobs.length = 0; lights.length = 0; ictx.clearRect(0, 0, W, H);
-  const stream = canvas.captureStream(30);
-  stream.getVideoTracks().forEach(t => { try { t.contentHint = 'detail'; } catch (e) {} });   // prioriza nitidez
-  // Sonido: la pista original tal cual llega (sin pasar por el analizador, que la reprocesa)
-  if (recSound) {
-    let tracks = [];
-    if (currentStream) tracks = currentStream.getAudioTracks().filter(t => t.readyState === 'live');
-    else if (audioEl && audioEl.captureStream) tracks = audioEl.captureStream().getAudioTracks();
-    if (!tracks.length && analyser && recDest) tracks = recDest.stream.getAudioTracks();
-    tracks.forEach(t => stream.addTrack(t));
-  }
-  recMime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-    .find(t => MediaRecorder.isTypeSupported(t)) || '';
-  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 28e6, audioBitsPerSecond: 256e3 }); }
-  catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
-  recChunks = [];
-  recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
-  recorder.onstop = finishRecording;
-  recorder.start(500);
   recT0 = performance.now();
   recTimer = setInterval(() => {
     const t = (performance.now() - recT0) / 1000;
@@ -2635,18 +2666,135 @@ function startRecording() {
     if (recDur && t >= recDur) stopRecording();
   }, 250);
 }
-function stopRecording() { if (recorder && recorder.state !== 'inactive') recorder.stop(); clearInterval(recTimer); }
-function finishRecording() {
+function startRecording(prep) {
+  recUiStart();
+  if (prep) return startWebCodecs(prep);
+  // --- Grabadora integrada del navegador ---
+  const stream = canvas.captureStream(30);
+  stream.getVideoTracks().forEach(t => { try { t.contentHint = 'detail'; } catch (e) {} });
+  if (recSound) { const t = recAudioTrack(); if (t) stream.addTrack(t); }
+  recMime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find(t => MediaRecorder.isTypeSupported(t)) || '';
+  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 28e6, audioBitsPerSecond: 256e3 }); }
+  catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
+  recChunks = [];
+  recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
+  recorder.onstop = () => { const type = (recMime || 'video/webm').split(';')[0]; finishRecording(new Blob(recChunks, { type }), type.includes('mp4') ? 'mp4' : 'webm'); };
+  recorder.start(500);
+}
+function startWebCodecs({ vcfg, track, acfg }) {
+  const muxer = new Mp4Muxer.Muxer({
+    target: new Mp4Muxer.ArrayBufferTarget(), fastStart: 'in-memory', firstTimestampBehavior: 'cross-track-offset',
+    video: { codec: 'avc', width: recSize.w, height: recSize.h, frameRate: 30 },
+    audio: acfg ? { codec: acfg.mux, sampleRate: acfg.cfg.sampleRate, numberOfChannels: acfg.cfg.numberOfChannels } : undefined,
+  });
+  const fail = e => { console.error(e); if (rec) rec.error = e; };
+  const venc = new VideoEncoder({ output: (chunk, meta) => muxer.addVideoChunk(chunk, meta), error: fail });
+  venc.configure(vcfg);
+  rec = { muxer, venc, aenc: null, next: 0, n: 0, dropped: 0, clone: null, reader: null, stopping: false };
+  if (track && acfg) {
+    const aenc = new AudioEncoder({ output: (chunk, meta) => { if (rec && rec.aBase != null) muxer.addAudioChunk(chunk, meta, Math.max(0, rec.aBase + chunk.timestamp - rec.aFirst)); }, error: fail });
+    aenc.configure(acfg.cfg);
+    const clone = track.clone(), reader = new MediaStreamTrackProcessor({ track: clone }).readable.getReader();
+    Object.assign(rec, { aenc, clone, reader });
+    (async () => {
+      const r_ = rec;
+      while (r_ && !r_.stopping) {
+        let res; try { res = await reader.read(); } catch (e) { break; }
+        if (res.done) break;
+        const d = res.value;
+        if (r_.stopping || aenc.state !== 'configured') { d.close(); break; }
+        // El primer trozo de sonido marca dónde cae en el tiempo del vídeo
+        if (r_.aBase == null) { r_.aFirst = d.timestamp; r_.aBase = Math.max(0, Math.round((performance.now() - recT0) * 1000 - d.duration)); }
+        aenc.encode(d); d.close();
+      }
+    })();
+  }
+}
+// Cada fotograma dibujado se manda al codificador, a 30 por segundo exactos y con su hora real
+function recFrame(now) {
+  if (!rec || rec.stopping || rec.venc.state !== 'configured') return;
+  const t = now - recT0;
+  if (t < rec.next) return;
+  rec.next = Math.max(rec.next + 1000 / 30, t - 1000 / 30);
+  if (rec.venc.encodeQueueSize > 8) { rec.dropped++; return; }   // si el equipo no da abasto, salta uno
+  const f = new VideoFrame(canvas, { timestamp: Math.round(t * 1000), duration: 33333 });
+  rec.venc.encode(f, { keyFrame: rec.n++ % 60 === 0 }); f.close();
+}
+async function stopRecording() {
+  clearInterval(recTimer);
+  if (rec) {
+    const r_ = rec; r_.stopping = true;
+    btnRec.innerHTML = '<span class="rec-dot"></span>Guardando…';
+    try {
+      try { r_.reader && await r_.reader.cancel(); } catch (e) {}
+      r_.clone && r_.clone.stop();
+      await r_.venc.flush();
+      if (r_.aenc && r_.aenc.state === 'configured') await r_.aenc.flush();
+      r_.muxer.finalize();
+      const blob = new Blob([r_.muxer.target.buffer], { type: 'video/mp4' });
+      rec = null; try { r_.venc.close(); r_.aenc && r_.aenc.close(); } catch (e) {}
+      finishRecording(blob, 'mp4');
+    } catch (e) {
+      console.error(e); rec = null;
+      finishRecording(null, 'mp4', e);
+    }
+    return;
+  }
+  if (recorder && recorder.state !== 'inactive') recorder.stop();
+}
+function finishRecording(blob, ext, err) {
   recording = false; recSize = null; document.body.classList.remove('recording');
   btnRec.innerHTML = '<span class="rec-dot"></span>Grabar';
   resize(); blobs.length = 0; lights.length = 0;
-  const type = (recMime || 'video/webm').split(';')[0], ext = type.includes('mp4') ? 'mp4' : 'webm';
-  const blob = new Blob(recChunks, { type });
+  if (!blob) { showSong(`<div class="meta"><div class="title">No se pudo guardar el clip</div><div class="note">${esc(err && err.message || 'Error al codificar')}. Prueba otra vez o cambia de navegador.</div></div>`); return; }
   const url = URL.createObjectURL(blob);
   const name = 'siente-la-musica' + (sp.item ? '-' + sp.item.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '') + '.' + ext;
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   showSong(`<div class="meta"><div class="title">Clip guardado</div><div class="note">Se descargó «${esc(name)}» (${(blob.size / 1048576).toFixed(1)} MB).${ext === 'webm' ? ' TikTok acepta este formato; si tu editor no, conviértelo a MP4.' : ''}</div><div class="row"><a href="${url}" download="${esc(name)}">Descargar otra vez</a></div></div>`);
 }
+
+// --- Empezar: deja la canción lista, cuenta 3-2-1 y graba justo cuando empieza a sonar ---
+async function recCue(ms) {   // la canción quieta en el punto elegido
+  if (nowSource() === 'file' && audioEl) { audioEl.pause(); audioEl.currentTime = ms / 1000; return; }
+  const dev = sp.deviceId ? '&device_id=' + encodeURIComponent(sp.deviceId) : '';
+  try { await spApi('/me/player/pause?' + dev.slice(1), { method: 'PUT' }); } catch (e) {}
+  try { await spApi('/me/player/seek?position_ms=' + Math.round(ms) + dev, { method: 'PUT' }); } catch (e) {}
+  sp.playing = false; sp.progress = ms; sp.at = performance.now(); sp.lockUntil = performance.now() + 2500; lyricIndex = -2; lvIndex = -2; spPatch();
+}
+function recPlay() {
+  if (nowSource() === 'file' && audioEl) audioEl.play().catch(() => {});
+  else if (nowSource() === 'spotify') spControl('play');
+}
+async function recWaitForMusic() {   // espera a que de verdad suene (máx. 6 s)
+  const t0 = performance.now();
+  if (analyser) {
+    let n = 0;
+    while (performance.now() - t0 < 6000) { await nextFrame(); if (hits.bass || energy > 0.08) return; if (energy > 0.04) { if (++n >= 2) return; } else n = 0; }
+    return;
+  }
+  if (nowSource() === 'file' && audioEl) { while (audioEl.paused && performance.now() - t0 < 4000) await sleep(50); return; }
+  if (nowSource() === 'spotify') while (performance.now() - t0 < 5000) { await sleep(250); try { const d = await spApi('/me/player'); if (d && d.is_playing) return; } catch (e) {} }
+}
+document.getElementById('btnRecStart').onclick = async () => {
+  closePops();
+  const webcodecs = 'VideoEncoder' in window, legacy = window.MediaRecorder && HTMLCanvasElement.prototype.captureStream;
+  if (!webcodecs && !legacy) { showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div><div class="note">Prueba con Chrome o Edge en un ordenador.</div></div>'); return; }
+  const cd = document.getElementById('countdown');
+  cd.innerHTML = '<span class="cd-wait">Preparando…</span>'; cd.hidden = false;
+  const target = recStartAt != null && canSeek() ? recStartAt : null; recStartAt = null;
+  const prepP = recPrepare().catch(() => null);
+  if (target != null) await recCue(target);
+  const prep = await prepP;
+  if (!prep && !legacy) { cd.hidden = true; showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div></div>'); return; }
+  for (const n of [3, 2, 1]) { cd.textContent = n; await sleep(800); }
+  const src = nowSource();
+  if (target != null || (src === 'spotify' && !sp.playing) || (src === 'file' && audioEl && audioEl.paused)) recPlay();
+  cd.innerHTML = '<span class="cd-wait">♪ Esperando la música…</span>';
+  await recWaitForMusic();
+  cd.hidden = true;
+  startRecording(prep);
+};
 
 // Texto que se dibuja en el lienzo solo mientras se graba
 function wrapWords(words, maxW) {
@@ -4431,6 +4579,7 @@ function render(now) {
   if (!recording) { ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); }
   ctx.globalAlpha = 1;
   drawRecOverlay();
+  recFrame(now);
 }
 requestAnimationFrame(frame);
 </script>
