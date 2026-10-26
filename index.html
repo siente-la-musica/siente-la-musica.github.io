@@ -189,6 +189,7 @@
   .song .row { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; font-size: 12px; color: var(--muted); }
   .song .row button { font-size: 12px; padding: 0; background: none; color: var(--muted); text-decoration: underline; text-underline-offset: 2px; }
   .song .row button:hover { color: var(--fg); filter: none; }
+  .song .row button.pick { text-decoration: none; background: var(--fg); color: var(--bg); padding: 7px 14px; border-radius: 99px; font-weight: 600; font-size: 13px; }
   .song .time { font-variant-numeric: tabular-nums; }
   .swatch.cover-swatch { background-size: cover; background-position: center; }
   .song .bar { height: 3px; border-radius: 2px; background: var(--chip); overflow: hidden; margin-top: 4px; }
@@ -1877,7 +1878,9 @@ function spRender() {
   if (!spConnected() || sp.dismissed) return;
   if (!sp.item) {
     const srcName = { spotify: 'Spotify', lastfm: 'Last.fm', file: 'El archivo' }[nowSource()] || 'Tu música';
-    showSong(`<div class="meta"><div class="title">${srcName} conectado</div><div class="note">Ahora mismo no suena nada.</div><div class="row"><button id="spOut">Desconectar</button></div></div>`);
+    const pick = nowSource() === 'spotify';
+    showSong(`<div class="meta"><div class="title">${srcName} conectado</div><div class="note">${pick ? 'Elige qué escuchar y suena desde aquí.' : 'Ahora mismo no suena nada.'}</div><div class="row">${pick ? '<button class="pick" id="spPick">▶ Elegir música</button>' : ''}<button id="spOut">Desconectar</button></div></div>`);
+    const pk = document.getElementById('spPick'); if (pk) pk.onclick = e => { e.stopPropagation(); libOpen(); };
   } else {
     const it = sp.item;
     const artist = it.artists ? it.artists.map(a => a.name).join(', ') : (it.show?.name || '');
@@ -2090,7 +2093,7 @@ function libOpen() {
   else if (!analyser) libNoteShow('Consejo: pulsa <b>Conectar audio → Audio del PC</b> para que las animaciones sigan lo que pongas aquí.');
   else libNoteShow('');
   const ra = document.getElementById('libReauth'); if (ra) ra.onclick = () => spLogin();
-  libDevices(); if (hasScope('streaming')) libSdk();
+  libDevices(); if (hasScope('streaming') && canWebPlayer) libSdk();
   if (missing) { libList.innerHTML = ''; return; }
   if (!libList.childElementCount) libShowTab(lib.tab);
 }
@@ -2118,7 +2121,7 @@ async function libDevices() {
     : '<option value="">Abre Spotify en tu PC o móvil</option>';
   const has = id => id && list.some(d => d.id === id);
   const active = list.find(d => d.is_active), real = list.find(d => !d.web);
-  libDev.value = has(cur) ? cur : active ? active.id : has(saved) ? saved : real ? real.id : list[0]?.id || '';
+  libDev.value = has(cur) ? cur : active ? active.id : has(saved) ? saved : real ? real.id : lib.webId || list[0]?.id || '';
   return list;
 }
 libDev.onfocus = libDevices;
@@ -2155,7 +2158,17 @@ async function libPlay(body, row, track) {
   try {
     let dev = libDev.value;
     if (!dev) { await libDevices(); dev = libDev.value; }
-    if (!dev) { libNoteShow('No encuentro un Spotify abierto. Abre Spotify en tu PC o móvil (o pulsa play allí una vez) y vuelve a intentarlo.'); return; }
+    if (!dev) {
+      // Nada abierto y este navegador no puede sonar (celular o cuenta sin Premium): se abre en la app de Spotify
+      const uri = body.uris ? body.uris[0] : body.context_uri, [, type, id] = (uri || '').split(':');
+      if (type && id) {
+        libNoteShow('Abriendo en la app de Spotify… Cuando empiece a sonar, vuelve aquí: la página lo seguirá sola.');
+        window.open(`https://open.spotify.com/${type}/${id}`, "_blank", "noopener");   // la app de Spotify la abre y empieza a sonar
+        spBurst();
+      } else libNoteShow('No encuentro un Spotify abierto. Abre la app de Spotify en tu celular o PC y vuelve a intentarlo.');
+      if (track && sp.expectId) { sp.expectId = null; sp.lockUntil = 0; }
+      return;
+    }
     const info = (lib.devices || []).find(d => d.id === dev);
     const play = () => spApi('/me/player/play?device_id=' + encodeURIComponent(dev), { method: 'PUT', body: JSON.stringify(body) });
     try { await play(); }
@@ -2470,7 +2483,8 @@ function fileStop() {
 }
 
 spButton();
-spHandleRedirect().then(() => { spButton(); spLoop(); lfLoop(); });
+const canWebPlayer = !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+spHandleRedirect().then(() => { spButton(); spLoop(); lfLoop(); if (spotifyOn() && canWebPlayer && hasScope('streaming')) libSdk(); });
 
 // ================= Letra sincronizada (LRCLIB, gratis y abierto) =================
 const lyricsEl = document.getElementById('lyrics'), btnLyrics = document.getElementById('btnLyrics');
