@@ -4232,6 +4232,14 @@ function drawMagnet(dt) {
 // las que tiene cerca. El cielo avanza despacio, como si viajaras.
 const starSky = { list: null, key: '', shooting: [], ptr: null, waves: [], lines: [] };
 addEventListener('pointermove', e => { if (state.mode === 'stars') starSky.ptr = { x: e.clientX / innerWidth, y: e.clientY / innerHeight, at: performance.now() }; });
+// Formas reales (aproximadas) de algunas constelaciones: puntos de 0 a 1 y sus uniones
+const CONSTELLATIONS = [
+  { n: 'Orión', p: [[0.28, 0.08], [0.72, 0.15], [0.42, 0.48], [0.5, 0.5], [0.58, 0.52], [0.3, 0.92], [0.76, 0.86], [0.5, 0.02]], e: [[7, 0], [7, 1], [0, 2], [1, 4], [2, 3], [3, 4], [2, 5], [4, 6]] },
+  { n: 'Osa Mayor', p: [[0.02, 0.3], [0.2, 0.25], [0.36, 0.33], [0.5, 0.45], [0.55, 0.7], [0.85, 0.75], [0.92, 0.5]], e: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 3]] },
+  { n: 'Casiopea', p: [[0.02, 0.35], [0.25, 0.65], [0.48, 0.42], [0.72, 0.7], [0.98, 0.3]], e: [[0, 1], [1, 2], [2, 3], [3, 4]] },
+  { n: 'Cruz del Sur', p: [[0.5, 0.02], [0.5, 0.98], [0.15, 0.48], [0.82, 0.4], [0.62, 0.62]], e: [[0, 1], [2, 3]] },
+  { n: 'Lyra', p: [[0.5, 0.05], [0.42, 0.35], [0.62, 0.38], [0.36, 0.85], [0.58, 0.9]], e: [[0, 1], [0, 2], [1, 2], [1, 3], [2, 4], [3, 4]] },
+];
 function starsInit() {
   const n = Math.round(Math.min(1400, 700 * (W * H) / (1920 * 1080 * DPR * DPR) + 300));
   starSky.list = Array.from({ length: n }, () => {
@@ -4252,11 +4260,15 @@ function drawStars(dt) {
   if (hits.bass > 0.25 && energy > 0.08) starSky.waves.push({ r: 0, k: 0.18 + hits.bass * 0.22 });
   starSky.waves.forEach(w => { w.r += dt * 1.5; w.k *= Math.pow(0.3, dt); });
   starSky.waves = starSky.waves.filter(w => w.r < 1.3 && w.k > 0.03);
-  // Constelaciones: con los medios, unas estrellas cercanas se unen con líneas un momento
-  if (hits.mid && starSky.list) {
-    const cx = Math.random(), cy = Math.random(), near = starSky.list.filter(s_ => s_.z > 0.25 && Math.hypot(s_.x - cx, (s_.y - cy) * H / W) < 0.12).slice(0, 7);
-    if (near.length > 2) starSky.lines.push({ stars: near, k: 0.5 + hits.mid * 0.5, c: Math.floor(Math.random() * 3) });
-    if (starSky.lines.length > 4) starSky.lines.shift();
+  // Constelaciones reales: de vez en cuando aparece una (con un golpe de medios o en un drop), sus
+  // líneas se trazan una a una con cada golpe, se queda un rato y se desvanece
+  const now_ = performance.now();
+  if ((hits.mid > 0.3 || dropHit) && energy > 0.1 && now_ - (starSky.lastCon ?? -1e9) > 9000 && starSky.lines.length < 2) {
+    starSky.lastCon = now_;
+    const def = CONSTELLATIONS[Math.floor(Math.random() * CONSTELLATIONS.length)];
+    const sc = 0.32 + Math.random() * 0.12, rot = (Math.random() - 0.5) * 0.7, cx = 0.25 + Math.random() * 0.5, cy = 0.28 + Math.random() * 0.4;
+    const pts = def.p.map(([x, y]) => { const X = (x - 0.5) * sc, Y = (y - 0.5) * sc; return [cx + (X * Math.cos(rot) - Y * Math.sin(rot)) * H / W, cy + X * Math.sin(rot) + Y * Math.cos(rot)]; });
+    starSky.lines.push({ name: def.n, pts, e: def.e, drawn: 0, prog: 0, age: 0, c: Math.floor(Math.random() * 3) });
   }
   const p = starSky.ptr && performance.now() - starSky.ptr.at < 2500 ? starSky.ptr : null;
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
@@ -4289,13 +4301,32 @@ function drawStars(dt) {
       }
     }
   }
-  // Líneas de las constelaciones
+  // Constelaciones: estrellas un poco más brillantes y líneas finas que se van trazando con el ritmo
   for (const cl of starSky.lines) {
-    cl.k *= Math.pow(0.3, dt);
-    ctx.globalAlpha = cl.k * 0.6; ctx.strokeStyle = rgba(RGB[cl.c], 1); ctx.lineWidth = DPR;
-    ctx.beginPath(); cl.stars.forEach((s_, i) => i ? ctx.lineTo(s_.x * W, s_.y * H) : ctx.moveTo(s_.x * W, s_.y * H)); ctx.stroke();
+    cl.age += dt;
+    if ((hits.bass || hits.mid || beatTick) && cl.drawn < cl.e.length) cl.drawn++;
+    cl.prog = Math.min(cl.drawn, cl.prog + dt * 4);
+    const life = cl.age < 1 ? cl.age : cl.age > 10 ? Math.max(0, 1 - (cl.age - 10) / 2.5) : 1;
+    const col = RGB[cl.c].map(v => v + (255 - v) * 0.5);
+    ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = Math.max(1, DPR * 0.9); ctx.lineCap = 'round';
+    cl.e.forEach(([i, j], k) => {
+      const f = Math.max(0, Math.min(1, cl.prog - k)); if (!f) return;
+      const [x1, y1] = cl.pts[i], [x2, y2] = cl.pts[j];
+      ctx.globalAlpha = life * 0.38 * (0.8 + beatSoft * 0.4);
+      ctx.beginPath(); ctx.moveTo(x1 * W, y1 * H); ctx.lineTo((x1 + (x2 - x1) * f) * W, (y1 + (y2 - y1) * f) * H); ctx.stroke();
+    });
+    for (const [x, y] of cl.pts) {
+      const r = DPR * (1.6 + beatSoft * 0.8), hr = r * 6;
+      ctx.globalAlpha = life * 0.55; ctx.drawImage(SPRITES[cl.c], x * W - hr, y * H - hr, hr * 2, hr * 2);
+      ctx.globalAlpha = life; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x * W, y * H, r, 0, Math.PI * 2); ctx.fill();
+    }
+    if (cl.prog >= cl.e.length && cl.age > 2 && cl.age < 10) {   // el nombre, muy tenue
+      ctx.globalAlpha = life * 0.35; ctx.fillStyle = rgba(col, 1); ctx.font = `500 ${Math.round(MIN * 0.016)}px -apple-system, "Segoe UI", system-ui, sans-serif`; ctx.textAlign = 'center';
+      const by = Math.max(...cl.pts.map(q => q[1])), bx = cl.pts.reduce((a_, q) => a_ + q[0], 0) / cl.pts.length;
+      ctx.fillText(cl.name, bx * W, by * H + MIN * 0.04);
+    }
   }
-  starSky.lines = starSky.lines.filter(c => c.k > 0.03);
+  starSky.lines = starSky.lines.filter(c => c.age < 12.5);
   // Estrellas fugaces con los golpes
   if (hits.bass > 0.4 && energy > 0.15 && Math.random() < 0.35) starSky.shooting.push({ x: Math.random() * W * 0.8 + W * 0.2, y: Math.random() * H * 0.4, vx: -(0.6 + Math.random() * 0.5) * MIN, vy: (0.25 + Math.random() * 0.25) * MIN, life: 0.9, t: 0, c: Math.floor(Math.random() * 3) });
   for (let i = starSky.shooting.length - 1; i >= 0; i--) {
@@ -4834,17 +4865,33 @@ function drawTiles(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 function drawTile(t, gap, night, pop) {
-  const sc = 1 + Math.min(0.18, pop * 0.12), s_ = (t.s - gap) * sc, x = t.x + t.s / 2 - s_ / 2, y = t.y + t.s / 2 - s_ / 2, c = mix(t.col);
-  const I = t.I, rr = Math.max(2, t.s * 0.035);
-  if (pop > 0.02) { lctx.save(); lctx.shadowColor = night ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.25)'; lctx.shadowBlur = t.s * 0.25 * pop; lctx.shadowOffsetY = t.s * 0.08 * pop; }
+  // Cada cuadro es un bloque con relieve: arriba y a la izquierda le da la luz, abajo y a la derecha
+  // queda en sombra. Al sobresalir, el bloque sale hacia afuera y se ven sus caras laterales.
+  const lift = Math.min(1, pop * 0.7), sc = 1 + lift * 0.1, s_ = (t.s - gap) * sc, x = t.x + t.s / 2 - s_ / 2, y = t.y + t.s / 2 - s_ / 2, c = mix(t.col);
+  const I = t.I, rr = Math.max(2, t.s * 0.03), depth = t.s * (0.035 + lift * 0.12);
+  const face = c.map(v => v * (0.35 + Math.min(1, I) * 0.65)), dark = c.map(v => v * 0.25);
+  if (lift > 0.02) { lctx.save(); lctx.shadowColor = night ? 'rgba(0,0,0,.75)' : 'rgba(0,0,0,.3)'; lctx.shadowBlur = t.s * 0.3 * lift; lctx.shadowOffsetX = depth * 0.6; lctx.shadowOffsetY = depth; }
+  // caras laterales (el grosor del bloque)
+  lctx.fillStyle = rgba(dark, Math.min(1, (night ? 0.5 : 0.35) + I * 0.4));
+  lctx.beginPath(); lctx.roundRect(x + depth * 0.5, y + depth, s_, s_, rr); lctx.fill();
+  if (lift > 0.02) lctx.restore();
+  // cara frontal con degradado de luz
   const g = lctx.createLinearGradient(x, y, x + s_, y + s_);
-  g.addColorStop(0, rgba(c.map(v => v + (255 - v) * 0.25 * I), Math.min(1, (night ? 0.07 : 0.1) + I * 0.85)));
-  g.addColorStop(1, rgba(c, Math.min(1, (night ? 0.04 : 0.07) + I * 0.65)));
+  g.addColorStop(0, rgba(face.map(v => v + (255 - v) * (0.18 + I * 0.25)), Math.min(1, (night ? 0.16 : 0.22) + I * 0.85)));
+  g.addColorStop(1, rgba(face, Math.min(1, (night ? 0.1 : 0.15) + I * 0.7)));
   lctx.fillStyle = g; lctx.beginPath(); lctx.roundRect(x, y, s_, s_, rr); lctx.fill();
-  if (pop > 0.02) lctx.restore();
-  // un filo de luz arriba, como un cristal
-  lctx.strokeStyle = `rgba(255,255,255,${(night ? 0.04 : 0.25) + I * 0.18})`; lctx.lineWidth = Math.max(1, DPR * 0.8);
-  lctx.beginPath(); lctx.roundRect(x + 0.5, y + 0.5, s_ - 1, s_ - 1, rr); lctx.stroke();
+  // bisel: filo de luz arriba-izquierda y sombra abajo-derecha
+  lctx.lineWidth = Math.max(1, t.s * 0.012);
+  lctx.strokeStyle = `rgba(255,255,255,${(night ? 0.08 : 0.35) + I * 0.3})`;
+  lctx.beginPath(); lctx.moveTo(x + rr, y + 1); lctx.lineTo(x + s_ - rr, y + 1); lctx.moveTo(x + 1, y + rr); lctx.lineTo(x + 1, y + s_ - rr); lctx.stroke();
+  lctx.strokeStyle = `rgba(0,0,0,${night ? 0.45 : 0.18})`;
+  lctx.beginPath(); lctx.moveTo(x + rr, y + s_ - 1); lctx.lineTo(x + s_ - rr, y + s_ - 1); lctx.moveTo(x + s_ - 1, y + rr); lctx.lineTo(x + s_ - 1, y + s_ - rr); lctx.stroke();
+  // reflejo de cristal en diagonal
+  if (I > 0.15) {
+    const sh = lctx.createLinearGradient(x, y, x + s_ * 0.6, y + s_ * 0.6);
+    sh.addColorStop(0, `rgba(255,255,255,${Math.min(0.22, I * 0.18)})`); sh.addColorStop(1, 'rgba(255,255,255,0)');
+    lctx.fillStyle = sh; lctx.beginPath(); lctx.moveTo(x, y); lctx.lineTo(x + s_ * 0.55, y); lctx.lineTo(x, y + s_ * 0.55); lctx.closePath(); lctx.fill();
+  }
 }
 
 
