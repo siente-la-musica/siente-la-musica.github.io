@@ -198,34 +198,34 @@
   .song.player {
     top: auto; right: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); left: var(--pl-x, 16px);
     width: var(--pl-w, 360px); z-index: 10; overflow: visible; isolation: isolate;
-    display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; grid-template-areas: "cv meta ctl";
-    gap: 10px; align-items: center; padding: 6px 8px 8px 6px; border-radius: 20px;
-    background: color-mix(in srgb, var(--bg) 45%, transparent);
+    display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; grid-template-areas: "cv meta ctl";
+    gap: 10px; align-items: center; padding: 7px 8px 7px 7px; border-radius: 22px;
+    background: var(--glass); border: 1px solid var(--glass-line); box-shadow: var(--shadow);
     transition: opacity .5s, transform .5s;
   }
   body.idle .song.player { transform: translateY(12px); }
   .song.player .pbg { position: absolute; inset: 0; z-index: -1; border-radius: inherit; overflow: hidden; }
-  .song.player .pbg::before { content: ''; position: absolute; inset: -40%; background: var(--cv, none) center / cover, linear-gradient(135deg, var(--c1, #555), var(--c2, #555)); filter: blur(30px) saturate(1.5); opacity: .7; }
-  .song.player .pbg::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 55%, transparent); }
-  .song.player .cover { grid-area: cv; width: 40px; height: 40px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
+  .song.player .pbg::before { content: ''; position: absolute; inset: -40%; background: var(--cv, none) center / cover, linear-gradient(135deg, var(--c1, #555), var(--c2, #555)); filter: blur(30px) saturate(1.4); opacity: .35; }
+  .song.player .pbg::after { content: ''; position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 35%, transparent); }
+  .song.player .cover { grid-area: cv; width: 36px; height: 36px; border-radius: 10px; box-shadow: 0 4px 14px rgba(0,0,0,.3); }
   .song.player .meta { grid-area: meta; gap: 0; min-width: 0; }
-  .song.player .title { font-size: 14px; letter-spacing: -.01em; }
-  .song.player .sub { display: flex; gap: 6px; font-size: 12px; color: var(--muted); min-width: 0; }
+  .song.player .title { font-size: 13px; letter-spacing: -.01em; line-height: 1.2; }
+  .song.player .sub { display: flex; gap: 6px; font-size: 11px; line-height: 1.2; color: var(--muted); min-width: 0; }
   .song.player .sub .artist { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
   .song.player .sub .time { flex: none; font-variant-numeric: tabular-nums; opacity: .8; }
   .song.player > .close { display: none; }
   .song .ctl { grid-area: ctl; display: flex; gap: 0; align-items: center; }
-  .song .ctl button { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: none; color: var(--fg); transition: transform .15s, background .2s; }
+  .song .ctl button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 50%; background: none; color: var(--fg); transition: transform .15s, background .2s; }
   .song .ctl button:hover { background: color-mix(in srgb, var(--fg) 10%, transparent); filter: none; }
   .song .ctl button:active { transform: scale(.88); }
-  .song .ctl button.main { width: 38px; height: 38px; margin: 0 2px; background: var(--fg); color: var(--bg); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+  .song .ctl button.main { width: 34px; height: 34px; margin: 0 2px; background: var(--fg); color: var(--bg); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
   .song .ctl button.main:hover { background: var(--fg); transform: scale(1.06); }
   .song .ctl button.dots { width: 28px; color: var(--muted); }
   .song svg { width: 18px; height: 18px; fill: currentColor; }
   .song .ctl .main svg { width: 18px; height: 18px; }
   /* Progreso: una línea fina en el borde de abajo, con zona de toque generosa */
-  .song .prog { position: absolute; left: 14px; right: 14px; bottom: 3px; height: 3px; }
-  .song .prog .bar { margin: 0; height: 3px; border-radius: 3px; position: relative; overflow: visible; background: color-mix(in srgb, var(--fg) 14%, transparent); transition: height .15s, transform .15s; }
+  .song .prog { position: absolute; left: 16px; right: 16px; bottom: 2px; height: 2px; }
+  .song .prog .bar { margin: 0; height: 2px; border-radius: 3px; position: relative; overflow: visible; background: color-mix(in srgb, var(--fg) 14%, transparent); transition: height .15s, transform .15s; }
   .song .prog .bar i { display: block; height: 100%; border-radius: 3px; background: var(--fg); position: relative; }
   .song .prog .bar i::after { content: ''; position: absolute; right: -5px; top: 50%; width: 10px; height: 10px; margin-top: -5px; border-radius: 50%; background: var(--fg); transform: scale(0); transition: transform .15s; }
   .song .prog .bar.seek { cursor: pointer; }
@@ -526,7 +526,6 @@
         <button data-mode="infinity">Infinito</button>
         <button data-mode="strobe">Estrobo</button>
         <button data-mode="tiles">Cuadros</button>
-        <button data-mode="dancers">Bailarines</button>
         <button data-mode="tubes">Inflables</button>
         <button data-mode="vinyl">Vinilo</button>
         <button data-mode="cover">Portada</button>
@@ -610,7 +609,7 @@ const PALETTES = [
 ];
 
 const state = {
-  mode: store.get('mode', 'bars'),
+  mode: ((m) => m === 'dancers' ? 'bars' : m)(store.get('mode', 'bars')),
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -3108,8 +3107,8 @@ const artistClean = new Map();
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
   calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'dancers'] },
-  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'dancers'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes'] },
+  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
 function moodTick(dt) {
@@ -4196,7 +4195,7 @@ function drawMagnet(dt) {
     // Golpe de bajo o soltar el ratón: estallido hacia fuera
     // Cada parte de la música mueve su grupo: el bajo empuja al primero, la voz/caja al segundo y
     // los platillos hacen chispear al tercero
-    const push = burst ? 0.55 : b === 0 ? kick * 0.8 : b === 1 ? hits.mid * 0.45 : hits.high * 0.25;
+    const push = burst ? 0.55 : b === 0 ? kick * 0.8 : 0;
     if (push) { const k = push * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
     mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
@@ -4204,11 +4203,8 @@ function drawMagnet(dt) {
     if (v2 > maxV * maxV * 4) { const k = maxV * 2 / Math.sqrt(v2); mag.vx[i] *= k; mag.vy[i] *= k; }
     const ox = mag.x[i], oy = mag.y[i];
     mag.x[i] += mag.vx[i] * dt; mag.y[i] += mag.vy[i] * dt;
-    // Las que se alejan vuelven poco a poco (sin saltos); solo si se pierden del todo reaparecen
-    // junto a su imán, sin dibujar ese tramo
-    const ox_ = mag.x[i] < 0 ? -mag.x[i] : mag.x[i] > W ? W - mag.x[i] : 0, oy_ = mag.y[i] < 0 ? -mag.y[i] : mag.y[i] > H ? H - mag.y[i] : 0;
-    if (ox_ || oy_) { mag.vx[i] += ox_ * dt * 4; mag.vy[i] += oy_ * dt * 4; }
-    if (mag.x[i] < -W * 0.6 || mag.x[i] > W * 1.6 || mag.y[i] < -H * 0.6 || mag.y[i] > H * 1.6) { mag.x[i] = att[b][0] + (Math.random() - 0.5) * s * 0.3; mag.y[i] = att[b][1] + (Math.random() - 0.5) * s * 0.3; mag.vx[i] = mag.vy[i] = 0; continue; }
+    // Las que se van lejos reaparecen junto a su imán, sin dibujar ese tramo
+    if (mag.x[i] < -W * 0.2 || mag.x[i] > W * 1.2 || mag.y[i] < -H * 0.2 || mag.y[i] > H * 1.2) { mag.x[i] = att[b][0] + (Math.random() - 0.5) * s * 0.3; mag.y[i] = att[b][1] + (Math.random() - 0.5) * s * 0.3; mag.vx[i] = mag.vy[i] = 0; continue; }
     // Se agrupa por banda y velocidad para dibujar todo en pocos trazos
     const sp = Math.min(3, Math.floor(Math.sqrt(v2) / maxV * 4));
     const seg = mag.buckets[b * 4 + sp]; seg.push(ox, oy, mag.x[i], mag.y[i]);
@@ -4523,14 +4519,14 @@ function glassBackground(night) {
   x.fillStyle = night ? '#07070b' : '#cfd3dc'; x.fillRect(0, 0, bw, bh);
   if (img && state.coverBg !== false) {
     const k = Math.max(bw / img.width, bh / img.height), dw = img.width * k, dh = img.height * k;
-    x.globalAlpha = night ? 0.55 : 0.75; x.drawImage(img, (bw - dw) / 2, (bh - dh) / 2, dw, dh); x.globalAlpha = 1;
+    x.globalAlpha = night ? 0.9 : 1; x.drawImage(img, (bw - dw) / 2, (bh - dh) / 2, dw, dh); x.globalAlpha = 1;
   }
   // luces que respiran con la música (como una ciudad tras el vidrio)
   x.globalCompositeOperation = night ? 'lighter' : 'soft-light';
   for (let i = 0; i < 9; i++) {
     const px = (0.1 + ((i * 0.37) % 0.85)) * bw + Math.sin(time * 0.1 + i) * bw * 0.03, py = (0.25 + ((i * 0.53) % 0.6)) * bh;
     const lv = spec[Math.floor(i / 9 * BANDS * 0.8)], r = bh * (0.12 + lv * 0.18 + beatSoft * 0.06);
-    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], Math.min(1, 0.3 + lv * 0.45 + beatSoft * 0.45))); g.addColorStop(1, rgba(RGB[i % 3], 0));
+    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], Math.min(1, (img ? 0.12 : 0.3) + lv * 0.4 + beatSoft * 0.4))); g.addColorStop(1, rgba(RGB[i % 3], 0));
     x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2);
   }
   if (glass.flash > 0.01) { x.globalCompositeOperation = 'lighter'; x.fillStyle = `rgba(220,230,255,${glass.flash * (state.noFlash ? 0.25 : 0.7)})`; x.fillRect(0, 0, bw, bh); }
@@ -4559,8 +4555,8 @@ function drawGlass(dt) {
   if (beatSoft > 0.02) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), beatSoft * (night ? 0.1 : 0.2)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late
   const u = MIN / 1000;
   // gotitas quietas: llueve más con más energía
-  const want = 220 + energy * 320;
-  for (let k = 0; k < 6 && glass.small.length < want; k++) if (Math.random() < 0.5 + energy) glass.small.push({ x: Math.random() * W, y: Math.random() * H, r: u * (3 + Math.random() * Math.random() * 11), a: 0 });
+  const want = 70 + energy * 110;
+  for (let k = 0; k < 6 && glass.small.length < want; k++) if (Math.random() < 0.5 + energy) glass.small.push({ x: Math.random() * W, y: Math.random() * H, r: u * (5 + Math.random() * Math.random() * 12), a: 0 });
   // gotas grandes: con cada golpe de graves cae una desde arriba
   if ((hits.bass && glass.big.length < 22) || (Math.random() < dt * (0.6 + energy * 1.5) && glass.big.length < 14))
     glass.big.push({ x: Math.random() * W, y: -u * 30, r: u * (15 + Math.random() * 14 + (hits.bass || 0) * 8), vy: 0, hold: 0, last: 0 });
@@ -4575,6 +4571,9 @@ function drawGlass(dt) {
     else d.vy *= Math.pow(0.05, dt);
     d.vy *= 1 + bass * 0.02;
     d.y += d.vy * dt; d.x += Math.sin(d.y * 0.02 + i) * u * 6 * dt;
+    // rastro húmedo: el vidrio queda más limpio por donde pasó la gota
+    (d.path = d.path || []).push([d.x, d.y]); if (d.path.length > 60) d.path.shift();
+    if (d.path.length > 2) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = d.r * 0.9; ctx.lineCap = 'round'; ctx.beginPath(); d.path.forEach(([px, py], k) => k ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.stroke(); ctx.restore(); }
     // se come las gotitas que toca y deja un rastro de gotitas detrás
     for (let j = glass.small.length - 1; j >= 0; j--) { const s_ = glass.small[j]; if (Math.abs(s_.x - d.x) < d.r && Math.abs(s_.y - d.y) < d.r) { glass.small.splice(j, 1); d.r = Math.min(u * 38, d.r + s_.r * 0.08); } }
     if (d.y - d.last > d.r * 0.9) { d.last = d.y; if (Math.random() < 0.7) glass.small.push({ x: d.x + (Math.random() - 0.5) * d.r * 0.6, y: d.y - d.r * 1.2, r: d.r * (0.18 + Math.random() * 0.2), a: 1 }); }
@@ -4582,10 +4581,6 @@ function drawGlass(dt) {
     if (d.y > H + d.r * 3) glass.big.splice(i, 1);
   }
   if (glass.small.length > want + 120) glass.small.splice(0, glass.small.length - want - 120);
-  // vaho: el vidrio se empaña un poco en los bordes
-  const v = ctx.createRadialGradient(W / 2, H / 2, MIN * 0.3, W / 2, H / 2, Math.hypot(W, H) * 0.6);
-  v.addColorStop(0, 'rgba(255,255,255,0)'); v.addColorStop(1, night ? 'rgba(160,170,190,.08)' : 'rgba(255,255,255,.25)');
-  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
 }
 
 // ================= Escena: Estrobo =================
@@ -4890,8 +4885,8 @@ function drawTiles(dt) {
   const L = tiles.list;
   const pick = (n, k) => { const c = L.filter(t => t.n === n || (n === 0)); for (let i = 0; i < k && c.length; i++) { const t = c.splice(Math.floor(Math.random() * c.length), 1)[0]; t.flash = 1; if (Math.random() < 0.5) t.popV += 6 + hits.bass * 6; } };
   if (hits.bass) {
-    pick(3, 1 + Math.round(hits.bass * 2)); pick(2, 1);
-    if (hits.bass > 0.5 || dropHit) tiles.waves.push({ x: Math.random() * W, y: Math.random() * H, r: 0, k: dropHit ? 1 : 0.7 });
+    pick(3, 2 + Math.round(hits.bass * 2)); pick(2, 2 + Math.round(hits.bass * 2)); pick(1, 3);
+    if (hits.bass > 0.3 || dropHit) tiles.waves.push({ x: Math.random() * W, y: Math.random() * H, r: 0, k: dropHit ? 1 : 0.7 });
   }
   if (hits.mid) pick(2, 1 + Math.round(hits.mid * 2));
   if (hits.high) pick(1, 2 + Math.round(hits.high * 4));
@@ -4903,11 +4898,11 @@ function drawTiles(dt) {
   for (const t of L) {
     const target = Math.pow(spec[t.band], 2.4);
     t.lv += (target - t.lv) * (1 - Math.pow(target > t.lv ? 0.0005 : 0.05, dt));
-    t.flash *= Math.pow(0.03, dt);
+    t.flash *= Math.pow(0.015, dt);   // se apaga rápido: se nota cada golpe por separado
     let wv = 0; for (const w of tiles.waves) { const d = Math.hypot(t.x + t.s / 2 - w.x, t.y + t.s / 2 - w.y); wv += w.k * Math.exp(-Math.pow((d - w.r) / (MIN * 0.12), 2)); }
     const pv = [t.pop], vv = [t.popV]; springTo(pv, vv, [0], dt, 180, 0.35); t.pop = pv[0]; t.popV = vv[0];
     if (t.colTo != null) { const d = ((t.colTo - t.col + 1.5) % 1) - 0.5; t.col = (t.col + d * Math.min(1, dt * 3) + 1) % 1; if (Math.abs(d) < 0.01) t.colTo = null; }
-    t.I = Math.min(1.2, 0.03 + t.lv * 0.4 + t.flash * 0.9 + wv * 0.7);
+    t.I = Math.min(1.2, 0.02 + t.lv * 0.22 + t.flash * 1.05 + wv * 0.8 + beatSoft * 0.08);   // lo que manda es el golpe
     if (t.pop > 0.02) popped.push(t); else drawTile(t, gap, night, 0);
   }
   popped.sort((a, b) => a.pop - b.pop).forEach(t => drawTile(t, gap, night, t.pop));   // los que sobresalen, encima
@@ -5059,13 +5054,23 @@ function drawTubes(dt) {
     // brazos detrás, luego el cuerpo
     for (const arm of m.arms) tubeStroke(ctx, arm, w * 0.55, c);
     tubeStroke(ctx, B, w, c);
+    // costuras del nailon cada pocos tramos
+    ctx.strokeStyle = rgba(c.map(v => v * 0.55), 0.55); ctx.lineWidth = Math.max(1, w * 0.04);
+    for (let k = 3; k < N - 2; k += 3) { const a_ = B[k - 1], b_ = B[k + 1], ddx = b_.x - a_.x, ddy = b_.y - a_.y, dd = Math.hypot(ddx, ddy) || 1, px_ = -ddy / dd * w * 0.48, py_ = ddx / dd * w * 0.48;
+      ctx.beginPath(); ctx.moveTo(B[k].x - px_, B[k].y - py_); ctx.quadraticCurveTo(B[k].x + ddx / dd * w * 0.12, B[k].y + ddy / dd * w * 0.12, B[k].x + px_, B[k].y + py_); ctx.stroke(); }
+    // manos: un penacho de tela al final de cada brazo
+    for (const arm of m.arms) { const tp = arm[arm.length - 1], pv = arm[arm.length - 2], ax_ = tp.x - pv.x, ay_ = tp.y - pv.y, al = Math.hypot(ax_, ay_) || 1;
+      for (let j = -1; j <= 1; j++) { const an = Math.atan2(ay_, ax_) + j * 0.5 + Math.sin(time * 12 + j) * 0.2, L = w * 0.5;
+        ctx.fillStyle = rgba(c2, 1); ctx.beginPath(); ctx.moveTo(tp.x - Math.sin(an) * w * 0.06, tp.y + Math.cos(an) * w * 0.06); ctx.lineTo(tp.x + Math.cos(an) * L, tp.y + Math.sin(an) * L); ctx.lineTo(tp.x + Math.sin(an) * w * 0.06, tp.y - Math.cos(an) * w * 0.06); ctx.closePath(); ctx.fill(); } }
     // mechón de pelo arriba (el de los inflables), que aletea
     const hx = top.x, hy = top.y, dx = top.x - B[N - 3].x, dy = top.y - B[N - 3].y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, nx = -uy, ny = ux;
     for (let j = -3; j <= 3; j++) {
       const a = j * 0.28 + Math.sin(time * 14 + j + m.ph) * (0.1 + high * 0.5), L = w * (0.9 + Math.abs(Math.sin(j * 1.7)) * 0.6);
       const ex = hx + (ux * Math.cos(a) - nx * Math.sin(a)) * L, ey = hy + (uy * Math.cos(a) - ny * Math.sin(a)) * L;
-      ctx.strokeStyle = rgba(c2, 1); ctx.lineWidth = w * 0.16; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(ex, ey); ctx.stroke();
+      // cada tira es de tela: ancha en la base y en punta, con una curva que aletea
+      const qx = (hx + ex) / 2 + nx * Math.sin(time * 9 + j) * w * 0.25, qy = (hy + ey) / 2 + ny * Math.sin(time * 9 + j) * w * 0.25, bw2 = w * 0.09;
+      ctx.fillStyle = rgba(j % 2 ? c2 : c2.map(v => v * 0.8), 1);
+      ctx.beginPath(); ctx.moveTo(hx - nx * bw2, hy - ny * bw2); ctx.quadraticCurveTo(qx, qy, ex, ey); ctx.quadraticCurveTo(qx, qy, hx + nx * bw2, hy + ny * bw2); ctx.closePath(); ctx.fill();
     }
     // cara: ojos saltones que se mueven con el cuerpo y una boca que «canta»
     const fx = top.x - ux * w * 0.9, fy = top.y - uy * w * 0.9;
@@ -5085,9 +5090,13 @@ function drawTubes(dt) {
     ctx.fillStyle = '#2a0b12'; ctx.beginPath(); ctx.ellipse(mx, my, w * 0.24, w * (0.05 + m.mouth * 0.17), Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
     // ventilador en el suelo: tiembla con los graves
     const bw = w * 2.4, bh = m.FH * 0.075, shake = (Math.random() - 0.5) * bass * w * 0.04;
-    ctx.fillStyle = night ? '#2b2b33' : '#3a3a44'; ctx.beginPath(); ctx.roundRect(m.x - bw / 2 + shake, ground - bh, bw, bh, bh * 0.25); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = Math.max(1, bh * 0.06);
-    for (let j = 1; j < 6; j++) { const x = m.x - bw / 2 + bw * j / 6 + shake; ctx.beginPath(); ctx.moveTo(x, ground - bh * 0.8); ctx.lineTo(x, ground - bh * 0.2); ctx.stroke(); }
+    // ventilador: un tambor redondo con rejilla y un aro de color
+    const fg = ctx.createLinearGradient(m.x - bw / 2, 0, m.x + bw / 2, 0); fg.addColorStop(0, '#1d1d22'); fg.addColorStop(0.5, night ? '#4a4a54' : '#5a5a66'); fg.addColorStop(1, '#1d1d22');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.roundRect(m.x - bw / 2 + shake, ground - bh * 1.3, bw, bh * 1.3, [bh * 0.6, bh * 0.6, bh * 0.15, bh * 0.15]); ctx.fill();
+    ctx.strokeStyle = rgba(c, 0.9); ctx.lineWidth = Math.max(1.5, bh * 0.12);
+    ctx.beginPath(); ctx.ellipse(m.x + shake, ground - bh * 1.25, bw * 0.42, bh * 0.25, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.14)'; ctx.lineWidth = Math.max(1, bh * 0.05);
+    for (let j = 1; j < 7; j++) { const x = m.x - bw / 2 + bw * j / 7 + shake; ctx.beginPath(); ctx.moveTo(x, ground - bh * 0.95); ctx.lineTo(x, ground - bh * 0.25); ctx.stroke(); }
   }
   // confeti
   for (const p of tube.confetti) { p.vy += MIN * 0.4 * dt; p.vx *= Math.pow(0.6, dt); p.x += p.vx * dt + Math.sin(time * 3 + p.r) * MIN * 0.03 * dt; p.y += p.vy * dt; p.r += p.vr * dt;
@@ -5096,127 +5105,7 @@ function drawTubes(dt) {
 }
 
 
-// ================= Escena: Bailarines =================
-// Dos personas en 3D (ella y él) con movimiento real: una samba grabada con captura de movimiento
-// (personajes de los ejemplos de three.js, de Mixamo). Se ven como siluetas con luz de contorno de
-// colores, como en un escenario. El baile va al tempo de la canción; sin música vuelven al reposo.
-// Él baila otra parte de la coreografía y en espejo, así nunca hacen lo mismo. Dejan una estela.
-const dance = { state: 'idle', T: null, renderer: null, scene: null, camera: null, people: [], lights: [], trail: null, tctx: null, key: '', w: 0 };
-// Personajes 3D compartidos (Bailarines y Ciudad): se descargan una sola vez
-let peopleP = null;
-function peopleAssets() {
-  if (!peopleP) peopleP = (async () => {
-    const T = await import('./lib/three-dance.js');
-    const loader = new T.GLTFLoader();
-    const [her, him] = await Promise.all(['lib/models/Michelle.glb', 'lib/models/Xbot.glb'].map(u => loader.loadAsync(u)));
-    // En otro cuerpo solo vale la rotación de los huesos (y la posición de la cadera)
-    const onlyRot = clip => { const c = clip.clone(); c.tracks = c.tracks.filter(t => !/\.(position|scale)$/.test(t.name)); return c; };
-    // Pasar el baile a otro cuerpo, hueso por hueso: cada esqueleto tiene sus huesos orientados a su
-    // manera en reposo, así que se toma cuánto gira cada hueso respecto a su reposo y ese mismo giro
-    // (medido en el mundo) se aplica sobre el reposo del otro esqueleto
-    const rests = g => { g.scene.updateMatrixWorld(true); const m = {}; g.scene.traverse(o => { if (o.isBone) m[o.name] = { l: o.quaternion.clone(), w: o.getWorldQuaternion(new T.Quaternion()) }; }); return m; };
-    const tpose = her.animations.find(a => a.name === 'TPose');   // los dos medidos desde la pose en T
-    if (tpose) { const tm = new T.AnimationMixer(her.scene); tm.clipAction(tpose).play(); tm.update(0); }
-    const RH = rests(her), RM = rests(him);
-    const retarget = (clip, RS, RT) => {
-      const c = onlyRot(clip), q = new T.Quaternion(), d = new T.Quaternion();
-      for (const tr of c.tracks) {
-        const bone = tr.name.replace(/\.quaternion$/, ''), S = RS[bone], Tt = RT[bone];
-        if (!S || !Tt) continue;
-        const C = Tt.w.clone().invert().multiply(S.w), Ci = C.clone().invert(), Sli = S.l.clone().invert();
-        for (let i = 0; i < tr.values.length; i += 4) {
-          d.copy(Sli).multiply(q.fromArray(tr.values, i));   // giro respecto al reposo (en el hueso de origen)
-          d.premultiply(C).multiply(Ci);                     // el mismo giro, en el hueso de destino
-          q.copy(Tt.l).multiply(d).toArray(tr.values, i);
-        }
-      }
-      return c;
-    };
-    return { T, her, him, RH, RM, retarget, onlyRot };
-  })();
-  return peopleP;
-}
-async function danceLoad() {
-  if (dance.state !== 'idle') return; dance.state = 'loading';
-  try {
-    const { T, her, him, RH, RM, retarget, onlyRot } = await peopleAssets(); dance.T = T;
-    const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.setClearColor(0x000000, 0);
-    const scene = new T.Scene(), camera = new T.PerspectiveCamera(28, 16 / 9, 0.1, 100);
-    camera.position.set(0, 1.0, 6.3); camera.lookAt(0, 0.92, 0);
-    // Luces: dos de contorno de colores desde atrás, una suave de frente y un poco de ambiente
-    const rimL = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6), rimR = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6);
-    rimL.position.set(-3.5, 3.2, -3.2); rimR.position.set(3.5, 3.2, -3.2);
-    rimL.target.position.set(-0.4, 0.9, 0); rimR.target.position.set(0.4, 0.9, 0);
-    const key = new T.DirectionalLight(0xffffff, 0.5); key.position.set(0, 2.5, 6);
-    const hemi = new T.HemisphereLight(0xffffff, 0x222233, 0.25);
-    scene.add(rimL, rimR, rimL.target, rimR.target, key, hemi);
-    const samba = her.animations.find(a => a.name === 'SambaDance'), idle = him.animations.find(a => a.name === 'idle');
-    const mat = new T.MeshStandardMaterial({ color: 0x0a0a0f, roughness: 0.42, metalness: 0.15, side: T.DoubleSide });
-    const setup = (g, x, mirror, offset, own) => {
-      const root = new T.Group(); root.add(g.scene); scene.add(root);
-      g.scene.traverse(o => { if (o.isMesh) { o.material = mat; o.frustumCulled = false; } });
-      const box = new T.Box3().setFromObject(g.scene), h = box.max.y - box.min.y, k = 1.72 / h;
-      root.scale.set(mirror ? -k : k, k, k); root.position.set(x, -box.min.y * k, 0); root.rotation.y = mirror ? 0.25 : -0.25;
-      const mixer = new T.AnimationMixer(g.scene);
-      const a = mixer.clipAction(own ? samba : retarget(samba, RH, RM)), b = mixer.clipAction(own ? retarget(idle, RM, RH) : onlyRot(idle));
-      a.play(); b.play(); a.time = offset; a.setEffectiveWeight(0); b.setEffectiveWeight(1);
-      return { root, mixer, dance: a, idle: b, w: 0 };
-    };
-    dance.people = [setup(her, -0.85, false, 0, true), setup(him, 0.85, true, 9.1, false)];
-    Object.assign(dance, { renderer, scene, camera, lights: [rimL, rimR, key], state: 'ready' });
-  } catch (e) { console.error(e); dance.state = 'error'; }
-}
-function drawDancers(dt) {
-  const night = state.theme === 'dark';
-  ambient();
-  if (dance.state !== 'ready') {
-    if (dance.state === 'idle') danceLoad();
-    ctx.save(); ctx.fillStyle = textFg(0.6); ctx.textAlign = 'center'; ctx.font = `600 ${MIN * 0.03}px -apple-system, "Segoe UI", system-ui, sans-serif`;
-    ctx.fillText(dance.state === 'error' ? 'No se pudieron cargar los bailarines' : 'Cargando a los bailarines…', W / 2, H / 2); ctx.restore();
-    return;
-  }
-  const T = dance.T, r = dance.renderer;
-  // Tamaño del 3D: como mucho ~1600 px de ancho (se amplía con suavizado); en vertical, más cerca
-  const sc = Math.min(1, 1600 / W), rw = Math.round(W * sc), rh = Math.round(H * sc);
-  if (dance.key !== rw + 'x' + rh) { r.setSize(rw, rh, false); dance.camera.aspect = rw / rh; dance.camera.position.z = rh > rw ? 9.5 : 6.3; dance.camera.updateProjectionMatrix(); dance.key = rw + 'x' + rh; }
-  // Ritmo: el baile va al tempo de la canción (la samba grabada va a ~100 pulsos por minuto)
-  const live = performance.now() - lastBassHit < 1800 || songBeatOn();
-  let rate = 1;
-  if (tempo.bpm && tempo.conf > 0.3) { rate = tempo.bpm / 100; while (rate > 1.4) rate /= 2; while (rate < 0.7) rate *= 2; }
-  const goal = live && energy > 0.05 ? Math.min(1, 0.45 + energy * 1.2) : 0;   // sin música, al reposo
-  for (const p of dance.people) {
-    p.w += (goal - p.w) * Math.min(1, dt * (goal > p.w ? 3 : 1.2));
-    p.dance.setEffectiveWeight(p.w); p.idle.setEffectiveWeight(1 - p.w);
-    p.dance.setEffectiveTimeScale(rate * (0.85 + p.w * 0.15));
-    p.mixer.update(dt);
-  }
-  // Luces: de los colores de la paleta; laten con los graves y destellan en los golpes
-  const [rimL, rimR, key] = dance.lights;
-  rimL.color.setRGB(...RGB[0].map(v => v / 255)); rimR.color.setRGB(...RGB[2].map(v => v / 255));
-  rimL.intensity = 70 + bass * 120 + beatSoft * 80; rimR.intensity = 70 + mid * 120 + beatSoft * 80;
-  key.intensity = night ? 0.25 + high * 0.4 : 1.2;
-  r.render(dance.scene, dance.camera);
-  // Estela a media resolución: la silueta se queda arrastrada un momento
-  if (!dance.trail || dance.trail.width !== Math.ceil(W / 2)) { dance.trail = document.createElement('canvas'); dance.trail.width = Math.ceil(W / 2); dance.trail.height = Math.ceil(H / 2); dance.tctx = dance.trail.getContext('2d'); }
-  const g = dance.tctx;
-  g.globalCompositeOperation = 'destination-out'; g.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; g.fillRect(0, 0, dance.trail.width, dance.trail.height);
-  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 0.3 + energy * 0.2; g.drawImage(r.domElement, 0, 0, dance.trail.width, dance.trail.height); g.globalAlpha = 1;
-  // Suelo: un círculo de luz bajo cada persona
-  for (const [i, c] of [[0, RGB[0]], [1, RGB[2]]]) {
-    const v = new T.Vector3(dance.people[i].root.position.x, 0, 0).project(dance.camera);
-    const gx = (v.x + 1) / 2 * W, ground = (1 - v.y) / 2 * H, gr = ctx.createRadialGradient(gx, ground, 0, gx, ground, MIN * 0.25);
-    gr.addColorStop(0, rgba(c, (night ? 0.22 : 0.14) + beatSoft * 0.15)); gr.addColorStop(1, rgba(c, 0));
-    ctx.save(); ctx.translate(gx, ground); ctx.scale(1, 0.2); ctx.translate(-gx, -ground); ctx.fillStyle = gr; ctx.fillRect(gx - MIN * 0.25, ground - MIN * 0.25, MIN * 0.5, MIN * 0.5); ctx.restore();
-  }
-  ctx.save(); ctx.imageSmoothingQuality = 'high';
-  ctx.globalAlpha = night ? 0.85 : 0.6; ctx.drawImage(dance.trail, 0, 0, W, H);
-  ctx.globalAlpha = 1; ctx.drawImage(r.domElement, 0, 0, W, H);
-  ctx.restore();
-}
-
-
-const scenes = { glass: drawGlass, dancers: drawDancers, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
