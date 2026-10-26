@@ -665,7 +665,7 @@ function resize() {
     if (typeof lights !== 'undefined') for (const l of lights) { l.x *= kx; l.y *= ky; l.r *= km; l.vx *= kx; l.vy *= ky; }
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
-    if (typeof drops !== 'undefined') { for (const d of drops) { d.x *= kx; d.y *= ky; d.floor *= ky; d.len *= km; } for (const q of ripples) { q.x *= kx; q.y *= ky; } splashes.length = 0; }
+    if (typeof glass !== 'undefined') { for (const d of [...glass.small, ...glass.big]) { d.x *= kx; d.y *= ky; d.r *= km; if (d.last != null) d.last *= ky; } glass.key = W + 'x' + H; }
   }
 }
 addEventListener('resize', resize); resize();
@@ -2641,10 +2641,11 @@ function liquidTick(dt) {
   springTo(t, v, [bass * 0.5], dt, 220, 0.35); liquid.st = t[0]; liquid.stV = v[0];
 }
 function liquidWord(k, newest, lit) {   // deformación de una palabra: [escala x, escala y, x, y, giro]
-  const amt = state.noFlash || calmMotion.matches ? 0.35 : 1;
-  const w = (newest ? 1 : lit ? 0.45 : 0.15) * amt, st = Math.max(-0.2, liquid.st) * w;
-  const tr = high * 0.05 * (lit ? 1 : 0.4) * amt;
-  return [1 - st * 0.18, 1 + st * 0.55, (Math.random() - 0.5) * tr, (Math.random() - 0.5) * tr, Math.sin(time * 2.1 + k * 1.7) * mid * 3.2 * w];
+  // Sutil y solo donde se canta: la palabra actual se estira un poco con los graves y se mece con la voz;
+  // las demás quedan quietas para que la línea se lea limpia
+  const amt = (state.noFlash || calmMotion.matches ? 0.4 : 1) * (newest ? 1 : lit ? 0.25 : 0);
+  const st = Math.max(-0.15, liquid.st) * amt;
+  return [1 - st * 0.06, 1 + st * 0.22, 0, -st * 0.02, Math.sin(time * 2.1 + k * 1.7) * mid * 1.2 * amt];
 }
 function lvFrame() {
   if (state.mode !== 'lyrics' || lvEl.hidden) return;
@@ -4138,9 +4139,16 @@ function magInit() {
   mag.trail = document.createElement('canvas'); mag.trail.width = W; mag.trail.height = H; mag.tctx = mag.trail.getContext('2d');
   mag.W = W; mag.H = H; mag.buckets = Array.from({ length: 12 }, () => []);
 }
+// Si cambia el tamaño (por ejemplo, al ajustar la calidad), se reescala todo en vez de empezar de cero
+function magResize() {
+  const kx = W / mag.W, ky = H / mag.H;
+  for (let i = 0; i < mag.n; i++) { mag.x[i] *= kx; mag.y[i] *= ky; mag.vx[i] *= kx; mag.vy[i] *= ky; }
+  const old = mag.trail; mag.trail = document.createElement('canvas'); mag.trail.width = W; mag.trail.height = H; mag.tctx = mag.trail.getContext('2d');
+  mag.tctx.drawImage(old, 0, 0, W, H); mag.W = W; mag.H = H;
+}
 function drawMagnet(dt) {
   const night = state.theme === 'dark';
-  if (!mag.n || mag.W !== W || mag.H !== H) magInit();
+  if (!mag.n) magInit(); else if (mag.W !== W || mag.H !== H) magResize();
   const t = mag.tctx;
   // Estelas: lo anterior se desvanece poco a poco
   t.globalCompositeOperation = 'destination-out'; t.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; t.fillRect(0, 0, W, H);
@@ -4170,15 +4178,21 @@ function drawMagnet(dt) {
     const f = (usePtr ? 14 : 7 * (0.25 + energy * 1.3) + lv[b] * 12) * s / d;   // en las partes suaves todo va más despacio
     let ax = dx / d * f - dy / d * f * swirl, ay = dy / d * f + dx / d * f * swirl;
     // Golpe de bajo o soltar el ratón: estallido hacia fuera
-    if (kick && b === 0 || burst) { const k = (burst ? 0.55 : kick * 0.8) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
+    // Cada parte de la música mueve su grupo: el bajo empuja al primero, la voz/caja al segundo y
+    // los platillos hacen chispear al tercero
+    const push = burst ? 0.55 : b === 0 ? kick * 0.8 : b === 1 ? hits.mid * 0.45 : hits.high * 0.25;
+    if (push) { const k = push * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
     mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
     const v2 = mag.vx[i] * mag.vx[i] + mag.vy[i] * mag.vy[i];
     if (v2 > maxV * maxV * 4) { const k = maxV * 2 / Math.sqrt(v2); mag.vx[i] *= k; mag.vy[i] *= k; }
     const ox = mag.x[i], oy = mag.y[i];
     mag.x[i] += mag.vx[i] * dt; mag.y[i] += mag.vy[i] * dt;
-    // Las que se van muy lejos vuelven por un borde
-    if (mag.x[i] < -W * 0.2 || mag.x[i] > W * 1.2 || mag.y[i] < -H * 0.2 || mag.y[i] > H * 1.2) { mag.x[i] = Math.random() * W; mag.y[i] = Math.random() < 0.5 ? -10 : H + 10; mag.vx[i] = mag.vy[i] = 0; continue; }
+    // Las que se alejan vuelven poco a poco (sin saltos); solo si se pierden del todo reaparecen
+    // junto a su imán, sin dibujar ese tramo
+    const ox_ = mag.x[i] < 0 ? -mag.x[i] : mag.x[i] > W ? W - mag.x[i] : 0, oy_ = mag.y[i] < 0 ? -mag.y[i] : mag.y[i] > H ? H - mag.y[i] : 0;
+    if (ox_ || oy_) { mag.vx[i] += ox_ * dt * 4; mag.vy[i] += oy_ * dt * 4; }
+    if (mag.x[i] < -W * 0.6 || mag.x[i] > W * 1.6 || mag.y[i] < -H * 0.6 || mag.y[i] > H * 1.6) { mag.x[i] = att[b][0] + (Math.random() - 0.5) * s * 0.3; mag.y[i] = att[b][1] + (Math.random() - 0.5) * s * 0.3; mag.vx[i] = mag.vy[i] = 0; continue; }
     // Se agrupa por banda y velocidad para dibujar todo en pocos trazos
     const sp = Math.min(3, Math.floor(Math.sqrt(v2) / maxV * 4));
     const seg = mag.buckets[b * 4 + sp]; seg.push(ox, oy, mag.x[i], mag.y[i]);
@@ -4318,125 +4332,81 @@ function drawLight(dt) {
 }
 
 // ================= Escena: Lluvia =================
-// Gotas con profundidad que caen y salpican; unos focos se mueven entre la lluvia y la
-// iluminan por zonas, como una linterna de noche. Cada foco se enciende con su banda.
-const drops = [], splashes = [];
-let dropSprites = null, dropKey = '';
-// Gota: cola que se desvanece y una cabeza redonda y brillante con un leve halo
-function makeDrop(col) {
-  const c = document.createElement('canvas'); c.width = 24; c.height = 96;
-  const x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 0, 84);
-  g.addColorStop(0, rgba(col, 0)); g.addColorStop(0.7, rgba(col, 0.35)); g.addColorStop(1, rgba(col, 0.9));
-  x.fillStyle = g; x.beginPath(); x.moveTo(11, 0); x.lineTo(13, 0); x.lineTo(15.5, 80); x.lineTo(8.5, 80); x.closePath(); x.fill();
-  const h = x.createRadialGradient(12, 82, 0, 12, 82, 11);
-  h.addColorStop(0, rgba(col.map(v => v + (255 - v) * 0.6), 1)); h.addColorStop(0.35, rgba(col, 0.8)); h.addColorStop(1, rgba(col, 0));
-  x.fillStyle = h; x.beginPath(); x.arc(12, 82, 11, 0, Math.PI * 2); x.fill();
-  return c;
+// Lluvia sobre un vidrio. Detrás, la portada (o las luces de la paleta) desenfocada, como vista por
+// una ventana mojada. Cada gota es una lente: muestra el fondo nítido e invertido, con su brillo y su
+// borde. Las gotas grandes resbalan a tirones, dejan un rastro de gotitas y se comen las que tocan.
+// Con los graves caen gotas nuevas; con más energía llueve más; en un drop hay un relámpago.
+const drops = [], splashes = [], ripples = [];   // (nombres antiguos que el reescalado aún recorre)
+const glass = { bg: null, bgc: null, sharp: null, sc: null, small: [], big: [], flash: 0, key: '' };
+function glassBackground(night) {
+  // Fondo a baja resolución: la portada si la hay; si no, luces de colores de la paleta
+  const bw = 480, bh = Math.max(120, Math.round(480 * H / W));
+  if (!glass.sharp || glass.sharp.width !== bw || glass.sharp.height !== bh) { glass.sharp = document.createElement('canvas'); glass.sharp.width = bw; glass.sharp.height = bh; glass.sc = glass.sharp.getContext('2d'); glass.bg = document.createElement('canvas'); glass.bg.width = bw; glass.bg.height = bh; glass.bgc = glass.bg.getContext('2d'); }
+  const x = glass.sc, img = recording ? coverClean : (coverClean || coverAny);
+  x.globalCompositeOperation = 'source-over';
+  x.fillStyle = night ? '#07070b' : '#cfd3dc'; x.fillRect(0, 0, bw, bh);
+  if (img && state.coverBg !== false) {
+    const k = Math.max(bw / img.width, bh / img.height), dw = img.width * k, dh = img.height * k;
+    x.globalAlpha = night ? 0.55 : 0.75; x.drawImage(img, (bw - dw) / 2, (bh - dh) / 2, dw, dh); x.globalAlpha = 1;
+  }
+  // luces que respiran con la música (como una ciudad tras el vidrio)
+  x.globalCompositeOperation = night ? 'lighter' : 'soft-light';
+  for (let i = 0; i < 9; i++) {
+    const px = (0.1 + ((i * 0.37) % 0.85)) * bw + Math.sin(time * 0.1 + i) * bw * 0.03, py = (0.25 + ((i * 0.53) % 0.6)) * bh;
+    const lv = spec[Math.floor(i / 9 * BANDS * 0.8)], r = bh * (0.12 + lv * 0.18);
+    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], 0.35 + lv * 0.5)); g.addColorStop(1, rgba(RGB[i % 3], 0));
+    x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2);
+  }
+  if (glass.flash > 0.01) { x.globalCompositeOperation = 'lighter'; x.fillStyle = `rgba(220,230,255,${glass.flash * (state.noFlash ? 0.25 : 0.7)})`; x.fillRect(0, 0, bw, bh); }
+  x.globalCompositeOperation = 'source-over';
+  // versión desenfocada (lo que se ve por el vidrio)
+  const b = glass.bgc; b.filter = CAN_BLUR ? 'blur(10px)' : 'none'; b.clearRect(0, 0, bw, bh); b.drawImage(glass.sharp, 0, 0); b.filter = 'none';
 }
-const rainLights = [{ band: 'bass', c: 0, sx: 0.13, ph: 0 }, { band: 'mid', c: 1, sx: 0.09, ph: 2.1 }, { band: 'high', c: 2, sx: 0.17, ph: 4.2 }];
-const rainLv = new Float32Array(3), rainLvV = new Float32Array(3), rainLvT = new Float32Array(3);
-function newDrop(top) {
-  const z = 0.25 + Math.random() * 0.75;
-  return { x: Math.random() * W * 1.2 - W * 0.1, y: top ? -Math.random() * H * 0.25 : Math.random() * H, z, sp: 0.85 + Math.random() * 0.3, len: (14 + z * 26) * DPR, floor: H * 0.8 + H * 0.2 * (0.1 + z * 0.85) };
+function glassDrop(x, y, r, stretch = 1) {   // una gota: lente que invierte el fondo, con borde y brillo
+  const s = glass.sharp, kx = s.width / W, ky = s.height / H, span = r * 5;
+  ctx.save();
+  ctx.beginPath(); ctx.ellipse(x, y, r, r * stretch, 0, 0, Math.PI * 2); ctx.clip();
+  ctx.translate(x, y); ctx.scale(1, -1);
+  ctx.drawImage(s, (x - span) * kx, (y - span) * ky, span * 2 * kx, span * 2 * ky, -r, -r * stretch, r * 2, r * 2 * stretch);
+  ctx.restore();
+  const g = ctx.createRadialGradient(x - r * 0.25, y - r * 0.3 * stretch, r * 0.1, x, y, r * 1.05);
+  g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.75, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.35)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r, r * stretch, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(x - r * 0.35, y - r * 0.4 * stretch, r * 0.22, r * 0.14 * stretch, -0.5, 0, Math.PI * 2); ctx.fill();
 }
-// Estado de la lluvia: ritmo de caída, viento y relámpago, todos con inercia
-const rainState = { speed: 0.6, speedV: 0, wind: 0, windV: 0, flash: 0, amount: 0.4 }, ripples = [];
 function drawRain(dt) {
-  const night = state.theme === 'dark', rs = rainState;
-  // La música marca el tiempo de la lluvia: casi cámara lenta en lo tranquilo, aguacero en lo intenso
-  const sTarget = 0.35 + Math.pow(energy, 0.9) * 1.5;
-  rs.speedV += ((sTarget - rs.speed) * 30 - rs.speedV * 2 * Math.sqrt(30) * 0.8) * dt; rs.speed += rs.speedV * dt;
-  if (hits.bass) rs.speedV += hits.bass * 1.5;   // el golpe empuja la lluvia
-  // Ráfagas: los medios empujan de lado, con inercia
-  const wTarget = (mid - 0.3) * 0.45 + Math.sin(time * 0.17) * 0.1;
-  rs.windV += ((wTarget - rs.wind) * 8 - rs.windV * 2 * Math.sqrt(8) * 0.7) * dt; rs.wind += rs.windV * dt;
-  if (hits.mid) rs.windV += (Math.random() - 0.5) * hits.mid * 0.6;
-  // Relámpago en los golpes fuertes
-  if (hits.bass > 0.6 && !state.noFlash) rs.flash = Math.max(rs.flash, 0.55 + hits.bass * 0.45);
-  rs.flash *= Math.pow(0.0015, dt);
-  // Cantidad: de llovizna (15 %) a aguacero según la intensidad. Las gotas nuevas entran por
-  // arriba poco a poco y las que sobran simplemente no vuelven a caer, así nunca hay cortes.
-  rs.amount += ((0.15 + Math.pow(energy, 0.9) * 1.25) - rs.amount) * (1 - Math.pow(0.25, dt));
-  if (hits.bass) rs.amount = Math.min(1.6, rs.amount + hits.bass * 0.12);
-  const want = Math.round(Math.min(2200, 1300 * W * H / (1920 * 1080 * DPR * DPR) * rs.amount));
-  for (let k = 0; k < 40 && drops.length < want; k++) drops.push(newDrop(true));
-  rainLvT[0] = Math.pow(bass, 0.8); rainLvT[1] = Math.pow(mid, 0.8); rainLvT[2] = Math.pow(high, 0.8);
-  if (hits.bass) rainLvV[0] += hits.bass * 5;
-  if (hits.mid) rainLvV[1] += hits.mid * 4;
-  if (hits.high) rainLvV[2] += hits.high * 4;
-  springTo(rainLv, rainLvV, rainLvT, dt, 260, 0.5);
-  // Focos que pasean despacio, cada uno encendido por su banda
-  const L = rainLights.map((l, i) => ({
-    x: W * (0.5 + 0.38 * Math.sin(time * l.sx + l.ph)), y: H * (0.4 + 0.12 * Math.sin(time * l.sx * 1.3 + l.ph)),
-    r: MIN * (0.24 + Math.max(0, rainLv[i]) * 0.32), I: 0.1 + Math.max(0, rainLv[i]) * 1.4 + rs.flash * 0.6, c: RGB[l.c]
-  }));
-  const surf = H * 0.8;   // dónde empieza la superficie del agua
-  lctx.clearRect(0, 0, W, H);
-  lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  // Relámpago: el aire entero se aclara un instante
-  if (rs.flash > 0.02) { lctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.6), rs.flash * (night ? 0.12 : 0.08)); lctx.fillRect(0, 0, W, H); }
-  // Superficie del agua: un reflejo oscuro que recoge la luz de los focos
-  const water = lctx.createLinearGradient(0, surf, 0, H);
-  water.addColorStop(0, rgba(mix(0.5), 0)); water.addColorStop(1, rgba(mix(0.5), night ? 0.06 + energy * 0.06 : 0.05));
-  lctx.fillStyle = water; lctx.fillRect(0, surf, W, H - surf);
-  for (const l of L) {
-    const g = lctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 1.6);
-    g.addColorStop(0, rgba(l.c, Math.min(0.45, (night ? 0.08 : 0.06) * l.I))); g.addColorStop(1, rgba(l.c, 0));
-    lctx.fillStyle = g; lctx.fillRect(l.x - l.r * 1.6, l.y - l.r * 1.6, l.r * 3.2, l.r * 3.2);
-    const fy = H * 0.9, rg = lctx.createRadialGradient(l.x, fy, 0, l.x, fy, l.r);
-    rg.addColorStop(0, rgba(l.c, Math.min(0.4, 0.09 * l.I))); rg.addColorStop(1, rgba(l.c, 0));
-    lctx.save(); lctx.translate(l.x, fy); lctx.scale(1.8, 0.22); lctx.translate(-l.x, -fy);
-    lctx.fillStyle = rg; lctx.fillRect(l.x - l.r, fy - l.r, l.r * 2, l.r * 2); lctx.restore();
+  const night = state.theme === 'dark';
+  if (glass.key !== W + 'x' + H) { glass.small = []; glass.big = []; glass.key = W + 'x' + H; }
+  if (dropHit) glass.flash = 1; glass.flash *= Math.pow(0.02, dt);
+  glassBackground(night);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.bg, 0, 0, W, H); ctx.restore();
+  const u = MIN / 1000;
+  // gotitas quietas: llueve más con más energía
+  const want = 220 + energy * 320;
+  for (let k = 0; k < 6 && glass.small.length < want; k++) if (Math.random() < 0.5 + energy) glass.small.push({ x: Math.random() * W, y: Math.random() * H, r: u * (3 + Math.random() * Math.random() * 11), a: 0 });
+  // gotas grandes: con cada golpe de graves cae una desde arriba
+  if ((hits.bass && glass.big.length < 22) || (Math.random() < dt * (0.6 + energy * 1.5) && glass.big.length < 14))
+    glass.big.push({ x: Math.random() * W, y: -u * 30, r: u * (15 + Math.random() * 14 + (hits.bass || 0) * 8), vy: 0, hold: 0, last: 0 });
+  for (const d of glass.small) { d.a = Math.min(1, d.a + dt * 3); glassDrop(d.x, d.y, d.r * d.a); }
+  for (let i = glass.big.length - 1; i >= 0; i--) {
+    const d = glass.big[i];
+    // resbala a tirones: se frena (la retiene el vidrio) y de pronto corre
+    d.hold -= dt;
+    if (d.hold <= 0) { d.vy += (u * 900 * (d.r / (u * 14))) * dt; if (Math.random() < dt * 1.5) { d.hold = 0.1 + Math.random() * 0.5; d.vy *= 0.2; } }
+    else d.vy *= Math.pow(0.05, dt);
+    d.vy *= 1 + bass * 0.02;
+    d.y += d.vy * dt; d.x += Math.sin(d.y * 0.02 + i) * u * 6 * dt;
+    // se come las gotitas que toca y deja un rastro de gotitas detrás
+    for (let j = glass.small.length - 1; j >= 0; j--) { const s_ = glass.small[j]; if (Math.abs(s_.x - d.x) < d.r && Math.abs(s_.y - d.y) < d.r) { glass.small.splice(j, 1); d.r = Math.min(u * 38, d.r + s_.r * 0.08); } }
+    if (d.y - d.last > d.r * 0.9) { d.last = d.y; if (Math.random() < 0.7) glass.small.push({ x: d.x + (Math.random() - 0.5) * d.r * 0.6, y: d.y - d.r * 1.2, r: d.r * (0.18 + Math.random() * 0.2), a: 1 }); }
+    glassDrop(d.x, d.y, d.r, 1 + Math.min(0.35, d.vy / (u * 2000)));
+    if (d.y > H + d.r * 3) glass.big.splice(i, 1);
   }
-  // Ondas al ritmo: los agudos salpican donde hay luz; cada golpe abre una onda grande bajo un foco
-  const ripple = (x, z, k, big) => { ripples.push({ x, y: surf + (H - surf) * (0.1 + z * 0.85), z, t: 0, life: big ? 1.6 : 0.7 + Math.random() * 0.4, k, big }); };
-  if (hits.high) for (let i = 0; i < 3 + Math.round(hits.high * 6); i++) { const l = L[Math.floor(Math.random() * 3)]; ripple(l.x + (Math.random() - 0.5) * l.r * 1.6, Math.random(), 0.6 + hits.high * 0.4, false); }
-  if (hits.bass) { const l = L[0]; ripple(l.x, 0.4 + Math.random() * 0.4, 0.8 + hits.bass * 0.4, true); }
-  const wind = rs.wind, base = night ? [200, 210, 230] : [70, 80, 100];
-  const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
-  if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c))]; }
-  for (let di = drops.length - 1; di >= 0; di--) {
-    const d = drops[di];
-    const v = (650 + d.z * 900) * DPR * rs.speed * d.sp;
-    d.y += v * dt; d.x += wind * v * dt;
-    if (d.y > d.floor) {
-      if (Math.random() < 0.2) ripple(d.x, d.z, 0.35, false);
-      if (drops.length > want) drops.splice(di, 1); else Object.assign(d, newDrop(true));
-      continue;
-    }
-    let lit = 0, best = 0, bi = 0;
-    for (let j = 0; j < 3; j++) { const l = L[j], dx = d.x - l.x, dy = d.y - l.y, f = l.I * Math.exp(-(dx * dx + dy * dy) / (l.r * l.r)); lit += f; if (f > best) { best = f; bi = j; } }
-    const k = Math.min(1, lit + rs.flash * 0.6);
-    // Estela: cuanto más rápido cae, más se estira
-    const w = (1.7 + d.z * 2.8) * DPR, h = d.len * (0.75 + Math.min(1.6, rs.speed) * 0.55);
-    lctx.setTransform(1, 0, -wind, 1, d.x, d.y);
-    lctx.globalAlpha = (night ? 0.18 + d.z * 0.25 : 0.28 + d.z * 0.3) * (1 - k * 0.7);
-    lctx.drawImage(dropSprites[0], -w / 2, -h, w, h);
-    if (k > 0.02) { lctx.globalAlpha = Math.min(1, k * 1.1); lctx.drawImage(dropSprites[1 + bi], -w / 2, -h, w, h); }
-  }
-  lctx.setTransform(1, 0, 0, 1, 0, 0);
-  // Dibujo de las ondas: dos anillos que se abren en perspectiva y se apagan
-  for (let i = ripples.length - 1; i >= 0; i--) {
-    const q = ripples[i]; q.t += dt;
-    const p = q.t / q.life;
-    if (p >= 1) { ripples.splice(i, 1); continue; }
-    let lit = 0, best = 0, col = base;
-    for (const l of L) { const dx = q.x - l.x, f = l.I * Math.exp(-(dx * dx) / (l.r * l.r * 1.6)); lit += f; if (f > best) { best = f; col = l.c; } }
-    const persp = 0.35 + q.z * 0.9;
-    const R = (q.big ? MIN * 0.22 : (8 + q.z * 22) * DPR) * persp * (0.15 + p * 0.85);
-    const a = (1 - p) * q.k * (0.15 + Math.min(1, lit) * 0.85);
-    lctx.lineWidth = DPR * (q.big ? 1.6 : 1) * persp;
-    for (const [rk, ak] of [[1, 1], [0.6, 0.6]]) {
-      lctx.globalAlpha = Math.min(1, a * ak);
-      lctx.strokeStyle = rgba(lit > 0.15 ? col.map(v => v + (255 - v) * 0.3) : base, 1);
-      lctx.beginPath(); lctx.ellipse(q.x, q.y, R * rk, R * rk * 0.24, 0, 0, Math.PI * 2); lctx.stroke();
-    }
-  }
-  if (ripples.length > 260) ripples.splice(0, ripples.length - 260);
-  lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
-  bloom(layer, night ? 0.55 + beatSoft * 0.35 + rs.flash * 0.4 : 0.25);
-  ctx.drawImage(layer, 0, 0);
+  if (glass.small.length > want + 120) glass.small.splice(0, glass.small.length - want - 120);
+  // vaho: el vidrio se empaña un poco en los bordes
+  const v = ctx.createRadialGradient(W / 2, H / 2, MIN * 0.3, W / 2, H / 2, Math.hypot(W, H) * 0.6);
+  v.addColorStop(0, 'rgba(255,255,255,0)'); v.addColorStop(1, night ? 'rgba(160,170,190,.08)' : 'rgba(255,255,255,.25)');
+  ctx.fillStyle = v; ctx.fillRect(0, 0, W, H);
 }
 
 // ================= Escena: Estrobo =================
