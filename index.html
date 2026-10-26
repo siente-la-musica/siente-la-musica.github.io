@@ -1081,7 +1081,7 @@ function analyse(dt) {
     }
     // Ganancia automática lenta: se adapta al volumen de la canción en unos 8 s, así una parte
     // suave se sigue viendo más tranquila que el estribillo (antes se igualaba en 1 s)
-    peak = Math.max(peak * Math.pow(0.92, dt), mx, 0.2);
+    peak = Math.max(peak * Math.pow(0.85, dt), mx, 0.05);   // suelo bajo: con el volumen del PC bajo también reaccionan
     const gain = Math.pow(state.sens, 0.8);   // sensibilidad elegida por la persona
     for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak * gain);
   } else if (songBeatOn()) {
