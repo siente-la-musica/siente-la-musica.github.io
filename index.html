@@ -5054,37 +5054,22 @@ function drawTubes(dt) {
     // brazos detrás, luego el cuerpo
     for (const arm of m.arms) tubeStroke(ctx, arm, w * 0.55, c);
     tubeStroke(ctx, B, w, c);
-    // costuras del nailon cada pocos tramos
-    ctx.strokeStyle = rgba(c.map(v => v * 0.55), 0.55); ctx.lineWidth = Math.max(1, w * 0.04);
-    for (let k = 3; k < N - 2; k += 3) { const a_ = B[k - 1], b_ = B[k + 1], ddx = b_.x - a_.x, ddy = b_.y - a_.y, dd = Math.hypot(ddx, ddy) || 1, px_ = -ddy / dd * w * 0.48, py_ = ddx / dd * w * 0.48;
-      ctx.beginPath(); ctx.moveTo(B[k].x - px_, B[k].y - py_); ctx.quadraticCurveTo(B[k].x + ddx / dd * w * 0.12, B[k].y + ddy / dd * w * 0.12, B[k].x + px_, B[k].y + py_); ctx.stroke(); }
-    // manos: un penacho de tela al final de cada brazo
-    for (const arm of m.arms) { const tp = arm[arm.length - 1], pv = arm[arm.length - 2], ax_ = tp.x - pv.x, ay_ = tp.y - pv.y, al = Math.hypot(ax_, ay_) || 1;
-      for (let j = -1; j <= 1; j++) { const an = Math.atan2(ay_, ax_) + j * 0.5 + Math.sin(time * 12 + j) * 0.2, L = w * 0.5;
-        ctx.fillStyle = rgba(c2, 1); ctx.beginPath(); ctx.moveTo(tp.x - Math.sin(an) * w * 0.06, tp.y + Math.cos(an) * w * 0.06); ctx.lineTo(tp.x + Math.cos(an) * L, tp.y + Math.sin(an) * L); ctx.lineTo(tp.x + Math.sin(an) * w * 0.06, tp.y - Math.cos(an) * w * 0.06); ctx.closePath(); ctx.fill(); } }
-    // mechón de pelo arriba (el de los inflables), que aletea
+    // manos: el extremo del brazo, redondeado
+    for (const arm of m.arms) { const tp = arm[arm.length - 1]; ctx.fillStyle = rgba(c, 1); ctx.beginPath(); ctx.arc(tp.x, tp.y, w * 0.32, 0, Math.PI * 2); ctx.fill(); }
+    // cabeza: el extremo del tubo, un poco más abultado
     const hx = top.x, hy = top.y, dx = top.x - B[N - 3].x, dy = top.y - B[N - 3].y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, nx = -uy, ny = ux;
-    for (let j = -3; j <= 3; j++) {
-      const a = j * 0.28 + Math.sin(time * 14 + j + m.ph) * (0.1 + high * 0.5), L = w * (0.9 + Math.abs(Math.sin(j * 1.7)) * 0.6);
-      const ex = hx + (ux * Math.cos(a) - nx * Math.sin(a)) * L, ey = hy + (uy * Math.cos(a) - ny * Math.sin(a)) * L;
-      // cada tira es de tela: ancha en la base y en punta, con una curva que aletea
-      const qx = (hx + ex) / 2 + nx * Math.sin(time * 9 + j) * w * 0.25, qy = (hy + ey) / 2 + ny * Math.sin(time * 9 + j) * w * 0.25, bw2 = w * 0.09;
-      ctx.fillStyle = rgba(j % 2 ? c2 : c2.map(v => v * 0.8), 1);
-      ctx.beginPath(); ctx.moveTo(hx - nx * bw2, hy - ny * bw2); ctx.quadraticCurveTo(qx, qy, ex, ey); ctx.quadraticCurveTo(qx, qy, hx + nx * bw2, hy + ny * bw2); ctx.closePath(); ctx.fill();
-    }
+    ctx.fillStyle = rgba(c, 1); ctx.beginPath(); ctx.arc(hx - ux * w * 0.35, hy - uy * w * 0.35, w * 0.6, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgba(c.map(v => v + (255 - v) * 0.5), 0.6); ctx.beginPath(); ctx.arc(hx - ux * w * 0.35 - nx * w * 0.2, hy - uy * w * 0.35 - ny * w * 0.2, w * 0.18, 0, Math.PI * 2); ctx.fill();
     // cara: ojos saltones que se mueven con el cuerpo y una boca que «canta»
     const fx = top.x - ux * w * 0.9, fy = top.y - uy * w * 0.9;
     const vx = (top.x - top.px), vy = (top.y - top.py), vm = Math.hypot(vx, vy) || 1, look = Math.min(1, vm / (w * 0.08));
     for (const sgn of [-1, 1]) {
       const ex = fx + nx * w * 0.22 * sgn, ey = fy + ny * w * 0.22 * sgn;
-      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, ey, w * 0.19, w * 0.22, Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, ey, w * 0.21, w * 0.24, Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = w * 0.03; ctx.stroke();
       ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex - vx / vm * w * 0.08 * look, ey - vy / vm * w * 0.08 * look, w * 0.085, 0, Math.PI * 2); ctx.fill();
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex - vx / vm * w * 0.08 * look - w * 0.03, ey - vy / vm * w * 0.08 * look - w * 0.03, w * 0.025, 0, Math.PI * 2); ctx.fill();
-      // ceja que sube con la música
-      const bx = ex + ux * w * 0.3, by = ey + uy * w * 0.3 + uy * beatSoft * w * 0.1;
-      ctx.strokeStyle = rgba(c.map(v => v * 0.35), 1); ctx.lineWidth = w * 0.06; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(bx - nx * w * 0.14, by - ny * w * 0.14 + uy * sgn * w * 0.04); ctx.lineTo(bx + nx * w * 0.14, by + ny * w * 0.14 - uy * sgn * w * 0.04); ctx.stroke();
+
     }
     const mx = fx - ux * w * 0.42, my = fy - uy * w * 0.42;
     ctx.fillStyle = '#2a0b12'; ctx.beginPath(); ctx.ellipse(mx, my, w * 0.24, w * (0.05 + m.mouth * 0.17), Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
