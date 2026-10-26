@@ -4879,24 +4879,13 @@ function drawTubes(dt) {
 // colores, como en un escenario. El baile va al tempo de la canción; sin música vuelven al reposo.
 // Él baila otra parte de la coreografía y en espejo, así nunca hacen lo mismo. Dejan una estela.
 const dance = { state: 'idle', T: null, renderer: null, scene: null, camera: null, people: [], lights: [], trail: null, tctx: null, key: '', w: 0 };
-async function danceLoad() {
-  if (dance.state !== 'idle') return; dance.state = 'loading';
-  try {
-    const T = dance.T = await import('./lib/three-dance.js');
+// Personajes 3D compartidos (Bailarines y Ciudad): se descargan una sola vez
+let peopleP = null;
+function peopleAssets() {
+  if (!peopleP) peopleP = (async () => {
+    const T = await import('./lib/three-dance.js');
     const loader = new T.GLTFLoader();
     const [her, him] = await Promise.all(['lib/models/Michelle.glb', 'lib/models/Xbot.glb'].map(u => loader.loadAsync(u)));
-    const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
-    renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.setClearColor(0x000000, 0);
-    const scene = new T.Scene(), camera = new T.PerspectiveCamera(28, 16 / 9, 0.1, 100);
-    camera.position.set(0, 1.0, 6.3); camera.lookAt(0, 0.92, 0);
-    // Luces: dos de contorno de colores desde atrás, una suave de frente y un poco de ambiente
-    const rimL = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6), rimR = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6);
-    rimL.position.set(-3.5, 3.2, -3.2); rimR.position.set(3.5, 3.2, -3.2);
-    rimL.target.position.set(-0.4, 0.9, 0); rimR.target.position.set(0.4, 0.9, 0);
-    const key = new T.DirectionalLight(0xffffff, 0.5); key.position.set(0, 2.5, 6);
-    const hemi = new T.HemisphereLight(0xffffff, 0x222233, 0.25);
-    scene.add(rimL, rimR, rimL.target, rimR.target, key, hemi);
-    const samba = her.animations.find(a => a.name === 'SambaDance'), idle = him.animations.find(a => a.name === 'idle');
     // En otro cuerpo solo vale la rotación de los huesos (y la posición de la cadera)
     const onlyRot = clip => { const c = clip.clone(); c.tracks = c.tracks.filter(t => !/\.(position|scale)$/.test(t.name)); return c; };
     // Pasar el baile a otro cuerpo, hueso por hueso: cada esqueleto tiene sus huesos orientados a su
@@ -4920,6 +4909,26 @@ async function danceLoad() {
       }
       return c;
     };
+    return { T, her, him, RH, RM, retarget, onlyRot };
+  })();
+  return peopleP;
+}
+async function danceLoad() {
+  if (dance.state !== 'idle') return; dance.state = 'loading';
+  try {
+    const { T, her, him, RH, RM, retarget, onlyRot } = await peopleAssets(); dance.T = T;
+    const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.setClearColor(0x000000, 0);
+    const scene = new T.Scene(), camera = new T.PerspectiveCamera(28, 16 / 9, 0.1, 100);
+    camera.position.set(0, 1.0, 6.3); camera.lookAt(0, 0.92, 0);
+    // Luces: dos de contorno de colores desde atrás, una suave de frente y un poco de ambiente
+    const rimL = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6), rimR = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6);
+    rimL.position.set(-3.5, 3.2, -3.2); rimR.position.set(3.5, 3.2, -3.2);
+    rimL.target.position.set(-0.4, 0.9, 0); rimR.target.position.set(0.4, 0.9, 0);
+    const key = new T.DirectionalLight(0xffffff, 0.5); key.position.set(0, 2.5, 6);
+    const hemi = new T.HemisphereLight(0xffffff, 0x222233, 0.25);
+    scene.add(rimL, rimR, rimL.target, rimR.target, key, hemi);
+    const samba = her.animations.find(a => a.name === 'SambaDance'), idle = him.animations.find(a => a.name === 'idle');
     const mat = new T.MeshStandardMaterial({ color: 0x0a0a0f, roughness: 0.42, metalness: 0.15, side: T.DoubleSide });
     const setup = (g, x, mirror, offset, own) => {
       const root = new T.Group(); root.add(g.scene); scene.add(root);
@@ -4982,6 +4991,7 @@ function drawDancers(dt) {
   ctx.globalAlpha = 1; ctx.drawImage(r.domElement, 0, 0, W, H);
   ctx.restore();
 }
+
 
 const scenes = { dancers: drawDancers, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
