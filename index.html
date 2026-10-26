@@ -3863,9 +3863,9 @@ function fluidStep(dt) {
   for (let i = 0; i < 20; i++) { gl.uniform1i(u.uPressure, glBind(1, fluid.pres.read)); glBlit(fluid.pres.write); fluid.pres.swap(); }
   u = use(P.gradient, v.read.texel); gl.uniform1i(u.uPressure, glBind(0, fluid.pres.read)); gl.uniform1i(u.uVelocity, glBind(1, v.read)); glBlit(v.write); v.swap();
   u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(0, v.read));
-  gl.uniform1f(u.dt, dt); gl.uniform1f(u.dissipation, 0.25); glBlit(v.write); v.swap();
+  gl.uniform1f(u.dt, dt); gl.uniform1f(u.dissipation, 0.5 + (1 - energy) * 1.6); glBlit(v.write); v.swap();   // en lo suave el movimiento se calma rápido
   u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(1, fluid.dye.read));
-  gl.uniform1f(u.dissipation, 0.6 + (1 - energy) * 0.6); glBlit(fluid.dye.write); fluid.dye.swap();
+  gl.uniform1f(u.dissipation, 0.8 + (1 - energy) * 1.2); glBlit(fluid.dye.write); fluid.dye.swap();
 }
 const fluidColor = (c, k) => c.map(x => x / 255 * k);
 addEventListener('pointermove', e => {
@@ -3890,8 +3890,9 @@ function drawFluid(dt) {
   };
   if (hits.bass) {
     ring(2 + Math.round(hits.bass * 2), hits.bass, 0.35 + hits.bass * 0.3, 0.45 + hits.bass * 0.5);
-    // Onda expansiva: empuja el fluido hacia fuera desde el centro
-    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(0.5 + Math.cos(a) * 0.05 * H / W, 0.5 + Math.sin(a) * 0.05, Math.cos(a) * 2600 * hits.bass, Math.sin(a) * 2600 * hits.bass, fluidColor(RGB[k % 3], 0.12 * hits.bass), R(0.12)); }
+    // Onda expansiva: cada golpe estalla desde un punto distinto, con tinta nueva y brillante
+    const ox = 0.25 + Math.random() * 0.5, oy = 0.3 + Math.random() * 0.4;
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(ox + Math.cos(a) * 0.05 * H / W, oy + Math.sin(a) * 0.05, Math.cos(a) * 2600 * hits.bass, Math.sin(a) * 2600 * hits.bass, fluidColor(RGB[k % 3], 0.12 * hits.bass), R(0.12)); }
   }
   if (hits.mid) ring(1 + Math.round(hits.mid), hits.mid * 0.6, 0.18, 0.3 + hits.mid * 0.3);
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
@@ -3905,12 +3906,12 @@ function drawFluid(dt) {
   fluid.emitA = (fluid.emitA || 0) + dt * (0.15 + energy * 0.6);
   const bandsE = [bass, (bass + mid) / 2, mid, (mid + high) / 2, high];
   for (let i = 0; i < 5; i++) {
-    const lv = Math.pow(bandsE[i], 1.3);
-    if (lv < 0.04) continue;
+    const lv = Math.pow(bandsE[i], 2.2);   // solo empujan fuerte cuando su parte suena de verdad
+    if (lv < 0.06) continue;
     const a = fluid.emitA + i * Math.PI * 2 / 5, rr = 0.22 + lv * 0.08;
     const x = 0.5 + Math.cos(a) * rr * (H / W), y = 0.5 + Math.sin(a) * rr;
-    const dir = a + Math.PI / 2, sp_ = 250 + lv * 2200;
-    fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[i % 3], lv * 0.14), R(0.06 + lv * 0.14));
+    const dir = a + Math.PI / 2, sp_ = 120 + lv * 1800;
+    fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[i % 3], lv * 0.1), R(0.05 + lv * 0.12));
   }
   fluidStep(Math.min(dt, 0.033));
   // Mostrar
