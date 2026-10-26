@@ -4688,7 +4688,7 @@ function vinylBase(R) {
 }
 function drawVinyl(dt) {
   const night = state.theme === 'dark', vertical = H > W;
-  const R = MIN * (vertical ? 0.36 : 0.37), cx = W / 2 - R * (vertical ? 0.14 : 0.18), cy = H * (vertical ? 0.46 : 0.5);   // a un lado para que quepa el brazo
+  const R = MIN * (vertical ? 0.33 : 0.33), cx = W / 2 - R * (vertical ? 0.14 : 0.18), cy = H * (vertical ? 0.44 : 0.46);   // a un lado para que quepa el brazo
   if (!vinyl.base || Math.abs(vinyl.baseR - R) > 2) { vinyl.base = vinylBase(R); vinyl.baseR = R; }
   // ¿Suena? Con canción conectada se sabe; si no, se mira el audio
   // Con Spotify se sabe si suena; con solo audio, se da por parado tras 3 s seguidos de silencio
@@ -4705,12 +4705,53 @@ function drawVinyl(dt) {
   ctx.save();
   glowSpot(cx, cy, R * 2, mix(0.5), (night ? 0.2 : 0.14) + beatSoft * 0.22);
   ambient();
+  // Tocadiscos: base de aluminio cepillado con sus controles (como un Technics)
+  {
+    const x0 = cx - R * 1.28, y0 = cy - R * 1.22, dw = R * 2.98, dh = R * 2.44, rr = R * 0.08;
+    ctx.save();
+    ctx.shadowColor = night ? 'rgba(0,0,0,.7)' : 'rgba(0,0,0,.3)'; ctx.shadowBlur = R * 0.25; ctx.shadowOffsetY = R * 0.08;
+    const deck = ctx.createLinearGradient(x0, y0, x0 + dw, y0 + dh);
+    deck.addColorStop(0, night ? '#2c2d33' : '#d9dade'); deck.addColorStop(0.5, night ? '#1d1e23' : '#c2c4ca'); deck.addColorStop(1, night ? '#26272d' : '#d0d2d7');
+    ctx.fillStyle = deck; ctx.beginPath(); ctx.roundRect(x0, y0, dw, dh, rr); ctx.fill();
+    ctx.restore();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x0, y0, dw, dh, rr); ctx.clip();   // vetas del cepillado
+    ctx.globalAlpha = night ? 0.05 : 0.08; ctx.strokeStyle = night ? '#fff' : '#000'; ctx.lineWidth = 1;
+    for (let k = 0; k < 70; k++) { const yy = y0 + (k / 70) * dh + Math.sin(k * 12.9) * 2; ctx.beginPath(); ctx.moveTo(x0, yy); ctx.lineTo(x0 + dw, yy + Math.sin(k) * 3); ctx.stroke(); }
+    ctx.restore();
+    ctx.strokeStyle = night ? 'rgba(255,255,255,.08)' : 'rgba(255,255,255,.6)'; ctx.lineWidth = Math.max(1, R * 0.006);
+    ctx.beginPath(); ctx.roundRect(x0 + 1, y0 + 1, dw - 2, dh - 2, rr); ctx.stroke();
+    // botón de encendido con su luz, y 33 / 45
+    const bx = x0 + R * 0.12, by = y0 + dh - R * 0.3;
+    ctx.fillStyle = night ? '#3a3b42' : '#b4b6bd'; ctx.beginPath(); ctx.roundRect(bx, by, R * 0.42, R * 0.18, R * 0.03); ctx.fill();
+    ctx.fillStyle = textFg(0.55); ctx.font = `600 ${Math.round(R * 0.045)}px -apple-system, "Segoe UI", system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('START · STOP', bx + R * 0.21, by + R * 0.09);
+    const led = playing ? [255, 70, 60] : [90, 30, 30];
+    ctx.fillStyle = rgba(led, 1); ctx.shadowColor = playing ? 'rgba(255,60,50,.9)' : 'transparent'; ctx.shadowBlur = R * 0.06;
+    ctx.beginPath(); ctx.arc(bx + R * 0.05, by - R * 0.06, R * 0.018, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+    const fast = rps > 0.66;
+    for (const [k, t] of [[0, '33'], [1, '45']]) {
+      const on = (k === 1) === fast, x = bx + R * 0.5 + k * R * 0.2;
+      ctx.fillStyle = on ? (night ? '#55565e' : '#9fa1a8') : (night ? '#33343a' : '#bfc1c7'); ctx.beginPath(); ctx.roundRect(x, by + R * 0.03, R * 0.16, R * 0.12, R * 0.02); ctx.fill();
+      ctx.fillStyle = on ? rgba(mix(0.5), 1) : textFg(0.4); ctx.fillText(t, x + R * 0.08, by + R * 0.09);
+    }
+    // deslizador de velocidad: se mueve según el tempo de la canción
+    const sx = x0 + dw - R * 0.2, sy0 = cy + R * 0.25, sy1 = y0 + dh - R * 0.15;
+    ctx.strokeStyle = night ? '#0c0c10' : '#8d9097'; ctx.lineWidth = R * 0.02; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(sx, sy0); ctx.lineTo(sx, sy1); ctx.stroke();
+    const pitch = Math.max(-1, Math.min(1, ((tempo.bpm || 120) - 120) / 40)), ky = (sy0 + sy1) / 2 - pitch * (sy1 - sy0) * 0.4;
+    ctx.fillStyle = night ? '#4a4b52' : '#e8e9ec'; ctx.beginPath(); ctx.roundRect(sx - R * 0.07, ky - R * 0.03, R * 0.14, R * 0.06, R * 0.012); ctx.fill();
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
   // Plato: un borde metálico fino que asoma bajo el disco
   ctx.save();
   ctx.shadowColor = night ? 'rgba(0,0,0,.75)' : 'rgba(0,0,0,.32)'; ctx.shadowBlur = R * 0.16; ctx.shadowOffsetY = R * 0.06;
   const pl = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
   pl.addColorStop(0, night ? '#4a4a52' : '#e4e4e8'); pl.addColorStop(0.5, night ? '#24242a' : '#b4b4bc'); pl.addColorStop(1, night ? '#3a3a42' : '#d0d0d6');
   ctx.fillStyle = pl; ctx.beginPath(); ctx.arc(cx, cy, R * 1.025, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang * 0.999);   // puntos del borde del plato
+  ctx.fillStyle = night ? 'rgba(220,225,235,.45)' : 'rgba(40,40,50,.45)';
+  for (let k = 0; k < 90; k++) { const a = k / 90 * Math.PI * 2; ctx.beginPath(); ctx.arc(Math.cos(a) * R * 1.013, Math.sin(a) * R * 1.013, R * 0.0045, 0, Math.PI * 2); ctx.fill(); }
   ctx.restore();
   // Disco (surcos pre-dibujados) girando
   ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang); ctx.drawImage(vinyl.base, -R, -R, R * 2, R * 2); ctx.restore();
@@ -4744,6 +4785,15 @@ function drawVinyl(dt) {
   ctx.fillStyle = vg; ctx.fillRect(-Rl, -Rl, Rl * 2, Rl * 2);
   ctx.restore();
   ctx.strokeStyle = 'rgba(0,0,0,.5)'; ctx.lineWidth = R * 0.008; ctx.beginPath(); ctx.arc(cx, cy, Rl, 0, Math.PI * 2); ctx.stroke();
+  {   // texto impreso en la etiqueta, girando con el disco
+    const label = ('SIENTE LA MÚSICA  ·  ' + (sp.item ? sp.item.name.toUpperCase().slice(0, 28) : '33⅓ RPM') + '  ·  LADO A  ·  ').split('');
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang);
+    ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = R * 0.055; ctx.beginPath(); ctx.arc(0, 0, Rl * 0.86, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = `600 ${Math.round(R * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const step = Math.PI * 2 / Math.max(label.length, 40);
+    label.forEach((ch, k) => { ctx.save(); ctx.rotate(k * step); ctx.translate(0, -Rl * 0.86); ctx.fillText(ch, 0, 0); ctx.restore(); });
+    ctx.restore(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
   // Eje central
   const sg = ctx.createRadialGradient(cx - R * 0.006, cy - R * 0.006, 0, cx, cy, R * 0.022);
   sg.addColorStop(0, '#f6f6f8'); sg.addColorStop(1, '#707078');
@@ -4979,10 +5029,12 @@ function tubePath(g, pts, off = 0, w = 0) {   // curva suave por los puntos (des
 function tubeStroke(g, pts, w, c) {
   const dark = c.map(v => v * 0.5), light = c.map(v => v + (255 - v) * 0.55);
   g.lineCap = 'round'; g.lineJoin = 'round';
-  tubePath(g, pts); g.strokeStyle = rgba(dark, 1); g.lineWidth = w * 1.12; g.stroke();
-  tubePath(g, pts); g.strokeStyle = rgba(c, 1); g.lineWidth = w; g.stroke();
-  tubePath(g, pts, 0.36, w); g.strokeStyle = rgba(c.map(v => v * 0.78), 0.9); g.lineWidth = w * 0.22; g.stroke();   // sombra de un lado
-  tubePath(g, pts, -0.22, w); g.strokeStyle = rgba(light, 0.75); g.lineWidth = w * 0.2; g.stroke();   // brillo del plástico
+  // Tubo de nailon redondo: capas de más oscuro (bordes) a más claro (centro) y un brillo a un lado
+  tubePath(g, pts); g.strokeStyle = rgba(dark, 1); g.lineWidth = w * 1.1; g.stroke();
+  tubePath(g, pts); g.strokeStyle = rgba(c.map(v => v * 0.75), 1); g.lineWidth = w; g.stroke();
+  tubePath(g, pts, -0.06, w); g.strokeStyle = rgba(c, 1); g.lineWidth = w * 0.72; g.stroke();
+  tubePath(g, pts, -0.12, w); g.strokeStyle = rgba(c.map(v => v + (255 - v) * 0.25), 1); g.lineWidth = w * 0.4; g.stroke();
+  tubePath(g, pts, -0.24, w); g.strokeStyle = rgba(light, 0.8); g.lineWidth = w * 0.12; g.stroke();   // brillo del plástico
 }
 function drawTubes(dt) {
   const night = state.theme === 'dark';
@@ -5021,7 +5073,13 @@ function drawTubes(dt) {
     for (const sgn of [-1, 1]) {
       const ex = fx + nx * w * 0.22 * sgn, ey = fy + ny * w * 0.22 * sgn;
       ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(ex, ey, w * 0.19, w * 0.22, Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,.55)'; ctx.lineWidth = w * 0.03; ctx.stroke();
       ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(ex - vx / vm * w * 0.08 * look, ey - vy / vm * w * 0.08 * look, w * 0.085, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(ex - vx / vm * w * 0.08 * look - w * 0.03, ey - vy / vm * w * 0.08 * look - w * 0.03, w * 0.025, 0, Math.PI * 2); ctx.fill();
+      // ceja que sube con la música
+      const bx = ex + ux * w * 0.3, by = ey + uy * w * 0.3 + uy * beatSoft * w * 0.1;
+      ctx.strokeStyle = rgba(c.map(v => v * 0.35), 1); ctx.lineWidth = w * 0.06; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(bx - nx * w * 0.14, by - ny * w * 0.14 + uy * sgn * w * 0.04); ctx.lineTo(bx + nx * w * 0.14, by + ny * w * 0.14 - uy * sgn * w * 0.04); ctx.stroke();
     }
     const mx = fx - ux * w * 0.42, my = fy - uy * w * 0.42;
     ctx.fillStyle = '#2a0b12'; ctx.beginPath(); ctx.ellipse(mx, my, w * 0.24, w * (0.05 + m.mouth * 0.17), Math.atan2(uy, ux) + Math.PI / 2, 0, Math.PI * 2); ctx.fill();
