@@ -4154,12 +4154,12 @@ function magInit() {
   mag.trail = document.createElement('canvas'); mag.trail.width = W; mag.trail.height = H; mag.tctx = mag.trail.getContext('2d');
   mag.W = W; mag.H = H; mag.buckets = Array.from({ length: 12 }, () => []);
 }
-// Si cambia el tamaño (por ejemplo, al ajustar la calidad), se reescala todo en vez de empezar de cero
+// Si cambia el tamaño (al ajustar la calidad) se reescala todo en vez de empezar de cero
 function magResize() {
   const kx = W / mag.W, ky = H / mag.H;
   for (let i = 0; i < mag.n; i++) { mag.x[i] *= kx; mag.y[i] *= ky; mag.vx[i] *= kx; mag.vy[i] *= ky; }
-  const old = mag.trail; mag.trail = document.createElement('canvas'); mag.trail.width = W; mag.trail.height = H; mag.tctx = mag.trail.getContext('2d');
-  mag.tctx.drawImage(old, 0, 0, W, H); mag.W = W; mag.H = H;
+  const prev = mag.trail; mag.trail = document.createElement('canvas'); mag.trail.width = W; mag.trail.height = H; mag.tctx = mag.trail.getContext('2d');
+  mag.tctx.drawImage(prev, 0, 0, W, H); mag.W = W; mag.H = H;
 }
 function drawMagnet(dt) {
   const night = state.theme === 'dark';
@@ -4169,18 +4169,16 @@ function drawMagnet(dt) {
   t.globalCompositeOperation = 'destination-out'; t.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; t.fillRect(0, 0, W, H);
   t.globalCompositeOperation = night ? 'lighter' : 'source-over'; t.lineCap = 'round';
   const lv = [bass, mid, high].map(v => Math.pow(v, 0.8));
-  mag.phase = mag.phase || [0, 2.1, 4.2];   // los imanes avanzan con la energía: en lo suave casi quietos
-  for (let k = 0; k < 3; k++) mag.phase[k] += dt * (0.25 + k * 0.08) * (0.2 + Math.pow(energy, 1.3) * 2.2);
   // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
   const att = [0, 1, 2].map(k => {
-    const a = mag.phase[k], r = MIN * (0.12 + lv[k] * 0.22);
+    const a = time * (0.25 + k * 0.08) * (1 + energy) + k * 2.1, r = MIN * (0.12 + lv[k] * 0.22);
     return [W / 2 + Math.cos(a) * r * 1.4, H / 2 + Math.sin(a * 1.3) * r];
   });
   const usePtr = mag.pointer && (mag.down || performance.now() - mag.pointer.at < 2000);
   const px = usePtr ? mag.pointer.x * W : 0, py = usePtr ? mag.pointer.y * H : 0;
   const kick = hits.bass ? hits.bass : 0, burst = mag.release;
   mag.release = 0;
-  const s = MIN, maxV = s * (0.25 + energy * 1.5);
+  const s = MIN, maxV = s * (0.6 + energy * 1.2);
   const cols = RGB.map(c => night ? c : c.map(v => v * 0.8));
   for (let i = 0; i < mag.n; i++) {
     const b = mag.band[i];
@@ -4190,21 +4188,18 @@ function drawMagnet(dt) {
     let dx = tx - mag.x[i], dy = ty - mag.y[i];
     const d2 = dx * dx + dy * dy + s * s * 0.002, d = Math.sqrt(d2);
     // Atracción + giro alrededor del imán
-    const f = (usePtr ? 14 : 7 * (0.25 + energy * 1.3) + lv[b] * 12) * s / d;   // en las partes suaves todo va más despacio
+    const f = (usePtr ? 14 : 7 + lv[b] * 12) * s / d;
     let ax = dx / d * f - dy / d * f * swirl, ay = dy / d * f + dx / d * f * swirl;
     // Golpe de bajo o soltar el ratón: estallido hacia fuera
-    // Cada parte de la música mueve su grupo: el bajo empuja al primero, la voz/caja al segundo y
-    // los platillos hacen chispear al tercero
-    const push = burst ? 0.55 : b === 0 ? kick * 0.8 : 0;
-    if (push) { const k = push * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
+    if (kick && b === 0 || burst) { const k = (burst ? 0.55 : kick * 0.8) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
     mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
     const v2 = mag.vx[i] * mag.vx[i] + mag.vy[i] * mag.vy[i];
     if (v2 > maxV * maxV * 4) { const k = maxV * 2 / Math.sqrt(v2); mag.vx[i] *= k; mag.vy[i] *= k; }
     const ox = mag.x[i], oy = mag.y[i];
     mag.x[i] += mag.vx[i] * dt; mag.y[i] += mag.vy[i] * dt;
-    // Las que se van lejos reaparecen junto a su imán, sin dibujar ese tramo
-    if (mag.x[i] < -W * 0.2 || mag.x[i] > W * 1.2 || mag.y[i] < -H * 0.2 || mag.y[i] > H * 1.2) { mag.x[i] = att[b][0] + (Math.random() - 0.5) * s * 0.3; mag.y[i] = att[b][1] + (Math.random() - 0.5) * s * 0.3; mag.vx[i] = mag.vy[i] = 0; continue; }
+    // Las que se van muy lejos vuelven por un borde
+    if (mag.x[i] < -W * 0.2 || mag.x[i] > W * 1.2 || mag.y[i] < -H * 0.2 || mag.y[i] > H * 1.2) { mag.x[i] = Math.random() * W; mag.y[i] = Math.random() < 0.5 ? -10 : H + 10; mag.vx[i] = mag.vy[i] = 0; continue; }
     // Se agrupa por banda y velocidad para dibujar todo en pocos trazos
     const sp = Math.min(3, Math.floor(Math.sqrt(v2) / maxV * 4));
     const seg = mag.buckets[b * 4 + sp]; seg.push(ox, oy, mag.x[i], mag.y[i]);
