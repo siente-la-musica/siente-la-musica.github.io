@@ -525,6 +525,7 @@
         <button data-mode="infinity">Infinito</button>
         <button data-mode="strobe">Estrobo</button>
         <button data-mode="tiles">Cuadros</button>
+        <button data-mode="dancers">Bailarines</button>
         <button data-mode="tubes">Inflables</button>
         <button data-mode="vinyl">Vinilo</button>
         <button data-mode="cover">Portada</button>
@@ -608,7 +609,7 @@ const PALETTES = [
 ];
 
 const state = {
-  mode: ((m) => m === 'dancers' ? 'tubes' : m)(store.get('mode', 'bars')),
+  mode: store.get('mode', 'bars'),
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -3091,8 +3092,8 @@ const artistClean = new Map();
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
   calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes'] },
-  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'dancers'] },
+  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'dancers'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
 function moodTick(dt) {
@@ -4871,7 +4872,118 @@ function drawTubes(dt) {
   tube.confetti = tube.confetti.filter(p => p.y < H + 20);
 }
 
-const scenes = { tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+
+// ================= Escena: Bailarines =================
+// Dos personas en 3D (ella y él) con movimiento real: una samba grabada con captura de movimiento
+// (personajes de los ejemplos de three.js, de Mixamo). Se ven como siluetas con luz de contorno de
+// colores, como en un escenario. El baile va al tempo de la canción; sin música vuelven al reposo.
+// Él baila otra parte de la coreografía y en espejo, así nunca hacen lo mismo. Dejan una estela.
+const dance = { state: 'idle', T: null, renderer: null, scene: null, camera: null, people: [], lights: [], trail: null, tctx: null, key: '', w: 0 };
+async function danceLoad() {
+  if (dance.state !== 'idle') return; dance.state = 'loading';
+  try {
+    const T = dance.T = await import('./lib/three-dance.js');
+    const loader = new T.GLTFLoader();
+    const [her, him] = await Promise.all(['lib/models/Michelle.glb', 'lib/models/Xbot.glb'].map(u => loader.loadAsync(u)));
+    const renderer = new T.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+    renderer.outputColorSpace = T.SRGBColorSpace; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.setClearColor(0x000000, 0);
+    const scene = new T.Scene(), camera = new T.PerspectiveCamera(28, 16 / 9, 0.1, 100);
+    camera.position.set(0, 1.0, 6.3); camera.lookAt(0, 0.92, 0);
+    // Luces: dos de contorno de colores desde atrás, una suave de frente y un poco de ambiente
+    const rimL = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6), rimR = new T.SpotLight(0xffffff, 60, 20, 0.6, 0.6);
+    rimL.position.set(-3.5, 3.2, -3.2); rimR.position.set(3.5, 3.2, -3.2);
+    rimL.target.position.set(-0.4, 0.9, 0); rimR.target.position.set(0.4, 0.9, 0);
+    const key = new T.DirectionalLight(0xffffff, 0.5); key.position.set(0, 2.5, 6);
+    const hemi = new T.HemisphereLight(0xffffff, 0x222233, 0.25);
+    scene.add(rimL, rimR, rimL.target, rimR.target, key, hemi);
+    const samba = her.animations.find(a => a.name === 'SambaDance'), idle = him.animations.find(a => a.name === 'idle');
+    // En otro cuerpo solo vale la rotación de los huesos (y la posición de la cadera)
+    const onlyRot = clip => { const c = clip.clone(); c.tracks = c.tracks.filter(t => !/\.(position|scale)$/.test(t.name)); return c; };
+    // Pasar el baile a otro cuerpo, hueso por hueso: cada esqueleto tiene sus huesos orientados a su
+    // manera en reposo, así que se toma cuánto gira cada hueso respecto a su reposo y ese mismo giro
+    // (medido en el mundo) se aplica sobre el reposo del otro esqueleto
+    const rests = g => { g.scene.updateMatrixWorld(true); const m = {}; g.scene.traverse(o => { if (o.isBone) m[o.name] = { l: o.quaternion.clone(), w: o.getWorldQuaternion(new T.Quaternion()) }; }); return m; };
+    const tpose = her.animations.find(a => a.name === 'TPose');   // los dos medidos desde la pose en T
+    if (tpose) { const tm = new T.AnimationMixer(her.scene); tm.clipAction(tpose).play(); tm.update(0); }
+    const RH = rests(her), RM = rests(him);
+    const retarget = (clip, RS, RT) => {
+      const c = onlyRot(clip), q = new T.Quaternion(), d = new T.Quaternion();
+      for (const tr of c.tracks) {
+        const bone = tr.name.replace(/\.quaternion$/, ''), S = RS[bone], Tt = RT[bone];
+        if (!S || !Tt) continue;
+        const C = Tt.w.clone().invert().multiply(S.w), Ci = C.clone().invert(), Sli = S.l.clone().invert();
+        for (let i = 0; i < tr.values.length; i += 4) {
+          d.copy(Sli).multiply(q.fromArray(tr.values, i));   // giro respecto al reposo (en el hueso de origen)
+          d.premultiply(C).multiply(Ci);                     // el mismo giro, en el hueso de destino
+          q.copy(Tt.l).multiply(d).toArray(tr.values, i);
+        }
+      }
+      return c;
+    };
+    const mat = new T.MeshStandardMaterial({ color: 0x0a0a0f, roughness: 0.42, metalness: 0.15, side: T.DoubleSide });
+    const setup = (g, x, mirror, offset, own) => {
+      const root = new T.Group(); root.add(g.scene); scene.add(root);
+      g.scene.traverse(o => { if (o.isMesh) { o.material = mat; o.frustumCulled = false; } });
+      const box = new T.Box3().setFromObject(g.scene), h = box.max.y - box.min.y, k = 1.72 / h;
+      root.scale.set(mirror ? -k : k, k, k); root.position.set(x, -box.min.y * k, 0); root.rotation.y = mirror ? 0.25 : -0.25;
+      const mixer = new T.AnimationMixer(g.scene);
+      const a = mixer.clipAction(own ? samba : retarget(samba, RH, RM)), b = mixer.clipAction(own ? retarget(idle, RM, RH) : onlyRot(idle));
+      a.play(); b.play(); a.time = offset; a.setEffectiveWeight(0); b.setEffectiveWeight(1);
+      return { root, mixer, dance: a, idle: b, w: 0 };
+    };
+    dance.people = [setup(her, -0.85, false, 0, true), setup(him, 0.85, true, 9.1, false)];
+    Object.assign(dance, { renderer, scene, camera, lights: [rimL, rimR, key], state: 'ready' });
+  } catch (e) { console.error(e); dance.state = 'error'; }
+}
+function drawDancers(dt) {
+  const night = state.theme === 'dark';
+  ambient();
+  if (dance.state !== 'ready') {
+    if (dance.state === 'idle') danceLoad();
+    ctx.save(); ctx.fillStyle = textFg(0.6); ctx.textAlign = 'center'; ctx.font = `600 ${MIN * 0.03}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillText(dance.state === 'error' ? 'No se pudieron cargar los bailarines' : 'Cargando a los bailarines…', W / 2, H / 2); ctx.restore();
+    return;
+  }
+  const T = dance.T, r = dance.renderer;
+  // Tamaño del 3D: como mucho ~1600 px de ancho (se amplía con suavizado); en vertical, más cerca
+  const sc = Math.min(1, 1600 / W), rw = Math.round(W * sc), rh = Math.round(H * sc);
+  if (dance.key !== rw + 'x' + rh) { r.setSize(rw, rh, false); dance.camera.aspect = rw / rh; dance.camera.position.z = rh > rw ? 9.5 : 6.3; dance.camera.updateProjectionMatrix(); dance.key = rw + 'x' + rh; }
+  // Ritmo: el baile va al tempo de la canción (la samba grabada va a ~100 pulsos por minuto)
+  const live = performance.now() - lastBassHit < 1800 || songBeatOn();
+  let rate = 1;
+  if (tempo.bpm && tempo.conf > 0.3) { rate = tempo.bpm / 100; while (rate > 1.4) rate /= 2; while (rate < 0.7) rate *= 2; }
+  const goal = live && energy > 0.05 ? Math.min(1, 0.45 + energy * 1.2) : 0;   // sin música, al reposo
+  for (const p of dance.people) {
+    p.w += (goal - p.w) * Math.min(1, dt * (goal > p.w ? 3 : 1.2));
+    p.dance.setEffectiveWeight(p.w); p.idle.setEffectiveWeight(1 - p.w);
+    p.dance.setEffectiveTimeScale(rate * (0.85 + p.w * 0.15));
+    p.mixer.update(dt);
+  }
+  // Luces: de los colores de la paleta; laten con los graves y destellan en los golpes
+  const [rimL, rimR, key] = dance.lights;
+  rimL.color.setRGB(...RGB[0].map(v => v / 255)); rimR.color.setRGB(...RGB[2].map(v => v / 255));
+  rimL.intensity = 70 + bass * 120 + beatSoft * 80; rimR.intensity = 70 + mid * 120 + beatSoft * 80;
+  key.intensity = night ? 0.25 + high * 0.4 : 1.2;
+  r.render(dance.scene, dance.camera);
+  // Estela a media resolución: la silueta se queda arrastrada un momento
+  if (!dance.trail || dance.trail.width !== Math.ceil(W / 2)) { dance.trail = document.createElement('canvas'); dance.trail.width = Math.ceil(W / 2); dance.trail.height = Math.ceil(H / 2); dance.tctx = dance.trail.getContext('2d'); }
+  const g = dance.tctx;
+  g.globalCompositeOperation = 'destination-out'; g.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; g.fillRect(0, 0, dance.trail.width, dance.trail.height);
+  g.globalCompositeOperation = 'source-over'; g.globalAlpha = 0.3 + energy * 0.2; g.drawImage(r.domElement, 0, 0, dance.trail.width, dance.trail.height); g.globalAlpha = 1;
+  // Suelo: un círculo de luz bajo cada persona
+  for (const [i, c] of [[0, RGB[0]], [1, RGB[2]]]) {
+    const v = new T.Vector3(dance.people[i].root.position.x, 0, 0).project(dance.camera);
+    const gx = (v.x + 1) / 2 * W, ground = (1 - v.y) / 2 * H, gr = ctx.createRadialGradient(gx, ground, 0, gx, ground, MIN * 0.25);
+    gr.addColorStop(0, rgba(c, (night ? 0.22 : 0.14) + beatSoft * 0.15)); gr.addColorStop(1, rgba(c, 0));
+    ctx.save(); ctx.translate(gx, ground); ctx.scale(1, 0.2); ctx.translate(-gx, -ground); ctx.fillStyle = gr; ctx.fillRect(gx - MIN * 0.25, ground - MIN * 0.25, MIN * 0.5, MIN * 0.5); ctx.restore();
+  }
+  ctx.save(); ctx.imageSmoothingQuality = 'high';
+  ctx.globalAlpha = night ? 0.85 : 0.6; ctx.drawImage(dance.trail, 0, 0, W, H);
+  ctx.globalAlpha = 1; ctx.drawImage(r.domElement, 0, 0, W, H);
+  ctx.restore();
+}
+
+const scenes = { dancers: drawDancers, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
