@@ -1640,7 +1640,7 @@ const spotifyOn = () => !!sp.refresh;
 const spConnected = () => !!(fileTrack || sp.refresh || (lf.user && LASTFM_KEY));
 const nowSource = () => fileTrack ? 'file' : sp.refresh ? 'spotify' : lf.user && LASTFM_KEY ? 'lastfm' : null;
 // Renueva el permiso de Spotify antes de que caduque, para que el primer toque no tenga que esperar
-setInterval(() => { if (sp.refresh && sp.expires - Date.now() < 5 * 60e3 && !document.hidden) spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }).catch(() => {}); }, 60e3);
+setInterval(() => { if (sp.refresh && sp.expires - Date.now() < 5 * 60e3 && !document.hidden) spRefresh().catch(() => {}); }, 60e3);
 function spSave() { store.set('sp.token', sp.token); store.set('sp.refresh', sp.refresh); store.set('sp.expires', sp.expires); }
 function spButton() {
   const src = nowSource();
@@ -1680,7 +1680,9 @@ async function spLogin() {
 }
 function spLogout(message) {
   clearTimeout(sp.timer);
-  Object.assign(sp, { token: null, refresh: null, expires: 0, item: null });
+  Object.assign(sp, { token: null, refresh: null, expires: 0, item: null, deviceId: null, expectId: null, lockUntil: 0 });
+  if (typeof libEl !== 'undefined') { libEl.hidden = true; libList.innerHTML = ''; }
+  store.set('sp.scope', '');
   loadLyrics(null);
   spSave(); spButton(); setCover(''); spCorner();
   if (message) showSong(message); else songEl.hidden = true;
@@ -1696,6 +1698,13 @@ async function spToken(params) {
   if (d.refresh_token) sp.refresh = d.refresh_token;
   if (d.scope) store.set('sp.scope', d.scope);
   spSave();
+}
+// Renovación del permiso: una sola a la vez y compartida. Spotify cambia la llave en cada renovación,
+// así que dos renovaciones simultáneas harían que la segunda fallara y desconectara la sesión.
+let spRefreshing = null;
+function spRefresh() {
+  if (!spRefreshing) spRefreshing = spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }).finally(() => { spRefreshing = null; });
+  return spRefreshing;
 }
 async function spHandleRedirect() {
   const q = new URLSearchParams(location.search);
@@ -1758,13 +1767,14 @@ function spPatch() {
 }
 async function spPoll() {
   if (Date.now() > sp.expires) {
-    try { await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); }
+    try { await spRefresh(); }
     catch (e) {
       if (e.code === 'invalid_grant') { spLogout('<div class="meta"><div class="title">Spotify se desconectó</div><div class="note">Pulsa Spotify para volver a conectar.</div></div>'); return null; }
       return 20000;
     }
   }
-  const r = await fetch('https://api.spotify.com/v1/me/player?additional_types=episode', { headers: { Authorization: 'Bearer ' + sp.token } });
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 10000);
+  let r; try { r = await fetch('https://api.spotify.com/v1/me/player?additional_types=episode', { headers: { Authorization: 'Bearer ' + sp.token }, signal: ctl.signal }); } finally { clearTimeout(to); }
   const fast = performance.now() < (sp.burstUntil || 0);
   if (r.status === 204) { if (!fast) spUpdate(null); return fast ? 600 : document.hidden ? 20000 : 8000; }
   if (r.status === 401) { sp.expires = 0; return 500; }
@@ -2064,10 +2074,13 @@ const LIB_ICON = {
 // Llamada a la API de Spotify: renueva el permiso si caducó y reintenta una vez si Spotify
 // pide esperar (429) o si el permiso dejó de valer (401)
 async function spApi(path, opts = {}, retry = true) {
-  if (!sp.token || Date.now() > sp.expires) await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh });
+  if (!sp.token || Date.now() > sp.expires) await spRefresh();
   let r;
-  try { r = await fetch('https://api.spotify.com/v1' + path, { ...opts, headers: { Authorization: 'Bearer ' + sp.token, 'Content-Type': 'application/json', ...(opts.headers || {}) } }); }
+  // Con límite de 8 s: si la red se cuelga, la orden falla con un aviso en vez de bloquear las siguientes
+  const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 8000);
+  try { r = await fetch('https://api.spotify.com/v1' + path, { ...opts, signal: ctl.signal, headers: { Authorization: 'Bearer ' + sp.token, 'Content-Type': 'application/json', ...(opts.headers || {}) } }); }
   catch (e) { const er = new Error('Sin conexión con Spotify. Revisa tu internet.'); er.status = 0; throw er; }
+  finally { clearTimeout(to); }
   if (retry && r.status === 401) { sp.expires = 0; return spApi(path, opts, false); }
   if (retry && r.status === 429) { await new Promise(res => setTimeout(res, Math.min(5, +(r.headers.get('Retry-After') || 2)) * 1000)); return spApi(path, opts, false); }
   if (r.status === 204 || r.status === 202) return null;
@@ -2132,7 +2145,7 @@ libDev.onchange = () => store.set('sp.device', libDev.value);
 function libSdk() {
   if (lib.sdk) return; lib.sdk = true; lib.sdkState = 'cargando';
   window.onSpotifyWebPlaybackSDKReady = () => {
-    const pl = new Spotify.Player({ name: 'Siente la música', volume: 0.8, getOAuthToken: async cb => { try { if (Date.now() > sp.expires) await spToken({ grant_type: 'refresh_token', refresh_token: sp.refresh }); } catch (e) {} cb(sp.token); } });
+    const pl = new Spotify.Player({ name: 'Siente la música', volume: 0.8, getOAuthToken: async cb => { try { if (Date.now() > sp.expires) await spRefresh(); } catch (e) {} cb(sp.token); } });
     pl.addListener('ready', ({ device_id }) => { lib.webId = device_id; lib.sdkState = 'listo'; libDevices(); });
     pl.addListener('not_ready', () => { lib.webId = null; lib.sdkState = 'desconectado'; libDevices(); });
     pl.addListener('account_error', () => { lib.sdkState = 'necesita Premium'; });
