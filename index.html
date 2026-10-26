@@ -5025,6 +5025,7 @@ function tubeStroke(g, pts, w, c) {
   const dark = c.map(v => v * 0.5), light = c.map(v => v + (255 - v) * 0.55);
   g.lineCap = 'round'; g.lineJoin = 'round';
   // Tubo de nailon redondo: capas de más oscuro (bordes) a más claro (centro) y un brillo a un lado
+  g.lineCap = 'butt';
   tubePath(g, pts); g.strokeStyle = rgba(dark, 1); g.lineWidth = w * 1.1; g.stroke();
   tubePath(g, pts); g.strokeStyle = rgba(c.map(v => v * 0.75), 1); g.lineWidth = w; g.stroke();
   tubePath(g, pts, -0.06, w); g.strokeStyle = rgba(c, 1); g.lineWidth = w * 0.72; g.stroke();
@@ -5058,8 +5059,12 @@ function drawTubes(dt) {
     for (const arm of m.arms) { const tp = arm[arm.length - 1]; ctx.fillStyle = rgba(c, 1); ctx.beginPath(); ctx.arc(tp.x, tp.y, w * 0.32, 0, Math.PI * 2); ctx.fill(); }
     // cabeza: el extremo del tubo, un poco más abultado
     const hx = top.x, hy = top.y, dx = top.x - B[N - 3].x, dy = top.y - B[N - 3].y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, nx = -uy, ny = ux;
-    ctx.fillStyle = rgba(c, 1); ctx.beginPath(); ctx.arc(hx - ux * w * 0.35, hy - uy * w * 0.35, w * 0.6, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = rgba(c.map(v => v + (255 - v) * 0.5), 0.6); ctx.beginPath(); ctx.arc(hx - ux * w * 0.35 - nx * w * 0.2, hy - uy * w * 0.35 - ny * w * 0.2, w * 0.18, 0, Math.PI * 2); ctx.fill();
+    // gorrito de fiesta encima (punta plana del tubo + cono de otro color que baila con los agudos)
+    const tilt = Math.sin(time * 6 + m.ph) * 0.15 * (0.3 + high), cux = ux * Math.cos(tilt) - uy * Math.sin(tilt), cuy = ux * Math.sin(tilt) + uy * Math.cos(tilt);
+    const bx0 = hx - nx * w * 0.42, by0 = hy - ny * w * 0.42, bx1 = hx + nx * w * 0.42, by1 = hy + ny * w * 0.42, tx = hx + cux * w * 1.1, ty = hy + cuy * w * 1.1;
+    ctx.fillStyle = rgba(c2, 1); ctx.beginPath(); ctx.moveTo(bx0, by0); ctx.lineTo(tx, ty); ctx.lineTo(bx1, by1); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = w * 0.08; ctx.beginPath(); ctx.moveTo(hx - nx * w * 0.2 + cux * w * 0.45, hy - ny * w * 0.2 + cuy * w * 0.45); ctx.lineTo(hx + nx * w * 0.2 + cux * w * 0.45, hy + ny * w * 0.2 + cuy * w * 0.45); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tx, ty, w * 0.13, 0, Math.PI * 2); ctx.fill();
     // cara: ojos saltones que se mueven con el cuerpo y una boca que «canta»
     const fx = top.x - ux * w * 0.9, fy = top.y - uy * w * 0.9;
     const vx = (top.x - top.px), vy = (top.y - top.py), vm = Math.hypot(vx, vy) || 1, look = Math.min(1, vm / (w * 0.08));
