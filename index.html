@@ -537,6 +537,7 @@
         <button data-mode="lava">Lava</button>
         <button data-mode="dots">Puntos</button>
         <button data-mode="puffs">Nubes</button>
+        <button data-mode="bust">Silueta</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -3184,7 +3185,7 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust'] },
   medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
@@ -5606,7 +5607,102 @@ function drawPuffs(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
-const scenes = { puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+// ================= Escena: Silueta =================
+// Una figura de pecho hacia arriba, quieta y en foco suave, con su aura. Por dentro el color va como
+// en una cámara térmica: el corazón late en el pecho con cada bombo, la voz enciende la garganta y la
+// cara, los agudos brillan en la cabeza y un calor que fluye la recorre. Respira despacio y se mece
+// apenas con el compás.
+const BUST_HALF = [[0, 0.8], [0.05, 0.795], [0.083, 0.776], [0.101, 0.746], [0.108, 0.706], [0.107, 0.668], [0.114, 0.657], [0.121, 0.641], [0.122, 0.617],
+  [0.116, 0.597], [0.106, 0.586], [0.097, 0.552], [0.084, 0.527], [0.068, 0.508], [0.058, 0.49], [0.056, 0.455], [0.062, 0.425], [0.085, 0.405],
+  [0.13, 0.388], [0.18, 0.37], [0.225, 0.352], [0.262, 0.335], [0.29, 0.316], [0.31, 0.291], [0.324, 0.258], [0.331, 0.218], [0.333, 0.15],
+  [0.33, 0.07], [0.326, -0.05]];
+const BUST_PTS = (() => { const r = BUST_HALF.slice(1), l = BUST_HALF.slice(1).reverse().map(([x, y]) => [-x, y]); return new Float32Array([BUST_HALF[0], ...r, [0.326, -0.06], [-0.326, -0.06], ...l.slice(1)].flat()); })();
+const bust = { prog: null, beat: 0, sway: 0, swayV: 0, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3) };
+function bustSetup() {
+  bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uBeat, uMid, uHigh, uSway, uBreath, uS, uGlow;
+    uniform vec3 uK0, uK1, uK2, uK3, uK4;
+    ${GLSL_NOISE}
+    float sdEll(vec2 p, vec2 r) { return (length(p / r) - 1.) * min(r.x, r.y); }
+    float sdCap(vec2 p, vec2 a, vec2 b, float r) { vec2 pa = p - a, ba = b - a; float t = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * t) - r; }
+    float sdRBox(vec2 p, vec2 b, float r) { vec2 d = abs(p) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
+    float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
+    // contorno de un busto de frente (cráneo, orejas, mandíbula, cuello, trapecios y hombros):
+    // distancia a un polígono; el foco suave lo da el difuminado del borde
+    uniform vec2 uPts[64]; uniform int uNP;
+    float figure(vec2 q) {
+      float c = cos(uSway), s = sin(uSway);
+      q = mat2(c, s, -s, c) * q;                       // se mece apenas desde la base
+      q.y /= 1. + uBreath;                              // y respira
+      float d = dot(q - uPts[0], q - uPts[0]), sg = 1.;
+      for (int i = 0; i < 64; i++) {
+        if (i >= uNP) break;
+        vec2 a = uPts[i], b = uPts[i + 1 < uNP ? i + 1 : 0], e = b - a, w = q - a;
+        vec2 pb = w - e * clamp(dot(w, e) / dot(e, e), 0., 1.);
+        d = min(d, dot(pb, pb));
+        bvec3 cond = bvec3(q.y >= a.y, q.y < b.y, e.x * w.y > e.y * w.x);
+        if (all(cond) || all(not(cond))) sg = -sg;
+      }
+      return sg * sqrt(d);
+    }
+    vec3 ramp(float t) {
+      t = clamp(t, 0., 1.) * 4.;
+      return t < 1. ? mix(uK0, uK1, smoothstep(0., 1., t)) : t < 2. ? mix(uK1, uK2, smoothstep(1., 2., t)) : t < 3. ? mix(uK2, uK3, smoothstep(2., 3., t)) : mix(uK3, uK4, smoothstep(3., 4., t));
+    }
+    void main() {
+      float asp = uRes.x / uRes.y;
+      vec2 p = vec2(vUv.x * asp, vUv.y), q = (p - vec2(asp * .5, 0.)) / uS;
+      float d = figure(q) * uS;
+      // calor: la figura entera, más el corazón (bombo), la garganta y la cara (voz) y la cabeza (agudos)
+      vec2 hp = q - vec2(.06, .2);
+      float T = .2 + .1 * smoothstep(0., .6, q.y);
+      T += exp(-dot(hp, hp) / .02) * (.12 + uBeat * .36);   // el corazón: un calor suave que se expande por el pecho
+      vec2 tp = q - vec2(0., .47); T += exp(-dot(tp * vec2(1., .7), tp * vec2(1., .7)) / .012) * uMid * .45;
+      vec2 cp = q - vec2(0., .7); T += exp(-dot(cp, cp) / .012) * uHigh * .45;
+      T += (fbm(q * 3.5 + vec2(uTime * .04, -uTime * .09)) - .5) * .42;
+      T *= mix(.55, 1.12, smoothstep(0., -.16, d));   // como en una cámara térmica: el centro más caliente, el borde más frío
+      vec3 col = ramp(T);
+      float blur = .018, a = smoothstep(blur, -blur, d);
+      // aura alrededor y una luz de color que resbala por el contorno
+      float glow = exp(-max(d, 0.) / .07) * (1. - a) * uGlow;
+      float rim = smoothstep(-.06, 0., d) * a;
+      vec3 rc = ramp(.75 + .2 * sin(uTime * .5 + q.y * 6.));
+      col = mix(col, rc, rim * (uNight > .5 ? .22 : .3));
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .08;
+      vec3 gc = ramp(.45);
+      o = vec4(col * a + gc * glow * (uNight > .5 ? .7 : .6), clamp(a + glow * (uNight > .5 ? .7 : .6), 0., 1.));
+    }`);
+}
+function drawBust(dt) {
+  if (!glInit()) { drawAura(dt); return; }
+  if (!bust.prog) bustSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
+  bust.lvT[0] = Math.pow(bass, 0.8); bust.lvT[1] = Math.pow(mid, 0.8); bust.lvT[2] = Math.pow(high, 0.8);
+  springTo(bust.lv, bust.lvV, bust.lvT, dt, 140, 0.6);
+  // se mece apenas hacia un lado y al otro, al compás
+  if (pulse.on) bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.02 * pulse.k;   // apenas: se mece con el compás
+  bust.swayV += (-bust.sway * 18 - bust.swayV * 5) * dt; bust.sway += bust.swayV * dt;
+  // los colores de la portada en una rampa térmica: hondo → oscuro → medio → claro → casi blanco
+  const cs = RGB.slice().sort((a, b) => (a[0] * 0.3 + a[1] * 0.59 + a[2] * 0.11) - (b[0] * 0.3 + b[1] * 0.59 + b[2] * 0.11)).map(c => c.map(v => v / 255));
+  const K = [cs[0].map(v => v * (night ? 0.35 : 0.6)), cs[0], cs[1], cs[2], cs[2].map(v => v + (1 - v) * 0.7)];
+  const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W), gl = GLX.gl;
+  if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
+  const p = bust.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0);
+  gl.uniform1f(p.u.uBeat, Math.min(1.2, P * 1.4 + Math.max(0, bust.lv[0]) * 0.3)); gl.uniform1f(p.u.uMid, Math.max(0, bust.lv[1])); gl.uniform1f(p.u.uHigh, Math.max(0, bust.lv[2]));
+  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, 0.012 * Math.sin(time * 1.4) + P * 0.008);
+  gl.uniform1f(p.u.uS, Math.min(1.12, asp / 0.7));   // la figura llena bien el cuadro (en el móvil, de hombro a hombro) gl.uniform1f(p.u.uGlow, (night ? 0.7 : 0.55) + P * 0.45);
+  ['uK0', 'uK1', 'uK2', 'uK3', 'uK4'].forEach((k, i) => gl.uniform3fv(p.u[k], K[i]));
+  gl.uniform2fv(p.u['uPts[0]'], BUST_PTS); gl.uniform1i(p.u.uNP, BUST_PTS.length / 2);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ambient();
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.25 + P * 0.3);
+}
+
+const scenes = { bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
