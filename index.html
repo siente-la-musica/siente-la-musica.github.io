@@ -47,7 +47,7 @@
   [hidden] { display: none !important; }
   html, body { height: 100%; margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); overflow: hidden; -webkit-font-smoothing: antialiased; }
   body { transition: background-color .5s; }
-  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 
   .dock {
     position: fixed; left: calc(50% + var(--bar-shift, 0px)); transform: translateX(-50%); transition: left .4s cubic-bezier(.2,.8,.2,1), opacity .5s, transform .5s;
@@ -542,6 +542,8 @@
         <button data-mode="curtain">Cortina</button>
         <button data-mode="orbs">Orbes</button>
         <button data-mode="eclipse">Eclipse</button>
+        <button data-mode="harp">Arpa</button>
+        <button data-mode="paint">Pintura</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -994,7 +996,7 @@ function toggleFull() {
   else document.documentElement.requestFullscreen?.().catch(() => setStatus('Este navegador no permite pantalla completa'));
 }
 document.getElementById('btnFull').onclick = toggleFull;
-canvas.addEventListener('dblclick', toggleFull);
+canvas.addEventListener('dblclick', () => { if (state.mode !== 'harp') toggleFull(); });   // en el Arpa, tocar dos veces es tocar el arpa
 
 let idleTimer;
 function wake() {
@@ -1156,7 +1158,7 @@ function analyse(dt) {
   // la caja es un chasquido ruidoso: solo cuenta si en ese instante el espectro de la voz se vuelve ruido
   const sBand = avg(raw, 44, 56), hBand = avg(raw, 56, BANDS);
   hits.snare = onset('snare', sBand, dt); hits.hat = onset('hat', hBand, dt);
-  if (hits.snare && (vox.noisy < 0.42 || (hits.hat && hBand > sBand))) hits.snare = 0;   // si domina arriba, eran los platillos
+  if (hits.snare && (vox.noisy < 0.03 || (hits.hat && hBand > sBand))) hits.snare = 0;   // si no suena a ruido o domina arriba, no era la caja
   if (hits.bass) { beatRaw = Math.max(beatRaw, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
   // El pulso «previsto» por el tempo solo sigue mientras haya golpes de verdad (no inventa latidos en las partes tranquilas)
   if (beatTick && !hits.bass && performance.now() - lastBassHit < 1500) beatRaw = Math.max(beatRaw, 0.35 * Math.min(1, tempo.conf * 1.5));
@@ -1300,12 +1302,15 @@ function voiceTick(dt) {
   // y la voz es tonal (tiene notas) mientras que la caja y los platillos son ruido: planitud del espectro
   if (analyser && freqData) {
     const hz = ((audioCtx && audioCtx.sampleRate) || 48000) / (analyser.fftSize || 4096), a0 = Math.round(250 / hz), a1 = Math.min(freqData.length, Math.round(3500 / hz));
+    // planitud espectral sobre la energía real (los bytes del analizador son decibelios): la voz y los
+    // instrumentos con notas dan valores bajos; el ruido de la caja o los platillos, altos
+    if (!vox.pw) { vox.pw = new Float32Array(256); for (let k = 0; k < 256; k++) vox.pw[k] = Math.pow(10, (k / 255 * 66 - 88) / 10); }
     let lg = 0, ar = 0, cnt = 0;
-    for (let i = a0; i < a1; i++) { const q = freqData[i] / 255 + 0.02; lg += Math.log(q); ar += q; cnt++; }
+    for (let i = a0; i < a1; i++) { const q = vox.pw[freqData[i]] + 1e-10; lg += Math.log(q); ar += q; cnt++; }
     const flat = cnt ? Math.exp(lg / cnt) / (ar / cnt) : 0.5;   // 1 = ruido plano, cerca de 0 = notas
     vox.tonal += ((1 - flat) - vox.tonal) * (1 - Math.pow(0.02, dt));
     vox.noisy = flat;
-    const tw = Math.min(1, Math.max(0, (vox.tonal - 0.15) * 2.2)), tNow = Math.min(1, Math.max(0, (0.58 - flat) * 2.5));
+    const tw = Math.min(1, Math.max(0, (vox.tonal - 0.7) * 4)), tNow = Math.min(1, Math.max(0, (0.06 - flat) * 20));
     v *= tw;
     vox.syl = v0 * tNow;   // para las sílabas: sin el filtro lento, pero solo lo que suena a nota (no a ruido)
   }
@@ -2909,7 +2914,7 @@ document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => { recDur 
 function freshCanvas() {   // un lienzo nuevo, sin imágenes de otros sitios, para poder grabarlo
   const c = document.createElement('canvas'); c.id = 'c';
   canvas.replaceWith(c); canvas = c; ctx = c.getContext('2d');
-  canvas.addEventListener('dblclick', toggleFull);
+  canvas.addEventListener('dblclick', () => { if (state.mode !== 'harp') toggleFull(); });   // en el Arpa, tocar dos veces es tocar el arpa
   canvas.addEventListener('contextrestored', () => { resize(); refreshColors(); });
 }
 // ================= Grabar el clip =================
@@ -3262,9 +3267,9 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats'] },
-  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint'] },
+  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
 function moodTick(dt) {
@@ -4180,7 +4185,7 @@ function cover3dLeaving() {
 function cover3dImage(url, img) {
   if (!img) { if (!cover3d.flip) cover3d.img = null; return; }
   if (cover3d.flip && cover3d.img) { cover3d.flip.next = { url, img }; cover3d.flip.t = 0; return; }
-  cover3d.url = url; cover3d.img = img; cover3d.upFor = '';
+  cover3d.url = url; cover3d.img = img; cover3d.upFor = ''; cover3d.base = { url, img };
 }
 // Ángulo extra del giro: se pone de canto, cambia la imagen y vuelve de frente
 function coverFlipAngle(dt) {
@@ -4190,7 +4195,7 @@ function coverFlipAngle(dt) {
   f.t += dt;
   const e = x => x * x * (3 - 2 * x), OUT = 0.32, IN = 0.42;
   if (f.t < OUT) return e(f.t / OUT) * 1.5;
-  if (!f.swapped) { f.swapped = true; cover3d.url = f.next.url; cover3d.img = f.next.img; cover3d.upFor = ''; }
+  if (!f.swapped) { f.swapped = true; cover3d.url = f.next.url; cover3d.img = f.next.img; cover3d.upFor = ''; if (!f.next.alt) cover3d.base = f.next; }
   const k = Math.min(1, (f.t - OUT) / IN);
   if (k >= 1) { cover3d.flip = null; return 0; }
   return -(1 - e(k)) * 1.5;
@@ -4230,7 +4235,7 @@ async function loadAltArt(item) {
   const single = !album || item.album?.album_type === 'single' || (item.album?.total_tracks && item.album.total_tracks <= 2) || norm(album) === norm(item.name);
   const key = single ? '' : norm(artist) + '|' + norm(album);
   if (key === altArt.key) return;
-  Object.assign(altArt, { key, imgs: [], bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: performance.now() });
+  Object.assign(altArt, { key, imgs: [], bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: performance.now(), show: -1, showAt: performance.now() });
   if (!key) return;
   if (!altArt.cache.has(key)) altArt.cache.set(key, altArtFor(artist, album).catch(() => []));
   const urls = await altArt.cache.get(key);
@@ -4257,8 +4262,10 @@ function drawAltArt(dt, cx, cy, S) {
   ctx.globalAlpha = 1;
   // Abanico: las otras ediciones del disco asoman detrás de la portada como cartas en la mano.
   // Se abren un poco con cada golpe; cada tanto se recogen detrás y salen con otras portadas.
-  if (A.length < 2) return;
-  const others = A.length;
+  const shown = altArt.show >= 0 ? altArt.imgs.filter(a => a.clean)[altArt.show] : null;
+  const pool = [...(shown && cover3d.base ? [{ img: cover3d.base.img, clean: true }] : []), ...A.filter(a => a !== shown)];
+  if (!pool.length) return;
+  const others = pool.length;
   if (altArt.spread == null) { altArt.spread = 0; altArt.spreadV = 0; altArt.closeAt = 0; }
   if (!altArt.closeAt && (now - altArt.cycleAt > 14000 || (now - altArt.cycleAt > 9000 && hits.bass))) altArt.closeAt = now;
   if (altArt.closeAt && now - altArt.closeAt > 700) { altArt.cycle++; altArt.cycleAt = now; altArt.closeAt = 0; }
@@ -4268,10 +4275,10 @@ function drawAltArt(dt, cx, cy, S) {
   springTo(sp_, spv, [open], dt, 90, 0.5); altArt.spread = sp_[0]; altArt.spreadV = spv[0];
   const fan = Math.max(0, altArt.spread);
   const vertical = H > W;
-  const slots = vertical ? [[-1, 0], [1, 0]] : [[-2, 1], [2, 1], [-1, 0], [1, 0]];   // de atrás hacia delante
+  const slots = (vertical ? [[-1, 0], [1, 0]] : [[-2, 1], [2, 1], [-1, 0], [1, 0]]).slice(-Math.max(1, Math.min(4, others)));   // de atrás hacia delante, sin repetir
   const px = cx, py = cy + S * 0.9;   // eje del abanico, por debajo de la portada
   slots.forEach(([side, depth], k) => {
-    const item = A[(k + altArt.cycle) % others];
+    const item = pool[(k + altArt.cycle) % others];
     if (!item || (recording && !item.clean)) return;
     const n = Math.abs(side), dir = Math.sign(side);
     const ang = dir * (0.1 + n * 0.09) * fan + Math.sin(time * 0.4 + k) * 0.01 + dir * cover3d.mouse[0] * 0.02;
@@ -4297,6 +4304,17 @@ function drawCover(dt) {
   const S = Math.min(MIN * (vertical ? 0.78 : 0.6), 1500), cx = W / 2, cy = H * (vertical ? 0.42 : 0.46);
   const x0 = cx - S / 2, y0 = cy - S / 2;
   const it = spConnected() && sp.item;
+  // Las otras ediciones del disco también tienen su momento: en cada frase (16 golpes, o cada ~16 s)
+  // la portada gira y muestra la siguiente con todo el protagonismo; después de todas vuelve la original
+  const Ac = altArt.imgs.filter(a => a.clean), nowT = performance.now();
+  if (Ac.length && cover3d.base && !cover3d.flip && cover3d.img) {
+    if (altArt.show == null) { altArt.show = -1; altArt.showAt = nowT; }
+    const el = nowT - altArt.showAt;
+    if ((pulse.on && pulse.count % 16 === 0 && el > 7000) || el > 16000) {
+      altArt.show = altArt.show + 1 >= Ac.length ? -1 : altArt.show + 1; altArt.showAt = nowT;
+      cover3d.flip = { t: 0, next: altArt.show < 0 ? { ...cover3d.base } : { url: 'alt:' + altArt.key + ':' + altArt.show, img: Ac[altArt.show].img, alt: true } };
+    }
+  }
   drawAltArt(dt, cx, cy, S);
   const P = Math.max(0, pulse.x);
   glowSpot(cx, cy, S * (1.05 + beatSoft * 0.08 + P * 0.14), mix(0.5), (night ? 0.3 : 0.2) + beatSoft * 0.12 + P * 0.32);
@@ -4336,6 +4354,13 @@ function drawCover(dt) {
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = textFg(0.6); ctx.font = `600 ${Math.round(MIN * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
     ctx.fillText(!spConnected() ? 'Conecta tu música para ver la portada' : !sp.item ? 'Pon algo de música' : 'Cargando la portada…', cx, cy);
+    ctx.restore();
+  }
+  // puntitos: cuántas versiones hay y cuál se ve (como las páginas del iPhone)
+  if (Ac.length && cover3d.img) {
+    const n = Ac.length + 1, act = (altArt.show ?? -1) + 1, gap = MIN * 0.024, r = MIN * 0.0055, yd = cy + S * 0.39 + MIN * 0.038;
+    ctx.save();
+    for (let i = 0; i < n; i++) { ctx.fillStyle = textFg(i === act ? 0.9 : 0.28); ctx.beginPath(); ctx.arc(cx + (i - (n - 1) / 2) * gap, yd, i === act ? r * 1.25 : r, 0, Math.PI * 2); ctx.fill(); }
     ctx.restore();
   }
   // Título y artista bajo la portada
@@ -4618,6 +4643,18 @@ function makeDrop(col) {
   x.fillStyle = 'rgba(255,255,255,.95)'; x.beginPath(); x.arc(10, 79.5, 1.6, 0, Math.PI * 2); x.fill();   // reflejo
   return c;
 }
+// Brillo de una gota cuando la toca la luz: el filo se enciende como un hilo y la cabeza devuelve un
+// destello (como la lluvia bajo un farol o en los faros de un carro)
+function makeGlint(col) {
+  const c = document.createElement('canvas'); c.width = 24; c.height = 96;
+  const x = c.getContext('2d'), lite = col.map(v => v + (255 - v) * 0.55);
+  const g = x.createLinearGradient(0, 8, 0, 84); g.addColorStop(0, rgba(lite, 0)); g.addColorStop(0.7, rgba(lite, 0.45)); g.addColorStop(1, rgba(lite, 0.95));
+  x.strokeStyle = g; x.lineWidth = 1.3; x.lineCap = 'round'; x.beginPath(); x.moveTo(11.5, 8); x.lineTo(10.5, 80); x.stroke();
+  const h = x.createRadialGradient(11, 81, 0, 11, 81, 9);
+  h.addColorStop(0, 'rgba(255,255,255,1)'); h.addColorStop(0.25, rgba(lite, 0.85)); h.addColorStop(0.6, rgba(col, 0.25)); h.addColorStop(1, rgba(col, 0));
+  x.fillStyle = h; x.beginPath(); x.arc(11, 81, 9, 0, Math.PI * 2); x.fill();
+  return c;
+}
 const rainLights = [{ band: 'bass', c: 0, sx: 0.13, ph: 0 }, { band: 'mid', c: 1, sx: 0.09, ph: 2.1 }, { band: 'high', c: 2, sx: 0.17, ph: 4.2 }];
 const rainLv = new Float32Array(3), rainLvV = new Float32Array(3), rainLvT = new Float32Array(3);
 function newDrop(top) {
@@ -4679,7 +4716,7 @@ function drawRain(dt) {
   if (hits.bass) { const l = L[0]; ripple(l.x, 0.4 + Math.random() * 0.4, 0.8 + hits.bass * 0.4, true); }
   const wind = rs.wind, base = night ? [200, 210, 230] : [70, 80, 100];
   const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
-  if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c))]; }
+  if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c)), ...L.map(l => makeGlint(l.c))]; }
   for (let di = drops.length - 1; di >= 0; di--) {
     const d = drops[di];
     const v = (650 + d.z * 900) * DPR * rs.speed * d.sp;
@@ -4697,7 +4734,12 @@ function drawRain(dt) {
     lctx.setTransform(1, 0, -wind, 1, d.x, d.y);
     lctx.globalAlpha = (night ? 0.3 + d.z * 0.35 : 0.4 + d.z * 0.35) * (1 - k * 0.6);
     lctx.drawImage(dropSprites[0], -w / 2, -h, w, h);
-    if (k > 0.02) { lctx.globalAlpha = Math.min(1, k * 1.1); lctx.drawImage(dropSprites[1 + bi], -w / 2, -h, w, h); }
+    if (k > 0.02) {
+      lctx.globalAlpha = Math.min(1, k * 0.9); lctx.drawImage(dropSprites[1 + bi], -w / 2, -h, w, h);
+      // la luz rebota en la gota: el filo y un destello en la cabeza, que titila según cómo gira al caer
+      const tw = 0.55 + 0.45 * Math.sin(d.y * 0.045 / DPR + d.x * 0.7);
+      lctx.globalAlpha = Math.min(1, k * 1.5 * tw * (night ? 1 : 0.8)); lctx.drawImage(dropSprites[4 + bi], -w / 2, -h, w, h);
+    }
   }
   lctx.setTransform(1, 0, 0, 1, 0, 0);
   // Dibujo de las ondas: dos anillos que se abren en perspectiva y se apagan
@@ -5086,9 +5128,10 @@ function drawVinyl(dt) {
 
 
 // ================= Escena: Cuadros =================
-// Un mosaico que llena la pantalla: cuadros grandes y pequeños, todos unidos. Cada cuadro escucha
-// una zona del sonido (los grandes, los graves; los pequeños, los agudos). Con cada golpe se
-// encienden unos cuantos, a veces en ola desde un punto, y algunos sobresalen un momento y vuelven.
+// Un mosaico que llena la pantalla: cuadros grandes y pequeños, como ventanas a un mismo degradado
+// de color que fluye. Cada cuadro escucha una zona del sonido (los grandes, los graves; los pequeños,
+// los agudos). Con cada golpe se encienden unos cuantos, a veces en ola desde un punto, y algunos
+// sobresalen un momento y vuelven.
 const tiles = { list: [], key: '', waves: [] };
 function tilesInit() {
   const c = MIN / 8, cols = Math.ceil(W / c), rows = Math.ceil(H / c), used = new Uint8Array(cols * rows);
@@ -5135,7 +5178,9 @@ function drawTiles(dt) {
   tiles.waves.forEach(w => { w.r += dt * MIN * 2.8; w.k *= Math.pow(0.1, dt); });   // olas rápidas y cortas: la luz cae en el golpe
   tiles.waves = tiles.waves.filter(w => w.k > 0.04 && w.r < Math.hypot(W, H));
   lctx.clearRect(0, 0, W, H);
-  const gap = Math.max(2, MIN * 0.006), popped = [];
+  // fondo: noche honda o papel cálido; entre cuadro y cuadro, un respiro
+  { const [hh] = hexToHsl(rgbToHex(...mix(0.5))); ctx.fillStyle = night ? hsl(hh, 30, 5) : hsl(hh, 25, 95); ctx.fillRect(0, 0, W, H); }
+  const gap = Math.max(3, MIN * 0.014), popped = [];
   for (const t of L) {
     const target = Math.pow(spec[t.band], 2.4);
     t.lv += (target - t.lv) * (1 - Math.pow(target > t.lv ? 0.0005 : 0.05, dt));
@@ -5152,33 +5197,25 @@ function drawTiles(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 function drawTile(t, gap, night, pop) {
-  // Cada cuadro es un bloque con relieve: arriba y a la izquierda le da la luz, abajo y a la derecha
-  // queda en sombra. Al sobresalir, el bloque sale hacia afuera y se ven sus caras laterales.
-  const lift = Math.min(1, pop * 0.7), sc = 1 + lift * 0.1, s_ = (t.s - gap) * sc, x = t.x + t.s / 2 - s_ / 2, y = t.y + t.s / 2 - s_ / 2, c = mix(t.col);
-  const I = t.I, rr = Math.max(2, t.s * 0.03), depth = t.s * (0.035 + lift * 0.12);
-  const face = c.map(v => v * (0.35 + Math.min(1, I) * 0.65)), dark = c.map(v => v * 0.25);
-  if (lift > 0.02) { lctx.save(); lctx.shadowColor = night ? 'rgba(0,0,0,.75)' : 'rgba(0,0,0,.3)'; lctx.shadowBlur = t.s * 0.3 * lift; lctx.shadowOffsetX = depth * 0.6; lctx.shadowOffsetY = depth; }
-  // caras laterales (el grosor del bloque)
-  lctx.fillStyle = rgba(dark, Math.min(1, (night ? 0.5 : 0.35) + I * 0.4));
-  lctx.beginPath(); lctx.roundRect(x + depth * 0.5, y + depth, s_, s_, rr); lctx.fill();
-  if (lift > 0.02) lctx.restore();
-  // cara frontal con degradado de luz
+  // Cada cuadro es una ventana a un mismo degradado de color que fluye despacio por todo el mosaico
+  // (los colores pasan de un cuadro al vecino sin cortes). La música decide cuánta luz tiene cada uno:
+  // apagado es hondo (de noche) o pastel (de día); encendido, el color se aviva y brilla. Sin biseles
+  // ni brillos de plástico: esquinas suaves, una luz interior difusa y, al sobresalir, una sombra suave.
+  const lift = Math.min(1, pop * 0.7), sc = 1 + lift * 0.08, s_ = (t.s - gap) * sc, x = t.x + t.s / 2 - s_ / 2, y = t.y + t.s / 2 - s_ / 2;
+  const I = Math.min(1.2, t.I), rr = Math.min(s_ * 0.22, MIN * 0.03);
+  const fx = (t.x + t.y) / (W + H) * 1.1 + time * 0.025 + t.col * 0.25;
+  const cA = mix(fx % 1), cB = mix((fx + 0.33) % 1);
+  const shade = c => night ? c.map(v => v * (0.16 + 0.84 * Math.min(1, I))) : c.map(v => v + (255 - v) * (0.62 - 0.55 * Math.min(1, I)));
+  if (lift > 0.02) { lctx.save(); lctx.shadowColor = night ? rgba(cA, 0.55 * lift) : `rgba(40,30,60,${0.22 * lift})`; lctx.shadowBlur = t.s * 0.35 * lift; lctx.shadowOffsetY = night ? 0 : t.s * 0.06 * lift; }
   const g = lctx.createLinearGradient(x, y, x + s_, y + s_);
-  g.addColorStop(0, rgba(face.map(v => v + (255 - v) * (0.18 + I * 0.25)), Math.min(1, (night ? 0.16 : 0.22) + I * 0.85)));
-  g.addColorStop(1, rgba(face, Math.min(1, (night ? 0.1 : 0.15) + I * 0.7)));
+  g.addColorStop(0, rgba(shade(cA), 1)); g.addColorStop(1, rgba(shade(cB), 1));
   lctx.fillStyle = g; lctx.beginPath(); lctx.roundRect(x, y, s_, s_, rr); lctx.fill();
-  // bisel: filo de luz arriba-izquierda y sombra abajo-derecha
-  lctx.lineWidth = Math.max(1, t.s * 0.012);
-  lctx.strokeStyle = `rgba(255,255,255,${(night ? 0.08 : 0.35) + I * 0.3})`;
-  lctx.beginPath(); lctx.moveTo(x + rr, y + 1); lctx.lineTo(x + s_ - rr, y + 1); lctx.moveTo(x + 1, y + rr); lctx.lineTo(x + 1, y + s_ - rr); lctx.stroke();
-  lctx.strokeStyle = `rgba(0,0,0,${night ? 0.45 : 0.18})`;
-  lctx.beginPath(); lctx.moveTo(x + rr, y + s_ - 1); lctx.lineTo(x + s_ - rr, y + s_ - 1); lctx.moveTo(x + s_ - 1, y + rr); lctx.lineTo(x + s_ - 1, y + s_ - rr); lctx.stroke();
-  // reflejo de cristal en diagonal
-  if (I > 0.15) {
-    const sh = lctx.createLinearGradient(x, y, x + s_ * 0.6, y + s_ * 0.6);
-    sh.addColorStop(0, `rgba(255,255,255,${Math.min(0.22, I * 0.18)})`); sh.addColorStop(1, 'rgba(255,255,255,0)');
-    lctx.fillStyle = sh; lctx.beginPath(); lctx.moveTo(x, y); lctx.lineTo(x + s_ * 0.55, y); lctx.lineTo(x, y + s_ * 0.55); lctx.closePath(); lctx.fill();
-  }
+  if (lift > 0.02) lctx.restore();
+  // luz interior: un resplandor difuso que nace arriba a la izquierda y crece con la música
+  const k = night ? 0.06 + I * 0.38 : 0.14 + I * 0.22;
+  const rg = lctx.createRadialGradient(x + s_ * 0.3, y + s_ * 0.25, 0, x + s_ * 0.3, y + s_ * 0.25, s_ * 0.95);
+  rg.addColorStop(0, `rgba(255,255,255,${k})`); rg.addColorStop(1, 'rgba(255,255,255,0)');
+  lctx.fillStyle = rg; lctx.beginPath(); lctx.roundRect(x, y, s_, s_, rr); lctx.fill();
 }
 
 
@@ -5310,12 +5347,22 @@ function drawTubes(dt) {
     for (const arm of m.arms) { const tp = arm[arm.length - 1]; ctx.fillStyle = rgba(c, 1); ctx.beginPath(); ctx.arc(tp.x, tp.y, w * 0.32, 0, Math.PI * 2); ctx.fill(); }
     // cabeza: el extremo del tubo, un poco más abultado
     const hx = top.x, hy = top.y, dx = top.x - B[N - 3].x, dy = top.y - B[N - 3].y, d = Math.hypot(dx, dy) || 1, ux = dx / d, uy = dy / d, nx = -uy, ny = ux;
-    // gorrito de fiesta encima (punta plana del tubo + cono de otro color que baila con los agudos)
-    const tilt = Math.sin(time * 6 + m.ph) * 0.15 * (0.3 + high), cux = ux * Math.cos(tilt) - uy * Math.sin(tilt), cuy = ux * Math.sin(tilt) + uy * Math.cos(tilt);
-    const bx0 = hx - nx * w * 0.42, by0 = hy - ny * w * 0.42, bx1 = hx + nx * w * 0.42, by1 = hy + ny * w * 0.42, tx = hx + cux * w * 1.1, ty = hy + cuy * w * 1.1;
-    ctx.fillStyle = rgba(c2, 1); ctx.beginPath(); ctx.moveTo(bx0, by0); ctx.lineTo(tx, ty); ctx.lineTo(bx1, by1); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.7)'; ctx.lineWidth = w * 0.08; ctx.beginPath(); ctx.moveTo(hx - nx * w * 0.2 + cux * w * 0.45, hy - ny * w * 0.2 + cuy * w * 0.45); ctx.lineTo(hx + nx * w * 0.2 + cux * w * 0.45, hy + ny * w * 0.2 + cuy * w * 0.45); ctx.stroke();
-    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(tx, ty, w * 0.13, 0, Math.PI * 2); ctx.fill();
+    // pelo de tiras, como los muñecos de aire de verdad: la boca del tubo abierta y un mechón de tiras
+    // de otro color que salen con el aire y aletean con los platillos (y más con cada golpe)
+    const ang = Math.atan2(uy, ux), Pk = Math.max(0, pulse.x);
+    ctx.fillStyle = rgba(c.map(v => v * 0.45), 1); ctx.beginPath(); ctx.ellipse(hx, hy, w * 0.12, w * 0.44, ang, 0, Math.PI * 2); ctx.fill();
+    ctx.lineCap = 'round';
+    for (let j = 0; j < 9; j++) {
+      const f = j / 8 * 2 - 1, fl = Math.sin(time * (8 + j) + j * 1.3 + m.ph) * (0.18 + high * 0.5 + Pk * 0.35);
+      const a0 = ang + f * 0.6 + fl, L = w * (1 + 0.35 * Math.sin(j * 2.1 + m.ph) + Pk * 0.3);
+      const sx0 = hx + nx * w * 0.36 * f, sy0 = hy + ny * w * 0.36 * f;
+      const mx_ = sx0 + Math.cos(a0) * L * 0.55, my_ = sy0 + Math.sin(a0) * L * 0.55, a1 = a0 + fl * 1.6 + f * 0.4;
+      const ex_ = mx_ + Math.cos(a1) * L * 0.5, ey_ = my_ + Math.sin(a1) * L * 0.5;
+      const cc = j % 2 ? c2 : c2.map(v => v + (255 - v) * 0.35);
+      ctx.strokeStyle = rgba(cc, 1);
+      ctx.lineWidth = w * 0.16; ctx.beginPath(); ctx.moveTo(sx0, sy0); ctx.quadraticCurveTo(mx_, my_, (mx_ + ex_) / 2, (my_ + ey_) / 2); ctx.stroke();
+      ctx.lineWidth = w * 0.1; ctx.beginPath(); ctx.moveTo((mx_ + ex_) / 2, (my_ + ey_) / 2); ctx.lineTo(ex_, ey_); ctx.stroke();
+    }
     // cara: ojos saltones que se mueven con el cuerpo y una boca que «canta»
     const fx = top.x - ux * w * 0.9, fy = top.y - uy * w * 0.9;
     const vx = (top.x - top.px), vy = (top.y - top.py), vm = Math.hypot(vx, vy) || 1, look = Math.min(1, vm / (w * 0.08));
@@ -5492,7 +5539,9 @@ function drawLava(dt) {
 // ================= Escena: Puntos =================
 // Una cuadrícula de bolitas quietas por la que pasa la lava: donde pasa, las bolitas se calientan
 // (su color va hacia el caliente y se aclara), se inflan y se unen con sus vecinas en cadenas
-// curvas. Cada columna escucha su parte del sonido (graves a la izquierda) y todas laten con el bombo.
+// curvas. Las corrientes bailan con la canción, no solas: la del bombo salta de sitio con cada golpe,
+// la de la voz sube y baja con la nota que se canta y avanza con cada sílaba, y la de la caja aparece
+// de golpe en otro lugar. Cada columna escucha su parte del sonido (graves a la izquierda).
 const dots = { prog: null, hot: null, seq: 0, t: 0, H: new Float32Array(16), L: new Float32Array(24), lv: new Float32Array(24) };
 function dotsSetup() {
   dots.prog = glProgram(`uniform vec2 uRes, uOff; uniform float uTime, uNight, uP, uS, uCols, uRows, uHue, uShim, uGlow;
@@ -5546,18 +5595,34 @@ function drawDots(dt) {
   // cuadrícula: bolitas a la misma distancia en horizontal y vertical, centrada
   const S = asp > 1 ? 0.2 : 0.155, cols = Math.min(24, Math.floor(asp / S)), rows = Math.floor(1 / S);
   const off = [(asp - cols * S) / 2, (1 - rows * S) / 2];
-  // corrientes de lava que recorren la cuadrícula despacio; cada golpe enciende una y en un drop arden todas
-  if (!dots.hot) dots.hot = [0, 1, 2].map(k => ({ ph: Math.random() * 100, sp: 0.6 + k * 0.23, k: 0.3 }));
-  if (pulse.on) { const hs = dots.hot[dots.seq++ % 3]; hs.k = Math.min(1.2, hs.k + 0.4 * pulse.k); }
-  if (dropHit) dots.hot.forEach(hs => hs.k = 1.2);
-  dots.t += dt * (0.05 + energy * 0.12);
-  dots.hot.forEach((hs, k) => {
-    hs.k += ((0.12 + energy * 0.5) - hs.k) * (1 - Math.pow(0.3, dt));   // vuelve despacio a lo que pide la música
-    const t = dots.t * hs.sp + hs.ph;
-    dots.H[k * 4] = asp * (0.5 + 0.45 * Math.sin(t * 1.3 + k * 2.1));
-    dots.H[k * 4 + 1] = 0.5 + 0.42 * Math.sin(t * 0.9 + k * 1.3);
-    dots.H[k * 4 + 2] = S * (0.95 + 0.3 * Math.sin(t * 0.7 + k));   // corrientes estrechas: unen unas pocas bolitas
-    dots.H[k * 4 + 3] = hs.k;
+  // tres corrientes de lava, cada una con su parte: bombo (salta de sitio con cada golpe), voz (sube y
+  // baja con la nota y avanza con cada sílaba) y caja (aparece de golpe en otro lugar)
+  const cellAt = (cx, cy) => [off[0] + (cx + 0.5) * S, off[1] + (cy + 0.5) * S];
+  if (!dots.hot || dots.cols !== cols || dots.rows !== rows) {
+    dots.cols = cols; dots.rows = rows;
+    dots.hot = [0, 1, 2].map(k => { const cx = Math.floor(cols * (0.25 + 0.25 * k)), cy = Math.floor(rows / 2), [x, y] = cellAt(cx, cy); return { cx, cy, x, y, vx: 0, vy: 0, k: 0.2, dir: k ? -1 : 1 }; });
+  }
+  const [hb, hv, hs] = dots.hot;
+  if (pulse.on) {   // el bombo: un paso (o dos, si el golpe es fuerte) hacia un lado, rebotando en los bordes
+    const st = pulse.k > 0.7 ? 2 : 1;
+    if (Math.random() < 0.65) { hb.cx += hb.dir * st; if (hb.cx < 0 || hb.cx >= cols) { hb.dir = -hb.dir; hb.cx = Math.max(0, Math.min(cols - 1, hb.cx + 2 * hb.dir * st)); } }
+    else hb.cy = Math.max(0, Math.min(rows - 1, hb.cy + (Math.random() < 0.5 ? -1 : 1)));
+    hb.k = Math.min(1.25, hb.k + 0.55 * pulse.k);
+  }
+  if (hits.voice) { hv.cx += hv.dir; if (hv.cx < 0 || hv.cx >= cols) { hv.dir = -hv.dir; hv.cx += 2 * hv.dir; } }
+  if (melodyConf > 0.3 && voice > 0.1) hv.cy = Math.round((vox.note / 11) * (rows - 1));   // la nota: grave abajo, aguda arriba
+  if (hits.snare) { hs.cx = Math.floor(Math.random() * cols); hs.cy = Math.floor(Math.random() * rows); [hs.x, hs.y] = cellAt(hs.cx, hs.cy); hs.k = 1.1; }
+  if (dropHit) dots.hot.forEach(h_ => h_.k = 1.25);
+  hb.k += (0.1 + energy * 0.25 - hb.k) * (1 - Math.pow(0.25, dt));
+  hv.k += (Math.min(1.2, voice * 1.6) - hv.k) * (1 - Math.pow(0.1, dt));
+  hs.k *= Math.pow(0.2, dt);
+  dots.hot.forEach((h_, k) => {
+    const [tx, ty] = cellAt(Math.max(0, Math.min(cols - 1, h_.cx)), Math.max(0, Math.min(rows - 1, h_.cy)));
+    h_.vx += ((tx - h_.x) * 70 - h_.vx * 13) * dt; h_.vy += ((ty - h_.y) * 70 - h_.vy * 13) * dt;   // se desliza al sitio nuevo
+    h_.x += h_.vx * dt; h_.y += h_.vy * dt;
+    dots.H[k * 4] = h_.x; dots.H[k * 4 + 1] = h_.y;
+    dots.H[k * 4 + 2] = S * (0.9 + 0.35 * Math.min(1, h_.k));   // corrientes estrechas: unen unas pocas bolitas
+    dots.H[k * 4 + 3] = h_.k;
   });
   // cada columna escucha su banda (graves a la izquierda), con un muelle para que no tiemble
   for (let i = 0; i < cols; i++) {
@@ -5595,8 +5660,8 @@ function drawDots(dt) {
 // Respiran con cada golpe, cada bulto escucha su parte del sonido y la luz de dentro sube con la energía.
 const puffs = { prog: null, clouds: null, asp: 0, A: new Float32Array(192), ZA: new Float32Array(96), nA: 0, nB: 0, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3) };
 function puffsSetup() {
-  puffs.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP; uniform int uN;
-    uniform vec3 uC0, uC1, uC2, uSky0, uSky1;
+  puffs.prog = glProgram(`uniform vec2 uRes, uSun; uniform float uTime, uNight, uP, uVoice; uniform int uN;
+    uniform vec3 uC0, uC1, uC2, uSky0, uSky1, uMel;
     uniform vec4 uA[48];    // x, y (altos de pantalla), radio, color — ya ordenados de atrás hacia delante
     uniform vec2 uZ[48];    // bruma (0 delante, 1 al fondo) y luz de su nube
     ${GLSL_NOISE} ${GLSL_PAL}
@@ -5604,6 +5669,8 @@ function puffsSetup() {
       float asp = uRes.x / uRes.y;
       vec2 p = vec2(vUv.x * asp, vUv.y);
       vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., vUv.y));
+      // mientras se canta, una luz del color de la nota sale detrás de las nubes (como un sol)
+      vec2 sd = p - uSun; sky += mix(uMel, vec3(1.), .35) * exp(-dot(sd, sd) / .09) * uVoice * (uNight > .5 ? .45 : .3);
       vec3 col = sky;
       vec3 L = normalize(vec3(-.42, .7, .58));
       // cada bulto es una esfera grande y lisa con borde suave; se pintan de atrás hacia delante,
@@ -5619,7 +5686,9 @@ function puffsSetup() {
         vec3 c = pal(b.w);
         vec3 lit = mix(c * vec3(.84, .86, .98) * .84, mix(c, vec3(1.), .45), smoothstep(.1, 1., l));   // volumen: arriba claro, abajo el mismo color más hondo
         lit += mix(c, vec3(1.), .7) * pow(rho, 4.) * .18;                 // borde translúcido
-        lit = mix(lit, mix(c, vec3(1.), .55), uZ[i].y * .5);               // la nube que «canta» se enciende
+        float back = exp(-dot(b.xy - uSun, b.xy - uSun) / .5);            // borde de plata: la luz de la voz por detrás
+        lit += mix(uMel, vec3(1.), .45) * pow(rho, 3.) * uVoice * (.25 + .35 * back) * (1. - uZ[i].x * .5);
+        lit = mix(lit, mix(mix(c, vec3(1.), .55), mix(uMel, vec3(1.), .4), uVoice * .6), uZ[i].y * .5);   // la nube que «canta» se enciende
         lit += c * uP * .06;
         lit = mix(lit, sky, uZ[i].x * .3);                                  // bruma: las del fondo, más lejanas
         col = mix(col, lit, a);
@@ -5660,16 +5729,19 @@ function drawPuffs(dt) {
   // con cada golpe, una nube distinta se ilumina por dentro (cantan por turnos); en un drop, todas
   if (pulse.on) { const big = puffs.clouds.filter(c => c.w > 0.4); const c = big[(puffs.seq = (puffs.seq || 0) + 1) % big.length]; c.glow = Math.max(c.glow, 0.45 + 0.55 * pulse.k); }
   if (dropHit) puffs.clouds.forEach(c => c.glow = 1);
+  if (hits.voice) { const sm = puffs.clouds.filter(c => c.w <= 0.4); const c = sm.length ? sm[Math.floor(Math.random() * sm.length)] : null; if (c) c.glow = Math.max(c.glow, 0.5); }   // cada sílaba enciende una nube pequeña
+  if (pulse.on) puffs.clouds.forEach((c, i) => { c.bobV = (c.bobV || 0) + (i % 2 ? 0.05 : 0.035) * pulse.k; });   // y con el golpe, todas saltan apenas
   const list = [];
   for (const c of puffs.clouds) {
     c.glow *= Math.pow(state.noFlash ? 0.3 : 0.06, dt);
     c.x += c.vx * (0.4 + energy * 1.2) * dt;   // pasan despacio; con más energía, algo más rápido
+    c.bobV = (c.bobV || 0) + (-(c.bob || 0) * 40 - (c.bobV || 0) * 7) * dt; c.bob = (c.bob || 0) + c.bobV * dt;
     if (c.x - c.w * 0.6 > asp) { c.x = -c.w * 0.6; c.glow = 0; }
     for (const l of c.lobes) {
       const lv = Math.max(0, puffs.lv[l.band]);
       // cada bulto respira despacio, crece un poco con su banda y todos se inflan con el golpe
-      const r = l.r * (1 + 0.035 * Math.sin(time * 0.4 + l.ph) + lv * 0.05 + P * 0.045);
-      list.push([c.x + l.dx + Math.sin(time * 0.2 + l.ph) * 0.006, c.base + l.dy + Math.cos(time * 0.17 + l.ph) * 0.005, r, l.c, l.z, c.layer ? 1 : 0, c.glow * (state.noFlash ? 0.4 : 1)]);
+      const r = l.r * (1 + 0.035 * Math.sin(time * 0.4 + l.ph) + lv * 0.05 + P * 0.06);
+      list.push([c.x + l.dx + Math.sin(time * 0.2 + l.ph) * 0.006, c.base + (c.bob || 0) + l.dy + Math.cos(time * 0.17 + l.ph) * 0.005, r, l.c, l.z, c.layer ? 1 : 0, c.glow * (state.noFlash ? 0.4 : 1)]);
     }
   }
   list.sort((a, b) => a[4] - b[4]);
@@ -5687,6 +5759,8 @@ function drawPuffs(dt) {
   gl.uniform1i(p.u.uN, n);
   gl.uniform3fv(p.u.uC0, pastel(RGB[0])); gl.uniform3fv(p.u.uC1, pastel(RGB[1])); gl.uniform3fv(p.u.uC2, pastel(RGB[2]));
   gl.uniform3fv(p.u.uSky0, sky0); gl.uniform3fv(p.u.uSky1, sky1);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.uniform2f(p.u.uSun, asp * (0.5 + 0.25 * Math.sin(time * 0.03)), 0.72);
   gl.uniform4fv(p.u['uA[0]'], puffs.A); gl.uniform2fv(p.u['uZ[0]'], puffs.ZA);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -5695,31 +5769,24 @@ function drawPuffs(dt) {
 }
 
 // ================= Escena: Silueta =================
-// Una figura de pecho hacia arriba, quieta y en foco suave, con su aura. Por dentro el color va como
-// en una cámara térmica: el corazón late en el pecho con cada bombo, la voz enciende la garganta y la
-// cara, los agudos brillan en la cabeza y un calor que fluye la recorre. Respira despacio y se mece
-// apenas con el compás.
-const BUST_HALF = [[0, 0.8], [0.05, 0.795], [0.083, 0.776], [0.101, 0.746], [0.108, 0.706], [0.107, 0.668], [0.114, 0.657], [0.121, 0.641], [0.122, 0.617],
-  [0.116, 0.597], [0.106, 0.586], [0.097, 0.552], [0.084, 0.527], [0.068, 0.508], [0.058, 0.49], [0.056, 0.455], [0.062, 0.425], [0.085, 0.405],
-  [0.13, 0.388], [0.18, 0.37], [0.225, 0.352], [0.262, 0.335], [0.29, 0.316], [0.31, 0.291], [0.324, 0.258], [0.331, 0.218], [0.333, 0.15],
-  [0.33, 0.07], [0.326, -0.05]];
-const BUST_PTS = (() => { const r = BUST_HALF.slice(1), l = BUST_HALF.slice(1).reverse().map(([x, y]) => [-x, y]); return new Float32Array([BUST_HALF[0], ...r, [0.326, -0.06], [-0.326, -0.06], ...l.slice(1)].flat()); })();
-const bust = { prog: null, beat: 0, sway: 0, swayV: 0, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3) };
+// Como una foto desenfocada: una figura de pecho hacia arriba, de un solo color intenso, más honda por
+// dentro y luminosa en el borde, que se deshace hacia abajo. La música la enfoca: cuando entra la voz
+// la figura se aclara (sale de la niebla) y una luz le sube del pecho a la cabeza; cada sílaba la
+// enciende un instante, el bombo la hace respirar y enfocar, la caja abre un leve arcoíris en el borde
+// (como una lente), los platillos dan grano y su color sigue la nota que se canta.
+const BUST_HALF = [[0, 0.885], [0.04, 0.881], [0.07, 0.868], [0.093, 0.848], [0.108, 0.822], [0.116, 0.79], [0.119, 0.755], [0.118, 0.72], [0.113, 0.685],
+  [0.104, 0.655], [0.094, 0.628], [0.085, 0.604], [0.079, 0.582], [0.077, 0.56], [0.078, 0.535], [0.085, 0.513], [0.103, 0.492], [0.135, 0.47], [0.172, 0.448],
+  [0.205, 0.427], [0.23, 0.405], [0.248, 0.38], [0.259, 0.352], [0.265, 0.32], [0.267, 0.27], [0.266, 0.2], [0.262, 0.12], [0.255, 0.04], [0.245, -0.05]];
+const BUST_PTS = (() => { const r = BUST_HALF.slice(1), l = BUST_HALF.slice(1).reverse().map(([x, y]) => [-x, y]); return new Float32Array([BUST_HALF[0], ...r, [0.245, -0.06], [-0.245, -0.06], ...l.slice(1)].flat()); })();
+const bust = { prog: null, sway: 0, swayV: 0, sig: 0.023, rise: 0, syl: 0, fr: 0, gr: 0, col: null };
 function bustSetup() {
-  bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uBeat, uMid, uHigh, uSway, uBreath, uS, uGlow;
-    uniform vec3 uK0, uK1, uK2, uK3, uK4;
-    ${GLSL_NOISE}
-    float sdEll(vec2 p, vec2 r) { return (length(p / r) - 1.) * min(r.x, r.y); }
-    float sdCap(vec2 p, vec2 a, vec2 b, float r) { vec2 pa = p - a, ba = b - a; float t = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * t) - r; }
-    float sdRBox(vec2 p, vec2 b, float r) { vec2 d = abs(p) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
-    float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
-    // contorno de un busto de frente (cráneo, orejas, mandíbula, cuello, trapecios y hombros):
-    // distancia a un polígono; el foco suave lo da el difuminado del borde
+  bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uSway, uBreath, uS, uSig, uVoice, uRise, uSyl, uFr, uGr;
+    uniform vec3 uCol, uCol2, uDeep, uMel, uBg0, uBg1;
     uniform vec2 uPts[64]; uniform int uNP;
+    ${GLSL_NOISE}
     float figure(vec2 q) {
       float c = cos(uSway), s = sin(uSway);
-      q = mat2(c, s, -s, c) * q;                       // se mece apenas desde la base
-      q.y /= 1. + uBreath;                              // y respira
+      q = mat2(c, s, -s, c) * q; q.y /= 1. + uBreath;
       float d = dot(q - uPts[0], q - uPts[0]), sg = 1.;
       for (int i = 0; i < 64; i++) {
         if (i >= uNP) break;
@@ -5731,79 +5798,101 @@ function bustSetup() {
       }
       return sg * sqrt(d);
     }
-    vec3 ramp(float t) {
-      t = clamp(t, 0., 1.) * 4.;
-      return t < 1. ? mix(uK0, uK1, smoothstep(0., 1., t)) : t < 2. ? mix(uK1, uK2, smoothstep(1., 2., t)) : t < 3. ? mix(uK2, uK3, smoothstep(2., 3., t)) : mix(uK3, uK4, smoothstep(3., 4., t));
-    }
+    // cuánto cubre la figura desenfocada: el borde de una forma vista con una lente fuera de foco
+    vec3 cov(vec3 d, float sg) { return 1. / (1. + exp(1.702 * d / sg)); }
     void main() {
       float asp = uRes.x / uRes.y;
       vec2 p = vec2(vUv.x * asp, vUv.y), q = (p - vec2(asp * .5, 0.)) / uS;
       float d = figure(q) * uS;
-      // calor: la figura entera, más el corazón (bombo), la garganta y la cara (voz) y la cabeza (agudos)
-      vec2 hp = q - vec2(.06, .2);
-      float T = .2 + .1 * smoothstep(0., .6, q.y);
-      T += exp(-dot(hp, hp) / .02) * (.12 + uBeat * .36);   // el corazón: un calor suave que se expande por el pecho
-      vec2 tp = q - vec2(0., .47); T += exp(-dot(tp * vec2(1., .7), tp * vec2(1., .7)) / .012) * uMid * .45;
-      vec2 cp = q - vec2(0., .7); T += exp(-dot(cp, cp) / .012) * uHigh * .45;
-      T += (fbm(q * 3.5 + vec2(uTime * .04, -uTime * .09)) - .5) * .42;
-      T *= mix(.55, 1.12, smoothstep(0., -.16, d));   // como en una cámara térmica: el centro más caliente, el borde más frío
-      vec3 col = ramp(T);
-      float blur = .018, a = smoothstep(blur, -blur, d);
-      // aura alrededor y una luz de color que resbala por el contorno
-      float glow = exp(-max(d, 0.) / .07) * (1. - a) * uGlow;
-      float rim = smoothstep(-.06, 0., d) * a;
-      vec3 rc = ramp(.75 + .2 * sin(uTime * .5 + q.y * 6.));
-      col = mix(col, rc, rim * (uNight > .5 ? .22 : .3));
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .08;
-      vec3 gc = ramp(.45);
-      o = vec4(col * a + gc * glow * (uNight > .5 ? .7 : .6), clamp(a + glow * (uNight > .5 ? .7 : .6), 0., 1.));
+      // más desenfocada abajo, donde se deshace; la caja separa un poco los colores en el borde
+      float low = smoothstep(.34, -.04, q.y), sg = uSig * (1. + 1.7 * low);
+      float f = (.0012 + uFr * .0045) * (1. + low);
+      vec3 a = cov(vec3(d - f, d, d + f), sg) * (1. - .55 * smoothstep(.16, -.06, q.y));
+      float core = cov(vec3(d + .05), sg * 2.2 + .02).x;   // hondura: más color hacia dentro
+      vec3 bg = mix(uBg1, uBg0, vUv.y);
+      bg *= 1. - .1 * smoothstep(.45, 1.1, length(vUv - .5) * 1.6);   // viñeta suave
+      // la luz de la voz: sube del pecho a la cabeza mientras se canta; cada sílaba la aviva
+      vec2 lp = (q - vec2(0., mix(.2, .66, uRise))) / vec2(.15, .13);
+      float L = exp(-dot(lp, lp)) * (uVoice * .55 + uSyl * .4) + exp(-dot(lp, lp) * .25) * uSyl * .15;
+      vec3 fig;
+      if (uNight > .5) {
+        fig = mix(uCol * .72, mix(uCol2, vec3(1.), .12), core * .85) * (1. + uP * .25);   // dos tonos: borde de un color, dentro de otro
+        fig += mix(uMel, vec3(1.), .15) * L * .7;
+      } else {
+        fig = mix(mix(uCol, vec3(1.), .12), uDeep, core * .9);
+        fig = mix(fig, mix(uMel, vec3(1.), .55), clamp(L * .8, 0., .85));
+        fig *= 1. + uP * .06;
+      }
+      vec3 col = mix(bg, fig, a);
+      // aura: la luz de la figura se abre en el aire (más con el bombo y la energía)
+      float od = max(d, 0.), aura = exp(-od / (.05 + uP * .025)) * (1. - a.y);
+      col += (uNight > .5 ? uCol * .32 : (mix(uCol, vec3(1.), .5) - bg) * .2) * aura * (.7 + uP * .8);
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * (.035 + uGr * .05);
+      o = vec4(col, 1.);
     }`);
 }
 function drawBust(dt) {
   if (!glInit()) { drawAura(dt); return; }
   if (!bust.prog) bustSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
-  bust.lvT[0] = Math.pow(bass, 0.8); bust.lvT[1] = Math.pow(mid, 0.8); bust.lvT[2] = Math.pow(high, 0.8);
-  springTo(bust.lv, bust.lvV, bust.lvT, dt, 140, 0.6);
-  // se mece apenas hacia un lado y al otro, al compás
-  if (pulse.on) bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.02 * pulse.k;   // apenas: se mece con el compás
+  // se mece apenas con el compás y respira
+  if (pulse.on) bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.012 * pulse.k;
   bust.swayV += (-bust.sway * 18 - bust.swayV * 5) * dt; bust.sway += bust.swayV * dt;
-  // los colores de la portada en una rampa térmica: hondo → oscuro → medio → claro → casi blanco
-  const cs = RGB.slice().sort((a, b) => (a[0] * 0.3 + a[1] * 0.59 + a[2] * 0.11) - (b[0] * 0.3 + b[1] * 0.59 + b[2] * 0.11)).map(c => c.map(v => v / 255));
-  const K = [cs[0].map(v => v * (night ? 0.35 : 0.6)), cs[0], cs[1], cs[2], cs[2].map(v => v + (1 - v) * 0.7)];
-  const [cw, ch] = glCanvas(1), gl = GLX.gl;
+  // el foco: la voz la saca de la niebla; sin voz se queda soñando; cada bombo la enfoca un instante
+  const focus = Math.min(1, voice * 1.6 + energy * 0.25 + (dropHit ? 1 : 0));
+  bust.sig += (0.023 - 0.012 * focus - bust.sig) * (1 - Math.pow(focus > 0.5 ? 0.02 : 0.25, dt));
+  bust.rise += (Math.min(1, voice * 1.5) - bust.rise) * (1 - Math.pow(0.15, dt));
+  bust.syl = Math.max(bust.syl * Math.pow(0.03, dt), hits.voice ? Math.min(1, 0.5 + hits.voice * 0.5) : 0);
+  bust.fr = Math.max(bust.fr * Math.pow(0.04, dt), hits.snare ? 1 : 0);
+  bust.gr = Math.max(bust.gr * Math.pow(0.02, dt), hits.hat ? 1 : 0);
+  // el color: el más intenso de la portada, que se va hacia el de la nota mientras se canta
+  const sat = c => Math.max(...c) - Math.min(...c);
+  const byS = RGB.slice().sort((x, y) => sat(y) - sat(x)), base = byS[0].map(v => v / 255), deep2 = byS[1].map(v => v / 255);
+  const mel = melodyColor().map(v => v / 255), wM = Math.min(1, melodyConf * 1.3) * Math.min(1, voice * 2) * 0.6;
+  const target = base.map((v, i) => v + (mel[i] - v) * wM);
+  if (!bust.col) bust.col = target.slice();
+  for (let i = 0; i < 3; i++) bust.col[i] += (target[i] - bust.col[i]) * (1 - Math.pow(0.3, dt));
+  const deep = bust.col.map((v, i) => (v * 0.75 + deep2[i] * 0.25) * (night ? 0.6 : 0.58));
+  const [hh] = hexToHsl(rgbToHex(...bust.col.map(v => v * 255)));
+  const bg0 = night ? hexToRgb(hsl(hh, 30, 5)).map(v => v / 255) : hexToRgb(hsl(hh, 14, 97)).map(v => v / 255);
+  const bg1 = night ? hexToRgb(hsl(hh + 20, 34, 10)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 18, 92)).map(v => v / 255);
+  const [cw, ch] = glCanvas(0.5), gl = GLX.gl;   // va desenfocada: media resolución basta y se ve igual de suave
   const p = bust.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0);
-  gl.uniform1f(p.u.uBeat, Math.min(1.2, P * 1.4 + Math.max(0, bust.lv[0]) * 0.3)); gl.uniform1f(p.u.uMid, Math.max(0, bust.lv[1])); gl.uniform1f(p.u.uHigh, Math.max(0, bust.lv[2]));
-  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, 0.012 * Math.sin(time * 1.4) + P * 0.008);
-  gl.uniform1f(p.u.uS, Math.min(1.12, asp / 0.7));   // la figura llena bien el cuadro (en el móvil, de hombro a hombro) gl.uniform1f(p.u.uGlow, (night ? 0.7 : 0.55) + P * 0.45);
-  ['uK0', 'uK1', 'uK2', 'uK3', 'uK4'].forEach((k, i) => gl.uniform3fv(p.u[k], K[i]));
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, 0.008 * Math.sin(time * 1.3) + P * 0.006);
+  gl.uniform1f(p.u.uS, Math.min(1, asp / 0.75));
+  gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.3 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3));
+  gl.uniform1f(p.u.uRise, bust.rise); gl.uniform1f(p.u.uSyl, bust.syl); gl.uniform1f(p.u.uFr, bust.fr); gl.uniform1f(p.u.uGr, bust.gr);
+  gl.uniform3fv(p.u.uCol, bust.col); gl.uniform3fv(p.u.uCol2, deep2); gl.uniform3fv(p.u.uDeep, deep); gl.uniform3fv(p.u.uMel, mel);
+  gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.uniform2fv(p.u['uPts[0]'], BUST_PTS); gl.uniform1i(p.u.uNP, BUST_PTS.length / 2);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
-  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  ambient();
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
-  if (night) bloom(GLX.c, 0.25 + P * 0.3);
+  if (night) bloom(GLX.c, 0.18 + P * 0.25);
 }
 
 // ================= Escena: Gatos =================
 // Tres gatos de luz, difuminados como en una foto con niebla, que caminan uno tras otro a distintas
-// distancias. Cada pisada cae en un golpe de la canción (el paso sigue el tempo), la cola se mece con
-// la voz, las orejas se mueven con los platillos y en un drop dan un saltito. Cada gato lleva un color
-// de la portada.
-const CAT_BODY = new Float32Array([[-0.44, 0.52], [-0.35, 0.56], [-0.2, 0.575], [0, 0.565], [0.18, 0.58], [0.3, 0.6], [0.38, 0.64], [0.41, 0.7], [0.425, 0.77],
-  [0.44, 0.83], [0.452, 0.905], [0.495, 0.84], [0.54, 0.845], [0.575, 0.912], [0.594, 0.815], [0.622, 0.778], [0.654, 0.735], [0.672, 0.698], [0.662, 0.668],
-  [0.624, 0.643], [0.565, 0.618], [0.495, 0.588], [0.445, 0.535], [0.425, 0.455], [0.385, 0.375], [0.3, 0.335], [0.1, 0.325], [-0.15, 0.325],
-  [-0.3, 0.345], [-0.42, 0.38], [-0.49, 0.44], [-0.485, 0.49]].flat());
-(() => { for (let i = 0; i < CAT_BODY.length; i += 2) { const x = CAT_BODY[i], y = CAT_BODY[i + 1]; if (x > 0.4 && y > 0.6) { CAT_BODY[i] = 0.54 + (x - 0.54) * 1.1; CAT_BODY[i + 1] = 0.74 + (y - 0.74) * 1.1; } } })();   // cabeza un poco más grande
-const cats = { prog: null, list: null, asp: 0, U: new Float32Array(48) };
+// distancias y van escuchando la canción: cabecean con cada golpe, la cola se mece al compás, las
+// orejas se mueven con los platillos, los ojos se encienden con la voz (y parpadean despacio, como
+// hacen los gatos contentos) y en un drop dan un saltito. Cada pisada cae en un golpe (el paso sigue
+// el tempo). Cada gato lleva un color de la portada.
+const CAT_BODY = new Float32Array([[-0.48, 0.5], [-0.44, 0.545], [-0.36, 0.585], [-0.25, 0.605], [-0.12, 0.598], [0.02, 0.585], [0.14, 0.592], [0.25, 0.612],
+  [0.33, 0.628], [0.39, 0.66], [0.425, 0.71], [0.44, 0.77], [0.447, 0.825], [0.468, 0.92], [0.52, 0.852], [0.56, 0.856], [0.586, 0.862], [0.618, 0.93],
+  [0.634, 0.834], [0.662, 0.8], [0.686, 0.766], [0.706, 0.731], [0.711, 0.714], [0.701, 0.695], [0.672, 0.68], [0.632, 0.668], [0.58, 0.652], [0.52, 0.615],
+  [0.47, 0.56], [0.44, 0.49], [0.41, 0.42], [0.36, 0.365], [0.26, 0.345], [0.12, 0.35], [-0.02, 0.37], [-0.14, 0.395], [-0.24, 0.41], [-0.33, 0.405],
+  [-0.42, 0.42], [-0.49, 0.455]].flat());
+const cats = { prog: null, list: null, asp: 0, U: new Float32Array(48), U3: new Float32Array(12) };
 function catsSetup() {
   cats.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uMid, uHigh, uGlow;
     uniform vec3 uC0, uC1, uC2, uBg0, uBg1;
     uniform vec4 uCat[3];   // x, y del suelo, escala, fase del paso
     uniform vec4 uCat2[3];  // salto, mirada (0 derecha), color, bruma
+    uniform vec4 uCat3[3];  // cabeceo, vaivén de la cola, oreja, ojos cerrados
+    uniform float uVoice; uniform vec3 uMel;
     ${GLSL_NOISE} ${GLSL_PAL}
     float sdEll(vec2 p, vec2 r) { return (length(p / r) - 1.) * min(r.x, r.y); }
     float sdCap(vec2 p, vec2 a, vec2 b, float r) { vec2 pa = p - a, ba = b - a; float t = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * t) - r; }
@@ -5831,33 +5920,43 @@ function catsSetup() {
       return sg * sqrt(d);
     }
     // pata corta y gruesa en dos tramos; la articulación se dobla hacia atrás (codo o corvejón)
-    float leg(vec2 p, vec2 top, float ph, float thick) {
+    float leg(vec2 p, vec2 top, float ph, float thick, float hind) {
       float sw = sin(ph * 6.2832), lift = max(0., cos(ph * 6.2832));
       vec2 foot = vec2(top.x + sw * .11, .045 + lift * .055);
       vec2 mid = (top + foot) * .5, dir = normalize(foot - top), n = vec2(dir.y, -dir.x);
       float L = length(foot - top), bend = sqrt(max(0., .2 * .2 - L * L * .25));
-      vec2 j = mid - n * bend * .8;
-      float d = min(sdCap2(p, top, j, thick, thick * .78), sdCap2(p, j, foot, thick * .74, thick * .66));
-      return min(d, sdEll(p - foot - vec2(.025, -.01), vec2(.055, .035)));   // la pata (almohadilla)
+      vec2 j = mid - n * bend * mix(.25, .8, hind);   // delante casi recta; detrás, el corvejón
+      float d = smin(sdCap2(p, top, j, thick * 1.15, thick * .74), sdCap2(p, j, foot, thick * .7, thick * .6), .02);
+      d = smin(d, sdEll(p - foot - vec2(.02, -.008), vec2(.045, .03)), .02);   // la pata (almohadilla)
+      return hind > .5 ? smin(d, sdEll(p - top - vec2(-.02, .04), vec2(.11, .085)), .05) : d;   // el muslo, redondo
     }
-    float tail(vec2 q, float ph) {
-      vec2 a = vec2(-.45, .5); float ang = 2.55, d = 1e3;
-      for (int k = 0; k < 6; k++) {
+    float tail(vec2 q, float ph, float sw) {
+      vec2 a = vec2(-.46, .52); float ang = 3.55 + sw * .3, d = 1e3;   // sale hacia atrás y sube en curva, con la punta enroscada
+      for (int k = 0; k < 7; k++) {
         float fk = float(k);
-        ang += -.26 + .1 * sin(uTime * 1.3 + fk * .8) * (.4 + uMid * .8);
-        vec2 b = a + vec2(cos(ang), sin(ang)) * .085;
-        d = smin(d, sdCap2(q, a, b, .052 - fk * .004, .048 - fk * .004), .02);
+        ang += -.3 - (fk > 4. ? .3 : 0.) + .1 * sin(uTime * 1.3 + fk * .8) * (.4 + uMid * .8) + sw * .12;
+        vec2 b = a + vec2(cos(ang), sin(ang)) * .08;
+        d = smin(d, sdCap2(q, a, b, .046 - fk * .003, .043 - fk * .003), .02);
         a = b;
       }
       return d;
     }
     // patas del lado de allá (más oscuras, detrás del cuerpo) y gato completo
-    float catFar(vec2 q, float ph) { return min(leg(q, vec2(.3, .4), ph + .75, .056), leg(q, vec2(-.33, .42), ph + .5, .066)); }
-    float cat(vec2 q, float ph) {
-      float d = bodyPoly(q) - .02;
-      d = smin(d, leg(q, vec2(.32, .4), ph + .25, .06), .04);
-      d = smin(d, leg(q, vec2(-.31, .42), ph, .07), .05);
-      return smin(d, tail(q, ph), .03);
+    float catFar(vec2 q, float ph) { return min(leg(q, vec2(.3, .4), ph + .75, .046, 0.), leg(q, vec2(-.33, .42), ph + .5, .05, 1.)); }
+    // la cabeza gira desde el cuello (cabeceo) y la oreja de delante se mueve: se deforma el punto
+    const vec2 NECK = vec2(.43, .6);
+    float headW(vec2 q) { return smoothstep(.34, .47, q.x) * smoothstep(.42, .58, q.y); }
+    vec2 headInv(vec2 q, float nod, float ear) {
+      float w = headW(q), an = nod * w, c = cos(an), s = sin(an);
+      q = NECK + mat2(c, s, -s, c) * (q - NECK) + vec2(0., nod * .07 * w);
+      q.x -= ear * .03 * smoothstep(.8, .92, q.y) * smoothstep(.5, .6, q.x);   // la oreja de delante se gira
+      return q;
+    }
+    float cat(vec2 q, float ph, vec4 c3) {
+      float d = bodyPoly(headInv(q, c3.x, c3.z)) - .02;
+      d = smin(d, leg(q, vec2(.32, .4), ph + .25, .05, 0.), .05);
+      d = smin(d, leg(q, vec2(-.31, .42), ph, .055, 1.), .05);
+      return smin(d, tail(q, ph, c3.y), .03);
     }
     void main() {
       float asp = uRes.x / uRes.y;
@@ -5866,24 +5965,36 @@ function catsSetup() {
       // niebla suave que se mueve
       col = mix(col, mix(uBg0, vec3(1.), uNight > .5 ? .05 : .4), (fbm(p * 1.5 + vec2(uTime * .02, 0.)) - .4) * .25);
       for (int i = 0; i < 3; i++) {
-        vec4 c = uCat[i], c2 = uCat2[i];
+        vec4 c = uCat[i], c2 = uCat2[i], c3 = uCat3[i];
         vec2 lp = (p - c.xy) / c.z; lp.x *= c2.y;                 // espejo si mira a la izquierda
         lp.y -= c2.x + .01 * sin(c.w * 12.566);                    // salto y el leve vaivén del paso
+        if (length((lp - vec2(.1, .6)) * vec2(.8, 1.)) > 1.15) continue;   // lejos del gato: nada que dibujar
         vec3 base = pal(c2.z);
-        float blur = (.022 + c2.w * .012) * c.z;
+        float blur = (.03 + c2.w * .014) * c.z;
         // patas de allá: el mismo color, más en sombra
         float df = catFar(lp, c.w) * c.z, af = smoothstep(blur, -blur, df);
         col = mix(col, mix(base * .8, col, c2.w * .4), af);
-        // borde de pelo: el contorno se deshace en una pelusa fina que brilla (nada de línea oscura)
-        float d = (cat(lp, c.w) + (fbm(lp * 34. + vec2(c.w * 3., 0.)) - .5) * .028) * c.z, a = smoothstep(blur, -blur * 1.4, d);
+        // pelo: el borde se deshace en una pelusa suave y luminosa, sin línea ni corte
+        float d0 = cat(lp, c.w, c3) * c.z;
+        float d = d0 + (fbm(lp * 22. + vec2(c.w * 2., 0.)) - .5) * .014 * c.z, a = smoothstep(blur, -blur * 1.3, d);
         float inner = smoothstep(0., -.09 * c.z, d), top = smoothstep(.25, .75, lp.y);
         // volumen: lomo y cabeza con luz, barriga y patas algo más hondas, y el cuerpo más claro por dentro
         float belly = smoothstep(.45, .3, lp.y);
         vec3 fur = mix(mix(base, vec3(1.), .18), mix(base, vec3(1.), .42), top * .8) * (.84 + .16 * inner) * (1. - belly * .14);
-        fur *= 1. + uP * .15;
-        float glow = exp(-max(d, 0.) / (.06 * c.z + .02)) * (1. - a) * uGlow;
+        fur *= 1. + uP * .15 + uVoice * .12;
+        float fuzz = exp(-max(d0, 0.) / (.045 * c.z)) * (1. - a) * (.55 + .45 * fbm(lp * 70. + c.w));   // pelusa fuera del cuerpo
+        float glow = exp(-max(d, 0.) / (.07 * c.z + .02)) * (1. - a) * uGlow;
         col = mix(col, mix(fur, col, c2.w * .35), a);
+        col = mix(col, mix(fur, col, c2.w * .35), fuzz * .45);
         col += base * glow * (uNight > .5 ? .45 : .25) * (1. - c2.w * .5);
+        // el ojo: va con la cabeza; se enciende con la voz y parpadea despacio
+        float an = c3.x * headW(vec2(.6, .77)), cs = cos(an), sn = sin(an);
+        vec2 ep = NECK + mat2(cs, -sn, sn, cs) * (vec2(.6, .77) - NECK) - vec2(0., c3.x * .07);
+        vec2 e = (lp - ep) / vec2(.03, .018 * (1. - c3.w * .85) + .002);
+        float eye = smoothstep(1., .5, length(e)) * a;
+        vec3 ec = uNight > .5 ? mix(mix(base, vec3(1.), .5), mix(uMel, vec3(1.), .4), uVoice) * (.7 + uVoice * .9) : mix(base * .25, uMel * .6, uVoice * .6);
+        col = mix(col, ec, eye * (1. - c2.w * .4));
+        col += mix(uMel, vec3(1.), .3) * exp(-dot(lp - ep, lp - ep) / .004) * uVoice * (uNight > .5 ? .35 : .12) * (1. - c2.w * .5);
       }
       col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .07;
       o = vec4(col, 1.);
@@ -5895,7 +6006,7 @@ function catsInit() {
   cats.list = asp > 1
     ? [{ x: asp * 0.15, y: 0.42, s: 0.3, c: 1.2, fog: 1, sp: 0.9, ph: 0.3 }, { x: asp * 0.62, y: 0.27, s: 0.42, c: 2.3, fog: 0.5, sp: 1, ph: 0.6 }, { x: asp * 0.3, y: 0.07, s: 0.56, c: 0.2, fog: 0, sp: 1.1, ph: 0 }]
     : [{ x: asp * 0.2, y: 0.5, s: 0.22, c: 1.2, fog: 1, sp: 0.9, ph: 0.3 }, { x: asp * 0.7, y: 0.32, s: 0.3, c: 2.3, fog: 0.5, sp: 1, ph: 0.6 }, { x: asp * 0.35, y: 0.1, s: 0.4, c: 0.2, fog: 0, sp: 1.1, ph: 0 }];
-  cats.list.forEach(c => { c.hop = 0; c.hopV = 0; });
+  cats.list.forEach(c => { c.hop = 0; c.hopV = 0; c.bob = 0; c.bobV = 0; c.nod = 0; c.nodV = 0; c.tl = 0; c.tlV = 0; c.ear = 0; c.blink = 0; c.blinkT = 2 + Math.random() * 4; });
 }
 function drawCats(dt) {
   if (!glInit()) { drawAura(dt); return; }
@@ -5912,19 +6023,30 @@ function drawCats(dt) {
     if (c.x - c.s * 0.6 > asp) c.x = -c.s * 1.2;
     if (dropHit) c.hopV = 1.6 + i * 0.2;
     c.hopV -= 9 * dt; c.hop = Math.max(0, c.hop + c.hopV * dt); if (c.hop === 0) c.hopV = Math.max(0, c.hopV);
-    cats.U.set([c.x, c.y, c.s, c.ph], i * 4); cats.U.set([c.hop, 1, c.c, c.fog], 12 + i * 4);
+    // escuchan: cabecean con cada golpe (cada uno con su propio gusto), la cola va de un lado a otro al
+    // compás, la oreja se mueve con los platillos y parpadean despacio de vez en cuando
+    if (pulse.on) { c.nodV += (7.5 + 4 * pulse.k) * (0.85 + 0.15 * i); c.tlV += (pulse.count % 2 ? 1 : -1) * (2.2 + pulse.k); c.bobV -= 0.35 + 0.25 * pulse.k; }
+    c.nodV += (-c.nod * 150 - c.nodV * 15) * dt; c.nod += c.nodV * dt;
+    c.bobV += (-c.bob * 220 - c.bobV * 16) * dt; c.bob += c.bobV * dt;   // y el cuerpo baja un poquito con el golpe
+    c.tlV += (-c.tl * 30 - c.tlV * 4) * dt; c.tl += c.tlV * dt;
+    c.ear = Math.max(c.ear * Math.pow(0.004, dt), hits.hat && Math.random() < 0.5 ? 1 : 0);
+    c.blinkT -= dt; if (c.blinkT < 0) { c.blink = 1; c.blinkT = 3 + Math.random() * 5; }
+    c.blink = Math.max(0, c.blink - dt * 2.5);
+    cats.U.set([c.x, c.y, c.s, c.ph], i * 4); cats.U.set([c.hop + c.bob * 0.05, 1, c.c, c.fog], 12 + i * 4);
+    cats.U3.set([Math.max(-0.1, c.nod * 0.85), Math.max(-1.2, Math.min(1.2, c.tl)), c.ear, Math.sin(Math.min(1, c.blink) * Math.PI)], i * 4);
   });
   const blue = RGB.slice().sort((a, b) => (b[2] - (b[0] + b[1]) / 2) - (a[2] - (a[0] + a[1]) / 2))[0];
   const [hs] = hexToHsl(rgbToHex(...blue));
   const bg0 = hexToRgb(hsl(hs, 35, night ? 10 : 70)).map(v => v / 255), bg1 = hexToRgb(hsl(hs + 15, 30, night ? 16 : 82)).map(v => v / 255);
-  const [cw, ch] = glCanvas(1), gl = GLX.gl;
+  const [cw, ch] = glCanvas(0.7), gl = GLX.gl;   // van en foco suave: no necesitan resolución completa
   const p = cats.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uMid, mid); gl.uniform1f(p.u.uHigh, hits.high ? 1 : Math.max(0, high - 0.3)); gl.uniform1f(p.u.uGlow, (night ? 0.8 : 0.5) + P * 0.5);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
-  gl.uniform4fv(p.u['uCat[0]'], cats.U.subarray(0, 12)); gl.uniform4fv(p.u['uCat2[0]'], cats.U.subarray(12, 24));
+  gl.uniform4fv(p.u['uCat[0]'], cats.U.subarray(0, 12)); gl.uniform4fv(p.u['uCat2[0]'], cats.U.subarray(12, 24)); gl.uniform4fv(p.u['uCat3[0]'], cats.U3);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
   gl.uniform2fv(p.u['uBody[0]'], CAT_BODY); gl.uniform1i(p.u.uNB, CAT_BODY.length / 2);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -5938,8 +6060,9 @@ function drawCats(dt) {
 // delante (bokeh), sobre nubes de color muy suaves. Cada golpe enciende y estira unos destellos; los
 // platillos hacen chispas; la voz mece la cortina. Colores de la portada.
 const curtain = { threads: null, key: '', fields: null, bokeh: null };
+const curtainCount = () => Math.round(Math.min(38, Math.max(14, W / DPR / 48)));
 function curtainInit() {
-  const n = Math.round(Math.min(38, Math.max(14, W / DPR / 48)));
+  const n = curtainCount();
   const bead = y => ({ y, v: 0, r: 0.6 + Math.pow(Math.random(), 2.5) * 2.6, c: Math.random() < 0.18 ? 3 : Math.floor(Math.random() * 3),
     glow: 0, a: 0, flare: Math.random() < 0.22 ? 0.5 + Math.random() : 0 });
   curtain.bead = bead;
@@ -5952,11 +6075,11 @@ function curtainInit() {
   curtain.fields = [0, 1, 2, 3, 4].map(k => ({ ph: Math.random() * 100, c: k % 3, sp: 0.02 + Math.random() * 0.03, s: 0.55 + Math.random() * 0.4 }));
   // esferas desenfocadas delante, como en una foto con poca profundidad de campo
   curtain.bokeh = Array.from({ length: 5 }, () => ({ x: Math.random(), y: Math.random(), r: 0.04 + Math.random() * 0.05, c: Math.floor(Math.random() * 3), ph: Math.random() * 100, v: 0.004 + Math.random() * 0.008 }));
-  curtain.key = W + 'x' + H;
+  curtain.key = n;
 }
 function drawCurtain(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
-  if (curtain.key !== W + 'x' + H) curtainInit();
+  if (curtain.key !== curtainCount()) curtainInit();   // todo va en proporciones: al cambiar la calidad sigue igual (antes se reiniciaba)
   // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
   if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); }
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
@@ -6034,15 +6157,19 @@ function drawCurtain(dt) {
 // ================= Escena: Orbes =================
 // Canicas de cristal en una cuadrícula, con un remolino de color por dentro (los de la portada y sus
 // vecinos en la rueda de color) que se ve con profundidad, un reflejo de ventana y su sombra sobre el
-// papel. Cada orbe se enciende con su parte del sonido (graves abajo, agudos arriba); el bombo manda
-// una ola de luz por la cuadrícula; la caja hace girar uno de golpe; los platillos sacan destellos del
-// cristal; la voz acelera los remolinos y tiñe la luz con el color de la nota que suena.
-const orbs = { prog: null, lv: new Float32Array(32), O: new Float32Array(128), ph: new Float32Array(32), fl: new Float32Array(32), gl: new Float32Array(32), wave: 9, waveK: 0 };
+// papel. Lo que vive es el líquido de dentro: fluye más rápido cuanto más suena su parte del sonido
+// (graves abajo, agudos arriba), cada bombo lo sacude y lo hace chapotear dentro del cristal antes de
+// volver a su sitio, la caja lo hace girar en espiral, la voz lo revuelve en vetas más finas y lo tiñe
+// con el color de la nota que suena, y los platillos sacan destellos del cristal. El bombo, además,
+// manda una ola de luz por la cuadrícula.
+const orbs = { prog: null, lv: new Float32Array(32), O: new Float32Array(128), O2: new Float32Array(128), ph: new Float32Array(32), fl: new Float32Array(32), gl: new Float32Array(32),
+  sx: new Float32Array(32), sy: new Float32Array(32), svx: new Float32Array(32), svy: new Float32Array(32), tw: new Float32Array(32), twv: new Float32Array(32), wp: new Float32Array(32).fill(1.6), wave: 9, waveK: 0 };
 function orbsSetup() {
   orbs.prog = glProgram(`uniform vec2 uRes, uOff; uniform float uTime, uNight, uP, uS, uCols, uRows, uWave, uWaveK, uVoice;
     uniform vec3 uBg, uMel;
     uniform vec3 uX[6];       // seis tonos: los de la portada y sus vecinos en la rueda de color
     uniform vec4 uO[32];      // por orbe: nivel de su banda, giro del remolino, golpe de caja, destello
+    uniform vec4 uO2[32];     // por orbe: chapoteo del líquido (x, y), giro en espiral, cuánto se revuelve
     ${GLSL_NOISE}
     vec3 pal6(float k) { k = mod(k, 6.); int i = int(k); vec3 a = uX[i], b = uX[i < 5 ? i + 1 : 0]; return mix(a, b, smoothstep(.15, .85, fract(k))); }
     void main() {
@@ -6054,7 +6181,7 @@ function orbsSetup() {
         vec2 cl = cell + vec2(float(jx), float(jy));
         if (cl.x < 0. || cl.y < 0. || cl.x >= uCols || cl.y >= uRows) continue;
         int id = int(cl.y * uCols + cl.x);
-        vec4 o = uO[id];
+        vec4 o = uO[id], o2 = uO2[id];
         float seed = h(cl * 1.37 + 2.1) * 10.;
         vec2 c = uOff + (cl + .5) * uS, d = p - c;
         // la ola del bombo: sale de abajo al centro y recorre la cuadrícula
@@ -6072,10 +6199,13 @@ function orbsSetup() {
           float z = sqrt(max(0., 1. - r * r));
           vec3 nr = vec3(d / R, z);
           // remolino visto a través del cristal: más hondo en el centro (parallax de la esfera)
-          vec2 q = d / R * (.75 + .35 * (1. - z)) + seed;
+          // el líquido: gira en espiral (caja), chapotea (bombo) y fluye con su sonido
+          vec2 dq = d / R; float ta = o2.z * pow(max(0., 1. - r), 1.4), tc = cos(ta), ts = sin(ta);
+          dq = mat2(tc, ts, -ts, tc) * dq;
+          vec2 q = dq * (.75 + .35 * (1. - z)) + o2.xy * (.55 + .45 * z) + seed;
           float t = o.y;
           vec2 w = vec2(n(q * 1.1 + vec2(t * .3, 0.)), n(q * 1.1 + vec2(5.2, 1.3) - t * .24));
-          float v = n(q * .9 + 1.6 * w + vec2(0., t * .07)) * .65 + n(q * 2.3 - w + t * .1) * .35;
+          float v = n(q * .9 + o2.w * w + vec2(0., t * .07)) * .65 + n(q * 2.3 - w + t * .1) * .35;
           vec3 m = pal6(v * 5. + seed * .6 + t * .05);
           // luz propia con su banda, la ola y la caja; tiñe con el color de la nota que suena
           float glow = o.x * .55 + wave * .6 + o.z * .7;
@@ -6108,16 +6238,23 @@ function drawOrbs(dt) {
   const off = [(asp - cols * S) / 2, (1 - rows * S) / 2], n = Math.min(32, cols * rows);
   if (pulse.on) { orbs.wave = 0; orbs.waveK = 0.5 + 0.5 * pulse.k; }
   orbs.wave += dt * 1.6; orbs.waveK *= Math.pow(0.35, dt);
-  if (hits.snare) { const i = Math.floor(Math.random() * n); orbs.fl[i] = 1; orbs.ph[i] += 0.8; }
+  if (hits.snare) { const i = Math.floor(Math.random() * n); orbs.fl[i] = 1; orbs.twv[i] += 9; for (let j = 0; j < n; j++) if (j !== i) orbs.twv[j] += (Math.random() - 0.5) * 3; }   // la caja: una gira en espiral, las demás se remecen
   if (hits.hat) orbs.gl[Math.floor(Math.random() * n)] = 1;
   for (let i = 0; i < n; i++) {
     // orden de abajo arriba: los graves en la fila de abajo, los agudos arriba
     const row = Math.floor(i / cols), k = (rows - 1 - row) * cols + (i % cols), f = k / Math.max(1, n - 1) * (BANDS - 1) * 0.85;
     const a = Math.floor(f), b = Math.min(BANDS - 1, a + 1), v = Math.pow(raw[a] * (1 - (f - a)) + raw[b] * (f - a), 1.3);
     orbs.lv[i] += (v - orbs.lv[i]) * (1 - Math.pow(v > orbs.lv[i] ? 1e-4 : 0.02, dt));   // sube al instante, baja suave
-    orbs.ph[i] += dt * (0.08 + orbs.lv[i] * 0.5 + voice * 0.8);   // con la voz, los remolinos fluyen más
+    orbs.ph[i] += dt * (0.05 + orbs.lv[i] * 2.4 + voice * 0.7);   // fluye cuanto más suena lo suyo
+    // el bombo sacude el líquido: chapotea dentro del cristal y vuelve oscilando
+    if (pulse.on) { orbs.svy[i] -= (0.8 + 0.9 * pulse.k) * (0.45 + orbs.lv[i]); orbs.svx[i] += (Math.random() - 0.5) * 0.9 * (0.4 + orbs.lv[i]); }
+    orbs.svx[i] += (-orbs.sx[i] * 60 - orbs.svx[i] * 3.6) * dt; orbs.svy[i] += (-orbs.sy[i] * 60 - orbs.svy[i] * 3.6) * dt;
+    orbs.sx[i] += orbs.svx[i] * dt; orbs.sy[i] += orbs.svy[i] * dt;
+    orbs.twv[i] += (-orbs.tw[i] * 22 - orbs.twv[i] * 2.6) * dt; orbs.tw[i] += orbs.twv[i] * dt;
+    orbs.wp[i] += (1.4 + voice * 1.5 + orbs.lv[i] * 0.7 - orbs.wp[i]) * (1 - Math.pow(0.1, dt));   // la voz lo revuelve en vetas finas
     orbs.fl[i] *= Math.pow(0.03, dt); orbs.gl[i] *= Math.pow(0.02, dt);
     orbs.O.set([orbs.lv[i], orbs.ph[i], orbs.fl[i], orbs.gl[i]], i * 4);
+    orbs.O2.set([orbs.sx[i], orbs.sy[i], orbs.tw[i], orbs.wp[i]], i * 4);
   }
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const bg = night ? hexToRgb(hsl(hh, 25, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 22, 89)).map(v => v / 255);
@@ -6130,11 +6267,346 @@ function drawOrbs(dt) {
   gl.uniform1f(p.u.uS, S); gl.uniform1f(p.u.uCols, cols); gl.uniform1f(p.u.uRows, rows);
   gl.uniform1f(p.u.uWave, orbs.wave); gl.uniform1f(p.u.uWaveK, orbs.waveK * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uVoice, voice);
   gl.uniform3fv(p.u.uBg, bg); gl.uniform3fv(p.u.uMel, mel);
-  gl.uniform3fv(p.u['uX[0]'], new Float32Array(X.flat())); gl.uniform4fv(p.u['uO[0]'], orbs.O);
+  gl.uniform3fv(p.u['uX[0]'], new Float32Array(X.flat())); gl.uniform4fv(p.u['uO[0]'], orbs.O); gl.uniform4fv(p.u['uO2[0]'], orbs.O2);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+// ================= Escena: Arpa =================
+// Una cortina de hilos de luz de colores que cae por toda la pantalla (como el fondo de los nuevos
+// MacBook Pro, pero con los colores de la portada). Cada tramo escucha su parte del sonido y baja más
+// o menos, así el borde de la cortina va dibujando la canción; el bombo la hace ondear, la caja pulsa
+// unas cuerdas, los platillos encienden las puntas, la nota que se canta hace vibrar su cuerda y la voz
+// manda luz que corre por los hilos (como un viaje por el Bifrost). El cursor los aparta y los estira
+// a su paso y, al soltarlos, vuelven vibrando; si se arrastra el dedo o el ratón apretado, suenan como
+// un arpa en el tono de la canción.
+const HARP_NX = 64, HARP_NY = 36, HARP_G = 48, HARP_STR = 15;
+const harp = { prog: null, tex: null, u: new Float32Array(HARP_NX * HARP_NY), v: new Float32Array(HARP_NX * HARP_NY),
+  lv: new Float32Array(HARP_G), lvV: new Float32Array(HARP_G), lvT: new Float32Array(HARP_G), vib: new Float32Array(HARP_G),
+  ptr: null, down: false, key: new Float32Array(12), flow: 0, tip: 0, dir: 1, syl: 0, sylX: 0.5, bus: null, notes: [] };
+function harpSetup() {
+  harp.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uN, uTip, uFlow, uSyl, uSylX;
+    uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
+    uniform sampler2D uDisp;
+    uniform float uLv[${HARP_G}], uVib[${HARP_G}];
+    ${GLSL_NOISE} ${GLSL_PAL}
+    float lvAt(float x) { float f = clamp(x, 0., 1.) * ${HARP_G - 1}., i = floor(f); int a = int(i), b = min(a + 1, ${HARP_G - 1}); return mix(uLv[a], uLv[b], smoothstep(0., 1., f - i)); }
+    void main() {
+      vec2 uv = vUv; float t = 1. - uv.y;   // 0 arriba, 1 abajo
+      vec3 col = mix(uBg1, uBg0, uv.y), add = vec3(0.);
+      float D = texture(uDisp, vec2(uv.x, t)).r;
+      int gi = int(clamp(uv.x, 0., .999) * ${HARP_G}.);
+      float vib = uVib[gi] * sin(uTime * 40. + float(gi) * 1.7) * sin(3.1416 * min(t, 1.)) * .0045;
+      // el borde de la cortina: liso, y en las bajadas las puntas se peinan hacia el lado corto
+      float lenH = .4 + .52 * lvAt(uv.x), sl = (lvAt(uv.x + .012) - lvAt(uv.x - .012)) / .024 * .52;
+      float bend = -clamp(sl, -1.2, 1.2) * .014 * smoothstep(.72, 1., t / lenH);
+      // brillo a gran escala: pliegues de luz y sombra que se mueven despacio, y su color
+      float fold = n(vec2(uv.x * 5.5 - D * 20., uTime * .04)), sheet = .25 + .75 * smoothstep(-.25, .45, fold);
+      float hueX = uv.x * 1.3 + n(vec2(uv.x * 2.2, uTime * .02 + 3.)) * .9;
+      for (int L = 0; L < 2; L++) {
+        float fl = float(L), N = uN * (fl > 0. ? 1. : .55);
+        float s = (uv.x - (D + vib + bend) * (fl > 0. ? 1. : .5)) * N, i0 = floor(s);
+        for (int k = -1; k <= 1; k++) {
+          float i = i0 + float(k), r1 = h(vec2(i, 1. + fl * 17.)), r2 = h(vec2(i, 3.1 + fl * 17.)), r3 = h(vec2(i, 7.7 + fl * 17.));
+          float dx = s - (i + .5 + (r1 - .5) * .8);
+          float w = mix(.06, .34, r2 * r2), wE = max(w, .6 * N / uRes.x);   // nunca más fino que medio píxel: sin parpadeo
+          float line = exp(-dx * dx / (wE * wE)) * (w / wE);
+          float len = fl > 0. ? lenH * (.985 + .03 * r3) : .97 - .05 * r3;
+          float along = clamp(t / len, 0., 1.);
+          // luz que viene de arriba y se apaga hacia abajo, con la punta encendida
+          float body = mix(1., .28, pow(along, .8)) * smoothstep(len + .003, len - .005, t);
+          float tz = (t - len) / .016, tip = exp(-tz * tz) * (fl > 0. ? .75 : .25);
+          float b = (.15 + .85 * r2 * r2) * (fl > 0. ? 1. : .45) * sheet;
+          // estelas de luz que bajan (como un viaje por el Bifrost): cabeza brillante y cola larga hacia arriba
+          float pz = along - fract(uFlow * (.6 + r3 * .8) + r1 * 7.), flow = (pz < 0. ? exp(pz / .16) : exp(-pz * pz / .0003)) * step(.78, r3) * uVoice * step(t, len) * .8;
+          float sx = ((i + .5) / N - uSylX) / .035, syl = exp(-sx * sx) * uSyl * body;
+          vec3 sc = pal(hueX + r1 * .35 + fl * .5);
+          sc = mix(sc, vec3(1.), .12 + .4 * r3 * r3);
+          vec3 hot = mix(sc, vec3(1.), .65), mel = mix(uMel, vec3(1.), .3);
+          float tipK = (.6 + uTip * .9 + uP * .35) * (.5 + .5 * sheet);
+          if (uNight > .5) add += line * (sc * body * b + hot * tip * tipK + mel * (flow + syl * 1.3));
+          else {
+            vec3 silk = mix(sc, sc * sc, .35);   // de día, hilos de seda de color sobre blanco
+            col = mix(col, silk, clamp(line * (body * b * 1.1 + tip * tipK * .9 + flow * .8 + syl), 0., .92));
+          }
+        }
+      }
+      if (uNight > .5) {
+        col += add * (1. + uP * .25);
+        float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .5) * exp(-eg * eg) * (.16 + uTip * .12 + uP * .1) * sheet;   // el borde, una línea de luz continua
+      } else {   // un resplandor de color por el borde de la cortina, como luz sobre el papel
+        float eg = (t - lenH) / .07; col = mix(col, mix(pal(hueX), vec3(1.), .35), exp(-eg * eg) * (.18 + uP * .1));
+      }
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .025;
+      o = vec4(col, 1.);
+    }`);
+  const gl = GLX.gl; harp.tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, harp.tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, HARP_NX, HARP_NY, 0, gl.RED, gl.FLOAT, harp.u);
+}
+// los hilos son cuerdas: cuelgan de arriba (fijas), abajo van sueltas; tiran de sus vecinas y vuelven solas
+function harpStep(dt) {
+  const NX = HARP_NX, NY = HARP_NY, u = harp.u, v = harp.v, q = harp.ptr, asp = W / H;
+  const n = Math.min(5, Math.ceil(dt / 0.007)), hs = dt / n;
+  let px = 0, py = 0, pvx = 0, pk = 0;
+  if (q) { const age = (performance.now() - q.at) / 1000; pk = q.lv; px = q.x; py = q.y; pvx = age < 0.12 ? q.vx : 0; }
+  for (let s = 0; s < n; s++) {
+    for (let y = 1; y < NY; y++) {
+      const ty = (y + 0.5) / NY;
+      for (let x = 0; x < NX; x++) {
+        const i = y * NX + x, ui = u[i], dn = y < NY - 1 ? u[i + NX] : ui, l = x > 0 ? u[i - 1] : ui, r = x < NX - 1 ? u[i + 1] : ui;
+        let a = (u[i - NX] + dn - 2 * ui) * 2000 + (l + r - 2 * ui) * 150 - ui * 6 - v[i] * 2.4;
+        if (pk > 0.01) {
+          const dxp = ((x + 0.5) / NX - px) * asp, dyp = ty - py, w = Math.exp(-(dxp * dxp + dyp * dyp) / 0.012) * pk;
+          if (w > 0.002) {
+            a += (pvx * 1.4 - v[i]) * w * 30;                                      // los arrastra a su paso
+            a += ((dxp > 0 ? 1 : -1) * 0.032 * Math.min(1, Math.abs(dxp) / 0.03) - ui) * w * 110;   // y se abren alrededor
+          }
+        }
+        v[i] += a * hs;
+      }
+    }
+    for (let i = NX; i < NX * NY; i++) u[i] += v[i] * hs;
+  }
+}
+// la tonalidad de la canción (perfil de Krumhansl sobre el croma acumulado); sin canción, Do
+function harpRoot() {
+  const P = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88], c = harp.key;
+  let sum = 0; for (let k = 0; k < 12; k++) sum += c[k];
+  if (sum < 1e-3) return 0;
+  let best = 0, bv = -1e9;
+  for (let r = 0; r < 12; r++) { let v = 0; for (let k = 0; k < 12; k++) v += P[k] * c[(k + r) % 12]; if (v > bv) { bv = v; best = r; } }
+  return best;
+}
+function harpBus() {
+  if (harp.bus) return harp.bus;
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const ac = audioCtx, out = ac.createGain(), verb = ac.createConvolver(), wet = ac.createGain();
+    const len = Math.round(ac.sampleRate * 2.4), ir = ac.createBuffer(2, len, ac.sampleRate);
+    for (let c = 0; c < 2; c++) { const d = ir.getChannelData(c); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2); }
+    verb.buffer = ir; out.gain.value = 0.55; wet.gain.value = 0.32;
+    out.connect(ac.destination); out.connect(verb); verb.connect(wet); wet.connect(ac.destination);
+    harp.bus = out;
+  } catch (e) { harp.bus = null; }
+  return harp.bus;
+}
+// una nota de arpa: pentatónica en la tonalidad de la canción, grave a la izquierda y aguda a la derecha
+function harpNote(x, vel) {
+  const bus = harpBus(); if (!bus) return;
+  const ac = audioCtx, now = ac.currentTime;
+  if (ac.state !== 'running') ac.resume().catch(() => {});
+  harp.notes = harp.notes.filter(t => t > now - 0.25); if (harp.notes.length > 8) return; harp.notes.push(now);
+  const k = Math.max(0, Math.min(HARP_STR - 1, Math.floor(x * HARP_STR))), steps = [0, 2, 4, 7, 9];
+  const midi = 48 + harpRoot() + 12 * Math.floor(k / 5) + steps[k % 5], f = 440 * Math.pow(2, (midi - 69) / 12);
+  const o1 = ac.createOscillator(), o2 = ac.createOscillator(), g2 = ac.createGain(), lp = ac.createBiquadFilter(), g = ac.createGain();
+  o1.type = 'triangle'; o1.frequency.value = f; o2.type = 'sine'; o2.frequency.value = f * 2.003; g2.gain.value = 0.22;
+  lp.type = 'lowpass'; lp.Q.value = 0.7; lp.frequency.setValueAtTime(Math.min(16000, f * 9), now); lp.frequency.exponentialRampToValueAtTime(f * 2.2, now + 0.4);
+  const dur = 1.3 + (1 - k / HARP_STR) * 1.4, a = 0.15 * vel;
+  g.gain.setValueAtTime(0.0001, now); g.gain.exponentialRampToValueAtTime(a, now + 0.005); g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  o1.connect(lp); o2.connect(g2); g2.connect(lp); lp.connect(g);
+  if (ac.createStereoPanner) { const pn = ac.createStereoPanner(); pn.pan.value = (x - 0.5) * 1.1; g.connect(pn); pn.connect(bus); } else g.connect(bus);
+  o1.start(now); o2.start(now); o1.stop(now + dur + 0.05); o2.stop(now + dur + 0.05);
+  const gi = Math.min(HARP_G - 1, Math.floor(x * HARP_G));
+  for (let j = Math.max(0, gi - 1); j <= Math.min(HARP_G - 1, gi + 1); j++) harp.vib[j] = Math.max(harp.vib[j], j === gi ? 1 : 0.5);
+}
+const harpUI = e => e.target.closest && e.target.closest('.dock, .pop, .song, .lib');
+addEventListener('pointermove', e => {
+  if (state.mode !== 'harp' || harpUI(e)) return;
+  const x = e.clientX / innerWidth, y = e.clientY / innerHeight, now = performance.now(), q = harp.ptr;
+  const dtp = q ? Math.max(0.008, (now - q.at) / 1000) : 1;
+  harp.ptr = { x, y, vx: q && dtp < 0.12 ? (x - q.x) / dtp : 0, at: now, lv: 1 };
+  // al arrastrar apretado suena cada cuerda que se cruza
+  if (harp.down && q) {
+    const a = Math.floor(q.x * HARP_STR), b = Math.floor(x * HARP_STR);
+    if (a !== b) { const st = b > a ? 1 : -1; for (let k = a + st; k !== b + st; k += st) harpNote((k + 0.5) / HARP_STR, Math.min(1, 0.55 + Math.abs(harp.ptr.vx) * 0.25)); }
+  }
+});
+addEventListener('pointerdown', e => {
+  if (state.mode !== 'harp' || harpUI(e)) return;
+  harp.down = true; const x = e.clientX / innerWidth;
+  harp.ptr = { x, y: e.clientY / innerHeight, vx: 0, at: performance.now(), lv: 1 };
+  harpNote(x, 0.8);
+});
+addEventListener('pointerup', e => { harp.down = false; if (e.pointerType === 'touch' && harp.ptr) harp.ptr.lift = true; });
+addEventListener('pointercancel', () => { harp.down = false; });
+function drawHarp(dt) {
+  if (!glInit()) { drawLight(dt); return; }
+  if (!harp.prog) harpSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), G = HARP_G;
+  dt = Math.min(dt, 0.05);
+  // lo que suena: el largo de cada tramo de la cortina (graves a la izquierda, agudos a la derecha)
+  for (let g = 0; g < G; g++) {
+    const f = g / (G - 1) * (BANDS - 1) * 0.86, a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
+    const sv = spec[a] * (1 - (f - a)) + spec[b] * (f - a), rv = raw[a] * (1 - (f - a)) + raw[b] * (f - a);
+    harp.lvT[g] = Math.min(1.1, Math.pow(rv * 0.6 + sv * 0.4, 0.85) * 1.1 * (1 + 0.5 * g / (G - 1)));
+    harp.vib[g] *= Math.pow(0.12, dt);
+  }
+  for (let pass = 0; pass < 2; pass++) { let prev = harp.lvT[0]; for (let g = 0; g < G; g++) { const cur = harp.lvT[g], nx = harp.lvT[Math.min(G - 1, g + 1)]; harp.lvT[g] = prev * 0.25 + cur * 0.5 + nx * 0.25; prev = cur; } }   // el borde fluye, sin escalones
+  springTo(harp.lv, harp.lvV, harp.lvT, dt, 200, 0.55);
+  // el bombo hace ondear la cortina (cada golpe hacia un lado), la caja pulsa unas cuerdas
+  const u = harp.u, v = harp.v, NX = HARP_NX, NY = HARP_NY;
+  if (pulse.on) {
+    harp.dir = -harp.dir; const ph = Math.random() * 6.28;
+    for (let y = 1; y < NY; y++) { const ty = (y + 0.5) / NY; for (let x = 0; x < NX; x++) v[y * NX + x] += harp.dir * (0.035 + 0.05 * pulse.k) * ty * ty * (0.6 + 0.4 * Math.sin(x / NX * 9 + ph)); }
+  }
+  if (hits.snare) { const g0 = Math.floor(Math.random() * G); for (let j = Math.max(0, g0 - 2); j <= Math.min(G - 1, g0 + 2); j++) harp.vib[j] = Math.max(harp.vib[j], 1 - Math.abs(j - g0) * 0.3); }
+  if (dropHit) for (let i = NX; i < NX * NY; i++) v[i] += (Math.random() - 0.5) * 0.25;
+  // la nota que se canta hace vibrar y encender su cuerda
+  if (hits.voice && melodyConf > 0.3) { harp.sylX = (vox.note + 0.5) / 12; harp.syl = 1; const gi = Math.floor(harp.sylX * G); for (let j = Math.max(0, gi - 1); j <= Math.min(G - 1, gi + 1); j++) harp.vib[j] = Math.max(harp.vib[j], 0.8); }
+  harp.syl *= Math.pow(0.08, dt);
+  harp.tip = Math.max(harp.tip * Math.pow(0.03, dt), hits.hat ? 0.8 : 0);
+  harp.flow += dt * (0.2 + voice * 1.3 + energy * 0.25);
+  for (let k = 0; k < 12; k++) harp.key[k] += (chromaNow[k] - harp.key[k]) * (1 - Math.pow(0.92, dt));
+  // el cursor: con el ratón quieto un rato, los hilos vuelven a su sitio; al levantar el dedo, también
+  const q = harp.ptr;
+  if (q) { const idle = (performance.now() - q.at) / 1000; q.lv = q.lift ? q.lv * Math.pow(0.02, dt) : idle > 2.5 ? q.lv * Math.pow(0.15, dt) : Math.min(1, q.lv + dt * 4); if (q.lv < 0.01) harp.ptr = null; }
+  harpStep(dt);
+  const sat = c => Math.max(...c) - Math.min(...c);
+  const [hh] = hexToHsl(rgbToHex(...RGB.slice().sort((a, b) => sat(b) - sat(a))[0]));
+  const bg0 = night ? hexToRgb(hsl(hh, 40, 3)).map(x => x / 255) : hexToRgb(hsl(hh, 25, 97)).map(x => x / 255);
+  const bg1 = night ? hexToRgb(hsl(hh + 25, 35, 6)).map(x => x / 255) : hexToRgb(hsl(hh + 25, 30, 90)).map(x => x / 255);
+  const [cw, ch] = glCanvas(W > 1800 ? 0.8 : 1), gl = GLX.gl;   // en pantallas muy grandes, un poco menos: los hilos siguen finos
+  const p = harp.prog; gl.useProgram(p.pr);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, harp.tex);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NX, NY, gl.RED, gl.FLOAT, u);
+  gl.uniform1i(p.u.uDisp, 0);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uN, Math.max(160, Math.min(720, cw / 3.2)));
+  gl.uniform1f(p.u.uTip, harp.tip); gl.uniform1f(p.u.uFlow, harp.flow); gl.uniform1f(p.u.uSyl, harp.syl); gl.uniform1f(p.u.uSylX, harp.sylX);
+  gl.uniform3fv(p.u.uC0, RGB[0].map(x => x / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(x => x / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(x => x / 255));
+  gl.uniform3fv(p.u.uMel, melodyColor().map(x => x / 255)); gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
+  gl.uniform1fv(p.u['uLv[0]'], harp.lv); gl.uniform1fv(p.u['uVib[0]'], harp.vib);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.3 + P * 0.3);
+}
+
+// ================= Escena: Pintura =================
+// Pintura lanzada contra una pared, pero mística: cada bombo arroja una mancha de color que estalla en
+// gotas hacia donde iba y luego chorrea; mientras se canta, los chorros bajan y la pintura fresca
+// respira con luz; la caja salpica, los platillos dejan polvo de brillo, la nota que se canta elige el
+// color del próximo lanzamiento y en un drop la pared se llena de color. De noche es pintura luminosa
+// sobre una pared oscura; de día, pintura brillante sobre una pared clara. La pintura vieja se
+// desvanece despacio, así la pared nunca se satura.
+const paint = { layer: null, pc: null, key: '', drips: [], fresh: [], rings: [], dust: [], seq: 0, last: null };
+function paintSplat(x, y, R, ang, col, k, drips) {
+  const c = paint.pc, night = state.theme === 'dark';
+  const lite = col.map(v => v + (255 - v) * 0.3), deep = col.map(v => v * 0.78);
+  // la mancha: un borde irregular, como pintura que se aplasta contra la pared, con unas lenguas
+  // hacia donde iba el lanzamiento
+  const ph = [Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3], N = 60;
+  const blob = (k_) => {
+    c.beginPath();
+    for (let i = 0; i <= N; i++) {
+      const a = i / N * Math.PI * 2, f = Math.cos(a - ang);
+      const r = R * k_ * (0.84 + 0.08 * Math.sin(a * 3 + ph[0]) + 0.05 * Math.sin(a * 5 + ph[1]) + 0.04 * Math.sin(a * 11 + ph[2])
+        + Math.max(0, f) ** 4 * (0.18 + 0.22 * Math.max(0, Math.sin(a * 7 + ph[3]))));
+      const px = x + Math.cos(a) * r, py = y + Math.sin(a) * r;
+      i ? c.lineTo(px, py) : c.moveTo(px, py);
+    }
+  };
+  // primero, el color que se corre en la pared alrededor (como acuarela que sangra)
+  if (CAN_BLUR) { c.save(); c.filter = `blur(${Math.max(2, R * 0.22).toFixed(1)}px)`; blob(1.3); c.fillStyle = rgba(col, night ? 0.3 : 0.22); c.fill(); c.restore(); }
+  blob(1);
+  const g = c.createRadialGradient(x - R * 0.2, y - R * 0.25, 0, x, y, R * 1.15);
+  g.addColorStop(0, rgba(lite, 1)); g.addColorStop(0.65, rgba(col, 1)); g.addColorStop(1, rgba(deep, 1));
+  c.fillStyle = g; c.fill();
+  if (!night) { c.strokeStyle = rgba(deep.map(v => v * 0.85), 0.35); c.lineWidth = Math.max(1, DPR * 0.8); c.stroke(); }   // el borde de la pintura húmeda
+  // gotas que salen disparadas hacia donde iba el lanzamiento (y unas pocas a cualquier lado)
+  const n = Math.round(10 + 22 * k);
+  for (let i = 0; i < n; i++) {
+    const cone = Math.random() < 0.75, a = cone ? ang + (Math.random() - 0.5) * 1.2 : Math.random() * Math.PI * 2;
+    const dd = R * (1.05 + Math.pow(Math.random(), 1.6) * (cone ? 2.8 : 1.4)), q = 1 - (dd / R - 1) / 3;
+    const rr = R * (0.03 + 0.15 * q * q * Math.random()), el = 1 + (dd / R) * 0.35;
+    c.fillStyle = rgba(Math.random() < 0.5 ? col : lite, 1);
+    c.beginPath(); c.ellipse(x + Math.cos(a) * dd, y + Math.sin(a) * dd, rr * el, rr, a, 0, Math.PI * 2); c.fill();
+  }
+  // bruma fina de salpicadura
+  c.fillStyle = rgba(col, 0.6);
+  for (let i = 0; i < 26 * k; i++) { const a = ang + (Math.random() - 0.5) * 1.8, dd = R * (1.4 + Math.random() * 2.6); c.beginPath(); c.arc(x + Math.cos(a) * dd, y + Math.sin(a) * dd, Math.max(0.6, R * 0.012 * Math.random()) * DPR, 0, Math.PI * 2); c.fill(); }
+  // chorros que nacen abajo de la mancha
+  for (let i = 0; i < drips; i++) {
+    const dx = (Math.random() - 0.5) * R * 1.2, w = R * (0.07 + Math.random() * 0.09);
+    paint.drips.push({ x: x + dx, y: y + Math.sqrt(Math.max(0, R * R * 0.75 - dx * dx)), w, v: MIN * (0.05 + Math.random() * 0.06), left: MIN * (0.06 + Math.random() * 0.3), col: Math.random() < 0.5 ? col : deep });
+  }
+  paint.fresh.push({ x, y, R, col, age: 0 }); if (paint.fresh.length > 7) paint.fresh.shift();
+  paint.rings.push({ x, y, R, col, t: 0 });
+}
+function drawPaint(dt) {
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  if (paint.key !== W + 'x' + H) {   // al cambiar el tamaño, la pared se conserva (escalada)
+    const old = paint.layer, ow = old && old.width, oh = old && old.height;
+    paint.layer = document.createElement('canvas'); paint.layer.width = W; paint.layer.height = H; paint.pc = paint.layer.getContext('2d');
+    if (old) paint.pc.drawImage(old, 0, 0, W, H);
+    if (old) { const kx = W / ow, ky = H / oh; paint.drips.forEach(d => { d.x *= kx; d.y *= ky; }); paint.fresh.forEach(f => { f.x *= kx; f.y *= ky; }); }
+    paint.key = W + 'x' + H;
+  }
+  const c = paint.pc;
+  // el color del próximo lanzamiento: la nota que se canta, o el siguiente de la portada
+  const pickCol = () => (melodyConf > 0.35 && voice > 0.15 ? melodyColor() : RGB[paint.seq % RGB.length]).map(v => Math.min(255, v * (0.9 + Math.random() * 0.2)));
+  const throwAt = (R, k, drips) => {
+    let x, y, tries = 0;
+    do { x = W * (0.1 + Math.random() * 0.8); y = H * (0.12 + Math.random() * 0.62); } while (paint.last && Math.hypot(x - paint.last[0], y - paint.last[1]) < MIN * 0.28 && ++tries < 8);
+    paint.last = [x, y]; paint.seq++;
+    paintSplat(x, y, R, Math.random() * Math.PI * 2, pickCol(), k, drips);
+  };
+  if (pulse.on) throwAt(MIN * (0.045 + 0.055 * pulse.k + energy * 0.03), 0.5 + 0.5 * pulse.k, 1 + Math.floor(Math.random() * 3));
+  if (hits.snare && !pulse.on) throwAt(MIN * (0.016 + 0.012 * Math.random()), 0.5, Math.random() < 0.3 ? 1 : 0);
+  if (dropHit) for (let i = 0; i < 4; i++) throwAt(MIN * (0.1 + Math.random() * 0.06), 1, 3);
+  if (hits.hat && paint.fresh.length) { const f = paint.fresh[Math.floor(Math.random() * paint.fresh.length)]; for (let i = 0; i < 6; i++) { const a = Math.random() * 6.28, d = f.R * (0.6 + Math.random() * 1.8); paint.dust.push({ x: f.x + Math.cos(a) * d, y: f.y + Math.sin(a) * d, t: 0, life: 0.5 + Math.random() * 0.6, col: f.col }); } }
+  // los chorros bajan, más rápido mientras se canta, y se van frenando
+  c.lineCap = 'round';
+  for (let i = paint.drips.length - 1; i >= 0; i--) {
+    const d = paint.drips[i], step = Math.min(d.left, d.v * (0.6 + voice * 1.6) * dt);
+    c.strokeStyle = rgba(d.col, 1); c.lineWidth = d.w;
+    c.beginPath(); c.moveTo(d.x, d.y); d.y += step; c.lineTo(d.x, d.y); c.stroke();
+    d.left -= step; d.v *= Math.pow(0.8, dt); d.w *= Math.pow(0.9, dt * (1 + step / Math.max(1, d.w)));
+    if (d.left <= 0.5 || d.w < 0.6) { c.fillStyle = rgba(d.col, 1); c.beginPath(); c.arc(d.x, d.y, d.w * 0.9, 0, Math.PI * 2); c.fill(); paint.drips.splice(i, 1); }   // la gota final
+  }
+  // la pintura vieja se desvanece despacio (vida media de ~14 s)
+  c.globalCompositeOperation = 'destination-out'; c.fillStyle = `rgba(0,0,0,${1 - Math.pow(0.5, dt / 14)})`; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
+  // la pared
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  if (night) {
+    const g = ctx.createRadialGradient(W * 0.5, H * 0.45, 0, W * 0.5, H * 0.5, Math.hypot(W, H) * 0.6);
+    g.addColorStop(0, hsl(hh, 22, 9)); g.addColorStop(1, hsl(hh, 30, 3)); ctx.fillStyle = g;
+  } else {
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, hsl(hh, 18, 95)); g.addColorStop(1, hsl(hh, 16, 89)); ctx.fillStyle = g;
+  }
+  ctx.fillRect(0, 0, W, H);
+  // la luz de la pintura fresca: respira con la voz y con el golpe (lo místico)
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (const f of paint.fresh) {
+    f.age += dt; const life = Math.exp(-f.age / 7);
+    glowSpot(f.x, f.y, f.R * (2.6 + voice * 1.2 + P * 0.6), night ? f.col : f.col.map(v => v + (255 - v) * 0.5), (night ? 0.32 : 0.22) * life * (0.45 + voice * 0.8 + P * 0.5));
+  }
+  ctx.restore();
+  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? 0.92 : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
+  // el impacto: un anillo de luz que se abre y se apaga
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (let i = paint.rings.length - 1; i >= 0; i--) {
+    const r = paint.rings[i]; r.t += dt; const p = r.t / 0.45;
+    if (p >= 1) { paint.rings.splice(i, 1); continue; }
+    ctx.strokeStyle = rgba(r.col.map(v => v + (255 - v) * 0.5), (1 - p) * (night ? 0.5 : 0.35)); ctx.lineWidth = Math.max(1, r.R * 0.08 * (1 - p));
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.R * (1.1 + p * 1.8), 0, Math.PI * 2); ctx.stroke();
+  }
+  // polvo de brillo (platillos)
+  for (let i = paint.dust.length - 1; i >= 0; i--) {
+    const q = paint.dust[i]; q.t += dt; const p = q.t / q.life;
+    if (p >= 1) { paint.dust.splice(i, 1); continue; }
+    ctx.fillStyle = rgba(night ? q.col.map(v => v + (255 - v) * 0.6) : [255, 255, 255], Math.sin(p * Math.PI) * 0.9);
+    ctx.beginPath(); ctx.arc(q.x, q.y - p * MIN * 0.01, Math.max(1, DPR * 1.3), 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+  if (night) { bloom(paint.layer, 0.35 + P * 0.25 + voice * 0.2); }
 }
 
 // ================= Escena: Eclipse =================
@@ -6239,13 +6711,32 @@ function drawEclipse(dt) {
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
-  // hilos finos de color que serpentean entre los círculos (como trazos a lápiz de color)
-  ctx.save(); ctx.lineWidth = Math.max(1, DPR * 0.8); ctx.lineCap = 'round';
+  // hilos finos de color que serpentean entre los círculos (como trazos a lápiz de color). Cada uno
+  // toca su parte: por el primero corre una ola con cada bombo, el segundo tiembla con la caja, el
+  // tercero canta (ondula con la voz, más apretado cuanto más aguda la nota, y toma su color) y el
+  // cuarto brilla con los platillos. Se engrosan y se encienden cuando suena lo suyo.
+  if (!ecl.ln) ecl.ln = { bumps: [], sn: 0, hat: 0, vo: 0 };
+  const ln = ecl.ln;
+  if (pulse.on) ln.bumps.push({ x: -0.05, a: 0.05 + 0.05 * pulse.k });
+  ln.bumps.forEach(b => { b.x += dt * 0.75; b.a *= Math.pow(0.55, dt); }); ln.bumps = ln.bumps.filter(b => b.x < 1.15);
+  ln.sn = Math.max(ln.sn * Math.pow(0.02, dt), hits.snare ? 1 : 0);
+  ln.hat = Math.max(ln.hat * Math.pow(0.01, dt), hits.hat ? 1 : 0);
+  ln.vo += (Math.min(1, voice * 1.5) - ln.vo) * (1 - Math.pow(0.05, dt));
+  const lvl = [Math.min(1, P + bass * 0.5), Math.min(1, ln.sn + mid * 0.3), ln.vo, Math.min(1, ln.hat * 0.8 + high * 0.3)];
+  const melC = melodyColor(), noteK = (vox.note || 0) / 11;
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   for (let k = 0; k < 4; k++) {
-    ctx.strokeStyle = rgba(RGB[k % 3], night ? 0.35 : 0.45);
+    ctx.lineWidth = Math.max(1, DPR * (0.8 + lvl[k] * 1.6));
+    ctx.strokeStyle = rgba(k === 2 ? RGB[2].map((v, j) => v + (melC[j] - v) * ln.vo) : RGB[k % 3], (night ? 0.3 : 0.4) + lvl[k] * 0.4);
     ctx.beginPath();
-    for (let i = 0; i <= 60; i++) {
-      const t = i / 60, x = W * (0.05 + t * 0.9), y = H * (0.5 + 0.28 * Math.sin(t * (3 + k) + time * (0.15 + k * 0.03) + k * 1.7) * Math.sin(t * 2 + k)) + Math.sin(t * 40 + time * 2) * mid * H * 0.01;
+    for (let i = 0; i <= 140; i++) {
+      const t = i / 140, x = W * (0.05 + t * 0.9);
+      let y = 0.5 + 0.28 * Math.sin(t * (3 + k) + time * (0.15 + k * 0.03) + k * 1.7) * Math.sin(t * 2 + k);
+      if (k === 0) for (const b of ln.bumps) { const z = (t - b.x) / 0.06; y -= b.a * Math.exp(-z * z); }
+      else if (k === 1) y += Math.sin(t * 70 + time * 40) * ln.sn * 0.012;
+      else if (k === 2) y += Math.sin(t * (22 + noteK * 30) - time * 7) * ln.vo * 0.018 * (0.6 + 0.4 * Math.sin(t * 3.1416));
+      else y += Math.sin(t * 120 + time * 25) * lvl[3] * 0.005;
+      y = H * y;
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
     ctx.stroke();
@@ -6253,7 +6744,7 @@ function drawEclipse(dt) {
   ctx.restore();
 }
 
-const scenes = { eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
