@@ -540,6 +540,7 @@
         <button data-mode="bust">Silueta</button>
         <button data-mode="cats">Gatos</button>
         <button data-mode="curtain">Cortina</button>
+        <button data-mode="orbs">Orbes</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -3188,7 +3189,7 @@ const artistClean = new Map();
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
   calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'cats'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'cats', 'orbs'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -5927,7 +5928,94 @@ function drawCurtain(dt) {
   ctx.drawImage(layer, 0, 0);
 }
 
-const scenes = { curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+// ================= Escena: Orbes =================
+// Una cuadrícula de orbes quietos con colores que se arremolinan por dentro como mármol líquido (los
+// de la portada, con tonos más claros y más hondos). Cada orbe escucha una parte del sonido: con ella
+// gira más rápido y se aviva; todos laten con el bombo y su borde ondula apenas.
+const orbs = { prog: null, lv: new Float32Array(32), L: new Float32Array(32), ph: new Float32Array(32) };
+function orbsSetup() {
+  orbs.prog = glProgram(`uniform vec2 uRes, uOff; uniform float uTime, uNight, uP, uS, uCols, uRows;
+    uniform vec3 uC0, uC1, uC2, uBg;
+    uniform vec3 uX[6];   // seis tonos: los de la portada y sus vecinos en la rueda de color
+    uniform float uLv[32], uPh[32];
+    ${GLSL_NOISE} ${GLSL_PAL}
+    vec3 pal6(float k) { k = mod(k, 6.); int i = int(k); vec3 a = uX[i], b = uX[i < 5 ? i + 1 : 0]; return mix(a, b, smoothstep(0., 1., fract(k))); }
+    float fbm3(vec2 p) { float v = 0., a = .5; for (int i = 0; i < 3; i++) { v += a * n(p); p = p * 1.9 + 7.3; a *= .5; } return v / .875; }
+    void main() {
+      float asp = uRes.x / uRes.y;
+      vec2 p = vec2(vUv.x * asp, vUv.y), cell = floor((p - uOff) / uS);
+      vec3 col = uBg;
+      // sombra suave bajo cada orbe (de día) o su halo (de noche)
+      if (cell.x >= 0. && cell.y >= 0. && cell.x < uCols && cell.y < uRows) {
+        int id = int(cell.y * uCols + cell.x);
+        float lv = uLv[id], seed = h(cell * 1.37 + 2.1) * 10.;
+        vec2 c = uOff + (cell + .5) * uS, d = p - c;
+        float R = uS * (.36 + .025 * uP + .02 * lv), ang = atan(d.y, d.x);
+        R *= 1. + .022 * sin(3. * ang + uTime * .6 + seed) + .025 * lv * sin(5. * ang - uTime * 1.3 + seed);   // el borde ondula
+        float r = length(d) / R;
+        float a = smoothstep(1., .965, r);
+        float halo = exp(-max(r - 1., 0.) * 6.) * (1. - a);
+        col = mix(col, uNight > .5 ? col + pal(seed) * .25 : col * .9, halo * (uNight > .5 ? .6 + uP * .4 : .35));
+        if (a > 0.) {
+          // mármol líquido: ruido deformado que fluye; su velocidad la marca la banda del orbe
+          vec2 q = d / R * .85 + seed;
+          float t = uPh[id];
+          vec2 w = vec2(fbm3(q + vec2(t * .25, 0.)), fbm3(q + vec2(5.2, 1.3) - t * .2));
+          float v = fbm3(q + 1.7 * w + vec2(0., t * .08));
+          // zonas de color amplias y limpias (como aerógrafo), con un brillo claro donde se juntan
+          vec3 m = pal6(v * 4.5 + seed * .6 + t * .04);
+          m = mix(m, vec3(1.), smoothstep(.62, .9, v) * .38);
+          m *= mix(.84, 1., smoothstep(.15, .4, v));
+          // volumen: luz arriba a la izquierda, borde más hondo y una línea fina de contorno
+          vec3 n = vec3(d / R, sqrt(max(0., 1. - r * r)));
+          float l = dot(n, normalize(vec3(-.45, .55, .7))) * .3 + .82;
+          m *= l * (1. + uP * .12 + lv * .15);
+          m = mix(m, m * .55, smoothstep(.86, 1., r) * .55);
+          float line = smoothstep(.93, .975, r) * (1. - smoothstep(.975, 1., r));
+          m = mix(m, uNight > .5 ? mix(m, vec3(1.), .5) : m * .35, line * .7);
+          col = mix(col, m, a);
+        }
+      }
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .06;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawOrbs(dt) {
+  if (!glInit()) { drawBokeh(dt); return; }
+  if (!orbs.prog) orbsSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
+  const cols = asp > 1 ? (asp > 1.6 ? 6 : 5) : 4, S = Math.min(asp / cols, 1 / (asp > 1 ? 3.3 : 6.2)), rows = Math.max(1, Math.floor(1 / S - 0.3));
+  const off = [(asp - cols * S) / 2, (1 - rows * S) / 2], n = cols * rows;
+  // cada orbe escucha su banda (graves abajo a la izquierda, agudos arriba a la derecha)
+  for (let i = 0; i < n && i < 32; i++) {
+    const f = i / Math.max(1, n - 1) * (BANDS - 1) * 0.85, a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
+    const v = Math.pow(spec[a] * (1 - (f - a)) + spec[b] * (f - a), 1.2);
+    orbs.lv[i] += (v - orbs.lv[i]) * (1 - Math.pow(v > orbs.lv[i] ? 0.002 : 0.1, dt));
+    orbs.L[i] = orbs.lv[i];
+    orbs.ph[i] += dt * (0.12 + orbs.lv[i] * 0.9 + P * 0.6);   // gira más deprisa cuando su parte suena
+  }
+  // fondo: papel cálido de día (como un póster), hondo de noche; con un toque de la paleta
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const bg = hexToRgb(hsl(hh, night ? 25 : 22, night ? 8 : 88)).map(v => v / 255);
+  const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W), gl = GLX.gl;
+  if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
+  const p = orbs.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uOff, off[0], off[1]);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uS, S); gl.uniform1f(p.u.uCols, cols); gl.uniform1f(p.u.uRows, rows);
+  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
+  gl.uniform3fv(p.u.uBg, bg);
+  // seis tonos: cada color de la portada y un vecino suyo en la rueda de color (más variedad, siempre en armonía)
+  const X = []; RGB.forEach(c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); X.push(c.map(v => v / 255), hexToRgb(hsl(h_ + 38, Math.max(55, s_), Math.min(72, Math.max(48, l_ + 6)))).map(v => v / 255)); });
+  gl.uniform3fv(p.u['uX[0]'], new Float32Array(X.flat()));
+  gl.uniform1fv(p.u['uLv[0]'], orbs.L); gl.uniform1fv(p.u['uPh[0]'], orbs.ph);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+const scenes = { orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
