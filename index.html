@@ -538,6 +538,8 @@
         <button data-mode="dots">Puntos</button>
         <button data-mode="puffs">Nubes</button>
         <button data-mode="bust">Silueta</button>
+        <button data-mode="cats">Gatos</button>
+        <button data-mode="curtain">Cortina</button>
         <button data-mode="orbs">Orbes</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
@@ -637,7 +639,7 @@ const PALETTES = [
 ];
 
 const state = {
-  mode: ((m) => m === 'dancers' ? 'bars' : m === 'cats' || m === 'curtain' ? 'lava' : m)(store.get('mode', 'bars')),
+  mode: ((m) => m === 'dancers' ? 'bars' : m)(store.get('mode', 'bars')),
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -3186,8 +3188,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -5849,81 +5851,102 @@ function drawCats(dt) {
 }
 
 // ================= Escena: Cortina =================
-// Hilos verticales finísimos con cuentas de luz que resbalan despacio, como gotas, delante de un fondo
-// de colores difuminados. Cada golpe deja caer unas cuantas cuentas y las enciende; los platillos
-// hacen chispas; la voz mece la cortina como una brisa. Los colores salen de la portada.
-const curtain = { threads: null, key: '', fields: null };
+// Como una cortina de cristal fotografiada de noche con luz de colores: hilos verticales de colores
+// con cuentas que brillan, algunas con un destello largo hacia arriba y abajo, otras desenfocadas
+// delante (bokeh), sobre nubes de color muy suaves. Cada golpe enciende y estira unos destellos; los
+// platillos hacen chispas; la voz mece la cortina. Colores de la portada.
+const curtain = { threads: null, key: '', fields: null, bokeh: null };
 function curtainInit() {
-  const n = Math.round(Math.min(56, Math.max(20, W / DPR / 34)));
-  // cuentas de tamaños muy distintos: muchas diminutas y unas pocas grandes y luminosas
-  const bead = (t, y) => ({ y, v: 0, r: 0.55 + Math.pow(Math.random(), 3) * 3.4, c: Math.random() < 0.15 ? 3 : Math.floor(Math.random() * 3), glow: 0, a: 0 });
+  const n = Math.round(Math.min(38, Math.max(14, W / DPR / 48)));
+  const bead = y => ({ y, v: 0, r: 0.6 + Math.pow(Math.random(), 2.5) * 2.6, c: Math.random() < 0.18 ? 3 : Math.floor(Math.random() * 3),
+    glow: 0, a: 0, flare: Math.random() < 0.22 ? 0.5 + Math.random() : 0 });
   curtain.bead = bead;
   curtain.threads = Array.from({ length: n }, (_, i) => {
-    const t = { x: (i + 0.5 + (Math.random() - 0.5) * 0.9) / n, len: Math.random() < 0.4 ? 1.05 : 0.3 + Math.random() * 0.65, ph: Math.random() * 100, w: 0.5 + Math.random(), beads: [] };
-    for (let k = 0; k < Math.floor(Math.random() * 2.4); k++) t.beads.push(Object.assign(bead(t, Math.random() * t.len), { a: 1 }));
+    const t = { x: (i + 0.5 + (Math.random() - 0.5) * 0.9) / n, len: Math.random() < 0.75 ? 1.05 : 0.45 + Math.random() * 0.5, ph: Math.random() * 100,
+      w: 0.5 + Math.random(), c: Math.floor(Math.random() * 3), thick: Math.random() < 0.2 ? 1.8 : 1, beads: [] };
+    for (let k = 0; k < 1 + Math.floor(Math.random() * 3); k++) t.beads.push(Object.assign(bead(Math.random() * t.len), { a: 1 }));
     return t;
   });
-  curtain.fields = [0, 1, 2, 3].map(k => ({ ph: Math.random() * 100, c: k % 3, sp: 0.03 + Math.random() * 0.04 }));
+  curtain.fields = [0, 1, 2, 3, 4].map(k => ({ ph: Math.random() * 100, c: k % 3, sp: 0.02 + Math.random() * 0.03, s: 0.55 + Math.random() * 0.4 }));
+  // esferas desenfocadas delante, como en una foto con poca profundidad de campo
+  curtain.bokeh = Array.from({ length: 5 }, () => ({ x: Math.random(), y: Math.random(), r: 0.04 + Math.random() * 0.05, c: Math.floor(Math.random() * 3), ph: Math.random() * 100, v: 0.004 + Math.random() * 0.008 }));
   curtain.key = W + 'x' + H;
 }
 function drawCurtain(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
   if (curtain.key !== W + 'x' + H) curtainInit();
-  // fondo: manchas grandes de color, muy suaves, que pasean despacio y respiran con el golpe
-  if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.86), 1); ctx.fillRect(0, 0, W, H); }
-  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'multiply';
+  // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
+  if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); }
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   curtain.fields.forEach((f, k) => {
-    const x = W * (0.5 + 0.42 * Math.sin(time * f.sp + f.ph)), y = H * (0.5 + 0.38 * Math.sin(time * f.sp * 1.3 + f.ph * 2));
-    const col = night ? RGB[f.c] : RGB[f.c].map(v => v + (255 - v) * 0.55);
-    glowSpot(x, y, MIN * (0.7 + 0.15 * Math.sin(time * 0.2 + k) + P * 0.08), col, (night ? 0.18 : 0.5) + energy * 0.15 + P * 0.1);
+    const x = W * (0.5 + 0.45 * Math.sin(time * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(time * f.sp * 1.3 + f.ph * 2));
+    const col = night ? RGB[f.c] : RGB[f.c].map(v => v + (255 - v) * 0.45);
+    glowSpot(x, y, MIN * f.s * (1 + P * 0.06), col, (night ? 0.16 : 0.38) + energy * 0.1 + P * 0.08);
   });
+  if (!night) glowSpot(W * (0.5 + 0.3 * Math.sin(time * 0.03)), H * 0.45, MIN * 0.6, [255, 255, 255], 0.55);   // un claro de luz
   ctx.restore();
-  // cada golpe deja caer unas cuentas y las enciende; los platillos, una chispa
   const T = curtain.threads;
-  if (pulse.on) for (let k = 0; k < 3 + Math.round(energy * 7); k++) {
+  // cada golpe enciende y estira unos destellos; los platillos, una chispa
+  if (pulse.on) for (let k = 0; k < 2 + Math.round(energy * 5); k++) {
     const t = T[Math.floor(Math.random() * T.length)];
-    if (t.beads.length && Math.random() < 0.7) { const b = t.beads[Math.floor(Math.random() * t.beads.length)]; b.v += 0.12 + 0.18 * pulse.k; b.glow = 1; }
-    else if (t.beads.length < 4) t.beads.push(Object.assign(curtain.bead(t, Math.random() * t.len * 0.7), { glow: 1 }));
+    if (t.beads.length) { const b = t.beads[Math.floor(Math.random() * t.beads.length)]; b.glow = 1; b.flare = Math.max(b.flare, 0.8 + pulse.k); b.v += 0.05 * pulse.k; }
+    else t.beads.push(Object.assign(curtain.bead(Math.random() * t.len * 0.8), { glow: 1 }));
   }
   if (hits.high) { const t = T[Math.floor(Math.random() * T.length)], b = t.beads[0]; if (b) b.spark = 1; }
   lctx.clearRect(0, 0, W, H);
-  const sway = (2 + mid * 9) * DPR, lw = Math.max(1, DPR * 0.8);
+  const sway = (2 + mid * 8) * DPR, lw = Math.max(1, DPR * 0.9);
   for (const t of T) {
-    // cuentas nuevas que aparecen arriba de vez en cuando
-    if (Math.random() < dt * (0.015 + energy * 0.08) && t.beads.length < 4) t.beads.push(curtain.bead(t, Math.random() * t.len * 0.8));   // aparecen a cualquier altura
-    const x0 = t.x * W, sx = Math.sin(time * 0.55 + t.ph) * sway * t.w, yEnd = t.len * H;
-    const xAt = y => x0 + sx * Math.pow(Math.min(1, y / yEnd), 1.4);   // la cortina cuelga de arriba: abajo se mece más
-    // el hilo: una línea finísima que se desvanece al final
+    if (Math.random() < dt * (0.02 + energy * 0.08) && t.beads.length < 4) t.beads.push(curtain.bead(Math.random() * t.len * 0.85));
+    const x0 = t.x * W, sx = Math.sin(time * 0.5 + t.ph) * sway * t.w, yEnd = t.len * H;
+    const xAt = y => x0 + sx * Math.pow(Math.min(1, y / yEnd), 1.4);
+    // el hilo, de su color y apenas brillante
+    const tc = night ? RGB[t.c].map(v => v * 0.6 + 90) : RGB[t.c].map(v => v * 0.75);
     const g = lctx.createLinearGradient(0, 0, 0, yEnd);
-    const tc = night ? [210, 215, 235] : [120, 120, 140];
-    g.addColorStop(0, rgba(tc, night ? 0.24 : 0.3)); g.addColorStop(0.85, rgba(tc, night ? 0.18 : 0.22)); g.addColorStop(1, rgba(tc, 0));
-    lctx.strokeStyle = g; lctx.lineWidth = lw;
-    lctx.beginPath(); lctx.moveTo(x0, -2); lctx.quadraticCurveTo(x0 + sx * 0.25, yEnd * 0.55, xAt(yEnd), yEnd); lctx.stroke();
+    g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, night ? 0.32 : 0.4)); g.addColorStop(0.9, rgba(tc, night ? 0.26 : 0.32)); g.addColorStop(1, rgba(tc, 0));
+    lctx.strokeStyle = g; lctx.lineWidth = lw * t.thick;
+    lctx.beginPath(); lctx.moveTo(x0, 0); lctx.quadraticCurveTo(x0 + sx * 0.25, yEnd * 0.55, xAt(yEnd), yEnd); lctx.stroke();
     for (let i = t.beads.length - 1; i >= 0; i--) {
       const b = t.beads[i];
-      b.a = Math.min(1, b.a + dt * 1.5);
-      b.v = b.v * Math.pow(0.35, dt) + (0.004 + energy * 0.012) * dt;   // resbala despacio; el golpe la empuja
-      b.y += (b.v + 0.004) * dt * H / H;
-      b.glow *= Math.pow(0.15, dt); if (b.spark) b.spark *= Math.pow(0.05, dt);
-      if (b.y > t.len) { b.a -= dt * 3; if (b.a <= 0) { t.beads.splice(i, 1); continue; } }
-      const y = b.y * H, x = xAt(y), r = b.r * DPR * (2.2 + P * 0.8) * (MIN / DPR / 700 + 0.5), st = 1 + Math.min(2.5, b.v * 22);   // al caer rápido se estira
-      const col = b.c === 3 ? [255, 236, 200] : RGB[b.c];
-      const gr = r * (5 + b.glow * 5);
-      lctx.globalAlpha = b.a * (0.35 + b.glow * 0.55) * (night ? 1 : 0.85);
-      lctx.drawImage(SPRITES[b.c === 3 ? 0 : b.c], x - gr, y - gr * st, gr * 2, gr * 2 * st);
+      b.a = Math.min(1, b.a + dt * 1.2);
+      b.v = b.v * Math.pow(0.3, dt) + 0.004 * dt; b.y += (b.v + 0.006) * dt;
+      b.glow *= Math.pow(0.18, dt); b.flare *= Math.pow(0.6, dt); if (b.spark) b.spark *= Math.pow(0.05, dt);
+      if (b.y > t.len) { b.a -= dt * 2; if (b.a <= 0) { t.beads.splice(i, 1); continue; } }
+      const y = b.y * H, x = xAt(y), u = MIN / 700, r = b.r * u * 2.4 * (1 + P * 0.25);
+      const col = b.c === 3 ? [255, 238, 205] : RGB[b.c], hot = col.map(v => v + (255 - v) * (0.45 + b.glow * 0.4));
+      // destello vertical: una luz alargada arriba y abajo de la cuenta (como en una foto de exposición)
+      const fl = b.flare + b.glow * 0.6;
+      if (fl > 0.05) {
+        const L = r * (10 + fl * 26), fg = lctx.createLinearGradient(0, y - L, 0, y + L);
+        fg.addColorStop(0, rgba(col, 0)); fg.addColorStop(0.5, rgba(hot, Math.min(0.75, 0.25 + fl * 0.35) * b.a)); fg.addColorStop(1, rgba(col, 0));
+        lctx.fillStyle = fg; lctx.beginPath(); lctx.ellipse(x, y, r * 1.1, L, 0, 0, Math.PI * 2); lctx.fill();
+      }
+      const gr = r * (4 + b.glow * 5);
+      lctx.globalAlpha = b.a * (0.45 + b.glow * 0.5);
+      lctx.drawImage(SPRITES[b.c === 3 ? 0 : b.c], x - gr, y - gr, gr * 2, gr * 2);
       lctx.globalAlpha = b.a;
-      lctx.fillStyle = rgba(col.map(v => v + (255 - v) * (0.35 + b.glow * 0.4)), 1);
-      lctx.beginPath(); lctx.ellipse(x, y, r, r * st, 0, 0, Math.PI * 2); lctx.fill();
-      if (b.spark > 0.05) {   // chispa: una cruz finita de luz
-        const L = r * 6 * b.spark; lctx.globalAlpha = b.spark * 0.8; lctx.strokeStyle = '#fff'; lctx.lineWidth = lw;
+      lctx.fillStyle = rgba(hot, 1); lctx.beginPath(); lctx.arc(x, y, r, 0, Math.PI * 2); lctx.fill();
+      if (b.spark > 0.05) {
+        const L = r * 7 * b.spark; lctx.globalAlpha = b.spark * 0.85; lctx.strokeStyle = '#fff'; lctx.lineWidth = lw;
         lctx.beginPath(); lctx.moveTo(x - L, y); lctx.lineTo(x + L, y); lctx.moveTo(x, y - L); lctx.lineTo(x, y + L); lctx.stroke();
       }
     }
   }
   lctx.globalAlpha = 1;
   ambient();
-  bloom(layer, (night ? 0.6 : 0.3) + P * 0.3);
+  bloom(layer, (night ? 0.65 : 0.4) + P * 0.3);
   ctx.drawImage(layer, 0, 0);
+  // bokeh delante: esferas grandes desenfocadas con un borde algo más hondo (como una lente)
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (const k of curtain.bokeh) {
+    k.y += k.v * dt; if (k.y > 1.15) { k.y = -0.15; k.x = Math.random(); }
+    const x = k.x * W + Math.sin(time * 0.2 + k.ph) * MIN * 0.02, y = k.y * H, R = k.r * MIN * (1 + P * 0.05);
+    const g = ctx.createRadialGradient(x - R * 0.2, y - R * 0.25, 0, x, y, R);
+    const c = RGB[k.c];
+    g.addColorStop(0, rgba(c.map(v => v + (255 - v) * 0.6), night ? 0.22 : 0.3)); g.addColorStop(0.75, rgba(c, night ? 0.16 : 0.22));
+    g.addColorStop(0.93, rgba(c.map(v => v * 0.6), night ? 0.2 : 0.28)); g.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 // ================= Escena: Orbes =================
