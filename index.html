@@ -426,6 +426,29 @@
     body:has(.song:not([hidden])) .status { display: none; }
     .corner { max-width: calc(100% - 40px); }
   }
+
+  /* ===== Interfaz viva: la barra, el reproductor y los avisos laten con la música =====
+     (--pulse es el golpe y --lvl la intensidad; los pone el bucle de animación) */
+  .dock, .song.player {
+    box-shadow: var(--shadow), 0 0 calc(6px + var(--pulse, 0) * 34px) calc(var(--pulse, 0) * 2px) color-mix(in srgb, var(--c1, #888) calc(var(--pulse, 0) * 60% + var(--lvl, 0) * 12%), transparent);
+  }
+  .dock::before, .song.player::before {
+    content: ''; position: absolute; inset: -1px; border-radius: inherit; padding: 1.25px; pointer-events: none; z-index: 1;
+    background: linear-gradient(105deg, var(--c1, #888), var(--c2, #888) 50%, var(--c1, #888));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+    opacity: calc(0.16 + var(--lvl, 0) * 0.3 + var(--pulse, 0) * 0.55);
+  }
+  .song.player .cover { transform: scale(calc(1 + var(--pulse, 0) * 0.07)); box-shadow: 0 4px 14px rgba(0,0,0,.3), 0 0 calc(var(--pulse, 0) * 16px) color-mix(in srgb, var(--c1, #888) 70%, transparent); }
+  .song .eq { display: inline-flex; align-items: flex-end; gap: 1.5px; height: 10px; flex: none; align-self: center; }
+  .song .eq i { width: 2px; height: 100%; border-radius: 1px; background: color-mix(in srgb, var(--c1, var(--fg)) 70%, var(--fg)); transform-origin: 50% 100%; transform: scaleY(.18); }
+  .song .prog .bar i { background: linear-gradient(90deg, var(--c1, var(--fg)), var(--c2, var(--fg))); box-shadow: 0 0 calc(3px + var(--pulse, 0) * 8px) color-mix(in srgb, var(--c1, #888) 80%, transparent); }
+  .status.live .dot { transform: scale(calc(1 + var(--pulse, 0) * 0.9)); }
+  .intro h1 span { display: inline-block; }
+  .intro h1 { text-shadow: 0 0 calc(var(--pulse, 0) * 0.35em) color-mix(in srgb, var(--c1, #888) 55%, transparent); }
+  #modes button[aria-pressed="true"] img { box-shadow: 0 0 0 2px var(--c1, var(--chip-on-fg)), 0 0 calc(10px + var(--pulse, 0) * 16px) color-mix(in srgb, var(--c1, #888) 55%, transparent); }
+  .song.player .cover { scale: 1; transition: scale .55s cubic-bezier(.34, 1.56, .64, 1), filter .4s; }
+  .song.player.paused .cover { scale: .8; filter: saturate(.6) brightness(.92); transition-timing-function: cubic-bezier(.4, 0, .2, 1); }
+  @media (prefers-reduced-motion: reduce) { .song.player .cover { transform: none; transition: none; } }
 </style>
 </head>
 <body>
@@ -666,7 +689,18 @@ function resize() {
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
     if (typeof drops !== 'undefined') { for (const d of drops) { d.x *= kx; d.y *= ky; d.floor *= ky; d.len *= km; } for (const q of ripples) { q.x *= kx; q.y *= ky; } splashes.length = 0; }
-    if (typeof glass !== 'undefined') { for (const d of [...glass.small, ...glass.big]) { d.x *= kx; d.y *= ky; d.r *= km; if (d.last != null) d.last *= ky; } glass.key = W + 'x' + H; }
+    if (typeof glass !== 'undefined') { for (const d of [...glass.small, ...glass.big]) { d.x *= kx; d.y *= ky; d.r *= km; if (d.last != null) d.last *= ky; if (d.path) for (const q of d.path) { q[0] *= kx; q[1] *= ky; } } glass.key = W + 'x' + H; }   // el rastro también, o se dibujaría un escalón
+    // Si solo cambió la calidad (la forma es la misma), el mosaico, los inflables y el cielo se conservan
+    // escalados en vez de empezar de cero (antes los cuadros cambiaban de dibujo de golpe)
+    if (Math.abs(kx - ky) < 0.02) {
+      if (typeof tiles !== 'undefined' && tiles.list.length) { for (const t of tiles.list) { t.x *= kx; t.y *= ky; t.s *= km; } for (const w of tiles.waves) { w.x *= kx; w.y *= ky; w.r *= km; } if (tiles.last) { tiles.last.x *= kx; tiles.last.y *= ky; } tiles.key = W + 'x' + H; }
+      if (typeof tube !== 'undefined' && tube.men.length) {
+        for (const m of tube.men) { for (const q of [...m.body, ...m.arms[0], ...m.arms[1]]) { q.x *= kx; q.y *= ky; q.px *= kx; q.py *= ky; } m.x *= kx; m.ground *= ky; m.FH *= km; m.L *= km; m.armLen *= km; }
+        for (const c of tube.confetti) { c.x *= kx; c.y *= ky; c.vx *= kx; c.vy *= ky; c.s *= km; }
+        tube.key = W + 'x' + H;
+      }
+      if (typeof starSky !== 'undefined' && starSky.list) starSky.key = W + 'x' + H;
+    }
   }
 }
 addEventListener('resize', resize); resize();
@@ -1069,6 +1103,7 @@ const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, c
 function avg(arr, a, b) { let s = 0; for (let i = a; i < b; i++) s += arr[i]; return s / (b - a); }
 
 function analyse(dt) {
+  if (!analyser) beatTick = false;   // sin audio, solo el ritmo de la canción (si lo hay) marca el compás
   if (analyser) {
     analyser.getByteFrequencyData(freqData);
     let mx = 0;
@@ -1116,6 +1151,30 @@ function analyse(dt) {
   // Sin destellos: el latido sube despacio y con menos fuerza
   beat = state.noFlash ? beat + (beatRaw * 0.45 - beat) * (1 - Math.pow(0.002, dt)) : beatRaw;
   beatSoft += (beat - beatSoft) * (1 - Math.pow(beat > beatSoft ? 0.0005 : 0.08, dt));
+  // Pulso: un golpe detectado o, mientras la canción traiga golpes, el tiempo que marca su tempo
+  // (así no se pierde ninguno ni se cuela uno doble)
+  // Un golpe real siempre cuenta (salvo que sea el mismo de hace un instante); el tiempo previsto por el
+  // tempo solo rellena cuando falta un golpe que debía sonar y la canción viene con un ritmo claro
+  const nowP = performance.now(), per = tempo.period ? tempo.period * 1000 : 500;
+  pulse.on = false;
+  const real = hits.bass && nowP - pulse.at > 120;
+  // El tempo avisa de que toca un golpe, pero se espera un instante por si llega el de verdad: así un
+  // golpe previsto un poco antes de tiempo nunca tapa al real (que es el que se oye)
+  if (beatTick) pulse.due = nowP;
+  let fill = false;
+  if (real) pulse.due = 0;
+  else if (pulse.due && nowP - pulse.due > 70) {
+    fill = tempo.conf > 0.5 && nowP - lastBassHit < 1500 && nowP - pulse.at > per * 0.75;
+    pulse.due = 0;
+  }
+  if (real || fill) {
+    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : 0.5;
+    // ataque al instante (en el mismo fotograma del golpe), sin esperar a que un muelle se estire
+    const amp = pulse.k * (state.noFlash ? 0.3 : 0.6);
+    if (amp > pulse.x) { pulse.x = amp; pulse.v = 0; }
+  }
+  // y vuelve con un muelle: cae en ~0,17 s con un leve rebote, como un parche de tambor
+  pulse.v += (-pulse.x * 120 - pulse.v * 12) * dt; pulse.x = Math.max(-0.2, Math.min(1.2, pulse.x + pulse.v * dt));
 }
 // Muelle amortiguado: lleva cada valor hacia su objetivo con inercia, sin tirones ni temblores
 function springTo(x, v, target, dt, k = 140, zeta = 0.9) {
@@ -1235,6 +1294,9 @@ function updateMusicStatus() {
   if (musicKey.conf > 0.35) parts.push(musicKey.name);
   statusText.textContent = parts.join(' · ');
 }
+// Pulso común de toda la página: lo usan las animaciones, la barra y el reproductor, así todo late a la vez.
+// on: hay golpe en este fotograma · count: cuántos van · k: su fuerza · x: el «empujón» (muelle) que sigue al golpe
+const pulse = { on: false, at: 0, due: 0, count: 0, k: 0, x: 0, v: 0 };
 let beat = 0, beatRaw = 0, beatSoft = 0, lastBassHit = 0, eShort = 0, eLong = 0, quietT = 0, dropHit = false, lastDrop = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
@@ -1405,18 +1467,24 @@ function drawBars(dt) {
   springTo(barX, barV, barT, dt, 520, 0.45);
   lctx.clearRect(0, 0, W, H);
   const gap = (W / n) * 0.3, bw = (W - gap * (n - 1)) / n, slot = bw + gap, x0 = 0;   // la primera y la última tocan los bordes
-  const base = H * 0.985, maxH = H * 0.86;
+  // A lo ancho de toda la pantalla pero bajas: ocupan la franja de abajo y dejan el resto libre
+  const base = H * 0.985, maxH = H * (H > W ? 0.24 : 0.31), P = Math.max(0, pulse.x);
   for (let i = 0; i < n; i++) {
-    const v = Math.max(0, Math.min(1.15, barX[i]));
+    // Arriba se comprime suave: lo fuerte sigue moviéndose en vez de quedarse pegado al techo
+    const v0 = Math.max(0, barX[i]), v = v0 < 0.7 ? v0 : 0.7 + 0.4 * Math.tanh((v0 - 0.7) / 0.4);
     const h = bw * 0.6 + v * maxH, x = x0 + i * slot, c = mix(i / (n - 1));
     barPeak[i] = Math.max(barPeak[i] - dt * 0.35, v);   // marca de pico que cae despacio
     const g = lctx.createLinearGradient(0, base - h, 0, base);
-    g.addColorStop(0, rgba(c.map(x_ => x_ + (255 - x_) * 0.35), 1)); g.addColorStop(0.25, rgba(c, 0.95)); g.addColorStop(1, rgba(c, night ? 0.25 : 0.35));
+    g.addColorStop(0, rgba(c.map(x_ => x_ + (255 - x_) * (0.35 + P * 0.3)), 1)); g.addColorStop(0.25, rgba(c, 0.95)); g.addColorStop(1, rgba(c, night ? 0.25 : 0.35));
     lctx.fillStyle = g;
     lctx.beginPath(); lctx.roundRect(x, base - h, bw, h, [bw / 2, bw / 2, 0, 0]); lctx.fill();
     const py = base - (bw * 0.6 + barPeak[i] * maxH) - bw * 0.5;
     lctx.fillStyle = rgba(c, 0.7); lctx.beginPath(); lctx.roundRect(x, py, bw, Math.max(DPR * 2, bw * 0.18), bw * 0.09); lctx.fill();
   }
+  // luz en la base que late con los graves
+  const fl = lctx.createLinearGradient(0, H, 0, H * 0.7);
+  fl.addColorStop(0, rgba(mix(0.5), (night ? 0.18 : 0.12) * (0.4 + bass) + P * 0.15)); fl.addColorStop(1, rgba(mix(0.5), 0));
+  lctx.fillStyle = fl; lctx.fillRect(0, H * 0.7, W, H * 0.3);
   ambient();
   bloom(layer, (night ? 0.75 : 0.4) + beatSoft * 0.45);
   ctx.drawImage(layer, 0, 0);
@@ -1519,15 +1587,17 @@ function drawInk(dt, flowerMode = false) {
     inkFade = 0;
   }
 
+  const P = Math.max(0, pulse.x);
   for (let bi = blobs.length - 1; bi >= 0; bi--) {
     const b = blobs[bi];
     b.age += dt * (0.8 + energy * 0.8);
     const p = b.age / b.life;
     if (p >= 1) { blobs.splice(bi, 1); continue; }
     const grow = 1 - Math.pow(1 - p, 3);                 // se expande rápido y frena
-    const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06 + beatSoft * 0.06);
-    const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5) * (1 + beatSoft * 0.7);   // todos los círculos se avivan con cada golpe
-    const th = (r * 0.14 + 3 * DPR) * (1 + beatSoft * 0.35);   // el trazo engorda con el golpe
+    // con cada golpe todos los anillos laten a la vez: se abren un poco, se avivan y engordan
+    const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06 + beatSoft * 0.03 + P * 0.08);
+    const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5) * (1 + beatSoft * 0.35 + P * 1.1);
+    const th = (r * 0.14 + 3 * DPR) * (1 + beatSoft * 0.15 + P * 0.6);
     const spr = SPRITES[b.sprite];
     const fl = b.flower;
     if (fl) fl.rot += fl.spin * dt;
@@ -1886,6 +1956,7 @@ const ICON = {
   power: '<svg viewBox="0 0 24 24"><path d="M11 3h2v9h-2zM7.05 6.05l1.41 1.41A6 6 0 1 0 15.54 7.46l1.41-1.41A8 8 0 1 1 7.05 6.05z"/></svg>',
 };
 function spRender() {
+  document.title = spConnected() && sp.item ? `${sp.item.name} · ${(sp.item.artists || []).map(a => a.name).join(', ') || sp.item.show?.name || ''} — Siente la música` : 'Siente la música';
   spCorner();
   if (!spConnected() || sp.dismissed) return;
   if (!sp.item) {
@@ -1904,10 +1975,11 @@ function spRender() {
       ? `<button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button>`
       : src === 'file' && audioEl ? `<button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button>` : '';
     const canVol = src === 'spotify' || (src === 'file' && audioEl);
+    const wasPaused = songEl.classList.contains('paused');
     showSong(
       `<div class="pbg"></div>` +
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
-      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="sub"><span class="artist" data-paused="${!play}">${esc(artist)}</span>${sp.duration ? '<span class="time"><span id="spTimeA">0:00</span> · <span id="spTimeB"></span></span>' : ''}</div></div>` +
+      `<div class="meta"><div class="title">${esc(it.name)}</div><div class="sub"><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="artist" data-paused="${!play}">${esc(artist)}</span>${sp.duration ? '<span class="time"><span id="spTimeA">0:00</span> · <span id="spTimeB"></span></span>' : ''}</div></div>` +
       `<div class="ctl">${ctl}<button class="dots" id="spMore" aria-label="Más opciones" aria-expanded="${!!sp.more}">${ICON.dots}</button></div>` +
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
@@ -1924,6 +1996,9 @@ function spRender() {
     const vol = document.getElementById('spVol');
     if (vol) vol.oninput = () => spSetVolume(+vol.value);
     songEl.classList.toggle('open-more', !!sp.more);
+    // en pausa la portada se recoge y al volver a sonar crece con un pequeño rebote (un fotograma
+    // después de pintarla, para que se vea el movimiento)
+    if (wasPaused !== !play) requestAnimationFrame(() => songEl.classList.toggle('paused', !play));
     if (typeof libLayout === 'function') requestAnimationFrame(libLayout);
     songEl.style.setProperty('--cv', cover ? `url("${cover.replace(/"/g, '%22')}")` : 'none');
     document.getElementById('spMore').onclick = e => { e.stopPropagation(); sp.more = !sp.more; songEl.classList.toggle('open-more', sp.more); e.currentTarget.setAttribute('aria-expanded', sp.more); libLayout(); };
@@ -3144,6 +3219,50 @@ function autoDirector(dt) {
   autoT = 0;
 }
 
+
+// ================= Interfaz viva =================
+// La imagen da un pequeño empujón con cada golpe (como la cámara de un videoclip) y la barra, el
+// reproductor, el aviso de arriba y el título de bienvenida laten con la misma música (--pulse, --lvl).
+const live = { key: '', targets: null, letters: null };
+const calmUI = () => state.noFlash || calmMotion.matches;
+function liveUI() {
+  // la interfaz se enciende en el golpe y se apaga algo más despacio que las animaciones (respira, no parpadea)
+  const nowU = performance.now(), dtU = Math.min(0.1, (nowU - (live.t || nowU)) / 1000); live.t = nowU;
+  live.p = Math.max(Math.max(0, pulse.x), (live.p || 0) * Math.pow(0.05, dtU));
+  const calm = calmUI(), p = live.p * (calm ? 0.35 : 1), lv = Math.min(1, energy * 1.2);
+  const sc = calm || state.mode === 'strobe' ? 1 : 1 + p * 0.012;
+  const tf = sc === 1 ? '' : `scale(${sc.toFixed(4)})`;
+  if (canvas.style.transform !== tf) canvas.style.transform = tf;
+  if (!live.targets) live.targets = [document.getElementById('dock'), songEl, statusEl, intro];
+  const key = p.toFixed(2) + '|' + lv.toFixed(2);
+  if (key !== live.key) {
+    live.key = key;
+    for (const el of live.targets) { el.style.setProperty('--pulse', p.toFixed(2)); el.style.setProperty('--lvl', lv.toFixed(2)); }
+  }
+  // Ecualizador junto al título de la canción: sus cuatro barras siguen graves, medios y agudos
+  const eq = !songEl.hidden && songEl.querySelector('.eq');
+  if (eq) {
+    const heard = analyser || songBeatOn(), lv4 = [bass, (bass + mid) / 2, mid, high];
+    for (let i = 0; i < 4; i++) {
+      const v = !sp.playing ? 0.18 : heard ? Math.min(1, 0.18 + Math.pow(lv4[i], 0.8) * 0.85 + (i === 0 ? p * 0.25 : 0)) : 0.3 + 0.25 * Math.abs(Math.sin(time * (2.6 + i * 0.7) + i * 1.3));
+      eq.children[i].style.transform = `scaleY(${v.toFixed(2)})`;
+    }
+  }
+  // Título de bienvenida: cada letra escucha su parte del sonido
+  if (!intro.hidden) {
+    if (!live.letters) {
+      const h = intro.querySelector('h1');
+      h.innerHTML = [...h.textContent].map(ch => ch === ' ' ? ' ' : `<span>${ch}</span>`).join('');
+      live.letters = [...h.querySelectorAll('span')];
+    }
+    const n = live.letters.length;
+    live.letters.forEach((el, i) => {
+      const v = Math.pow(spec[Math.min(BANDS - 1, Math.floor(i / n * BANDS * 0.7))], 1.5) * (calm ? 0.3 : 1);
+      el.style.transform = `translateY(${(-v * 0.16).toFixed(3)}em) scale(${(1 + v * 0.05).toFixed(3)})`;
+    });
+  }
+}
+
 // ================= Bucle principal =================
 // ================= Escena: Focos (luces desenfocadas a lo lejos) =================
 const lights = [];
@@ -3216,7 +3335,7 @@ function glowSpot(x, y, r, col, a) {
   ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
 }
 function drawAura(dt) {
-  const night = state.theme === 'dark';
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x);
   ctx.save();
   ctx.globalCompositeOperation = night ? 'lighter' : 'multiply';
   const per = 2 * (W + H);
@@ -3231,21 +3350,21 @@ function drawAura(dt) {
     else if (d < W + H) { x = W; y = d - W; nx = 1; ny = 0; }
     else if (d < 2 * W + H) { x = W - (d - W - H); y = H; nx = 0; ny = 1; }
     else { x = 0; y = H - (d - 2 * W - H); nx = -1; ny = 0; }
-    const r = MIN * b.size * (0.6 + L * 1.05 + beat * 0.25);
+    const r = MIN * b.size * (0.6 + L * 1.05 + beat * 0.15 + P * 0.2);
     x += nx * r * 0.18; y += ny * r * 0.18;
     const col = night ? RGB[b.c] : RGB[b.c].map(c => 255 - (255 - c) * 0.9);
     const sat_ = night ? col : col;
-    glowSpot(x, y, r * 1.1, sat_, Math.min(1, (night ? 0.36 + L * 0.95 : 0.28 + L * 0.75) + beat * 0.35));
+    glowSpot(x, y, r * 1.1, sat_, Math.min(1, (night ? 0.36 + L * 0.95 : 0.28 + L * 0.75) + beat * 0.2 + P * 0.35));
   });
   // Luz leve en el centro
-  glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.1), mix(0.5), (night ? 0.08 + energy * 0.3 : 0.06 + energy * 0.22) + beat * 0.16);
+  glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.06 + P * 0.08), mix(0.5), (night ? 0.08 + energy * 0.3 : 0.06 + energy * 0.22) + beat * 0.08 + P * 0.16);
   ctx.restore();
 }
 
 // ================= Escena: Infinito (viaje sin fin por un túnel de luz) =================
 // El túnel se divide en tramos; cada tramo tiene su estilo de anillo, su giro y
 // su tono, así el viaje nunca se repite igual.
-let camZ = 0, camSpeed = 1.6;
+let camZ = 0, camSpeed = 1.6, infRot = 0;
 const streaks = [], pulses = [];
 const tunnelPath = z => [
   Math.sin(z * 0.09) * 0.7 + Math.sin(z * 0.037) * 0.6,
@@ -3280,7 +3399,9 @@ function drawInfinity(dt) {
   if (hits.bass) camSpeed += hits.bass * 4;
   camSpeed += (target - camSpeed) * (1 - Math.pow(0.08, dt));
   camZ += dt * camSpeed;
-  if (hits.bass) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
+  infRot += dt * (0.06 + energy * 0.45);   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
+  const P = Math.max(0, pulse.x);
+  if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
 
   const F = MIN * 0.55, FAR = 24, SP = 0.8;
@@ -3313,14 +3434,14 @@ function drawInfinity(dt) {
     const v = spec[band];
     let glow = 0; for (const pz of pulses) glow += Math.exp(-((z - pz) ** 2) / 0.8);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
-    const R = sc * tunnelRadius(z) * (1 + v * 0.12);
+    const R = sc * tunnelRadius(z) * (1 + v * 0.12 + P * 0.07 * (1 - dz / FAR));   // el túnel entero late con el golpe
     const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
     lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + beat * 0.4)));
     const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
     // Las líneas de menos de un píxel parpadean: se mantienen a 1 px y se atenúan en su lugar
     lctx.lineWidth = Math.max(DPR, lw);
     if (lw < DPR) lctx.globalAlpha = Math.max(0.15, lw / DPR);
-    const rot = k * (A.twist * (1 - f) + B.twist * f) + time * 0.25;
+    const rot = k * (A.twist * (1 - f) + B.twist * f) + infRot;
     const C = Math.PI * 2 * R;
     if (A.style === 1) { lctx.setLineDash([C / 24, C / 48]); lctx.lineDashOffset = rot * R; }
     else if (A.style === 2) { lctx.setLineDash([0.001, C / 64]); lctx.lineDashOffset = rot * R; lctx.lineWidth *= 1.8; }
@@ -3887,15 +4008,15 @@ function drawFluid(dt) {
       fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[Math.floor(Math.random() * 3)], k), R(size));
     }
   };
-  if (hits.bass) {
-    ring(2 + Math.round(hits.bass * 2), hits.bass, 0.35 + hits.bass * 0.3, 0.45 + hits.bass * 0.5);
+  if (pulse.on) {   // el golpe (o el tiempo que marca el tempo si falta uno)
+    const kb = hits.bass || pulse.k * 0.6;
+    ring(2 + Math.round(kb * 2), kb, 0.35 + kb * 0.3, 0.45 + kb * 0.5);
     // Onda expansiva: cada golpe estalla desde un punto distinto, con tinta nueva y brillante
     const ox = 0.25 + Math.random() * 0.5, oy = 0.3 + Math.random() * 0.4;
-    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(ox + Math.cos(a) * 0.05 * H / W, oy + Math.sin(a) * 0.05, Math.cos(a) * 2600 * hits.bass, Math.sin(a) * 2600 * hits.bass, fluidColor(RGB[k % 3], 0.12 * hits.bass), R(0.12)); }
+    for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(ox + Math.cos(a) * 0.05 * H / W, oy + Math.sin(a) * 0.05, Math.cos(a) * 2600 * kb, Math.sin(a) * 2600 * kb, fluidColor(RGB[k % 3], 0.12 * kb), R(0.12)); }
   }
   if (hits.mid) ring(1 + Math.round(hits.mid), hits.mid * 0.6, 0.18, 0.3 + hits.mid * 0.3);
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
-  if (beatTick && !hits.bass && performance.now() - lastBassHit < 1500) ring(1, 0.3, 0.2, 0.25);
   if (Math.random() < energy * dt * 6) ring(1, energy * 0.4, 0.15, 0.15 + energy * 0.25);
   // El ratón o el dedo revuelven
   if (fluid.pointer && fluid.pointer.moves.length) {
@@ -3923,7 +4044,7 @@ function drawFluid(dt) {
   ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   ctx.drawImage(GLX.c, 0, 0, W, H);
   ctx.restore();
-  if (night) bloom(GLX.c, 0.35 + beatSoft * 0.3);
+  if (night) bloom(GLX.c, 0.35 + beatSoft * 0.15 + Math.max(0, pulse.x) * 0.4);
 }
 
 // ================= Escena: Portada 3D =================
@@ -4096,7 +4217,16 @@ function drawCover(dt) {
   const x0 = cx - S / 2, y0 = cy - S / 2;
   const it = spConnected() && sp.item;
   drawAltArt(dt, cx, cy, S);
-  glowSpot(cx, cy, S * (1.05 + beatSoft * 0.15), mix(0.5), (night ? 0.3 : 0.2) + beatSoft * 0.25);
+  const P = Math.max(0, pulse.x);
+  glowSpot(cx, cy, S * (1.05 + beatSoft * 0.08 + P * 0.14), mix(0.5), (night ? 0.3 : 0.2) + beatSoft * 0.12 + P * 0.32);
+  // Onda: al empezar cada compás (cada 4 golpes) o en un drop, el contorno de la portada se abre y se apaga
+  cover3d.rings = (cover3d.rings || []).filter(r => r.t < 0.55);
+  if (pulse.on && (pulse.count % 4 === 0 || dropHit) && cover3d.img && !state.noFlash) cover3d.rings.push({ t: 0, k: dropHit ? 1 : pulse.k });
+  for (const r of cover3d.rings) {
+    r.t += dt; const q = r.t / 0.55, e = 1 - Math.pow(1 - q, 3), h = S * (0.39 + e * 0.22);   // la portada visible mide 0,78·S
+    ctx.save(); ctx.strokeStyle = rgba(night ? mix(0.5).map(v => v + (255 - v) * 0.4) : mix(0.5), Math.pow(1 - q, 2) * 0.35 * r.k); ctx.lineWidth = Math.max(DPR, S * 0.007 * (1 - q));
+    ctx.beginPath(); ctx.roundRect(cx - h, cy - h, h * 2, h * 2, S * (0.025 + e * 0.04)); ctx.stroke(); ctx.restore();
+  }
   if (false) {  } else if (cover3d.img && glInit()) {
     if (!cover3d.prog) { try { cover3dSetup(); } catch (e) { console.error(e); GLX.ok = false; return; } }
     const gl = GLX.gl, sz = Math.round(Math.min(S, 1400));
@@ -4104,7 +4234,7 @@ function drawCover(dt) {
     if (cover3d.upFor !== cover3d.url) { glUpload(cover3d.tImg, cover3d.img); cover3d.upFor = cover3d.url; }
     // Inclinación con muelle: sigue al ratón y se mece con la música; cada golpe la empuja
     const tgt = [-cover3d.mouse[1] * 0.22 + Math.sin(time * 0.5) * (0.04 + bass * 0.08), cover3d.mouse[0] * 0.28 + Math.cos(time * 0.41) * (0.05 + mid * 0.08)];
-    if (hits.bass) cover3d.tiltV[0] += hits.bass * 1.2 * (Math.random() < 0.5 ? 1 : -1);
+    if (pulse.on) cover3d.tiltV[1] += pulse.k * 0.9 * (pulse.count % 2 ? 1 : -1);   // se mece a un lado y al otro, al compás
     springTo(cover3d.tilt, cover3d.tiltV, tgt, dt, 60, 0.45);
     const p = cover3d.prog; gl.useProgram(p.pr);
     gl.uniform2f(p.u.texel, 1 / sz, 1 / sz);
@@ -4112,7 +4242,7 @@ function drawCover(dt) {
     const flipA = coverFlipAngle(dt);
     gl.uniform2f(p.u.uTilt, cover3d.tilt[0], cover3d.tilt[1] + flipA);
     gl.uniform1f(p.u.uAlpha, Math.max(0, Math.min(1, (1.55 - Math.abs(flipA)) / 0.35)) * (cover3d.flip && !cover3d.flip.next ? 0.85 : 1));
-    gl.uniform1f(p.u.uZoom, 0.78 + beatSoft * 0.025 + bass * 0.01);
+    gl.uniform1f(p.u.uZoom, 0.78 + beatSoft * 0.01 + P * 0.035 + bass * 0.01);   // respira con cada golpe
     gl.uniform1f(p.u.uRound, 0.03);
     gl.uniform1f(p.u.uShine, 0.06 + beatSoft * 0.22);
     gl.uniform1f(p.u.uShinePos, ((time * 0.25) % 3) - 0.5);
@@ -4169,6 +4299,8 @@ function drawMagnet(dt) {
   t.globalCompositeOperation = 'destination-out'; t.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; t.fillRect(0, 0, W, H);
   t.globalCompositeOperation = night ? 'lighter' : 'source-over'; t.lineCap = 'round';
   const lv = [bass, mid, high].map(v => Math.pow(v, 0.8));
+  // En lo tranquilo flotan despacio; con la música fuerte se aceleran (así se siente la diferencia)
+  const drive = 0.3 + 0.7 * Math.min(1, energy * 1.8), P = Math.max(0, pulse.x);
   // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
   const att = [0, 1, 2].map(k => {
     const a = time * (0.25 + k * 0.08) * (1 + energy) + k * 2.1, r = MIN * (0.12 + lv[k] * 0.22);
@@ -4176,9 +4308,9 @@ function drawMagnet(dt) {
   });
   const usePtr = mag.pointer && (mag.down || performance.now() - mag.pointer.at < 2000);
   const px = usePtr ? mag.pointer.x * W : 0, py = usePtr ? mag.pointer.y * H : 0;
-  const kick = hits.bass ? hits.bass : 0, burst = mag.release;
+  const kick = pulse.on ? pulse.k : 0, burst = mag.release;
   mag.release = 0;
-  const s = MIN, maxV = s * (0.6 + energy * 1.2);
+  const s = MIN, maxV = s * (0.35 + energy * 1.5);
   const cols = RGB.map(c => night ? c : c.map(v => v * 0.8));
   for (let i = 0; i < mag.n; i++) {
     const b = mag.band[i];
@@ -4188,10 +4320,10 @@ function drawMagnet(dt) {
     let dx = tx - mag.x[i], dy = ty - mag.y[i];
     const d2 = dx * dx + dy * dy + s * s * 0.002, d = Math.sqrt(d2);
     // Atracción + giro alrededor del imán
-    const f = (usePtr ? 14 : 7 + lv[b] * 12) * s / d;
+    const f = (usePtr ? 14 : (7 + lv[b] * 12) * drive) * s / d;
     let ax = dx / d * f - dy / d * f * swirl, ay = dy / d * f + dx / d * f * swirl;
-    // Golpe de bajo o soltar el ratón: estallido hacia fuera
-    if (kick && b === 0 || burst) { const k = (burst ? 0.55 : kick * 0.8) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
+    // Cada golpe (o soltar el ratón): estallido hacia fuera, fuerte en las de los graves y suave en las demás
+    if (kick || burst) { const k = (burst ? 0.55 : kick * (b === 0 ? 0.8 : 0.3)) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
     mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
     const v2 = mag.vx[i] * mag.vx[i] + mag.vy[i] * mag.vy[i];
@@ -4207,7 +4339,7 @@ function drawMagnet(dt) {
   for (let k = 0; k < 12; k++) {
     const seg = mag.buckets[k]; if (!seg.length) continue;
     const b = Math.floor(k / 4), sp = (k % 4) / 3, c = cols[b];
-    t.strokeStyle = `rgba(${c[0] + (255 - c[0]) * sp * 0.3 | 0},${c[1] + (255 - c[1]) * sp * 0.3 | 0},${c[2] + (255 - c[2]) * sp * 0.3 | 0},${Math.min(1, (night ? 0.28 : 0.4) + sp * 0.3 + lv[b] * 0.25).toFixed(2)})`;
+    t.strokeStyle = `rgba(${c[0] + (255 - c[0]) * sp * 0.3 | 0},${c[1] + (255 - c[1]) * sp * 0.3 | 0},${c[2] + (255 - c[2]) * sp * 0.3 | 0},${Math.min(1, (night ? 0.28 : 0.4) + sp * 0.3 + lv[b] * 0.25 + P * 0.3).toFixed(2)})`;
     t.lineWidth = DPR * (1.1 + sp * 1.4);
     t.beginPath();
     for (let j = 0; j < seg.length; j += 4) { t.moveTo(seg[j], seg[j + 1]); t.lineTo(seg[j + 2] + 0.01, seg[j + 3]); }
@@ -4354,17 +4486,27 @@ function drawLight(dt) {
     // Núcleo discreto: solo brilla de verdad con los agudos
     glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), mix(drift).map(x => x + (255 - x) * 0.6), 0.15 + Lh * 0.6);
   } else {
-    // De día: tres lóbulos de color que giran alrededor del centro y laten con su banda;
-    // con 'multiply' el color se mezcla como tinta de luz sobre el blanco.
-    const sat = c => { const [h, s_, l] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(80, s_), 60)); };
+    // De día: tres lóbulos de color que giran alrededor del centro y laten con su banda. Se pintan
+    // luminosos y encima del blanco (no 'multiply'): al cruzarse se mezclan sin oscurecerse.
+    const sat = (c, l) => { const [h, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(92, s_), l)); };
+    const P = Math.max(0, pulse.x), L3 = [Lb, Lm, Lh];
+    // el blanco entero se tiñe con la música y respira con cada golpe
     ctx.globalCompositeOperation = 'multiply';
-    const L3 = [Lb, Lm, Lh];
+    ctx.fillStyle = rgba(sat(mix(drift), 84), 0.08 + energy * 0.14 + P * 0.1); ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
     for (let k = 0; k < 3; k++) {
       const a = time * (0.35 + energy * 0.8) + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
-      glowSpot(W / 2 + Math.cos(a) * off, H / 2 + Math.sin(a) * off, MIN * (0.16 + L3[k] * 0.95 + beat * 0.2), sat(RGB[k]), 0.35 + L3[k] * 0.6);
+      const gx = W / 2 + Math.cos(a) * off, gy = H / 2 + Math.sin(a) * off;
+      glowSpot(gx, gy, MIN * (0.16 + L3[k] * 0.95 + beat * 0.2), sat(RGB[k], 62), Math.min(0.92, 0.4 + L3[k] * 0.55));
+    }
+    // un velo de tinta encima da profundidad sin ensuciar los cruces
+    ctx.globalCompositeOperation = 'multiply';
+    for (let k = 0; k < 3; k++) {
+      const a = time * (0.35 + energy * 0.8) + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
+      glowSpot(W / 2 + Math.cos(a) * off, H / 2 + Math.sin(a) * off, MIN * (0.08 + L3[k] * 0.5), sat(RGB[k], 56), 0.18 + L3[k] * 0.22);
     }
     ctx.globalCompositeOperation = 'source-over';
-    glowSpot(W / 2, H / 2, MIN * (0.04 + Lh * 0.1), sat(mix(drift)), 0.3 + Lh * 0.6);
+    glowSpot(W / 2, H / 2, MIN * (0.04 + Lh * 0.1 + P * 0.04), sat(mix(drift), 66).map(x => x + (255 - x) * 0.25), Math.min(1, 0.45 + Lh * 0.55));
   }
   ctx.restore();
 }
@@ -4520,8 +4662,8 @@ function glassBackground(night) {
   x.globalCompositeOperation = night ? 'lighter' : 'soft-light';
   for (let i = 0; i < 9; i++) {
     const px = (0.1 + ((i * 0.37) % 0.85)) * bw + Math.sin(time * 0.1 + i) * bw * 0.03, py = (0.25 + ((i * 0.53) % 0.6)) * bh;
-    const lv = spec[Math.floor(i / 9 * BANDS * 0.8)], r = bh * (0.12 + lv * 0.18 + beatSoft * 0.06);
-    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], Math.min(1, (img ? 0.12 : 0.3) + lv * 0.4 + beatSoft * 0.4))); g.addColorStop(1, rgba(RGB[i % 3], 0));
+    const lv = spec[Math.floor(i / 9 * BANDS * 0.8)], P = Math.max(0, pulse.x), r = bh * (0.12 + lv * 0.18 + beatSoft * 0.03 + P * 0.07);
+    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], Math.min(1, (img ? 0.12 : 0.3) + lv * 0.4 + beatSoft * 0.15 + P * 0.5))); g.addColorStop(1, rgba(RGB[i % 3], 0));
     x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2);
   }
   if (glass.flash > 0.01) { x.globalCompositeOperation = 'lighter'; x.fillStyle = `rgba(220,230,255,${glass.flash * (state.noFlash ? 0.25 : 0.7)})`; x.fillRect(0, 0, bw, bh); }
@@ -4547,19 +4689,26 @@ function drawGlass(dt) {
   if (dropHit) glass.flash = 1; glass.flash *= Math.pow(0.02, dt);
   glassBackground(night);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.bg, 0, 0, W, H); ctx.restore();
-  if (beatSoft > 0.02) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), beatSoft * (night ? 0.1 : 0.2)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late
+  const P = Math.max(0, pulse.x), glow = beatSoft * 0.04 + P * 0.16;
+  if (glow > 0.01) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), glow * (night ? 1 : 1.8)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late con cada golpe
   const u = MIN / 1000;
   // gotitas quietas: llueve más con más energía
   const want = 70 + energy * 110;
   for (let k = 0; k < 6 && glass.small.length < want; k++) if (Math.random() < 0.5 + energy) glass.small.push({ x: Math.random() * W, y: Math.random() * H, r: u * (5 + Math.random() * Math.random() * 12), a: 0 });
-  // gotas grandes: con cada golpe de graves cae una desde arriba
-  if ((hits.bass && glass.big.length < 22) || (Math.random() < dt * (0.6 + energy * 1.5) && glass.big.length < 14))
-    glass.big.push({ x: Math.random() * W, y: -u * 30, r: u * (15 + Math.random() * 14 + (hits.bass || 0) * 8), vy: 0, hold: 0, last: 0 });
+  // gotas grandes: algunas bajan desde arriba y, con cada golpe, una gota nueva choca contra el vidrio
+  if (Math.random() < dt * (0.5 + energy * 1.2) && glass.big.length < 14)
+    glass.big.push({ x: Math.random() * W, y: -u * 30, r: u * (15 + Math.random() * 14), vy: 0, hold: 0, last: 0, a: 1 });
+  if (pulse.on) {
+    if (glass.big.length < 24 && energy > 0.05) glass.big.push({ x: W * (0.06 + Math.random() * 0.88), y: H * (0.06 + Math.random() * 0.6), r: u * (14 + Math.random() * 12 + pulse.k * 10), vy: 0, hold: 0.35 + Math.random() * 0.6, last: 0, a: 0 });
+    // el golpe sacude el vidrio: las gotas que estaban quietas se sueltan y bajan un tramo
+    for (const d of glass.big) if (d.a >= 1) { d.hold = 0; d.vy += u * (140 + 280 * pulse.k) * (d.r / (u * 20)); }
+  }
   // con cada golpe el vidrio vibra un instante (como una ventana junto a un parlante)
-  const shake = beatSoft * u * 2.2, sx = Math.sin(time * 90) * shake, sy = Math.cos(time * 77) * shake;
+  const shake = (beatSoft * 0.4 + P * 1.5) * u * 2, sx = Math.sin(time * 90) * shake, sy = Math.cos(time * 77) * shake;
   for (const d of glass.small) { d.a = Math.min(1, d.a + dt * 3); glassDrop(d.x + sx, d.y + sy, d.r * d.a * (1 + beatSoft * 0.06)); }
   for (let i = glass.big.length - 1; i >= 0; i--) {
     const d = glass.big[i];
+    d.a = Math.min(1, (d.a ?? 1) + dt * 9);   // la gota que acaba de chocar aparece de golpe
     // resbala a tirones: se frena (la retiene el vidrio) y de pronto corre
     d.hold -= dt;
     if (d.hold <= 0) { d.vy += (u * 900 * (d.r / (u * 14))) * dt; if (Math.random() < dt * 1.5) { d.hold = 0.1 + Math.random() * 0.5; d.vy *= 0.2; } }
@@ -4572,7 +4721,8 @@ function drawGlass(dt) {
     // se come las gotitas que toca y deja un rastro de gotitas detrás
     for (let j = glass.small.length - 1; j >= 0; j--) { const s_ = glass.small[j]; if (Math.abs(s_.x - d.x) < d.r && Math.abs(s_.y - d.y) < d.r) { glass.small.splice(j, 1); d.r = Math.min(u * 38, d.r + s_.r * 0.08); } }
     if (d.y - d.last > d.r * 0.9) { d.last = d.y; if (Math.random() < 0.7) glass.small.push({ x: d.x + (Math.random() - 0.5) * d.r * 0.6, y: d.y - d.r * 1.2, r: d.r * (0.18 + Math.random() * 0.2), a: 1 }); }
-    glassDrop(d.x + sx, d.y + sy, d.r * (1 + beatSoft * 0.05), 1 + Math.min(0.35, d.vy / (u * 2000)));
+    const pop = d.a < 1 ? 1 + (1 - d.a) * 0.35 : 1;   // al chocar se aplasta y se recoge
+    glassDrop(d.x + sx, d.y + sy, d.r * Math.min(1, d.a * 1.6) * pop * (1 + beatSoft * 0.03 + P * 0.04), 1 + Math.min(0.35, d.vy / (u * 2000)));
     if (d.y > H + d.r * 3) glass.big.splice(i, 1);
   }
   if (glass.small.length > want + 120) glass.small.splice(0, glass.small.length - want - 120);
@@ -4633,7 +4783,7 @@ function drawStrobe(dt) {
   if (CAN_BLUR) ctx.filter = `blur(${(size * 0.012).toFixed(2)}px)`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lh = size * 1.02, y0 = H / 2 - (lines.length - 1) * lh / 2;
-  const pump = 1 + bass * 0.08 + beat * 0.08;   // el texto late con los graves
+  const pump = 1 + bass * 0.06 + beat * 0.04 + Math.max(0, pulse.x) * 0.12;   // el texto late con el bombo
   lines.forEach((l, i) => {
     ctx.save(); ctx.translate(W / 2, H / 2 + (y0 + i * lh - H / 2) * pump); ctx.scale(0.8 * pump, pump);
     ctx.fillText(l, 0, 0); ctx.restore();
@@ -4693,7 +4843,8 @@ function drawVinyl(dt) {
   vinyl.scratch *= Math.pow(0.02, dt);
   vinyl.ang += (vinyl.spin * Math.PI * 2 + vinyl.scratch) * dt;
   ctx.save();
-  glowSpot(cx, cy, R * 2, mix(0.5), (night ? 0.2 : 0.14) + beatSoft * 0.22);
+  const P = Math.max(0, pulse.x);
+  glowSpot(cx, cy, R * (2 + P * 0.18), mix(0.5), (night ? 0.2 : 0.14) + beatSoft * 0.12 + P * 0.28);   // la luz de la sala late con el bombo
   ambient();
   // Tocadiscos: base de aluminio cepillado con sus controles (como un Technics)
   {
@@ -4755,7 +4906,7 @@ function drawVinyl(dt) {
     for (let k = 0; k < RINGS; k++) {
       const t = k / (RINGS - 1), band = Math.min(BANDS - 1, Math.floor((1 - t) * BANDS * 0.8));
       const lv = Math.pow(spec[band], 1.3), c = mix(t);
-      const a = 0.04 + lv * 0.4 + beatSoft * 0.08;
+      const a = 0.04 + lv * 0.4 + beatSoft * 0.05 + P * 0.12;
       const ra = r0 + (r1 - r0) * k / RINGS, rb = r0 + (r1 - r0) * (k + 1) / RINGS;
       const cg = ctx.createConicGradient(-0.75 + Math.sin(time * 0.2) * 0.05, cx, cy);
       const tint = c.map(v => v * 0.6 + 255 * 0.4);
@@ -4872,32 +5023,44 @@ function tilesInit() {
   // un pequeño desfase para que el mosaico quede centrado
   const ox = (W - cols * c) / 2, oy = (H - rows * c) / 2;
   list.forEach(t => { t.x += ox; t.y += oy; });
-  tiles.list = list; tiles.key = W + 'x' + H;
+  tiles.list = list; tiles.key = W + 'x' + H; tiles.order = null;
 }
 function drawTiles(dt) {
   const night = state.theme === 'dark';
   if (tiles.key !== W + 'x' + H) tilesInit();
   const L = tiles.list;
-  const pick = (n, k) => { const c = L.filter(t => t.n === n || (n === 0)); for (let i = 0; i < k && c.length; i++) { const t = c.splice(Math.floor(Math.random() * c.length), 1)[0]; t.flash = 1; if (Math.random() < 0.5) t.popV += 6 + hits.bass * 6; } };
-  if (hits.bass) {
-    pick(3, 2 + Math.round(hits.bass * 2)); pick(2, 2 + Math.round(hits.bass * 2)); pick(1, 3);
-    if (hits.bass > 0.3 || dropHit) tiles.waves.push({ x: Math.random() * W, y: Math.random() * H, r: 0, k: dropHit ? 1 : 0.7 });
+  // enciende k cuadros de tamaño n (lejos de un punto, si se da) con la fuerza a
+  const pick = (n, k, a, far) => {
+    const c = L.filter(t => t.n === n && (!far || Math.hypot(t.x + t.s / 2 - far.x, t.y + t.s / 2 - far.y) > MIN * 0.45));
+    for (let i = 0; i < k && c.length; i++) { const t = c.splice(Math.floor(Math.random() * c.length), 1)[0]; t.flash = Math.max(t.flash, a); }
+  };
+  // Como las luces de un escenario, con jerarquía: el bombo manda (enciende el siguiente grupo de la
+  // secuencia, que recorre la pantalla, y todo el mosaico respira con él); la caja contesta con un
+  // cuadro mediano en el otro lado; los platillos solo chispean en los pequeños. Cada 4 golpes, una
+  // ola; cada 16 (o en un drop), los colores cambian.
+  if (!tiles.order) tiles.order = L.map((t, i) => i).filter(i => L[i].n >= 2).sort((a, b) => (L[a].x - L[b].x) || (L[a].y - L[b].y));
+  if (pulse.on && tiles.order.length) {
+    const t0 = L[tiles.order[pulse.count % tiles.order.length]], cx0 = t0.x + t0.s / 2, cy0 = t0.y + t0.s / 2;
+    for (const t of L) { const d = Math.hypot(t.x + t.s / 2 - cx0, t.y + t.s / 2 - cy0) / (t0.s * 1.8); t.flash = Math.max(t.flash, d < 1 ? (0.8 + pulse.k * 0.3) * (1 - d * 0.55) : 0.28 * pulse.k); }
+    t0.popV += 5 + pulse.k * 4;
+    tiles.last = { x: cx0, y: cy0 };
+    if (pulse.count % 4 === 0 || dropHit) tiles.waves.push({ x: cx0, y: cy0, r: 0, k: dropHit ? 1 : 0.55 });
+    if (pulse.count % 16 === 0 || dropHit) { const k = Math.random(); L.forEach(t => { if (Math.random() < 0.4) t.colTo = (k + Math.random() * 0.35) % 1; }); }   // cambio de color con la frase
   }
-  if (hits.mid) pick(2, 1 + Math.round(hits.mid * 2));
-  if (hits.high) pick(1, 2 + Math.round(hits.high * 4));
-  if (dropHit || (hits.bass > 0.6 && Math.random() < 0.3)) { const k = Math.random(); L.forEach(t => { if (Math.random() < 0.35) t.colTo = (k + Math.random() * 0.35) % 1; }); }   // cambio de color al ritmo
-  tiles.waves.forEach(w => { w.r += dt * MIN * 1.6; w.k *= Math.pow(0.35, dt); });
+  if (hits.mid > 0.3 && energy > 0.12 && !pulse.on) pick(2, 1, 0.55 + hits.mid * 0.3, tiles.last);
+  if (hits.high && energy > 0.15) pick(1, 1, 0.32);
+  tiles.waves.forEach(w => { w.r += dt * MIN * 2.8; w.k *= Math.pow(0.1, dt); });   // olas rápidas y cortas: la luz cae en el golpe
   tiles.waves = tiles.waves.filter(w => w.k > 0.04 && w.r < Math.hypot(W, H));
   lctx.clearRect(0, 0, W, H);
   const gap = Math.max(2, MIN * 0.006), popped = [];
   for (const t of L) {
     const target = Math.pow(spec[t.band], 2.4);
     t.lv += (target - t.lv) * (1 - Math.pow(target > t.lv ? 0.0005 : 0.05, dt));
-    t.flash *= Math.pow(0.015, dt);   // se apaga rápido: se nota cada golpe por separado
+    t.flash *= Math.pow(0.015, dt);   // se enciende de golpe y se apaga en ~0,2 s: cada golpe es un destello nítido
     let wv = 0; for (const w of tiles.waves) { const d = Math.hypot(t.x + t.s / 2 - w.x, t.y + t.s / 2 - w.y); wv += w.k * Math.exp(-Math.pow((d - w.r) / (MIN * 0.12), 2)); }
     const pv = [t.pop], vv = [t.popV]; springTo(pv, vv, [0], dt, 180, 0.35); t.pop = pv[0]; t.popV = vv[0];
     if (t.colTo != null) { const d = ((t.colTo - t.col + 1.5) % 1) - 0.5; t.col = (t.col + d * Math.min(1, dt * 3) + 1) % 1; if (Math.abs(d) < 0.01) t.colTo = null; }
-    t.I = Math.min(1.2, 0.02 + t.lv * 0.22 + t.flash * 1.05 + wv * 0.8 + beatSoft * 0.08);   // lo que manda es el golpe
+    t.I = Math.min(1.2, 0.02 + t.lv * 0.18 + t.flash * 1.1 + wv * 0.8);   // lo que manda es el golpe
     if (t.pop > 0.02) popped.push(t); else drawTile(t, gap, night, 0);
   }
   popped.sort((a, b) => a.pop - b.pop).forEach(t => drawTile(t, gap, night, t.pop));   // los que sobresalen, encima
@@ -4958,7 +5121,9 @@ function tubeInit() {
 }
 function tubeStep(m, dt, air) {
   const g = m.FH * 3, lift = air * m.FH * 6, B = m.body, N = m.N;
-  const turb = m.FH * (0.35 + energy * 1.5 + beatSoft * 1.1);
+  // remolino suave que crece con la energía; el golpe lo marca la coreografía (no un remolino al azar,
+  // que en cada golpe los tiraba hacia un lado distinto y se veía desordenado)
+  const turb = m.FH * (0.12 + energy * 0.4 + beat * 0.5);
   const t = time + m.ph;
   for (let i = 2; i < N; i++) {
     const p = B[i], h = i / (N - 1);
@@ -4969,18 +5134,15 @@ function tubeStep(m, dt, air) {
     const ax = nx * turb * Math.pow(h, 1.6) * 0.5, ay = g - lift * (0.7 + 0.3 * h);   // abajo casi quieto, arriba se agita
     p.x += vx + ax * dt * dt; p.y += vy + ay * dt * dt;
   }
-  // golpe: latigazo de lado en la parte de arriba
-  if (hits.bass) { const dir = Math.random() < 0.5 ? -1 : 1, kk = m.FH * (0.008 + hits.bass * 0.018); for (let i = N - 6; i < N; i++) B[i].px -= dir * kk * (i - N + 7) / 6; }
   for (const arm of m.arms) {
     const side = arm === m.arms[0] ? -1 : 1;
     for (let i = 1; i < arm.length; i++) {
       const p = arm[i], vx = (p.x - p.px) * 0.97, vy = (p.y - p.py) * 0.97;
       p.px = p.x; p.py = p.y;
-      const fl = Math.sin(t * (7 + side) + i * 0.8) * (0.5 + high * 3 + mid * 1.5) * m.FH * 3;
+      const fl = Math.sin(t * (7 + side) + i * 0.8) * (0.25 + high * 0.8 + mid * 0.4) * m.FH * 2;   // vaivén suave; los golpes los da el compás
       p.x += vx + (side * air * m.FH * 2.2 + fl * 0.6) * dt * dt;
       p.y += vy + (g * 0.9 - air * m.FH * 3.2 + fl) * dt * dt;
     }
-    if (hits.mid) arm[arm.length - 1].py += m.FH * 0.02 * hits.mid;
   }
   // restricciones: largo de cada tramo, rigidez según el aire, el suelo
   const stiff = Math.max(0.05, Math.min(1, (air - 0.3) * 1.1));   // inflado = recto; desinflado = se dobla
@@ -5039,9 +5201,20 @@ function drawTubes(dt) {
     // el aire: la música; en silencio se desinflan, en un drop se levantan de golpe
     const goal = Math.min(1.6, 0.15 + Math.pow(energy, 0.9) * 1.25 + beatSoft * 0.7 + (dropHit ? 1 : 0));
     m.air += (goal - m.air) * (1 - Math.pow(goal > m.air ? 0.02 : 0.3, dt));
+    // Coreografía al compás: en cada golpe un soplo de aire (se estira), un latigazo que alterna
+    // izquierda y derecha (y cada muñeco va al contrario que su vecino) y un brazo arriba
+    if (pulse.on) {
+      const Bm = m.body, Nm = m.N, dir = (pulse.count + m.k) % 2 ? 1 : -1, kk = m.FH * (0.02 + pulse.k * 0.03);
+      for (let i = Nm - 7; i < Nm; i++) { const f = (i - Nm + 8) / 7; Bm[i].px -= dir * kk * f; Bm[i].py += m.FH * 0.015 * pulse.k * f; }   // latigazo y salto hacia arriba
+      m.air = Math.min(1.8, m.air + 0.35 * pulse.k);
+      const arm = m.arms[(pulse.count + m.k) % 2], tip = arm[arm.length - 1], mid_ = arm[arm.length - 3];
+      tip.py += m.FH * 0.035 * pulse.k; mid_.py += m.FH * 0.02 * pulse.k;
+    }
+    if (hits.high) { const arm = m.arms[Math.random() < 0.5 ? 0 : 1]; arm[arm.length - 1].px += (Math.random() - 0.5) * m.FH * 0.02 * hits.high; }
     const sub = 3; for (let k = 0; k < sub; k++) tubeStep(m, Math.min(dt, 0.04) / sub, m.air);
-    m.mouth += ((0.15 + mid * 1.1 + beatSoft * 0.3) - m.mouth) * Math.min(1, dt * 14);
-    const c = RGB[m.k % 3], c2 = RGB[(m.k + 1) % 3], w = m.FH * 0.11, B = m.body, N = m.N;
+    m.mouth += ((0.15 + mid * 1.1 + Math.max(0, pulse.x) * 0.6) - m.mouth) * Math.min(1, dt * 14);
+    // el soplo del golpe los infla al instante (marca el tiempo exacto) y luego viene el latigazo
+    const c = RGB[m.k % 3], c2 = RGB[(m.k + 1) % 3], w = m.FH * 0.11 * (1 + Math.max(0, pulse.x) * 0.14), B = m.body, N = m.N;
     // sombra en el suelo
     const top = B[N - 1], sx = (B[0].x + top.x) / 2;
     const sh = ctx.createRadialGradient(sx, ground, 0, sx, ground, m.FH * 0.25);
@@ -5148,6 +5321,7 @@ function render(now) {
   ctx.globalAlpha = 1;
   drawRecOverlay();
   recFrame(now);
+  liveUI();
 }
 requestAnimationFrame(frame);
 </script>
