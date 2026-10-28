@@ -534,6 +534,9 @@
       </div>
       <div class="group" role="group" aria-label="Animación" id="modes">
         <button data-mode="bars">Barras</button>
+        <button data-mode="lava">Lava</button>
+        <button data-mode="dots">Puntos</button>
+        <button data-mode="puffs">Nubes</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -3181,8 +3184,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -5263,7 +5266,347 @@ function drawTubes(dt) {
 }
 
 
-const scenes = { glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+// ================= Escena: Lava =================
+// Como una lámpara de lava: gotas de color que se calientan abajo, suben, se enfrían arriba y vuelven
+// a bajar; al tocarse se funden y luego se separan. Cada golpe calienta una gota (sube) y las infla a
+// todas; la energía aviva el fuego y en un drop estallan. Se dibuja en la tarjeta gráfica: un campo de
+// «metabolas» con relieve (parecen infladas), halo de luz, borde iridiscente y grano de película.
+// Los colores salen de la portada y se mezclan dentro de cada gota como aceite en agua.
+const lava = { prog: null, blobs: null, seq: 0, asp: 0, t: 0, shim: 0, B: new Float32Array(56) };
+const GLSL_NOISE = `
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+      return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+    float fbm(vec2 p) { float v = 0., a = .5; for (int i = 0; i < 4; i++) { v += a * n(p); p = p * 2.03 + 17.1; a *= .5; } return v; }`;
+const GLSL_PAL = `
+    vec3 pal(float k) { k = mod(k, 3.); vec3 a = k < 1. ? uC0 : k < 2. ? uC1 : uC2, b = k < 1. ? uC1 : k < 2. ? uC2 : uC0;
+      return mix(a, b, smoothstep(0., 1., fract(k))); }`;
+function lavaSetup() {
+  lava.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uShim, uGlow, uHue; uniform int uN;
+    uniform vec3 uC0, uC1, uC2;
+    uniform vec4 uB[14];   // x, y (en altos de pantalla), radio, color (0-3)
+    ${GLSL_NOISE} ${GLSL_PAL}
+    void main() {
+      float asp = uRes.x / uRes.y;
+      vec2 p = vec2(vUv.x * asp, vUv.y);
+      // campo de gotas (caída gaussiana: cada gota mide su radio y dos gotas se unen al acercarse).
+      // Cada gota trae dos colores: el «frío» de su borde y el «caliente» de su centro
+      float F = 0., Fw = 0.; vec2 G = vec2(0.); vec3 Cc = vec3(0.), Ch = vec3(0.), Cw = vec3(0.);
+      for (int i = 0; i < 14; i++) {
+        if (i >= uN) break;
+        vec2 d = p - uB[i].xy; float r2 = uB[i].z * uB[i].z, q = dot(d, d), f = exp2(-q / r2), fw = exp2(-q / (r2 * 7.));
+        vec3 c = pal(uB[i].w), c2 = pal(uB[i].w + 1.2);
+        F += f; G -= 1.3863 * f * d / r2; Cc += f * c; Ch += f * c2; Fw += fw; Cw += fw * c;
+      }
+      vec3 cool = Cc / max(F, 1e-5), hot = Ch / max(F, 1e-5), wide = Cw / max(Fw, 1e-5);
+      // calor, como una cámara térmica: el centro de cada forma es lo más caliente y un ruido que
+      // fluye lo desplaza por dentro, así el color pasa de uno a otro como con aerógrafo
+      float sw = fbm(p * 1.9 + vec2(uTime * .03, -uTime * .05));
+      float t = smoothstep(.5, 1.5, F + (sw - .5) * .6);
+      float a = smoothstep(.5 - mix(.15, .1, uNight), .5 + mix(.15, .1, uNight), F);
+      // línea fina iridiscente justo en el borde (tiembla con los agudos)
+      vec3 iri = .5 + .5 * cos(6.2832 * (atan(G.y, G.x) / 6.2832 + uTime * .04 + uShim * .25 + vec3(0., .33, .67)));
+      float line = exp(-pow((F - .55) / .06, 2.));
+      vec3 col; float glow, ga;
+      if (uNight > .5) {
+        // de noche: luz propia; bordes hondos y saturados, centro caliente y luminoso
+        col = mix(cool * .75, mix(hot, vec3(1.), .28), t);
+        col += mix(cool, iri, .4) * line * .35;
+        col *= 1. + uP * .35;
+        col = col / (1. + max(col.r, max(col.g, col.b)) * .22);
+        glow = (pow(clamp(F / .5, 0., 1.), 2.) * .55 + (1. - exp(-Fw * Fw * 1.4)) * .5) * (1. - a) * uGlow; ga = .85;
+      } else {
+        // de día: como la Luz del centro, color luminoso que tiñe el blanco con un halo amplio
+        col = mix(cool, mix(hot, vec3(1.), .45), t * .8);   // el centro, más claro: brilla
+        col = mix(col, iri, line * .12);
+        glow = (pow(clamp(F / .5, 0., 1.), 1.6) * .6 + (1. - exp(-Fw * Fw * 1.2)) * .55) * (1. - a) * uGlow; ga = .62;
+      }
+      // grano de película, distinto en cada fotograma
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .075;
+      vec3 gc = mix(wide, cool, .5);
+      o = vec4(col * a + gc * glow * ga, clamp(a + glow * ga, 0., 1.));
+    }`);
+}
+function lavaInit() {
+  const asp = W / H, n = asp > 1 ? 8 : 6, sizes = [0.14, 0.12, 0.095, 0.085, 0.07, 0.06, 0.05, 0.045];
+  lava.asp = asp;
+  // como en una lámpara de verdad: un par de gotas grandes, algunas medianas y varias pequeñas
+  const lanes = Array.from({ length: n }, (_, i) => i).sort(() => Math.random() - 0.5);
+  lava.blobs = Array.from({ length: n }, (_, i) => {
+    const r = sizes[i] * (asp > 1 ? 1 : 0.8) * (0.9 + Math.random() * 0.2);
+    return { x: (0.12 + 0.76 * Math.random()) * asp, y: i < n * 0.6 ? 0.06 + Math.random() * 0.25 : 0.3 + Math.random() * 0.6,
+      vx: 0, vy: 0, r, heat: Math.random() * 0.8, c: (i % 3) + Math.random() * 0.8, ph: Math.random() * 100,
+      home: (lanes[i] + 0.5) / n, hot: 0.6 + Math.random() * 0.8 };   // cada gota tiene su carril y su propio ritmo de calor
+  });
+}
+function drawLava(dt) {
+  if (!glInit()) { drawAura(dt); return; }   // sin WebGL2: la luz de colores
+  if (!lava.prog) lavaSetup();
+  const asp = W / H, night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  if (!lava.blobs || (asp > 1) !== (lava.asp > 1)) lavaInit();
+  if (lava.asp !== asp) { for (const b of lava.blobs) b.x *= asp / lava.asp; lava.asp = asp; }
+  const B = lava.blobs, n = B.length;
+  // Cada golpe calienta la siguiente gota (sube) y las infla a todas; la voz las mece; en un drop estallan
+  if (pulse.on) { const b = B[lava.seq++ % n]; b.heat = Math.min(1.5, b.heat + 0.22 * pulse.k); b.vy += 0.03 * pulse.k; }
+  if (hits.mid > 0.25) { const b = B[Math.floor(Math.random() * n)]; b.vx += (Math.random() - 0.5) * 0.08 * hits.mid; }
+  if (dropHit) for (const b of B) { b.vx += (Math.random() - 0.5) * 0.35; b.vy += 0.08 + Math.random() * 0.2; b.heat += 0.4; }
+  lava.shim += dt * (0.2 + high * 3);
+  const fire = 0.1 + energy * 0.45;   // con la música fuerte, el fuego de abajo calienta más
+  // se tocan y se funden, pero no se apilan todas en un solo montón: un leve empuje las separa
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+    const a_ = B[i], b_ = B[j], dx = b_.x - a_.x, dy = b_.y - a_.y, d = Math.hypot(dx, dy) || 1e-4, m = (a_.r + b_.r) * 1.15;
+    if (d < m) { const f = (m - d) / m * 0.12 * dt / d; a_.vx -= dx * f; a_.vy -= dy * f; b_.vx += dx * f; b_.vy += dy * f; }
+  }
+  for (const b of B) {
+    // abajo se calienta y arriba se enfría, como en la lámpara; caliente sube, fría baja
+    if (b.y < 0.2) b.heat += dt * fire * b.hot * (1.3 - b.y / 0.2);
+    if (b.y > 0.72) b.heat -= dt * (0.22 + (b.y - 0.72) * 1.2);
+    b.heat = Math.max(0, Math.min(1.5, b.heat - dt * 0.03));
+    b.vy += (b.heat - 0.5) * (0.09 + energy * 0.12) * dt;   // despacio: se mira y relaja
+    // cada gota vuelve despacio a su carril (que pasea un poco): se reparten por toda la pantalla
+    const hx = (b.home + 0.08 * Math.sin(time * 0.05 + b.ph)) * asp;
+    b.vx += ((hx - b.x) * 0.02 + Math.sin(time * 0.13 + b.ph) * 0.008) * dt;
+    b.vx *= Math.pow(0.35, dt); b.vy *= Math.pow(0.4, dt);   // espesa, como cera
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    const m = b.r * 0.35;
+    if (b.y < m) { b.y = m; b.vy = Math.abs(b.vy) * 0.2; }
+    if (b.y > 1 - m) { b.y = 1 - m; b.vy = -Math.abs(b.vy) * 0.2; b.heat *= 0.6; }
+    if (b.x < m) { b.x = m; b.vx = Math.abs(b.vx) * 0.3; }
+    if (b.x > asp - m) { b.x = asp - m; b.vx = -Math.abs(b.vx) * 0.3; }
+  }
+  // Media resolución: es todo suave y así va ligero también en el móvil
+  const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W), gl = GLX.gl;
+  if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
+  B.forEach((b, i) => { const k = i * 4; lava.B[k] = b.x; lava.B[k + 1] = b.y; lava.B[k + 2] = b.r * (1 + P * 0.16 + bass * 0.05 + 0.05 * Math.sin(time * 0.5 + b.ph)); lava.B[k + 3] = b.c; });
+  lava.t += dt * (0.35 + energy * 0.5);
+  const p = lava.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, lava.t); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uShim, lava.shim); gl.uniform1f(p.u.uGlow, (night ? 0.6 : 0.75) + P * 0.5 + beatSoft * 0.15); gl.uniform1f(p.u.uHue, time * 0.02);
+  gl.uniform1i(p.u.uN, n);
+  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
+  gl.uniform4fv(p.u['uB[0]'], lava.B);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ambient();
+  if (!night) {   // de día, como en la Luz: el blanco entero se tiñe con la música y respira con el golpe
+    ctx.save(); ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = rgba(mix(0.5 + 0.5 * Math.sin(time * 0.05)).map(v => v + (255 - v) * 0.55), 0.1 + energy * 0.14 + P * 0.1); ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.22 + P * 0.35 + beatSoft * 0.1);
+}
+
+// ================= Escena: Puntos =================
+// Una cuadrícula de bolitas quietas por la que pasa la lava: donde pasa, las bolitas se calientan
+// (su color va hacia el caliente y se aclara), se inflan y se unen con sus vecinas en cadenas
+// curvas. Cada columna escucha su parte del sonido (graves a la izquierda) y todas laten con el bombo.
+const dots = { prog: null, hot: null, seq: 0, t: 0, H: new Float32Array(16), L: new Float32Array(24), lv: new Float32Array(24) };
+function dotsSetup() {
+  dots.prog = glProgram(`uniform vec2 uRes, uOff; uniform float uTime, uNight, uP, uS, uCols, uRows, uHue, uShim, uGlow;
+    uniform vec3 uC0, uC1, uC2;
+    uniform vec4 uHot[4];      // x, y, radio, fuerza de cada corriente de lava
+    uniform float uLv[24];     // nivel de cada columna
+    ${GLSL_NOISE} ${GLSL_PAL}
+    void main() {
+      float asp = uRes.x / uRes.y;
+      vec2 p = vec2(vUv.x * asp, vUv.y), g0 = floor((p - uOff) / uS);
+      float F = 0., T = 0.; vec2 G = vec2(0.); vec3 Cc = vec3(0.), Ch = vec3(0.);
+      for (int j = -1; j <= 1; j++) for (int i = -1; i <= 1; i++) {
+        vec2 cell = g0 + vec2(float(i), float(j));
+        if (cell.x < 0. || cell.y < 0. || cell.x >= uCols || cell.y >= uRows) continue;
+        vec2 c = uOff + (cell + .5) * uS;
+        float heat = 0.;
+        for (int k = 0; k < 4; k++) { vec2 d = c - uHot[k].xy; heat += uHot[k].w * exp(-dot(d, d) / (uHot[k].z * uHot[k].z)); }
+        heat = clamp(heat, 0., 1.);
+        float r = uS * (.26 + .2 * heat + .05 * uLv[int(cell.x)] + .03 * uP);
+        vec2 d = p - c; float r2 = r * r, f = exp2(-dot(d, d) / r2);
+        // cada bolita con su color (en diagonal) y su propio tono: unas hondas, otras claras
+        float idx = (cell.x * .9 + cell.y * .6) * .33 + uHue, tone = h(cell * 1.7 + 3.1);
+        vec3 c0 = pal(idx), tc = tone < .3 ? c0 * .55 : tone > .75 ? mix(c0, vec3(1.), .35) : c0;
+        F += f; T += f * heat; G -= 1.3863 * f * d / r2; Cc += f * tc; Ch += f * pal(idx + 1.2);
+      }
+      vec3 cool = Cc / max(F, 1e-5), hot = Ch / max(F, 1e-5);
+      float t = smoothstep(.15, 1.1, T / max(F, 1e-5) + (fbm(p * 3. + uTime * .05) - .5) * .4);
+      float a = smoothstep(.5 - mix(.085, .07, uNight), .5 + mix(.085, .07, uNight), F);   // bordes más nítidos que en Lava: gráfico
+      vec3 iri = .5 + .5 * cos(6.2832 * (atan(G.y, G.x) / 6.2832 + uTime * .04 + uShim * .25 + vec3(0., .33, .67)));
+      float line = exp(-pow((F - .56) / .06, 2.));
+      vec3 col; float glow, ga;
+      if (uNight > .5) {
+        col = mix(cool * .8, mix(hot, vec3(1.), .3), t);
+        col += mix(cool, iri, .4) * line * .3;
+        col *= 1. + uP * .3;
+        col = col / (1. + max(col.r, max(col.g, col.b)) * .22);
+        glow = pow(clamp(F / .5, 0., 1.), 2.) * (1. - a) * uGlow; ga = .85;
+      } else {
+        col = mix(cool, mix(hot, vec3(1.), .45), t * .85);
+        col = mix(col, iri, line * .12);
+        glow = pow(clamp(F / .5, 0., 1.), 1.5) * (1. - a) * uGlow; ga = .6;
+      }
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .075;
+      o = vec4(col * a + cool * glow * ga, clamp(a + glow * ga, 0., 1.));
+    }`);
+}
+function drawDots(dt) {
+  if (!glInit()) { drawBokeh(dt); return; }   // sin WebGL2: los focos
+  if (!dots.prog) dotsSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
+  // cuadrícula: bolitas a la misma distancia en horizontal y vertical, centrada
+  const S = asp > 1 ? 0.2 : 0.155, cols = Math.min(24, Math.floor(asp / S)), rows = Math.floor(1 / S);
+  const off = [(asp - cols * S) / 2, (1 - rows * S) / 2];
+  // corrientes de lava que recorren la cuadrícula despacio; cada golpe enciende una y en un drop arden todas
+  if (!dots.hot) dots.hot = [0, 1, 2].map(k => ({ ph: Math.random() * 100, sp: 0.6 + k * 0.23, k: 0.3 }));
+  if (pulse.on) { const hs = dots.hot[dots.seq++ % 3]; hs.k = Math.min(1.2, hs.k + 0.4 * pulse.k); }
+  if (dropHit) dots.hot.forEach(hs => hs.k = 1.2);
+  dots.t += dt * (0.05 + energy * 0.12);
+  dots.hot.forEach((hs, k) => {
+    hs.k += ((0.12 + energy * 0.5) - hs.k) * (1 - Math.pow(0.3, dt));   // vuelve despacio a lo que pide la música
+    const t = dots.t * hs.sp + hs.ph;
+    dots.H[k * 4] = asp * (0.5 + 0.45 * Math.sin(t * 1.3 + k * 2.1));
+    dots.H[k * 4 + 1] = 0.5 + 0.42 * Math.sin(t * 0.9 + k * 1.3);
+    dots.H[k * 4 + 2] = S * (0.95 + 0.3 * Math.sin(t * 0.7 + k));   // corrientes estrechas: unen unas pocas bolitas
+    dots.H[k * 4 + 3] = hs.k;
+  });
+  // cada columna escucha su banda (graves a la izquierda), con un muelle para que no tiemble
+  for (let i = 0; i < cols; i++) {
+    const f = i / Math.max(1, cols - 1) * (BANDS - 1) * 0.85, a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
+    const v = Math.pow(spec[a] * (1 - (f - a)) + spec[b] * (f - a), 1.2);
+    dots.lv[i] += (v - dots.lv[i]) * (1 - Math.pow(v > dots.lv[i] ? 0.001 : 0.08, dt));
+    dots.L[i] = dots.lv[i];
+  }
+  const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W), gl = GLX.gl;
+  if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
+  const p = dots.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uOff, off[0], off[1]);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uS, S); gl.uniform1f(p.u.uCols, cols); gl.uniform1f(p.u.uRows, rows);
+  gl.uniform1f(p.u.uHue, time * 0.015); gl.uniform1f(p.u.uShim, (dots.shim = (dots.shim || 0) + dt * (0.2 + high * 3)));
+  gl.uniform1f(p.u.uGlow, (night ? 0.6 : 0.7) + P * 0.5);
+  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
+  dots.H.fill(0, 12); gl.uniform4fv(p.u['uHot[0]'], dots.H); gl.uniform1fv(p.u['uLv[0]'], dots.L);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ambient();
+  if (!night) {   // de día, el blanco se tiñe un poco con la música (como en la Luz)
+    ctx.save(); ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = rgba(mix(0.5 + 0.5 * Math.sin(time * 0.05)).map(v => v + (255 - v) * 0.6), 0.08 + energy * 0.1 + P * 0.08); ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.2 + P * 0.35);
+}
+
+// ================= Escena: Nubes =================
+// Cúmulos pastel como un render 3D suave: cada nube es un racimo de esferas que se funden, con luz
+// de arriba, sombra delicada en los pliegues y bordes translúcidos; dos capas (las de atrás, más
+// lejanas y brumosas) sobre un cielo en degradado. Los colores salen de la portada en tono pastel.
+// Respiran con cada golpe, cada bulto escucha su parte del sonido y la luz de dentro sube con la energía.
+const puffs = { prog: null, clouds: null, asp: 0, A: new Float32Array(192), ZA: new Float32Array(96), nA: 0, nB: 0, lv: new Float32Array(3), lvV: new Float32Array(3), lvT: new Float32Array(3) };
+function puffsSetup() {
+  puffs.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP; uniform int uN;
+    uniform vec3 uC0, uC1, uC2, uSky0, uSky1;
+    uniform vec4 uA[48];    // x, y (altos de pantalla), radio, color — ya ordenados de atrás hacia delante
+    uniform vec2 uZ[48];    // bruma (0 delante, 1 al fondo) y luz de su nube
+    ${GLSL_NOISE} ${GLSL_PAL}
+    void main() {
+      float asp = uRes.x / uRes.y;
+      vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., vUv.y));
+      vec3 col = sky;
+      vec3 L = normalize(vec3(-.42, .7, .58));
+      // cada bulto es una esfera grande y lisa con borde suave; se pintan de atrás hacia delante,
+      // así los de delante tapan a los de atrás sin pliegues ni líneas oscuras
+      for (int i = 0; i < 48; i++) {
+        if (i >= uN) break;
+        vec4 b = uA[i];
+        vec2 d = (p - b.xy) / b.z; float q = dot(d, d);
+        if (q > 1.) continue;
+        float rho = sqrt(q), a = smoothstep(1., .8, rho);
+        vec3 n = vec3(d, sqrt(1. - q));
+        float l = dot(n, L) * .5 + .5;
+        vec3 c = pal(b.w);
+        vec3 lit = mix(c * vec3(.84, .86, .98) * .84, mix(c, vec3(1.), .45), smoothstep(.1, 1., l));   // volumen: arriba claro, abajo el mismo color más hondo
+        lit += mix(c, vec3(1.), .7) * pow(rho, 4.) * .18;                 // borde translúcido
+        lit = mix(lit, mix(c, vec3(1.), .55), uZ[i].y * .5);               // la nube que «canta» se enciende
+        lit += c * uP * .06;
+        lit = mix(lit, sky, uZ[i].x * .3);                                  // bruma: las del fondo, más lejanas
+        col = mix(col, lit, a);
+      }
+      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .035;
+      o = vec4(col, 1.);
+    }`);
+}
+function puffsInit() {
+  const asp = W / H; puffs.asp = asp;
+  // un cúmulo: pocas esferas grandes — una corona arriba, hombros a los lados y una base delante
+  const cloud = (x, base, w, h, layer, c) => {
+    const lobes = [], J = () => (Math.random() - 0.5);
+    const add = (ux, uy, r, z) => lobes.push({ dx: ux * w * 0.5, dy: uy * h, r: r * h, z: z + layer * -10, ph: Math.random() * 100,
+      band: uy < 0.35 ? 0 : uy < 0.65 ? 1 : 2, c: c + uy * 0.9 + J() * 0.18 });   // el color cambia poco a poco con la altura
+    add(0.05 + J() * 0.25, 0.7 + J() * 0.06, 0.36 + J() * 0.05, 0);                 // corona
+    add(-0.5 + J() * 0.1, 0.46 + J() * 0.06, 0.36 + J() * 0.04, 1);                 // hombros
+    add(0.52 + J() * 0.1, 0.48 + J() * 0.06, 0.37 + J() * 0.04, 1.2);
+    add(J() * 0.2, 0.42, 0.42, 0.8);                                                  // cuerpo
+    add(-0.42 + J() * 0.1, 0.16, 0.4 + J() * 0.05, 2 + Math.random());               // base, delante
+    add(0.45 + J() * 0.1, 0.15, 0.42 + J() * 0.05, 2 + Math.random());
+    return { x, base, w, h, layer, lobes, vx: layer ? 0.006 : 0.012, glow: 0 };
+  };
+  const L = asp > 1
+    ? [cloud(asp * 0.3, -0.02, 0.85, 0.8, 1, 0.1), cloud(asp * 0.8, 0.0, 0.75, 0.7, 1, 1.3),
+       cloud(asp * 0.1, -0.1, 0.6, 0.48, 0, 2.2), cloud(asp * 0.52, -0.12, 0.75, 0.52, 0, 0.8), cloud(asp * 0.97, -0.1, 0.55, 0.44, 0, 2.5)]
+    : [cloud(asp * 0.5, 0.1, 1.1, 0.7, 1, 0.1), cloud(asp * 0.25, -0.05, 0.8, 0.46, 0, 2.2), cloud(asp * 0.85, -0.07, 0.7, 0.4, 0, 1.1)];
+  puffs.clouds = L;
+}
+function drawPuffs(dt) {
+  if (!glInit()) { drawCloudsPuffs(dt); return; }
+  if (!puffs.prog) puffsSetup();
+  const asp = W / H, night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  if (!puffs.clouds || (asp > 1) !== (puffs.asp > 1)) puffsInit();
+  if (puffs.asp !== asp) { for (const c of puffs.clouds) c.x *= asp / puffs.asp; puffs.asp = asp; }
+  puffs.lvT[0] = Math.pow(bass, 0.8); puffs.lvT[1] = Math.pow(mid, 0.8); puffs.lvT[2] = Math.pow(high, 0.8);
+  springTo(puffs.lv, puffs.lvV, puffs.lvT, dt, 120, 0.6);
+  // con cada golpe, una nube distinta se ilumina por dentro (cantan por turnos); en un drop, todas
+  if (pulse.on) { const big = puffs.clouds.filter(c => c.w > 0.4); const c = big[(puffs.seq = (puffs.seq || 0) + 1) % big.length]; c.glow = Math.max(c.glow, 0.45 + 0.55 * pulse.k); }
+  if (dropHit) puffs.clouds.forEach(c => c.glow = 1);
+  const list = [];
+  for (const c of puffs.clouds) {
+    c.glow *= Math.pow(state.noFlash ? 0.3 : 0.06, dt);
+    c.x += c.vx * (0.4 + energy * 1.2) * dt;   // pasan despacio; con más energía, algo más rápido
+    if (c.x - c.w * 0.6 > asp) { c.x = -c.w * 0.6; c.glow = 0; }
+    for (const l of c.lobes) {
+      const lv = Math.max(0, puffs.lv[l.band]);
+      // cada bulto respira despacio, crece un poco con su banda y todos se inflan con el golpe
+      const r = l.r * (1 + 0.035 * Math.sin(time * 0.4 + l.ph) + lv * 0.05 + P * 0.045);
+      list.push([c.x + l.dx + Math.sin(time * 0.2 + l.ph) * 0.006, c.base + l.dy + Math.cos(time * 0.17 + l.ph) * 0.005, r, l.c, l.z, c.layer ? 1 : 0, c.glow * (state.noFlash ? 0.4 : 1)]);
+    }
+  }
+  list.sort((a, b) => a[4] - b[4]);
+  const n = Math.min(48, list.length);
+  for (let i = 0; i < n; i++) { const e = list[i]; puffs.A.set([e[0], e[1], e[2], e[3]], i * 4); puffs.ZA[i * 2] = e[5]; puffs.ZA[i * 2 + 1] = e[6]; }
+  // colores pastel de la portada; cielo con el más azulado (de día claro, de noche hondo)
+  const pastel = c => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(60, Math.min(90, s_)), night ? 66 : 76)).map(v => v / 255); };
+  const blue = RGB.slice().sort((a, b) => (b[2] - (b[0] + b[1]) / 2) - (a[2] - (a[0] + a[1]) / 2))[0];
+  const [hs] = hexToHsl(rgbToHex(...blue));
+  const sky0 = hexToRgb(hsl(hs, 62, night ? 14 : 63)).map(v => v / 255), sky1 = hexToRgb(hsl(hs + 20, 55, night ? 22 : 80)).map(v => v / 255);
+  const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W), gl = GLX.gl;
+  if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
+  const p = puffs.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P + Math.max(0, puffs.lv[0]) * 0.3);
+  gl.uniform1i(p.u.uN, n);
+  gl.uniform3fv(p.u.uC0, pastel(RGB[0])); gl.uniform3fv(p.u.uC1, pastel(RGB[1])); gl.uniform3fv(p.u.uC2, pastel(RGB[2]));
+  gl.uniform3fv(p.u.uSky0, sky0); gl.uniform3fv(p.u.uSky1, sky1);
+  gl.uniform4fv(p.u['uA[0]'], puffs.A); gl.uniform2fv(p.u['uZ[0]'], puffs.ZA);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+const scenes = { puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
