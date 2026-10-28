@@ -6539,7 +6539,7 @@ function drawHarp(dt) {
 const paint = { layer: null, pc: null, key: '', drips: [], fresh: [], rings: [], dust: [], seq: 0, last: null };
 function paintSplat(x, y, R, ang, col, k, drips) {
   const c = paint.pc, night = state.theme === 'dark';
-  const lite = col.map(v => v + (255 - v) * 0.3), deep = col.map(v => v * 0.78);
+  const lite = col.map(v => v + (255 - v) * (night ? 0.12 : 0.3)), deep = col.map(v => v * 0.78);   // de noche, sin blanquear: el color se queda intenso
   // la mancha: un borde irregular, como pintura que se aplasta contra la pared, con unas lenguas
   // hacia donde iba el lanzamiento
   const ph = [Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3, Math.random() * 6.3], N = 60;
@@ -6627,10 +6627,10 @@ function drawPaint(dt) {
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (const f of paint.fresh) {
     f.age += dt; const life = Math.exp(-f.age / 7);
-    glowSpot(f.x, f.y, f.R * (2.6 + voice * 1.2 + P * 0.6), night ? f.col : f.col.map(v => v + (255 - v) * 0.5), (night ? 0.32 : 0.22) * life * (0.45 + voice * 0.8 + P * 0.5));
+    glowSpot(f.x, f.y, f.R * (2.6 + voice * 1.2 + P * 0.6), night ? f.col : f.col.map(v => v + (255 - v) * 0.5), (night ? 0.22 : 0.22) * life * (0.45 + voice * 0.8 + P * 0.5));
   }
   ctx.restore();
-  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? 0.92 : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
+  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? 0.82 : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
   // el impacto: un anillo de luz que se abre y se apaga
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (let i = paint.rings.length - 1; i >= 0; i--) {
@@ -6647,7 +6647,7 @@ function drawPaint(dt) {
     ctx.beginPath(); ctx.arc(q.x, q.y - p * MIN * 0.01, Math.max(1, DPR * 1.3), 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
-  if (night) { bloom(paint.layer, 0.35 + P * 0.25 + voice * 0.2); }
+  if (night) { bloom(paint.layer, 0.26 + P * 0.22 + voice * 0.18); }
 }
 
 // ================= Escena: Eclipse =================
