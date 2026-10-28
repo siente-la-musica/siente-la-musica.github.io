@@ -538,8 +538,6 @@
         <button data-mode="dots">Puntos</button>
         <button data-mode="puffs">Nubes</button>
         <button data-mode="bust">Silueta</button>
-        <button data-mode="cats">Gatos</button>
-        <button data-mode="curtain">Cortina</button>
         <button data-mode="orbs">Orbes</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
@@ -639,7 +637,7 @@ const PALETTES = [
 ];
 
 const state = {
-  mode: ((m) => m === 'dancers' ? 'bars' : m)(store.get('mode', 'bars')),
+  mode: ((m) => m === 'dancers' ? 'bars' : m === 'cats' || m === 'curtain' ? 'lava' : m)(store.get('mode', 'bars')),
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -3188,8 +3186,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'cats', 'orbs'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
