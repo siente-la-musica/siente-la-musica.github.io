@@ -5487,6 +5487,7 @@ function drawLava(dt) {
   // Cada golpe calienta la siguiente gota (sube) y las infla a todas; la voz las mece; en un drop estallan
   if (pulse.on) { const b = B[lava.seq++ % n]; b.heat = Math.min(1.5, b.heat + 0.22 * pulse.k); b.vy += 0.03 * pulse.k; }
   if (hits.mid > 0.25) { const b = B[Math.floor(Math.random() * n)]; b.vx += (Math.random() - 0.5) * 0.08 * hits.mid; }
+  if (hits.voice) { const b = B[Math.floor(Math.random() * n)]; b.heat = Math.min(1.5, b.heat + 0.1 * (0.5 + hits.voice)); }   // cada sílaba calienta una gota: la voz también las hace subir
   if (dropHit) for (const b of B) { b.vx += (Math.random() - 0.5) * 0.35; b.vy += 0.08 + Math.random() * 0.2; b.heat += 0.4; }
   lava.shim += dt * (0.2 + high * 3);
   const fire = 0.1 + energy * 0.45;   // con la música fuerte, el fuego de abajo calienta más
@@ -6317,7 +6318,7 @@ function harpSetup() {
           float along = clamp(t / len, 0., 1.);
           // luz que viene de arriba y se apaga hacia abajo, con la punta encendida
           float body = mix(1., .28, pow(along, .8)) * smoothstep(len + .003, len - .005, t);
-          float tz = (t - len) / .016, tip = exp(-tz * tz) * (fl > 0. ? .75 : .25);
+          float tz = (t - len) / .016, tip = exp(-tz * tz) * (fl > 0. ? .75 : .12);
           float b = (.15 + .85 * r2 * r2) * (fl > 0. ? 1. : .45) * sheet;
           // estelas de luz que bajan (como un viaje por el Bifrost): cabeza brillante y cola larga hacia arriba
           float pz = along - fract(uFlow * (.6 + r3 * .8) + r1 * 7.), flow = (pz < 0. ? exp(pz / .16) : exp(-pz * pz / .0003)) * step(.78, r3) * uVoice * step(t, len) * .8;
@@ -6335,7 +6336,7 @@ function harpSetup() {
       }
       if (uNight > .5) {
         col += add * (1. + uP * .25);
-        float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .5) * exp(-eg * eg) * (.16 + uTip * .12 + uP * .1) * sheet;   // el borde, una línea de luz continua
+        float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .5) * exp(-eg * eg) * (.1 + uTip * .1 + uP * .08) * sheet;   // el borde, una línea de luz continua
       } else {   // un resplandor de color por el borde de la cortina, como luz sobre el papel
         float eg = (t - lenH) / .07; col = mix(col, mix(pal(hueX), vec3(1.), .35), exp(-eg * eg) * (.18 + uP * .1));
       }
@@ -6446,7 +6447,7 @@ function drawHarp(dt) {
     harp.lvT[g] = Math.min(1.1, Math.pow(rv * 0.6 + sv * 0.4, 0.85) * 1.1 * (1 + 0.5 * g / (G - 1)));
     harp.vib[g] *= Math.pow(0.12, dt);
   }
-  for (let pass = 0; pass < 2; pass++) { let prev = harp.lvT[0]; for (let g = 0; g < G; g++) { const cur = harp.lvT[g], nx = harp.lvT[Math.min(G - 1, g + 1)]; harp.lvT[g] = prev * 0.25 + cur * 0.5 + nx * 0.25; prev = cur; } }   // el borde fluye, sin escalones
+  for (let pass = 0, np = W < H ? 4 : 2; pass < np; pass++) { let prev = harp.lvT[0]; for (let g = 0; g < G; g++) { const cur = harp.lvT[g], nx = harp.lvT[Math.min(G - 1, g + 1)]; harp.lvT[g] = prev * 0.25 + cur * 0.5 + nx * 0.25; prev = cur; } }   // el borde fluye, sin escalones
   springTo(harp.lv, harp.lvV, harp.lvT, dt, 200, 0.55);
   // el bombo hace ondear la cortina (cada golpe hacia un lado), la caja pulsa unas cuerdas
   const u = harp.u, v = harp.v, NX = HARP_NX, NY = HARP_NY;
@@ -6558,8 +6559,9 @@ function drawPaint(dt) {
     paint.last = [x, y]; paint.seq++;
     paintSplat(x, y, R, Math.random() * Math.PI * 2, pickCol(), k, drips);
   };
-  if (pulse.on) throwAt(MIN * (0.045 + 0.055 * pulse.k + energy * 0.03), 0.5 + 0.5 * pulse.k, 1 + Math.floor(Math.random() * 3));
-  if (hits.snare && !pulse.on) throwAt(MIN * (0.016 + 0.012 * Math.random()), 0.5, Math.random() < 0.3 ? 1 : 0);
+  // un lanzamiento cada dos golpes (la pared respira, no se llena de golpe); la caja, a veces, una salpicadura
+  if (pulse.on && pulse.count % 2 === 0) throwAt(MIN * (0.05 + 0.06 * pulse.k + energy * 0.03), 0.5 + 0.5 * pulse.k, (Math.random() < 0.6 ? 1 : 0) + (pulse.k > 0.8 ? 1 : 0));
+  if (hits.snare && !pulse.on && Math.random() < 0.5) throwAt(MIN * (0.014 + 0.01 * Math.random()), 0.4, 0);
   if (dropHit) for (let i = 0; i < 4; i++) throwAt(MIN * (0.1 + Math.random() * 0.06), 1, 3);
   if (hits.hat && paint.fresh.length) { const f = paint.fresh[Math.floor(Math.random() * paint.fresh.length)]; for (let i = 0; i < 6; i++) { const a = Math.random() * 6.28, d = f.R * (0.6 + Math.random() * 1.8); paint.dust.push({ x: f.x + Math.cos(a) * d, y: f.y + Math.sin(a) * d, t: 0, life: 0.5 + Math.random() * 0.6, col: f.col }); } }
   // los chorros bajan, más rápido mientras se canta, y se van frenando
@@ -6571,8 +6573,8 @@ function drawPaint(dt) {
     d.left -= step; d.v *= Math.pow(0.8, dt); d.w *= Math.pow(0.9, dt * (1 + step / Math.max(1, d.w)));
     if (d.left <= 0.5 || d.w < 0.6) { c.fillStyle = rgba(d.col, 1); c.beginPath(); c.arc(d.x, d.y, d.w * 0.9, 0, Math.PI * 2); c.fill(); paint.drips.splice(i, 1); }   // la gota final
   }
-  // la pintura vieja se desvanece despacio (vida media de ~14 s)
-  c.globalCompositeOperation = 'destination-out'; c.fillStyle = `rgba(0,0,0,${1 - Math.pow(0.5, dt / 14)})`; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
+  // la pintura vieja se desvanece despacio (vida media de ~8 s)
+  c.globalCompositeOperation = 'destination-out'; c.fillStyle = `rgba(0,0,0,${1 - Math.pow(0.5, dt / 8)})`; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
   // la pared
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   if (night) {
