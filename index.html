@@ -3501,6 +3501,10 @@ function drawInfinity(dt) {
   const P = Math.max(0, pulse.x);
   if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
+  // la voz: cada sílaba manda por el túnel una onda del color de la nota
+  const vP = drawInfinity.vp || (drawInfinity.vp = []), melC = melodyColor();
+  if (hits.voice && voice > 0.12) vP.push(camZ + 0.5);
+  for (let i = vP.length - 1; i >= 0; i--) { vP[i] += dt * 10; if (vP[i] > camZ + 40) vP.splice(i, 1); }
 
   const F = MIN * 0.55, FAR = 24, SP = 0.8;
   // La cámara sigue el camino y mira en la dirección en que avanza
@@ -3530,11 +3534,13 @@ function drawInfinity(dt) {
     // Cerca reaccionan los graves; lejos, los agudos
     const band = Math.min(BANDS - 1, Math.floor((dz / FAR) * BANDS * 0.85));
     const v = spec[band];
-    let glow = 0; for (const pz of pulses) glow += Math.exp(-((z - pz) ** 2) / 0.8);
+    let glow = 0, vg = 0; for (const pz of pulses) glow += Math.exp(-((z - pz) ** 2) / 0.8);
+    for (const pz of vP) vg += Math.exp(-((z - pz) ** 2) / 1.2);
+    vg = Math.min(1, vg);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
     const R = sc * tunnelRadius(z) * (1 + v * 0.12 + P * 0.07 * (1 - dz / FAR));   // el túnel entero late con el golpe
     const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
-    lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + beat * 0.4)));
+    lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)).map((c_, j) => c_ + (melC[j] - c_) * vg * 0.85), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + vg * 0.8 + beat * 0.4)));
     const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
     // Las líneas de menos de un píxel parpadean: se mantienen a 1 px y se atenúan en su lugar
     lctx.lineWidth = Math.max(DPR, lw);
@@ -4116,6 +4122,8 @@ function drawFluid(dt) {
   if (hits.mid) ring(1 + Math.round(hits.mid), hits.mid * 0.6, 0.18, 0.3 + hits.mid * 0.3);
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
   if (Math.random() < energy * dt * 6) ring(1, energy * 0.4, 0.15, 0.15 + energy * 0.25);
+  // la voz: cada sílaba suelta un hilo de tinta del color de la nota que sube suave desde abajo
+  if (hits.voice && voice > 0.12) { const x = 0.3 + Math.random() * 0.4; fluidSplat(x, 0.12, (Math.random() - 0.5) * 600, 1600 + hits.voice * 1400, fluidColor(melodyColor(), 0.35 + hits.voice * 0.3), R(0.16)); }
   // El ratón o el dedo revuelven
   if (fluid.pointer && fluid.pointer.moves.length) {
     for (const [x, y, dx, dy] of fluid.pointer.moves.splice(0)) fluidSplat(x, y, dx * 6000, dy * 6000, fluidColor(mix(x), 0.18), R(0.2));
@@ -4430,12 +4438,14 @@ function drawMagnet(dt) {
   const kick = pulse.on ? pulse.k : 0, burst = mag.release;
   mag.release = 0;
   const s = MIN, maxV = s * (0.35 + energy * 1.5);
-  const cols = RGB.map(c => night ? c : c.map(v => v * 0.8));
+  // la voz: las partículas del imán del medio toman el color de la nota, giran más y respiran con cada sílaba
+  const vo = Math.min(1, voice * 1.5), melC = melodyColor(), syl = hits.voice ? 0.25 + hits.voice * 0.2 : 0;
+  const cols = RGB.map((c, k) => (k === 1 ? c.map((v, j) => v + (melC[j] - v) * vo * 0.7) : c)).map(c => night ? c : c.map(v => v * 0.8));
   for (let i = 0; i < mag.n; i++) {
     const b = mag.band[i];
     let tx, ty, swirl;
     if (usePtr) { tx = px; ty = py; swirl = mag.down ? 2.2 : 0.6; }
-    else { tx = att[b][0]; ty = att[b][1]; swirl = 0.9 + lv[b]; }
+    else { tx = att[b][0]; ty = att[b][1]; swirl = 0.9 + lv[b] + (b === 1 ? vo * 0.8 : 0); }
     let dx = tx - mag.x[i], dy = ty - mag.y[i];
     const d2 = dx * dx + dy * dy + s * s * 0.002, d = Math.sqrt(d2);
     // Atracción + giro alrededor del imán
@@ -4444,6 +4454,7 @@ function drawMagnet(dt) {
     // Cada golpe (o soltar el ratón): estallido hacia fuera de las que ya llegaron a su imán (las lejanas
     // siguen volviendo; así nunca se quedan dando vueltas por fuera)
     if (burst || (kick && b === 0 && d < s * 0.22)) { const k = (burst ? 0.55 : kick * 0.6) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
+    else if (syl && b === 1 && d < s * 0.18) { const k = syl * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
     mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
     const v2 = mag.vx[i] * mag.vx[i] + mag.vy[i] * mag.vy[i];
@@ -4837,6 +4848,9 @@ function drawGlass(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.bg, 0, 0, W, H); ctx.restore();
   const P = Math.max(0, pulse.x), glow = beatSoft * 0.04 + P * 0.16;
   if (glow > 0.01) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), glow * (night ? 1 : 1.8)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late con cada golpe
+  // la voz: detrás del vidrio se enciende una luz del color de la nota, como una ventana iluminada al fondo
+  const gv = drawGlass.v = (drawGlass.v || 0) + (Math.min(1, voice * 1.5) - (drawGlass.v || 0)) * (1 - Math.pow(0.1, dt));
+  if (gv > 0.02) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; glowSpot(W * (0.5 + 0.2 * Math.sin(time * 0.05)), H * 0.42, MIN * (0.35 + gv * 0.3), melodyColor(), gv * (night ? 0.35 : 0.5)); ctx.restore(); }
   const u = MIN / 1000;
   // gotitas quietas: llueve más con más energía
   const want = 70 + energy * 110;
@@ -4990,7 +5004,9 @@ function drawVinyl(dt) {
   vinyl.ang += (vinyl.spin * Math.PI * 2 + vinyl.scratch) * dt;
   ctx.save();
   const P = Math.max(0, pulse.x);
-  glowSpot(cx, cy, R * (2 + P * 0.18), mix(0.5), (night ? 0.2 : 0.14) + beatSoft * 0.12 + P * 0.28);   // la luz de la sala late con el bombo
+  // la luz de la sala late con el bombo; mientras se canta, toma el color de la nota
+  const vv = drawVinyl.v = (drawVinyl.v || 0) + (Math.min(1, voice * 1.5) - (drawVinyl.v || 0)) * (1 - Math.pow(0.1, dt)), vmc = melodyColor();
+  glowSpot(cx, cy, R * (2 + P * 0.18 + vv * 0.3), mix(0.5).map((c_, j) => c_ + (vmc[j] - c_) * vv * 0.75), (night ? 0.2 : 0.14) + beatSoft * 0.12 + P * 0.28 + vv * 0.1);
   ambient();
   // Tocadiscos: base de aluminio cepillado con sus controles (como un Technics)
   {
@@ -6120,6 +6136,8 @@ function drawCurtain(dt) {
     else t.beads.push(Object.assign(curtain.bead(Math.random() * t.len * 0.8), { glow: 1 }));
   }
   if (hits.high) { const t = T[Math.floor(Math.random() * T.length)], b = t.beads[0]; if (b) b.spark = 1; }
+  // la voz: cada sílaba enciende una cuenta con el color de la nota y la estira en un destello
+  if (hits.voice && voice > 0.12) { const t = T[Math.floor(Math.random() * T.length)]; const b = t.beads[0] || (t.beads.push(curtain.bead(Math.random() * t.len * 0.8)), t.beads[0]); b.c = Math.floor(((melodyHue % 1) + 1) % 1 * 3) % 3; b.glow = 1; b.flare = Math.max(b.flare, 1); }
   lctx.clearRect(0, 0, W, H);
   const sway = (2 + mid * 8) * DPR, lw = Math.max(1, DPR * 0.9);
   for (const t of T) {
