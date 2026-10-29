@@ -1164,7 +1164,7 @@ function analyse(dt) {
   for (let i = 0; i < BANDS; i++) {
     const v = spec[i];
     lvFloor[i] += (v - lvFloor[i]) * (v < lvFloor[i] ? 1 - Math.pow(0.02, dt) : 1 - Math.pow(0.75, dt));
-    lvCeil[i] = Math.max(lvCeil[i] * Math.pow(0.8, dt), v, lvFloor[i] + 0.12);
+    lvCeil[i] = Math.max(lvCeil[i] * Math.pow(0.93, dt), v, lvFloor[i] + 0.12);   // el techo baja despacio: tras un estribillo, la estrofa se ve suave
     lvx[i] = Math.min(1, Math.max(0, (v - lvFloor[i]) / (lvCeil[i] - lvFloor[i])));
   }
   bass = avg(raw, 0, 10); mid = avg(raw, 10, 38); high = avg(raw, 38, BANDS);
