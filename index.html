@@ -287,7 +287,9 @@
   .lib-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 12px; background: none; text-align: left; width: 100%; font-size: 14px; }
   .lib-row:hover { background: var(--chip); filter: none; }
   .lib-row.now { background: color-mix(in srgb, var(--c1, #888) 22%, transparent); }
-  .lib-row img, .lib-row .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--chip); }
+  .lib-row img, .lib-row .ph { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--chip); box-shadow: 0 3px 10px rgba(0,0,0,.18); transition: transform .2s; }
+  .lib-row:hover img { transform: scale(1.05); }
+  .lib-row { transition: background .2s; }
   .lib-row.round img { border-radius: 50%; }
   .lib-row .tx { min-width: 0; display: grid; gap: 1px; }
   .lib-row .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2669,7 +2671,7 @@ songEl.addEventListener('wheel', e => {
 function layoutBottom() {
   const dock = document.getElementById('dock'), show = !songEl.hidden && songEl.classList.contains('player');
   const root = document.documentElement.style, dw = dock.offsetWidth, dh = dock.offsetHeight, gap = 10;
-  const pw = Math.min(380, innerWidth - 24);
+  const pw = Math.min(innerWidth >= dw + 430 + gap + 40 ? 430 : 400, innerWidth - 24);   // con aire para aleatorio y repetir
   if (!show) { root.setProperty('--bar-shift', '0px'); root.setProperty('--stack-h', dh + 'px'); return; }
   if (innerWidth >= dw + pw + gap + 40) {   // al lado: el conjunto queda centrado
     const shift = (pw + gap) / 2, left = innerWidth / 2 + shift - dw / 2 - gap - pw;
@@ -4030,7 +4032,7 @@ function drawCloudsPuffs(dt) {
       const v = bandX(cl.band[0], cl.band[1]);   // su tramo, con sus altos y bajos
       cl.lvV += ((v - cl.level) * 220 - cl.lvV * 2 * Math.sqrt(220) * 0.5) * dt; cl.level += cl.lvV * dt;
       if (hits.bass && layer === 2) cl.lvV += hits.bass * 2;
-      cl.phase += dt * cl.speed;
+      cl.phase += dt * cl.speed * (0.04 + energy * 2.4);   // sin música, quietas
       const S = MIN * cl.size * (0.92 + Math.max(0, cl.level) * 0.24 + beatSoft * 0.05);
       const span = W + S * 2.4;
       const cx = (((cl.u + cl.phase) % 1 + 1) % 1) * span - S * 1.2, cy = cl.v * H + Math.sin(time * 0.25 + cl.u * 9) * MIN * 0.01;
@@ -5783,6 +5785,9 @@ function drawLava(dt) {
   if (!lava.blobs || (asp > 1) !== (lava.asp > 1)) lavaInit();
   if (lava.asp !== asp) { for (const b of lava.blobs) b.x *= asp / lava.asp; lava.asp = asp; }
   const B = lava.blobs, n = B.length;
+  // la cera solo se mueve cuando suena algo: en silencio el tiempo de la lámpara casi se detiene
+  lava.act = (lava.act || 0) + (Math.min(1, energy * 2.5) - (lava.act || 0)) * (1 - Math.pow(0.2, dt));
+  dt *= 0.05 + lava.act * 0.95;
   // Cada golpe calienta la siguiente gota (sube) y las infla a todas; la voz las mece; en un drop estallan
   if (pulse.on) { const b = B[lava.seq++ % n]; b.heat = Math.min(1.5, b.heat + 0.3 * pulse.k); b.vy += 0.045 * pulse.k; }
   if (hits.mid > 0.25) { const b = B[Math.floor(Math.random() * n)]; b.vx += (Math.random() - 0.5) * 0.08 * hits.mid; }
@@ -6222,8 +6227,8 @@ function catsSetup() {
     // cuerpo de un gato de perfil hecho de volúmenes suaves: anca redonda, lomo, pecho hondo,
     // cuello corto, cabeza redonda con mejillas, hocico pequeño y orejas triangulares
     float catBody(vec2 q) {
-      float d = sdEll(q - vec2(-.29, .44), vec2(.19, .16));                   // anca
-      d = smin(d, sdCap2(q, vec2(-.25, .47), vec2(.24, .455), .138, .145), .08); // lomo y barriga
+      float d = sdEll(q - vec2(-.28, .475), vec2(.18, .13));                  // anca (redonda arriba, sin bulto abajo)
+      d = smin(d, sdCap2(q, vec2(-.24, .485), vec2(.24, .46), .118, .14), .08);  // lomo y barriga (la cintura se recoge hacia atrás)
       d = smin(d, sdEll(q - vec2(.27, .42), vec2(.16, .165)), .06);            // pecho
       d = smin(d, sdCap2(q, vec2(.33, .5), vec2(.46, .6), .11, .1), .06);      // cuello
       vec2 hq = q - vec2(.53, .665);
@@ -6233,24 +6238,30 @@ function catsSetup() {
       hd = smin(hd, sdTri(q, vec2(.51, .765), vec2(.57, .865), vec2(.635, .75)) + .006, .03);  // oreja de acá
       return smin(d, hd, .04);
     }
-    // pata corta y gruesa en dos tramos; la articulación se dobla hacia atrás (codo o corvejón)
+    // patas finas y firmes, como las de un gato que camina: la de delante casi recta (hombro, codo y
+    // muñeca); la de atrás con muslo, rodilla, corvejón alto y metatarso largo. Pies pequeños
     float leg(vec2 p, vec2 top, float ph, float thick, float hind) {
       float sw = sin(ph * 6.2832), lift = max(0., cos(ph * 6.2832));
-      vec2 foot = vec2(top.x + sw * .11, .045 + lift * .055);
-      vec2 mid = (top + foot) * .5, dir = normalize(foot - top), n = vec2(dir.y, -dir.x);
-      float L = length(foot - top), bend = sqrt(max(0., .2 * .2 - L * L * .25));
-      vec2 j = mid - n * bend * mix(.25, .8, hind);   // delante casi recta; detrás, el corvejón
-      float d = smin(sdCap2(p, top, j, thick * 1.15, thick * .74), sdCap2(p, j, foot, thick * .7, thick * .6), .02);
-      d = smin(d, sdEll(p - foot - vec2(.02, -.008), vec2(.045, .03)), .02);   // la pata (almohadilla)
-      return hind > .5 ? smin(d, sdEll(p - top - vec2(-.02, .04), vec2(.11, .085)), .05) : d;   // el muslo, redondo
+      vec2 foot = vec2(top.x + sw * .1, .035 + lift * .05);
+      float d;
+      if (hind < .5) {
+        vec2 elbow = mix(top, foot, .45) + vec2(-.015 - sw * .01, 0.);
+        d = smin(sdCap2(p, top, elbow, thick * 1.05, thick * .78), sdCap2(p, elbow, foot, thick * .72, thick * .6), .015);
+      } else {
+        vec2 knee = top + vec2(.07 + sw * .03, -.1), hock = foot + vec2(-.035 - sw * .02, .1 + lift * .02);
+        d = smin(sdCap2(p, top + vec2(-.02, .04), knee, thick * 1.5, thick * .9), sdCap2(p, knee, hock, thick * .8, thick * .6), .02);
+        d = smin(d, sdCap2(p, hock, foot, thick * .58, thick * .55), .012);
+      }
+      return smin(d, sdEll(p - foot - vec2(.016, -.004), vec2(.032, .02)), .012);   // el pie
     }
+    // la cola: una curva continua (muchos tramos cortos fundidos) que sale del anca, sube y se enrosca
     float tail(vec2 q, float ph, float sw) {
-      vec2 a = vec2(-.45, .48); float ang = 3.55 + sw * .3, d = 1e3;   // sale hacia atrás y sube en curva, con la punta enroscada
-      for (int k = 0; k < 7; k++) {
+      vec2 a = vec2(-.44, .5); float ang = 3.45 + sw * .3, d = 1e3;
+      for (int k = 0; k < 14; k++) {
         float fk = float(k);
-        ang += -.3 - (fk > 4. ? .3 : 0.) + .1 * sin(uTime * 1.3 + fk * .8) * (.4 + uMid * .8) + sw * .12;
-        vec2 b = a + vec2(cos(ang), sin(ang)) * .08;
-        d = smin(d, sdCap2(q, a, b, .046 - fk * .003, .043 - fk * .003), .02);
+        ang += -.15 - (fk > 9. ? .16 : 0.) + .05 * sin(uTime * 1.3 + fk * .4) * (.4 + uMid * .8) + sw * .06;
+        vec2 b = a + vec2(cos(ang), sin(ang)) * .042;
+        d = smin(d, sdCap2(q, a, b, .036 - fk * .0011, .035 - fk * .0011), .03);
         a = b;
       }
       return d;
@@ -6406,7 +6417,7 @@ function drawCurtain(dt) {
   // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
   if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  curtain.fph = (curtain.fph || 0) + dt * (0.15 + energy * 2.2);   // las nubes de color se mueven con la música
+  curtain.fph = (curtain.fph || 0) + dt * (0.015 + energy * 2.3);   // las nubes de color se mueven con la música
   curtain.fields.forEach((f, k) => {
     const x = W * (0.5 + 0.45 * Math.sin(curtain.fph * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(curtain.fph * f.sp * 1.3 + f.ph * 2));
     const col = night ? RGB[f.c] : RGB[f.c].map(v => v + (255 - v) * 0.45);
@@ -6436,7 +6447,7 @@ function drawCurtain(dt) {
   lctx.clearRect(0, 0, W, H);
   const sway = (2 + mid * 8) * DPR, lw = Math.max(1, DPR * 0.9);
   for (const t of T) {
-    if (Math.random() < dt * (0.02 + energy * 0.08) && t.beads.length < 4) t.beads.push(curtain.bead(Math.random() * t.len * 0.85));
+    if (Math.random() < dt * energy * 0.1 && t.beads.length < 4) t.beads.push(curtain.bead(Math.random() * t.len * 0.85));
     const x0 = t.x * W, sx = Math.sin(time * 0.5 + t.ph) * sway * t.w, yEnd = t.len * H;
     const xAt = y => x0 + sx * Math.pow(Math.min(1, y / yEnd), 1.4);
     // cada hilo escucha la banda de su sitio (graves a la izquierda): brilla y engorda con lo suyo
@@ -6902,7 +6913,7 @@ function drawCrystal(dt) {
   if (dropHit) for (const b of Bs) { b.vx += (Math.random() - 0.5) * 0.5; b.vy += (Math.random() - 0.5) * 0.5; }
   crystal.rip *= Math.pow(0.12, dt); crystal.ripT += dt;
   crystal.spark = Math.max(crystal.spark * Math.pow(0.02, dt), hits.hat ? 1 : 0);
-  const mv = 0.03 + energy * 0.35 + bandX(0, BANDS) * 0.6;   // en lo suave flotan; en el estribillo bailan
+  const mv = 0.004 + energy * 0.35 + bandX(0, BANDS) * 0.6;   // en lo suave flotan; en el estribillo bailan
   // se tocan y se funden un momento, pero se vuelven a separar (no acaban todas en una sola mancha)
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
     const a = Bs[i], c = Bs[j], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) + 1e-4, m = (a.r + c.r) * 1.05;
@@ -7008,7 +7019,7 @@ function drawFire(dt) {
   // el bombo aviva todo; en un drop, la llamarada
   if (dropHit) fire.flareV += 2.4;
   fire.flareV += (-fire.flare * 30 - fire.flareV * 7) * dt; fire.flare = Math.max(-0.1, fire.flare + fire.flareV * dt);
-  fire.t += dt * (0.3 + energy * 1.5 + P * 0.8);   // sin música, llamas perezosas; con música, vivas
+  fire.t += dt * (0.04 + energy * 1.7 + P * 0.8);   // sin música, llamas perezosas; con música, vivas
   fire.vo += (Math.min(1, voice * 1.5) - fire.vo) * (1 - Math.pow(0.08, dt));
   // los colores cambian con las frases (cada 16 golpes) y en los drops: el corazón pasa a otro color
   if (pulse.on && pulse.count % 16 === 0 || dropHit) fire.shiftT = (fire.shiftT + 1) % RGB.length;
@@ -7041,7 +7052,7 @@ function drawFire(dt) {
     const g = Math.min(G - 1, Math.max(0, Math.round(x * (G - 1)))), top = hFrac * (0.5 + 0.5 * fire.lv[g]) * 0.7;
     E.push({ x: x * W, y: H * (1 - top * Math.random()), vx: (Math.random() - 0.5) * MIN * 0.05, vy: -MIN * (0.12 + Math.random() * 0.25) * k, life: 1.2 + Math.random() * 1.6, t: 0, r: (0.8 + Math.random() * 1.6) * DPR, c: Math.random() < 0.5 ? K[2] : K[3], sp: Math.floor(Math.random() * 3) });
   } };
-  if (Math.random() < dt * (2 + energy * 30)) spawn(1, null, 0, 1);
+  if (Math.random() < dt * energy * 32) spawn(1, null, 0, 1);
   if (pulse.on) spawn(6 + Math.round(14 * pulse.k), 0.5, 0.6, 1 + pulse.k * 0.6);
   if (hits.snare) spawn(10, 0.15 + Math.random() * 0.7, 0.08, 1.3);
   if (hits.hat) spawn(3, null, 0, 0.8);
