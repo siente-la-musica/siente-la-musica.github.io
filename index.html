@@ -3447,17 +3447,27 @@ function moodTick(dt) {
   if (mood.candT > 6) { mood.cur = m; mood.cand = null; return true; }   // el carácter cambió de verdad
   return false;
 }
+// Ritmo de cambios: cada animación se queda al menos 20 s (nunca dos cambios seguidos), cambia en un golpe
+// fuerte pasados ~32 s y como mucho a los 45 s; una canción nueva, un drop o un cambio de carácter
+// adelantan el cambio, pero sin romper ese mínimo. Y no se repite: se recorren todas antes de volver a una
+const autoHist = [];
 function autoDirector(dt) {
   const changed = moodTick(dt);
   if (!state.auto || recording) return;
   autoT += dt;
   if (dropHit && mood.cur !== 'calm') mood.cur = 'high';
-  if (!(changed || dropHit || (autoT > 40 && hits.bass > 0.5) || (autoT > 60 && mood.cur === 'calm'))) return;
+  const song = sp.item && sp.item.id, newSong = song && song !== autoDirector.song;
+  if (newSong) autoDirector.song = song;
+  const due = autoT > 20 && (changed || dropHit || (newSong && autoT > 12)) || (autoT > 32 && pulse.on && pulse.k > 0.6) || autoT > 45;
+  if (!due) return;
   const pool = MOODS[mood.cur].modes.slice();
   if (mood.cur === 'high' && !state.noFlash) pool.push('strobe');
   if (spConnected() && sp.item) pool.push(mood.cur === 'calm' ? 'lyrics' : 'cover', mood.cur === 'high' ? 'lyrics' : 'artist');
-  const options = pool.filter(m => m !== state.mode);
-  setMode(options[Math.floor(Math.random() * options.length)]);
+  // la que lleva más tiempo sin verse (las nunca vistas primero, al azar entre ellas)
+  const age = m => { const i = autoHist.lastIndexOf(m); return i < 0 ? 1e9 + Math.random() : autoHist.length - i + Math.random() * 0.5; };
+  const next = pool.filter(m => m !== state.mode).sort((a, b) => age(b) - age(a))[0];
+  if (!next) return;
+  setMode(next); autoHist.push(next); if (autoHist.length > 60) autoHist.shift();
   document.getElementById('btnAuto').title = 'Automático · canción ' + MOODS[mood.cur].name;
   autoT = 0;
 }
@@ -3627,6 +3637,18 @@ function drawAura(dt) {
     for (const sp_ of spots) glowSpot(sp_.x, sp_.y, sp_.r * 0.85, sat(sp_.c, 48), 0.3 + sp_.L * 0.3 + P * 0.1);
     ctx.globalCompositeOperation = 'source-over';
     glowSpot(W / 2, H / 2, Math.max(W, H) * (0.4 + P * 0.06 + av * 0.12), sat(ac, 66), 0.08 + energy * 0.14 + P * 0.1 + av * 0.2);
+  }
+  // ondas de color: cada golpe suelta un anillo del color de la luz más fuerte que entra desde el borde
+  // (así el movimiento del color se ve y cae justo en el ritmo)
+  const AW = drawAura.waves = drawAura.waves || [];
+  if (pulse.on && spots.length) { const sp_ = spots.reduce((a, b) => b.L > a.L ? b : a); AW.push({ x: sp_.x, y: sp_.y, r: sp_.r * 0.3, k: pulse.k, c: night ? sp_.c : sat(sp_.c, 52) }); if (AW.length > 6) AW.shift(); }
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (let i = AW.length - 1; i >= 0; i--) {
+    const w = AW[i]; w.r += MIN * (0.9 + w.k * 0.8) * dt; w.k *= Math.pow(0.25, dt);
+    if (w.k < 0.02) { AW.splice(i, 1); continue; }
+    const g = ctx.createRadialGradient(w.x, w.y, w.r * 0.55, w.x, w.y, w.r);
+    g.addColorStop(0, rgba(w.c, 0)); g.addColorStop(0.75, rgba(w.c, (night ? 0.4 : 0.5) * w.k)); g.addColorStop(1, rgba(w.c, 0));
+    ctx.fillStyle = g; ctx.fillRect(w.x - w.r, w.y - w.r, w.r * 2, w.r * 2);
   }
   ctx.restore();
 }
