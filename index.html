@@ -1702,7 +1702,7 @@ function drawMountains(dt) {
       const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.01;
       pts.push([x * W, H - H * (L.base + wob + Math.min(1.2, Math.max(0, r[p])) * (L.hMax - L.base))]);
     }
-    const c = mix(L.color);
+    const c = night ? mix(L.color) : mix(L.color).map(v => v * 0.86);   // de día un tono más hondo: que no se pierda en el blanco
     const top = H - H * L.hMax;   // degradado fijo: el brillo de la capa no vibra cuando cambian los picos
     const g = lctx.createLinearGradient(0, top, 0, H);
     g.addColorStop(0, rgba(c, L.alpha));
@@ -5138,7 +5138,7 @@ function drawRain(dt) {
   lctx.fillStyle = water; lctx.fillRect(0, surf, W, H - surf);
   for (const l of L) {
     const g = lctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 1.6);
-    g.addColorStop(0, rgba(l.c, Math.min(night ? 0.45 : 0.6, (night ? 0.08 : 0.2) * l.I))); g.addColorStop(1, rgba(l.c, 0));
+    g.addColorStop(0, rgba(l.c, Math.min(night ? 0.45 : 0.75, (night ? 0.08 : 0.32) * l.I))); g.addColorStop(1, rgba(l.c, 0));
     lctx.fillStyle = g; lctx.fillRect(l.x - l.r * 1.6, l.y - l.r * 1.6, l.r * 3.2, l.r * 3.2);
     const fy = H * 0.9, rg = lctx.createRadialGradient(l.x, fy, 0, l.x, fy, l.r);
     rg.addColorStop(0, rgba(l.c, Math.min(0.4, 0.09 * l.I))); rg.addColorStop(1, rgba(l.c, 0));
@@ -5149,7 +5149,7 @@ function drawRain(dt) {
   const ripple = (x, z, k, big) => { ripples.push({ x, y: surf + (H - surf) * (0.1 + z * 0.85), z, t: 0, life: big ? 1.6 : 0.7 + Math.random() * 0.4, k, big }); };
   if (hits.high) for (let i = 0; i < 3 + Math.round(hits.high * 6); i++) { const l = L[Math.floor(Math.random() * 3)]; ripple(l.x + (Math.random() - 0.5) * l.r * 1.6, Math.random(), 0.6 + hits.high * 0.4, false); }
   if (hits.bass) { const l = L[0]; ripple(l.x, 0.4 + Math.random() * 0.4, 0.8 + hits.bass * 0.4, true); }
-  const wind = rs.wind, base = night ? [200, 210, 230] : [45, 55, 80];
+  const wind = rs.wind, base = night ? [200, 210, 230] : mix(0.5).map(v => v * 0.45);   // de día, gotas del color de la canción en tono hondo
   const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
   if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c)), ...L.map(l => makeGlint(l.c))]; }
   for (let di = drops.length - 1; di >= 0; di--) {
@@ -6622,7 +6622,7 @@ function drawCurtain(dt) {
     // cada hilo escucha la banda de su sitio (graves a la izquierda): brilla y engorda con lo suyo
     const k0 = Math.min(BANDS - 3, Math.floor(t.x * BANDS * 0.85)), tl = bandX(k0, k0 + 3);
     t.lv = (t.lv || 0) + (tl - (t.lv || 0)) * (1 - Math.pow(tl > (t.lv || 0) ? 0.0005 : 0.03, dt));
-    const tc = night ? RGB[t.c].map(v => v * 0.6 + 90) : RGB[t.c].map(v => v * 0.62);
+    const tc = night ? RGB[t.c].map(v => v * 0.6 + 90) : RGB[t.c].map(v => v * 0.52);
     const g = lctx.createLinearGradient(0, 0, 0, yEnd);
     const ta = 0.35 + t.lv * 1.1;
     g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, Math.min(1, (night ? 0.32 : 0.6) * ta))); g.addColorStop(0.9, rgba(tc, Math.min(1, (night ? 0.26 : 0.5) * ta))); g.addColorStop(1, rgba(tc, 0));
