@@ -1744,7 +1744,8 @@ function drawInk(dt, flowerMode = false) {
     if (p >= 1) { blobs.splice(bi, 1); continue; }
     const grow = 1 - Math.pow(1 - p, 3);                 // se expande rápido y frena
     // con cada golpe todos los anillos laten a la vez: se abren un poco, se avivan y engordan
-    const r = b.maxR * (0.15 + 0.85 * grow) * (1 + bass * 0.06 + beatSoft * 0.03 + P * 0.08);
+    if (b.k0 === undefined) b.k0 = Math.floor(Math.random() * (BANDS - 6));   // cada mancha escucha su tramo
+    const r = b.maxR * (0.15 + 0.85 * grow) * (0.93 + bandX(b.k0, b.k0 + 6) * 0.2 + beatSoft * 0.03 + P * 0.08);
     const fadeA = Math.pow(1 - p, 1.4) * (0.5 + b.strength * 0.5) * (1 + beatSoft * 0.35 + P * 1.1);
     const th = (r * 0.14 + 3 * DPR) * (1 + beatSoft * 0.15 + P * 0.6);
     const spr = SPRITES[b.sprite];
@@ -3451,7 +3452,7 @@ function drawBokeh(dt) {
 
   lctx.clearRect(0, 0, W, H);
   lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  const level = { bass, mid, high };
+  const level = { bass: bandX(0, 10), mid: bandX(10, 38), high: bandX(38, BANDS) };
   for (let i = lights.length - 1; i >= 0; i--) {
     const L = lights[i];
     L.age += dt; const p = L.age / L.life;
@@ -3614,12 +3615,12 @@ function drawInfinity(dt) {
     const A = zoneInfo(zi), B = zoneInfo(zi + 1);
     // Cerca reaccionan los graves; lejos, los agudos
     const band = Math.min(BANDS - 1, Math.floor((dz / FAR) * BANDS * 0.85));
-    const v = spec[band];
+    const v = bandX(Math.min(band, BANDS - 2), Math.min(band, BANDS - 2) + 2);   // con sus altos y bajos
     let glow = 0, vg = 0; for (const pz of pulses) glow += Math.exp(-((z - pz) ** 2) / 0.8);
     for (const pz of vP) vg += Math.exp(-((z - pz) ** 2) / 1.2);
     vg = Math.min(1, vg);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
-    const R = sc * tunnelRadius(z) * (1 + v * 0.14 + P * 0.1 * (1 - dz / FAR));   // el túnel entero late con el golpe
+    const R = sc * tunnelRadius(z) * (0.95 + v * 0.2 + P * 0.1 * (1 - dz / FAR));   // el túnel entero late con el golpe
     const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
     lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)).map((c_, j) => c_ + (melC[j] - c_) * vg * 0.85), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + vg * 0.8 + beat * 0.4)));
     const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
@@ -3911,11 +3912,11 @@ function drawCloudsPuffs(dt) {
   for (let layer = 0; layer < 3; layer++) {
     for (const cl of CLOUDS) {
       if (cl.layer !== layer) continue;
-      const v = Math.pow(avg(spec, cl.band[0], cl.band[1]), 0.8);
+      const v = bandX(cl.band[0], cl.band[1]);   // su tramo, con sus altos y bajos
       cl.lvV += ((v - cl.level) * 220 - cl.lvV * 2 * Math.sqrt(220) * 0.5) * dt; cl.level += cl.lvV * dt;
       if (hits.bass && layer === 2) cl.lvV += hits.bass * 2;
       cl.phase += dt * cl.speed;
-      const S = MIN * cl.size * (1 + Math.max(0, cl.level) * 0.14 + beatSoft * 0.05);
+      const S = MIN * cl.size * (0.92 + Math.max(0, cl.level) * 0.24 + beatSoft * 0.05);
       const span = W + S * 2.4;
       const cx = (((cl.u + cl.phase) % 1 + 1) % 1) * span - S * 1.2, cy = cl.v * H + Math.sin(time * 0.25 + cl.u * 9) * MIN * 0.01;
       const depth = [0.5, 0.75, 1][layer], L = Math.max(0, cl.level);
@@ -4224,7 +4225,7 @@ function drawFluid(dt) {
   }
   // Emisores: cinco chorros en círculo, cada uno con su banda; giran despacio y laten con la música
   fluid.emitA = (fluid.emitA || 0) + dt * (0.15 + energy * 0.6);
-  const bandsE = [bass, (bass + mid) / 2, mid, (mid + high) / 2, high];
+  const bandsE = [bandX(0, 8), bandX(8, 20), bandX(20, 34), bandX(34, 48), bandX(48, BANDS)];
   for (let i = 0; i < 5; i++) {
     const lv = Math.pow(bandsE[i], 2.2);   // solo empujan fuerte cuando su parte suena de verdad
     if (lv < 0.06) continue;
@@ -4541,7 +4542,7 @@ function drawMagnet(dt) {
   // Estelas: lo anterior se desvanece poco a poco
   t.globalCompositeOperation = 'destination-out'; t.fillStyle = `rgba(0,0,0,${Math.min(1, dt * 3.2)})`; t.fillRect(0, 0, W, H);
   t.globalCompositeOperation = night ? 'lighter' : 'source-over'; t.lineCap = 'round';
-  const lv = [bass, mid, high].map(v => Math.pow(v, 0.8));
+  const lv = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)];
   // En lo tranquilo flotan despacio; con la música fuerte se aceleran (así se siente la diferencia)
   const drive = 0.65 + 0.35 * Math.min(1, energy * 1.8), P = Math.max(0, pulse.x);
   // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
@@ -4647,7 +4648,7 @@ function drawStars(dt) {
   for (const s_ of starSky.list) {
     s_.x -= speed * (0.2 + s_.z) * dt; if (s_.x < -0.02) { s_.x = 1.02; s_.y = Math.random(); }
     const x = s_.x * W, y = s_.y * H;
-    const lv = Math.pow(spec[s_.band], 1.4);
+    const lv = Math.pow(bandX(Math.min(s_.band, BANDS - 2), Math.min(s_.band, BANDS - 2) + 2), 1.2);
     let near = 0;
     if (p) { const dx = s_.x - p.x, dy = (s_.y - p.y) * H / W; near = Math.exp(-(dx * dx + dy * dy) * 160); }
     const tw = 0.6 + 0.4 * Math.sin(time * s_.tw + s_.ph);
@@ -4721,7 +4722,7 @@ function drawStars(dt) {
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
 function drawLight(dt) {
   const night = state.theme === 'dark';
-  lightT[0] = Math.pow(bass, 0.8); lightT[1] = Math.pow(mid, 0.8); lightT[2] = high;
+  [lightT[0], lightT[1], lightT[2]] = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)];   // graves, medios y agudos, con sus altos y bajos
   if (hits.bass) lightV[0] += hits.bass * 5;
   if (hits.mid) lightV[1] += hits.mid * 3;
   springTo(lightLv, lightV, lightT, dt, 260, 0.45);
@@ -4831,7 +4832,7 @@ function drawRain(dt) {
   if (hits.bass) rs.amount = Math.min(1.6, rs.amount + hits.bass * 0.12);
   const want = Math.round(Math.min(2200, 1300 * W * H / (1920 * 1080 * DPR * DPR) * rs.amount));
   for (let k = 0; k < 40 && drops.length < want; k++) drops.push(newDrop(true));
-  rainLvT[0] = Math.pow(bass, 0.8); rainLvT[1] = Math.pow(mid, 0.8); rainLvT[2] = Math.pow(high, 0.8);
+  [rainLvT[0], rainLvT[1], rainLvT[2]] = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)];
   if (hits.bass) rainLvV[0] += hits.bass * 5;
   if (hits.mid) rainLvV[1] += hits.mid * 4;
   if (hits.high) rainLvV[2] += hits.high * 4;
@@ -4963,7 +4964,7 @@ function drawGlass(dt) {
   if (dropHit) glass.flash = 1; glass.flash *= Math.pow(0.02, dt);
   glassBackground(night);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.bg, 0, 0, W, H); ctx.restore();
-  const P = Math.max(0, pulse.x), glow = beatSoft * 0.05 + P * 0.28;
+  const P = Math.max(0, pulse.x), glow = beatSoft * 0.05 + P * 0.24 + bandX(0, BANDS) * 0.12;
   if (glow > 0.01) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), glow * (night ? 1 : 1.8)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late con cada golpe
   // la voz: detrás del vidrio se enciende una luz del color de la nota, como una ventana iluminada al fondo
   const gv = drawGlass.v = (drawGlass.v || 0) + (Math.min(1, voice * 1.5) - (drawGlass.v || 0)) * (1 - Math.pow(0.1, dt));
@@ -5071,7 +5072,7 @@ function drawStrobe(dt) {
   if (CAN_BLUR) ctx.filter = `blur(${(size * 0.012).toFixed(2)}px)`;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const lh = size * 1.02, y0 = H / 2 - (lines.length - 1) * lh / 2;
-  const pump = 1 + bass * 0.06 + beat * 0.04 + Math.max(0, pulse.x) * 0.12;   // el texto late con el bombo
+  const pump = 1 + bandX(0, 10) * 0.07 + beat * 0.04 + Math.max(0, pulse.x) * 0.12;   // el texto late con el bombo
   lines.forEach((l, i) => {
     ctx.save(); ctx.translate(W / 2, H / 2 + (y0 + i * lh - H / 2) * pump); ctx.scale(0.8 * pump, pump);
     ctx.fillText(l, 0, 0); ctx.restore();
@@ -5348,13 +5349,13 @@ function drawTiles(dt) {
   { const [hh] = hexToHsl(rgbToHex(...mix(0.5))); ctx.fillStyle = night ? hsl(hh, 30, 5) : hsl(hh, 25, 95); ctx.fillRect(0, 0, W, H); drawBackdrop(0); }   // la portada de fondo, si está activa
   const gap = Math.max(3, MIN * 0.014), popped = [];
   for (const t of L) {
-    const target = Math.pow(spec[t.band], 2.4);
+    const kb = Math.max(0, Math.min(BANDS - 3, t.band - 1)), target = Math.pow(bandX(kb, kb + 3), 1.4);   // lo suyo, con sus altos y bajos
     t.lv += (target - t.lv) * (1 - Math.pow(target > t.lv ? 0.0005 : 0.05, dt));
     t.flash *= Math.pow(0.015, dt);   // se enciende de golpe y se apaga en ~0,2 s: cada golpe es un destello nítido
     let wv = 0; for (const w of tiles.waves) { const d = Math.hypot(t.x + t.s / 2 - w.x, t.y + t.s / 2 - w.y); wv += w.k * Math.exp(-Math.pow((d - w.r) / (MIN * 0.12), 2)); }
     const pv = [t.pop], vv = [t.popV]; springTo(pv, vv, [0], dt, 180, 0.35); t.pop = pv[0]; t.popV = vv[0];
     if (t.colTo != null) { const d = ((t.colTo - t.col + 1.5) % 1) - 0.5; t.col = (t.col + d * Math.min(1, dt * 3) + 1) % 1; if (Math.abs(d) < 0.01) t.colTo = null; }
-    t.I = Math.min(1.25, 0.03 + t.lv * 0.42 + t.flash * 1.15 + wv * 0.85);   // cada cuadro brilla con su sonido; el golpe manda
+    t.I = Math.min(1.25, 0.03 + t.lv * 0.62 + t.flash * 1.05 + wv * 0.8);   // cada cuadro brilla con su sonido; el golpe manda
     if (t.pop > 0.02) popped.push(t); else drawTile(t, gap, night, 0);
   }
   popped.sort((a, b) => a.pop - b.pop).forEach(t => drawTile(t, gap, night, t.pop));   // los que sobresalen, encima
@@ -5485,7 +5486,7 @@ function drawTubes(dt) {
   if (dropHit) for (let i = 0; i < 140; i++) tube.confetti.push({ x: Math.random() * W, y: -Math.random() * H * 0.3, vx: (Math.random() - 0.5) * MIN * 0.2, vy: MIN * (0.15 + Math.random() * 0.25), r: Math.random() * 6, vr: (Math.random() - 0.5) * 10, c: Math.floor(Math.random() * 3), s: MIN * (0.006 + Math.random() * 0.008) });
   for (const m of tube.men) {
     // el aire: la música; en silencio se desinflan, en un drop se levantan de golpe
-    const goal = Math.min(1.6, 0.15 + Math.pow(energy, 0.9) * 1.25 + beatSoft * 0.7 + (dropHit ? 1 : 0));
+    const goal = Math.min(1.6, 0.1 + bandX(0, BANDS) * 1.1 + Math.pow(energy, 0.9) * 0.4 + beatSoft * 0.7 + (dropHit ? 1 : 0));
     m.air += (goal - m.air) * (1 - Math.pow(goal > m.air ? 0.02 : 0.3, dt));
     // Coreografía al compás: en cada golpe un soplo de aire (se estira), un latigazo que alterna
     // izquierda y derecha (y cada muñeco va al contrario que su vecino) y un brazo arriba
@@ -5498,7 +5499,7 @@ function drawTubes(dt) {
     }
     if (hits.high) { const arm = m.arms[Math.random() < 0.5 ? 0 : 1]; arm[arm.length - 1].px += (Math.random() - 0.5) * m.FH * 0.02 * hits.high; }
     const sub = 3; for (let k = 0; k < sub; k++) tubeStep(m, Math.min(dt, 0.04) / sub, m.air);
-    m.mouth += ((0.15 + mid * 1.1 + Math.max(0, pulse.x) * 0.6) - m.mouth) * Math.min(1, dt * 14);
+    m.mouth += ((0.1 + bandX(10, 38) * 1.2 + Math.max(0, pulse.x) * 0.6) - m.mouth) * Math.min(1, dt * 14);
     // el soplo del golpe los infla al instante (marca el tiempo exacto) y luego viene el latigazo
     const c = RGB[m.k % 3], c2 = RGB[(m.k + 1) % 3], w = m.FH * 0.11 * (1 + Math.max(0, pulse.x) * 0.14), B = m.body, N = m.N;
     // sombra en el suelo
@@ -6031,7 +6032,8 @@ function drawBust(dt) {
   if (pulse.on) bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.012 * pulse.k;
   bust.swayV += (-bust.sway * 18 - bust.swayV * 5) * dt; bust.sway += bust.swayV * dt;
   // el foco: la voz la saca de la niebla; sin voz se queda soñando; cada bombo la enfoca un instante
-  const focus = Math.min(1, voice * 1.6 + energy * 0.25 + (dropHit ? 1 : 0));
+  const vx_ = bandX(10, 40), lx_ = bandX(0, 10);   // lo que suena en la voz y en los graves, con sus altos y bajos
+  const focus = Math.min(1, voice * 1.6 + vx_ * 0.45 + (dropHit ? 1 : 0));
   bust.sig += (0.023 - 0.012 * focus - bust.sig) * (1 - Math.pow(focus > 0.5 ? 0.02 : 0.25, dt));
   bust.rise += (Math.min(1, voice * 1.5) - bust.rise) * (1 - Math.pow(0.15, dt));
   bust.syl = Math.max(bust.syl * Math.pow(0.03, dt), hits.voice ? Math.min(1, 0.5 + hits.voice * 0.5) : 0);
@@ -6052,9 +6054,9 @@ function drawBust(dt) {
   const p = bust.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, (0.002 + energy * 0.006) * Math.sin(time * 1.3) + P * 0.02);
+  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, (0.002 + energy * 0.006) * Math.sin(time * 1.3) + P * 0.02 + lx_ * 0.012);
   gl.uniform1f(p.u.uS, Math.min(1, asp / 0.75));
-  gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.5 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3));
+  gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.5 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3 + vx_ * 0.35));
   gl.uniform1f(p.u.uRise, bust.rise); gl.uniform1f(p.u.uSyl, bust.syl); gl.uniform1f(p.u.uFr, bust.fr); gl.uniform1f(p.u.uGr, bust.gr);
   gl.uniform3fv(p.u.uCol, bust.col); gl.uniform3fv(p.u.uCol2, deep2); gl.uniform3fv(p.u.uDeep, deep); gl.uniform3fv(p.u.uMel, mel);
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
@@ -6287,7 +6289,7 @@ function drawCurtain(dt) {
   if (!curtain.soft) curtain.soft = Array.from({ length: 7 }, (_, i) => ({ x: (i + 0.5 + (Math.random() - 0.5) * 0.8) / 7, w: 0.012 + Math.random() * 0.03, c: i % 3, ph: Math.random() * 6 }));
   for (const sf of curtain.soft) {
     const x = (sf.x + Math.sin(curtain.fph * 0.05 + sf.ph) * 0.01) * W, w = sf.w * W * (1 + P * 0.25), c = RGB[sf.c];
-    const g = ctx.createLinearGradient(x - w, 0, x + w, 0), a = (night ? 0.06 : 0.1) + bass * (night ? 0.12 : 0.1) + P * 0.1;
+    const k0 = Math.min(BANDS - 3, Math.floor(sf.x * BANDS * 0.85)), g = ctx.createLinearGradient(x - w, 0, x + w, 0), a = (night ? 0.04 : 0.07) + bandX(k0, k0 + 3) * (night ? 0.2 : 0.16) + P * 0.08;
     g.addColorStop(0, rgba(c, 0)); g.addColorStop(0.5, rgba(night ? c : c.map(v => v * 0.85), a)); g.addColorStop(1, rgba(c, 0));
     ctx.fillStyle = g; ctx.fillRect(x - w, 0, w * 2, H);
   }
@@ -6308,11 +6310,14 @@ function drawCurtain(dt) {
     if (Math.random() < dt * (0.02 + energy * 0.08) && t.beads.length < 4) t.beads.push(curtain.bead(Math.random() * t.len * 0.85));
     const x0 = t.x * W, sx = Math.sin(time * 0.5 + t.ph) * sway * t.w, yEnd = t.len * H;
     const xAt = y => x0 + sx * Math.pow(Math.min(1, y / yEnd), 1.4);
-    // el hilo, de su color y apenas brillante
+    // cada hilo escucha la banda de su sitio (graves a la izquierda): brilla y engorda con lo suyo
+    const k0 = Math.min(BANDS - 3, Math.floor(t.x * BANDS * 0.85)), tl = bandX(k0, k0 + 3);
+    t.lv = (t.lv || 0) + (tl - (t.lv || 0)) * (1 - Math.pow(tl > (t.lv || 0) ? 0.0005 : 0.03, dt));
     const tc = night ? RGB[t.c].map(v => v * 0.6 + 90) : RGB[t.c].map(v => v * 0.62);
     const g = lctx.createLinearGradient(0, 0, 0, yEnd);
-    g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, night ? 0.32 : 0.6)); g.addColorStop(0.9, rgba(tc, night ? 0.26 : 0.5)); g.addColorStop(1, rgba(tc, 0));
-    lctx.strokeStyle = g; lctx.lineWidth = lw * t.thick;
+    const ta = 0.35 + t.lv * 1.1;
+    g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, Math.min(1, (night ? 0.32 : 0.6) * ta))); g.addColorStop(0.9, rgba(tc, Math.min(1, (night ? 0.26 : 0.5) * ta))); g.addColorStop(1, rgba(tc, 0));
+    lctx.strokeStyle = g; lctx.lineWidth = lw * t.thick * (0.8 + t.lv * 0.9);
     lctx.beginPath(); lctx.moveTo(x0, 0); lctx.quadraticCurveTo(x0 + sx * 0.25, yEnd * 0.55, xAt(yEnd), yEnd); lctx.stroke();
     for (let i = t.beads.length - 1; i >= 0; i--) {
       const b = t.beads[i];
@@ -6320,7 +6325,7 @@ function drawCurtain(dt) {
       b.v = b.v * Math.pow(0.3, dt) + 0.004 * dt; b.y += (b.v + 0.006) * dt;
       b.glow *= Math.pow(0.18, dt); b.flare *= Math.pow(0.6, dt); if (b.spark) b.spark *= Math.pow(0.05, dt);
       if (b.y > t.len) { b.a -= dt * 2; if (b.a <= 0) { t.beads.splice(i, 1); continue; } }
-      const y = b.y * H, x = xAt(y), u = MIN / 700, r = b.r * u * 2.4 * (1 + P * 0.25);
+      const y = b.y * H, x = xAt(y), u = MIN / 700, r = b.r * u * 2.4 * (0.8 + P * 0.25 + t.lv * 0.6);
       const col = b.c === 3 ? [255, 238, 205] : RGB[b.c], hot = col.map(v => v + (255 - v) * (0.45 + b.glow * 0.4));
       // destello vertical: una luz alargada arriba y abajo de la cuenta (como en una foto de exposición)
       const fl = b.flare + b.glow * 0.6;
@@ -6330,7 +6335,7 @@ function drawCurtain(dt) {
         lctx.fillStyle = fg; lctx.beginPath(); lctx.ellipse(x, y, r * 1.1, L, 0, 0, Math.PI * 2); lctx.fill();
       }
       const gr = r * (4 + b.glow * 5);
-      lctx.globalAlpha = b.a * (0.45 + b.glow * 0.5);
+      lctx.globalAlpha = b.a * Math.min(1, 0.3 + b.glow * 0.5 + t.lv * 0.5);
       lctx.drawImage(SPRITES[b.c === 3 ? 0 : b.c], x - gr, y - gr, gr * 2, gr * 2);
       lctx.globalAlpha = b.a;
       lctx.fillStyle = rgba(hot, 1); lctx.beginPath(); lctx.arc(x, y, r, 0, Math.PI * 2); lctx.fill();
@@ -7031,11 +7036,13 @@ function drawPaint(dt) {
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (const f of paint.fresh) {
     f.age += dt; const life = Math.exp(-f.age / 7);
-    glowSpot(f.x, f.y, f.R * (2.6 + voice * 1.2 + P * 0.6), night ? f.col : f.col.map(v => v + (255 - v) * 0.5), (night ? 0.22 : 0.22) * life * (0.45 + voice * 0.8 + P * 0.5));
+    if (f.k0 === undefined) f.k0 = Math.floor(Math.random() * (BANDS - 6));   // cada mancha escucha un tramo del espectro
+    const fl = bandX(f.k0, f.k0 + 6);
+    glowSpot(f.x, f.y, f.R * (2.2 + voice * 1.2 + P * 0.6 + fl * 1.2), night ? f.col : f.col.map(v => v + (255 - v) * 0.5), 0.22 * life * (0.25 + voice * 0.8 + P * 0.5 + fl * 0.9));
   }
   ctx.restore();
   // toda la pared late con el golpe: de noche la pintura brilla más en cada golpe; de día se aviva
-  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? Math.min(1, 0.62 + P * 0.55 + voice * 0.15) : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
+  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? Math.min(1, 0.45 + bandX(0, BANDS) * 0.35 + P * 0.5 + voice * 0.15) : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
   if (!night && P > 0.02) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(0.35, P * 0.45); ctx.drawImage(paint.layer, 0, 0); ctx.restore(); }
   // el impacto: un anillo de luz que se abre y se apaga
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
@@ -7136,14 +7143,16 @@ function drawEclipse(dt) {
   const n = ecl.big.length;
   ecl.big.forEach((b, i) => {
     b.flare *= Math.pow(state.noFlash ? 0.3 : 0.08, dt);
+    const lv = i === 0 ? bandX(0, 12) : i === 1 ? bandX(12, 36) : bandX(36, BANDS);   // cada corona, su parte del espectro
+    b.lv = (b.lv || 0) + (lv - (b.lv || 0)) * (1 - Math.pow(lv > (b.lv || 0) ? 0.0005 : 0.03, dt));
     b.ph += dt * (0.01 + mid * 0.06 + (i === 0 ? bass * 0.04 : 0));   // los colores giran alrededor con la voz
     const R = b.R * (1 + (i === 0 ? P * 0.025 : 0) + 0.01 * Math.sin(time * 0.5 + i));
     ecl.E.set([b.x + Math.sin(time * 0.05 + i) * 0.01, b.y + Math.cos(time * 0.04 + i) * 0.01, R, b.c], i * 4);
-    ecl.E2.set([b.w * (1 + energy * 0.5), b.ph, b.flare * (state.noFlash ? 0.4 : 1), b.sun ? 1 : 0], i * 4);
+    ecl.E2.set([b.w * (0.7 + b.lv * 1.1), b.ph, Math.max(b.flare, b.lv * 0.4) * (state.noFlash ? 0.4 : 1), b.sun ? 1 : 0], i * 4);
   });
   ecl.dots.forEach((d, i) => {
     d.k *= Math.pow(0.1, dt);
-    const r = d.r * (1 + d.k * 0.8 + Math.max(0, spec[Math.floor(d.t * BANDS * 0.8)] - 0.3) * 0.5);
+    const k0 = Math.min(BANDS - 3, Math.floor(d.t * BANDS * 0.8)), r = d.r * (0.8 + d.k * 0.8 + bandX(k0, k0 + 3) * 0.7);
     ecl.S.set([d.x + Math.sin(time * 0.1 + i) * 0.004, d.y + Math.cos(time * 0.09 + i) * 0.004, r, d.c], i * 4);
   });
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
