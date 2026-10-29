@@ -1179,12 +1179,13 @@ function analyse(dt) {
     }
     // Ganancia automática: se adapta en unos segundos para que cada canción llene la pantalla (los altos y
     // bajos de verdad los lleva dynL, que se mide antes de esta ganancia)
-    peak = Math.max(peak * Math.pow(0.85, dt), mx, 0.05);   // suelo bajo: con el volumen del PC bajo también reaccionan
-    const gain = Math.pow(state.sens, 0.8);   // sensibilidad elegida por la persona
+    peak = Math.max(peak * Math.pow(0.85, dt), mx, 0.05 / Math.pow(state.sens, 0.8));   // suelo bajo: con el volumen del PC bajo también reaccionan
     // el volumen real, antes de la ganancia automática (que iguala las partes suaves y fuertes)
     { let le = 0; for (let i = 0; i < BANDS; i++) le += Math.pow(10, (raw[i] - 1) * 3.3); dynLe = le / BANDS; }
     // con la sensibilidad alta no se corta en seco (eso aplanaba las cimas): se acerca a 1 con una curva suave
-    for (let i = 0; i < BANDS; i++) { const x = raw[i] / peak * gain; raw[i] = x < 0.7 ? x : 0.7 + 0.3 * (1 - Math.exp(-(x - 0.7) / 0.3)); }
+    // la sensibilidad solo ayuda cuando el sonido llega débil (baja el suelo de la ganancia); ya no multiplica
+    // lo que suena normal, que llenaba todas las bandas y aplanaba las animaciones
+    for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak);
   } else if (songBeatOn()) {
     songBeatSynth();
   } else {
@@ -1693,7 +1694,7 @@ function drawMountains(dt) {
   ];
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [];
-    for (let p = 0; p < P; p++) { const t_ = Math.max(0, (Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 0.85) - 0.12) * 1.55); ridgeT[p] = 1.15 * (1 - Math.exp(-t_ / 1.15)); }   // valles hondos, picos altos y redondos (nunca una meseta)
+    for (let p = 0; p < P; p++) { const t_ = Math.max(0, (Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 1.3) - 0.14) * 1.6); ridgeT[p] = t_ < 1 ? t_ : 1 + 0.2 * (1 - Math.exp(-(t_ - 1) / 0.2)); }   // valles hondos, picos altos (solo lo que pasa del tope se redondea)
     smoothProfile(ridgeT, 1);
     if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (2.5 + li * 1.5) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
     springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.45);
@@ -6500,8 +6501,7 @@ function catsInit() {
   // en fila, uno detrás de otro y al mismo paso (nunca uno encima de otro); cada uno con su color
   const s0 = asp > 1 ? 0.4 : 0.3, gap = s0 * 1.6, y0 = asp > 1 ? 0.14 : 0.3;
   cats.span = Math.max(asp + s0 * 1.6, gap * 3);
-  cats.list = [0, 1, 2].map(i => ({ x: asp * 0.72 - i * gap, xT: 0, y: y0 - i * 0.012, s: s0 * (1 - i * 0.04), c: [0.2, 2.3, 1.2][i], fog: i * 0.15, ph: i * 0.5, phT: i * 0.5 }));
-  cats.list.forEach(c => { c.xT = c.x; });
+  cats.list = [0, 1, 2].map(i => ({ x: asp * 0.72 - i * gap, y: y0 - i * 0.012, s: s0 * (1 - i * 0.04), c: [0.2, 2.3, 1.2][i], fog: i * 0.15, ph: i * 0.5, phT: i * 0.5 }));
   cats.list.forEach(c => { c.hop = 0; c.hopV = 0; c.bob = 0; c.bobV = 0; c.nod = 0; c.nodV = 0; c.tl = 0; c.tlV = 0; c.ear = 0; c.blink = 0; c.blinkT = 2 + Math.random() * 4; });
 }
 function drawCats(dt) {
@@ -6510,24 +6510,25 @@ function drawCats(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
   if (!cats.list || (asp > 1) !== (cats.asp > 1)) catsInit();
   if (cats.asp !== asp) { cats.list.forEach(c => c.x *= asp / cats.asp); cats.asp = asp; }
-  // caminan al golpe: cada golpe es un paso (la pata cae justo en el «pam» y el cuerpo rebota); entre golpe
-  // y golpe se quedan en su pose. Si suena música sin golpes claros, pasean despacio y parejo
-  const beatless = performance.now() - pulse.at > 1500, stride = c => c.s * 0.69 / 4;
+  // caminan de seguido, todos al mismo paso (así nunca se enciman), al ritmo del tempo: una pisada por golpe.
+  // Sin música casi se detienen; en lo suave pasean, en lo fuerte trotan
+  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5, moving = Math.min(1.15, 0.03 + energy * 1.3 + bandX(0, BANDS) * 0.5);
   cats.list.forEach((c, i) => {
-    if (pulse.on) { c.phT += 0.25; c.xT += stride(c) * (0.8 + 0.4 * pulse.k); }
-    else if (beatless && energy > 0.08) { const v = dt * Math.min(1, energy * 2) * 0.35; c.phT += v; c.xT += stride(c) * 4 * v; }
-    const k = 1 - Math.pow(0.00002, dt);   // el paso dura ~0,12 s
-    c.ph += (c.phT - c.ph) * k; c.x += (c.xT - c.x) * k;
-    if (c.x - c.s * 0.7 > asp) { c.x -= cats.span; c.xT -= cats.span; }
+    c.ph += dt / (4 * per) * moving;
+    if (pulse.on) c.ph += ((Math.round(c.ph * 4) / 4) - c.ph) * 0.35;   // la pisada se acerca al golpe
+    c.x += dt * moving * c.s * 0.69 / (4 * per);                      // avanzan lo que miden sus pasos (sin patinar)
+    if (c.x - c.s * 0.7 > asp) c.x -= cats.span;
     if (dropHit) c.hopV = 1.6 + i * 0.12;
     c.hopV -= 9 * dt; c.hop = Math.max(0, c.hop + c.hopV * dt); if (c.hop === 0) c.hopV = Math.max(0, c.hopV);
     // todos rebotan con el paso; y cada uno escucha su instrumento con la cabeza: el primero el bombo, el
     // segundo la caja y la percusión, el tercero los platillos. La cola va de lado a lado al compás
-    if (pulse.on) { c.bobV -= 0.7 + 0.5 * pulse.k; c.tlV += (pulse.count % 2 ? 1 : -1) * (2.6 + 1.6 * pulse.k); if (i === 0) c.nodV += 12 + 8 * pulse.k; }
-    if (i === 1 && (hits.snare || hits.perc > 0.25)) { c.nodV += 11; c.ear = 1; }
-    if (i === 2 && hits.hat) { c.nodV += 7; c.ear = 1; }
-    if (hits.voice && i === 1) c.nodV += 4;
-    c.nodV += (-c.nod * 150 - c.nodV * 15) * dt; c.nod += c.nodV * dt;
+    // la cabeza marca el golpe: baja de golpe justo en el «pam» y sube suave (sin rebote, que confunde el
+    // tiempo). Todos cabecean con el pulso; las orejas, con los platillos
+    if (pulse.on) { c.nodE = Math.max(c.nodE || 0, 0.55 + 0.45 * pulse.k); c.bobV -= 0.7 + 0.5 * pulse.k; c.tlV += (pulse.count % 2 ? 1 : -1) * (2.6 + 1.6 * pulse.k); }
+    if (hits.hat && i === 2) c.ear = 1;
+    if ((hits.snare || hits.perc > 0.3) && i === 1) c.ear = 1;
+    c.nodE = (c.nodE || 0) * Math.pow(0.004, dt);   // vuelve arriba en ~0,25 s
+    c.nod = c.nodE * 0.42;
     c.bobV += (-c.bob * 220 - c.bobV * 16) * dt; c.bob += c.bobV * dt;   // y el cuerpo baja un poquito con el golpe
     c.tlV += (-c.tl * 30 - c.tlV * 4) * dt; c.tl += c.tlV * dt;
     c.ear *= Math.pow(0.004, dt);
@@ -6537,7 +6538,7 @@ function drawCats(dt) {
     c.blinkT -= dt; if (c.blinkT < 0) { c.blink = 1; c.blinkT = 3 + Math.random() * 5; }
     c.blink = Math.max(0, c.blink - dt * 2.5);
     cats.U.set([c.x, c.y, c.s, c.ph], i * 4); cats.U.set([c.hop + c.bob * 0.12, 1, c.c, c.fog], 12 + i * 4);
-    cats.U3.set([Math.max(-0.25, Math.min(0.6, c.nod * 1.1)), Math.max(-1.2, Math.min(1.2, c.tl)), c.ear, Math.sin(Math.min(1, c.blink) * Math.PI)], i * 4);
+    cats.U3.set([Math.max(-0.25, Math.min(0.6, c.nod)), Math.max(-1.2, Math.min(1.2, c.tl)), c.ear, Math.sin(Math.min(1, c.blink) * Math.PI)], i * 4);
   });
   const blue = RGB.slice().sort((a, b) => (b[2] - (b[0] + b[1]) / 2) - (a[2] - (a[0] + a[1]) / 2))[0];
   const [hs] = hexToHsl(rgbToHex(...blue));
