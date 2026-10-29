@@ -221,6 +221,13 @@
   .song .ctl button.main { width: 34px; height: 34px; margin: 0 2px; background: var(--fg); color: var(--bg); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
   .song .ctl button.main:hover { background: var(--fg); transform: scale(1.06); }
   .song .ctl button.dots { width: 28px; color: var(--muted); }
+  .song .more .mob { display: none; }
+  @media (max-width: 480px) { .song .ctl button.mode { display: none; } .song .more .mob { display: flex; } }
+  .song .ctl button.mode { width: 26px; height: 26px; color: var(--muted); position: relative; }
+  .song .ctl button.mode svg { width: 15px; height: 15px; }
+  .song .ctl button.mode[aria-pressed="true"] { color: var(--accent, var(--fg)); }
+  .song .ctl button.mode[aria-pressed="true"]::after { content: ''; position: absolute; bottom: 1px; left: 50%; width: 3px; height: 3px; margin-left: -1.5px; border-radius: 50%; background: currentColor; }
+  .song .ctl button.mode.one::before { content: '1'; position: absolute; top: 1px; right: 2px; font: 700 8px/1 system-ui; }
   .song svg { width: 18px; height: 18px; fill: currentColor; }
   .song .ctl .main svg { width: 18px; height: 18px; }
   /* Progreso: una línea fina en el borde de abajo, con zona de toque generosa */
@@ -1129,8 +1136,8 @@ addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state !== 'runn
 
 // ================= Análisis =================
 let bass = 0, mid = 0, high = 0, energy = 0, time = 0;
-const lowPrev = new Float32Array(12), kickHist = new Float32Array(32), kickE2 = new Float32Array(32);
-const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, cd: 0 }, high: { prev: 0, avg: 0.02, cd: 0 }, snare: { prev: 0, avg: 0.02, cd: 0 }, hat: { prev: 0, avg: 0.02, cd: 0 }, voice: { prev: 0, avg: 0.02, cd: 0 } };
+const lowPrev = new Float32Array(12), fullPrev = new Float32Array(BANDS), kickHist = new Float32Array(32), kickE2 = new Float32Array(32);
+const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, cd: 0 }, high: { prev: 0, avg: 0.02, cd: 0 }, snare: { prev: 0, avg: 0.02, cd: 0 }, hat: { prev: 0, avg: 0.02, cd: 0 }, voice: { prev: 0, avg: 0.02, cd: 0 }, perc: { prev: 0, avg: 0.02, cd: 0 } };
 
 function avg(arr, a, b) { let s = 0; for (let i = a; i < b; i++) s += arr[i]; return s / (b - a); }
 
@@ -1146,21 +1153,19 @@ function analyse(dt) {
       v *= 0.85 + 0.5 * (i / BANDS);   // compensa que los agudos suenan más débiles
       raw[i] = v; if (v > mx) mx = v;
     }
-    // Ganancia automática muy lenta (~15 s para la mitad): así los altos y bajos de la canción se notan;
-    // una estrofa suave se ve tranquila y el estribillo explota (antes se igualaba en pocos segundos)
-    peak = Math.max(peak * Math.pow(0.95, dt), mx, 0.05);   // suelo bajo: con el volumen del PC bajo también reaccionan
+    // Ganancia automática: se adapta en unos segundos para que cada canción llene la pantalla (los altos y
+    // bajos de verdad los lleva dynL, que se mide antes de esta ganancia)
+    peak = Math.max(peak * Math.pow(0.85, dt), mx, 0.05);   // suelo bajo: con el volumen del PC bajo también reaccionan
     const gain = Math.pow(state.sens, 0.8);   // sensibilidad elegida por la persona
     // el volumen real, antes de la ganancia automática (que iguala las partes suaves y fuertes)
     { let le = 0; for (let i = 0; i < BANDS; i++) le += Math.pow(10, (raw[i] - 1) * 3.3); dynLe = le / BANDS; }
-    for (let i = 0; i < BANDS; i++) raw[i] = Math.min(1, raw[i] / peak * gain);
+    // con la sensibilidad alta no se corta en seco (eso aplanaba las cimas): se acerca a 1 con una curva suave
+    for (let i = 0; i < BANDS; i++) { const x = raw[i] / peak * gain; raw[i] = x < 0.7 ? x : 0.7 + 0.3 * (1 - Math.exp(-(x - 0.7) / 0.3)); }
   } else if (songBeatOn()) {
     songBeatSynth();
   } else {
-    // Sin música: solo una respiración lenta, sin golpes (nada de inventar un ritmo propio)
-    for (let i = 0; i < BANDS; i++) {
-      const x = i / BANDS;
-      raw[i] = Math.max(0, (0.3 - x * 0.2) * (0.55 + 0.45 * Math.sin(time * 0.5 + i * 0.35) * Math.sin(time * 0.23 + i * 0.12)));
-    }
+    // Sin música no se inventa nada: si no suena, nada se enciende ni late
+    raw.fill(0);
   }
   for (let i = 0; i < BANDS; i++) {
     const k = raw[i] > spec[i] ? 1 - Math.pow(0.00001, dt) : 1 - Math.pow(0.006, dt); // sube al instante, baja rápido pero suave
@@ -1203,7 +1208,11 @@ function analyse(dt) {
     }
     lowF = Math.max(lowF, rise * 0.5);
   }
-  hits.bass = onset('bass', bass, dt, lowF); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
+  hits.bass = onset('bass', bass, dt, lowF);
+  // la percusión de todo el espectro (congas, güiro, palmas, timbales, guitarras rasgueadas): lo que sube
+  // banda por banda, del medio para arriba. En una salsa o una cumbia el pulso vive aquí, no en el bombo
+  let fullF = 0; for (let i = 8; i < BANDS; i++) { fullF += Math.max(0, raw[i] - fullPrev[i]); } for (let i = 0; i < BANDS; i++) fullPrev[i] = raw[i];
+  hits.perc = onset('perc', 0, dt, fullF / (BANDS - 8) * 1.6); hits.mid = onset('mid', mid, dt); hits.high = onset('high', high, dt);
   // la caja (chasquido de 2 a 6 kHz) y los platillos (de 6 kHz para arriba), por separado
   // la caja es un chasquido ruidoso: solo cuenta si en ese instante el espectro de la voz se vuelve ruido
   const sBand = avg(raw, 44, 56), hBand = avg(raw, 56, BANDS);
@@ -1235,7 +1244,10 @@ function analyse(dt) {
   // tempo solo rellena cuando falta un golpe que debía sonar y la canción viene con un ritmo claro
   const nowP = performance.now(), per = tempo.period ? tempo.period * 1000 : 500;
   pulse.on = false;
-  const real = hits.bass && nowP - pulse.at > 120;
+  // la percusión también marca el pulso (en salsa, cumbia o acústico el bombo no lleva el ritmo); si un bajo
+  // o un bombo acaba de sonar, ese golpe ya cuenta
+  const percP = !hits.bass && hits.perc > 0.12 && analyser && nowP - lastBassHit > 170 && nowP - pulse.at > 170;
+  const real = (hits.bass || percP) && nowP - pulse.at > 120;
   // El tempo avisa de que toca un golpe, pero se espera un instante por si llega el de verdad: así un
   // golpe previsto un poco antes de tiempo nunca tapa al real (que es el que se oye)
   if (beatTick) pulse.due = nowP;
@@ -1246,7 +1258,7 @@ function analyse(dt) {
     pulse.due = 0;
   }
   if (real || fill) {
-    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : 0.5;
+    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : 0.5;
     pulse.k = Math.min(1, pulse.k * (0.5 + bandX(0, 12) * 0.65));   // el mismo bombo pega menos en la estrofa que en el estribillo
     // ataque al instante (en el mismo fotograma del golpe), sin esperar a que un muelle se estire
     const amp = pulse.k * (state.noFlash ? 0.3 : 0.6);
@@ -1266,7 +1278,7 @@ function smoothProfile(a, passes = 2) {
   for (let p = 0; p < passes; p++) { for (let i = 0; i < n; i++) t[i] = (a[Math.max(0, i - 1)] + a[i] * 2 + a[Math.min(n - 1, i + 1)]) / 4; a.set(t); }
   return a;
 }
-const hits = { bass: 0, mid: 0, high: 0, snare: 0, hat: 0, voice: 0 };
+const hits = { bass: 0, mid: 0, high: 0, snare: 0, hat: 0, voice: 0, perc: 0 };
 
 // ================= Tempo (BPM) y pulso =================
 // Se guarda la "fuerza de ataque" del sonido 100 veces por segundo durante 8 s y se busca
@@ -1657,7 +1669,7 @@ function drawMountains(dt) {
   ];
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [];
-    for (let p = 0; p < P; p++) ridgeT[p] = Math.max(0, Math.min(1.25, (Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 0.85) - 0.12) * 1.55));   // valles hondos, picos altos
+    for (let p = 0; p < P; p++) { const t_ = Math.max(0, (Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 0.85) - 0.12) * 1.55); ridgeT[p] = 1.15 * (1 - Math.exp(-t_ / 1.15)); }   // valles hondos, picos altos y redondos (nunca una meseta)
     smoothProfile(ridgeT, 1);
     if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (2.5 + li * 1.5) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
     springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.45);
@@ -1977,6 +1989,44 @@ function spControl(action, pos) {
     }
   });
 }
+// Aleatorio y repetir (lista → canción → nada), como en Spotify
+function spPlayMode(kind) {
+  const dev = sp.deviceId ? '&device_id=' + encodeURIComponent(sp.deviceId) : '';
+  let path;
+  if (kind === 'shuffle') { sp.shuffle = !sp.shuffle; path = 'shuffle?state=' + sp.shuffle; }
+  else { sp.repeat = { off: 'context', context: 'track', track: 'off' }[sp.repeat || 'off']; path = 'repeat?state=' + sp.repeat; }
+  sp.modeLock = performance.now() + 3000; spRender();
+  spToast(kind === 'shuffle' ? (sp.shuffle ? 'Aleatorio activado' : 'Aleatorio desactivado') : ({ context: 'Repetir la lista', track: 'Repetir esta canción', off: 'Sin repetir' })[sp.repeat]);
+  spBusy = spBusy.then(() => spApi('/me/player/' + path + dev, { method: 'PUT' })).catch(e => { sp.modeLock = 0; spToast(spErrorText(e)); spLoop(); });
+}
+// Radio: Spotify ya no da recomendaciones a apps nuevas, así que se arma una mezcla parecida: canciones
+// similares según Last.fm (si hay clave), del mismo género y del mismo artista, barajadas
+async function spRadio(item, artistOnly) {
+  if (!item) return;
+  const ar = (item.artists || [])[0] || item, name = ar.name || '', seen = new Set([item.uri]), uris = item.uri && !artistOnly ? [item.uri] : [];
+  const add = list => { for (const t of list || []) if (t && t.uri && !seen.has(t.uri) && t.type !== 'episode') { seen.add(t.uri); uris.push(t.uri); } };
+  const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+  spToast('Armando la radio de ' + esc(artistOnly ? name : item.name || name) + '…');
+  try {
+    const pool = [];
+    if (LASTFM_KEY && item.name && !artistOnly) {   // canciones parecidas de verdad
+      try {
+        const d = await lfApi({ method: 'track.getSimilar', artist: name, track: item.name, limit: 30 });
+        const sim = (d.similartracks?.track || []).slice(0, 25);
+        const found = await Promise.all(sim.map(t => spApi('/search?type=track&limit=1&q=' + encodeURIComponent(`track:"${t.name}" artist:"${t.artist?.name}"`)).then(r => r.tracks?.items?.[0]).catch(() => null)));
+        pool.push(...found.filter(Boolean));
+      } catch (e) {}
+    }
+    const info = ar.id ? await spArtistData(ar.id) : null, genres = (info && info.genres) || [];
+    const own = await spApi('/search?type=track&limit=20&q=' + encodeURIComponent(`artist:"${name}"`)).catch(() => null);
+    const byGenre = await Promise.all(genres.slice(0, 3).map(g => spApi('/search?type=track&limit=20&offset=' + Math.floor(Math.random() * 60) + '&q=' + encodeURIComponent(`genre:"${g}"`)).then(r => r.tracks?.items || []).catch(() => [])));
+    pool.push(...shuffle(byGenre.flat()).slice(0, 30), ...shuffle((own?.tracks?.items || []).slice()).slice(0, 12));
+    add(shuffle(pool));
+    if (uris.length < 2) { spToast('No encontré suficientes canciones para la radio'); return; }
+    await libPlay({ uris: uris.slice(0, 80) }, null, item.album ? item : null);
+    spToast('Radio de ' + esc(artistOnly ? name : item.name || name) + ' · ' + Math.min(80, uris.length) + ' canciones');
+  } catch (e) { spToast(spErrorText(e)); }
+}
 // Aviso corto dentro del reproductor
 function spToast(html) {
   let t = songEl.querySelector('.toast');
@@ -2032,6 +2082,7 @@ async function spLoop() {
 function spUpdate(d, src = 'spotify') {
   if (src !== nowSource()) return;   // otra fuente con más prioridad está al mando
   const item = d && d.item;
+  if (src === 'spotify' && d && performance.now() > (sp.modeLock || 0)) { if ('shuffle_state' in d) sp.shuffle = !!d.shuffle_state; if (d.repeat_state) sp.repeat = d.repeat_state; }
   if (src === 'spotify' && sp.expectId) {
     // Se pidió una canción desde la página: hasta que Spotify la confirme, se ignoran respuestas viejas
     if (performance.now() < (sp.lockUntil || 0) && (item && item.id) !== sp.expectId) return;
@@ -2113,6 +2164,9 @@ const ICON = {
   dots: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
   vol: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/></svg>',
   power: '<svg viewBox="0 0 24 24"><path d="M11 3h2v9h-2zM7.05 6.05l1.41 1.41A6 6 0 1 0 15.54 7.46l1.41-1.41A8 8 0 1 1 7.05 6.05z"/></svg>',
+  shuffle: '<svg viewBox="0 0 24 24"><path d="M16 4l4 3.5-4 3.5V8.5h-1.6c-1.3 0-2.4.7-3.1 1.8l-3.9 6.1A5.6 5.6 0 0 1 2.7 19H2v-2h.7c1.3 0 2.4-.7 3.1-1.8l3.9-6.1A5.6 5.6 0 0 1 14.4 6.5H16V4zM2 5h.7c1.6 0 3.1.7 4.1 1.9L5.6 8.5A3.6 3.6 0 0 0 2.7 7H2V5zm12.4 12.5H16V15l4 3.5L16 22v-2.5h-1.6c-1.6 0-3.1-.7-4.1-1.9l1.2-1.6c.7.9 1.7 1.5 2.9 1.5z"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24"><path d="M7 7h10V4.5l4 3.5-4 3.5V9H7a2 2 0 0 0-2 2v1H3v-1a4 4 0 0 1 4-4zm10 10H7v2.5L3 16l4-3.5V15h10a2 2 0 0 0 2-2v-1h2v1a4 4 0 0 1-4 4z"/></svg>',
+  radio: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2.2"/><path d="M7.8 7.8a6 6 0 0 0 0 8.4l-1.4 1.4a8 8 0 0 1 0-11.2zm8.4 0 1.4-1.4a8 8 0 0 1 0 11.2l-1.4-1.4a6 6 0 0 0 0-8.4zM4.9 4.9a10 10 0 0 0 0 14.2l-1.4 1.4a12 12 0 0 1 0-17zm14.2 0 1.4-1.4a12 12 0 0 1 0 17l-1.4-1.4a10 10 0 0 0 0-14.2z"/></svg>',
 };
 function spRender() {
   document.title = spConnected() && sp.item ? `${sp.item.name} · ${(sp.item.artists || []).map(a => a.name).join(', ') || sp.item.show?.name || ''} — Siente la música` : 'Siente la música';
@@ -2131,7 +2185,7 @@ function spRender() {
     const linkName = it.external_urls?.spotify ? 'Abrir en Spotify' : 'Ver en Last.fm';
     const src = nowSource(), play = sp.playing;
     const ctl = src === 'spotify'
-      ? `<button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button>`
+      ? `<button class="mode" data-sp="shuffle" aria-label="Aleatorio" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}</button><button data-sp="previous" aria-label="Anterior">${ICON.prev}</button><button class="main" data-sp="${play ? 'pause' : 'play'}" aria-label="${play ? 'Pausar' : 'Reproducir'}">${play ? ICON.pause : ICON.play}</button><button data-sp="next" aria-label="Siguiente">${ICON.next}</button><button class="mode${sp.repeat === 'track' ? ' one' : ''}" data-sp="repeat" aria-label="${sp.repeat === 'track' ? 'Repetir esta canción' : sp.repeat === 'context' ? 'Repetir la lista' : 'Repetir'}" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}</button>`
       : src === 'file' && audioEl ? `<button data-file="back" aria-label="Atrás 10 s">${ICON.prev}</button><button class="main" data-file="toggle" aria-label="${audioEl.paused ? 'Reproducir' : 'Pausar'}">${audioEl.paused ? ICON.play : ICON.pause}</button><button data-file="fwd" aria-label="Adelante 10 s">${ICON.next}</button>` : '';
     const canVol = src === 'spotify' || (src === 'file' && audioEl);
     const wasPaused = songEl.classList.contains('paused');
@@ -2143,7 +2197,7 @@ function spRender() {
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
-        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button>` : '') +
+        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spRadio">${ICON.radio}Radio de esta canción</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
         (!analyser ? `<button id="spTap"><span style="width:16px;text-align:center">♩</span>Marcar el ritmo (tocando)</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
         (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
@@ -2165,7 +2219,8 @@ function spRender() {
   songEl.querySelector('.close').onclick = () => { sp.dismissed = true; songEl.hidden = true; };
   const out = document.getElementById('spOut');
   if (out) out.onclick = () => { const s_ = nowSource(); if (s_ === 'file') fileStop(); else if (s_ === 'lastfm') lfLogout(); else spLogout(); };
-  songEl.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => spControl(b.dataset.sp));
+  songEl.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => b.dataset.sp === 'shuffle' || b.dataset.sp === 'repeat' ? spPlayMode(b.dataset.sp) : spControl(b.dataset.sp));
+  const rd = document.getElementById('spRadio'); if (rd) rd.onclick = e => { e.stopPropagation(); sp.more = false; songEl.classList.remove('open-more'); spRadio(sp.item); };
   const sl = document.getElementById('spLib'); if (sl) sl.onclick = e => { e.stopPropagation(); libOpen(); };
   songEl.querySelectorAll('[data-file]').forEach(b => b.onclick = () => {
     if (!audioEl) return;
@@ -2477,14 +2532,31 @@ function libView(title, back, fill) {
   lib.stack.push(() => libView(title, back, fill));
   fill().catch(e => { libMsg(''); libList.firstChild.innerHTML = spErrorText(e) + '<br><br><button id="libDiag2">Revisar conexión</button>'; document.getElementById('libDiag2').onclick = libDiagnose; });
 }
+// Todas las páginas (Spotify da de 50 en 50): se van mostrando a medida que llegan, sin esperar al final
+async function spPages(path, onPage, max = 2000) {
+  let next = path, got = 0;
+  while (next && got < max) {
+    const d = await spApi(next);
+    const items = d.items || [];
+    got += items.length;
+    if (onPage(items, d) === false) return;
+    next = d.next ? d.next.replace('https://api.spotify.com/v1', '') : null;
+  }
+}
 function openPlaylist(pl) {
   libView(pl.name, true, async () => {
     libMsg('Cargando…');
-    let d; try { d = await spApi(`/playlists/${pl.id}/items?limit=50`); } catch (e) { d = await spApi(`/playlists/${pl.id}/tracks?limit=50`); }
-    const tracks = (d.items || []).map(x => x.item || x.track).filter(t => t && t.uri && t.type !== 'episode');
-    libList.innerHTML = '';
-    libList.append(libRow({ title: 'Reproducir todo', sub: pl.owner?.display_name || '', img: imgOf(pl), play: row => libPlay({ context_uri: pl.uri }, row) }));
-    tracks.length ? libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })) : libList.append(libSec('Spotify solo muestra las canciones de tus propias playlists; esta puedes reproducirla entera'));
+    let path = `/playlists/${pl.id}/items?limit=50`;
+    try { await spApi(path.replace('limit=50', 'limit=1')); } catch (e) { path = `/playlists/${pl.id}/tracks?limit=50`; }
+    let first = true, any = false;
+    await spPages(path, items => {
+      if (lib.stack.length && libTitle.textContent !== pl.name) return false;   // se fue a otra vista
+      const tracks = items.map(x => x.item || x.track).filter(t => t && t.uri && t.type !== 'episode');
+      if (first) { libList.innerHTML = ''; libList.append(libRow({ title: 'Reproducir todo', sub: (pl.owner?.display_name || '') + (pl.tracks?.total ? ' · ' + pl.tracks.total + ' canciones' : ''), img: imgOf(pl), play: row => libPlay({ context_uri: pl.uri }, row) })); first = false; }
+      if (tracks.length) { any = true; libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })); }
+    });
+    if (first) libList.innerHTML = '';
+    if (!any) libList.append(libSec('Spotify no deja ver las canciones de esta playlist (las de Spotify, como Daily Mix, no se comparten con otras apps); puedes reproducirla entera'));
   });
 }
 function openAlbum(al) {
@@ -2502,6 +2574,7 @@ function openArtist(ar) {   // Spotify ya no da «canciones más populares» a a
     const d = await spApi('/search?type=track,album&limit=10&q=' + encodeURIComponent(`artist:"${ar.name}"`));
     libList.innerHTML = '';
     libList.append(libRow({ title: 'Reproducir ' + ar.name, sub: 'Mezcla del artista', img: imgOf(ar), round: true, play: row => libPlay({ context_uri: ar.uri }, row) }));
+    libList.append(libRow({ title: 'Radio de ' + ar.name, sub: 'El artista y otros parecidos', img: imgOf(ar), round: true, play: () => spRadio({ name: ar.name, artists: [ar] }, true) }));
     const tr = (d.tracks?.items || []).filter(Boolean), al = (d.albums?.items || []).filter(Boolean);
     if (tr.length) libList.append(libSec('Canciones'), ...trackRows(tr));
     if (al.length) libList.append(libSec('Álbumes'), ...al.map(a => libRow({ title: a.name, sub: (a.release_date || '').slice(0, 4), img: imgOf(a), open: () => openAlbum(a) })));
@@ -2509,13 +2582,24 @@ function openArtist(ar) {   // Spotify ya no da «canciones más populares» a a
 }
 const LIB_TABS = {
   playlists: ['Tus playlists', async () => {
-    const d = await spApi('/me/playlists?limit=50'), items = (d.items || []).filter(Boolean);
-    libList.innerHTML = '';
-    items.length ? libList.append(...items.map(pl => libRow({ title: pl.name, sub: 'Playlist · ' + (pl.owner?.display_name || ''), img: imgOf(pl), open: () => openPlaylist(pl) }))) : libMsg('Aún no tienes playlists.');
+    let first = true;
+    await spPages('/me/playlists?limit=50', items => {
+      if (lib.tab !== 'playlists' || libQ.value.trim()) return false;
+      if (first) { libList.innerHTML = ''; first = false; }
+      libList.append(...items.filter(Boolean).map(pl => libRow({ title: pl.name, sub: 'Playlist · ' + (pl.owner?.display_name || '') + (pl.tracks?.total ? ' · ' + pl.tracks.total : ''), img: imgOf(pl), open: () => openPlaylist(pl) })));
+    }, 1000);
+    if (!libList.children.length) libMsg('Aún no tienes playlists.');
   }],
   liked: ['Me gusta', async () => {
-    const d = await spApi('/me/tracks?limit=50'), tr = (d.items || []).map(x => x.track).filter(Boolean);
-    libList.innerHTML = ''; tr.length ? libList.append(...trackRows(tr)) : libMsg('Aún no tienes canciones guardadas.');
+    if (!sp.userId) spApi('/me').then(d => { sp.userId = d.id; }).catch(() => {});
+    let first = true;
+    await spPages('/me/tracks?limit=50', items => {
+      if (lib.tab !== 'liked' || libQ.value.trim()) return false;
+      if (first) { libList.innerHTML = ''; libList.append(libRow({ title: 'Reproducir tus Me gusta', sub: 'En orden o en aleatorio', play: row => libPlay({ context_uri: 'spotify:user:' + (sp.userId || '') + ':collection' }, row) })); first = false; }
+      const tr = items.map(x => x.track).filter(Boolean);
+      libList.append(...trackRows(tr));
+    }, 3000);
+    if (libList.children.length < 2) libMsg('Aún no tienes canciones guardadas.');
   }],
   top: ['Lo que más escuchas', async () => {
     const d = await spApi('/me/top/tracks?limit=50&time_range=short_term'), tr = (d.items || []).filter(Boolean);
@@ -5980,15 +6064,18 @@ const BUST_HALF = [[0, 0.885], [0.04, 0.881], [0.07, 0.868], [0.093, 0.848], [0.
   [0.104, 0.655], [0.094, 0.628], [0.085, 0.604], [0.079, 0.582], [0.077, 0.56], [0.078, 0.535], [0.085, 0.513], [0.103, 0.492], [0.135, 0.47], [0.172, 0.448],
   [0.205, 0.427], [0.23, 0.405], [0.248, 0.38], [0.259, 0.352], [0.265, 0.32], [0.267, 0.27], [0.266, 0.2], [0.262, 0.12], [0.255, 0.04], [0.245, -0.05]];
 const BUST_PTS = (() => { const r = BUST_HALF.slice(1), l = BUST_HALF.slice(1).reverse().map(([x, y]) => [-x, y]); return new Float32Array([BUST_HALF[0], ...r, [0.245, -0.06], [-0.245, -0.06], ...l.slice(1)].flat()); })();
-const bust = { prog: null, sway: 0, swayV: 0, sig: 0.023, rise: 0, syl: 0, fr: 0, gr: 0, col: null };
+const bust = { prog: null, sway: 0, swayV: 0, nod: 0, nodV: 0, tilt: 0, tiltV: 0, sig: 0.023, rise: 0, syl: 0, fr: 0, gr: 0, col: null };
 function bustSetup() {
-  bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uSway, uBreath, uS, uSig, uVoice, uRise, uSyl, uFr, uGr;
+  bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uSway, uBreath, uS, uSig, uVoice, uRise, uSyl, uFr, uGr, uNod, uTilt;
     uniform vec3 uCol, uCol2, uDeep, uMel, uBg0, uBg1;
     uniform vec2 uPts[64]; uniform int uNP;
     ${GLSL_NOISE} ${GLSL_COVER}
     float figure(vec2 q) {
       float c = cos(uSway), s = sin(uSway);
       q = mat2(c, s, -s, c) * q; q.y /= 1. + uBreath;
+      // la cabeza se mueve sola desde el cuello: cabecea con el ritmo y se ladea con la melodía
+      float hw = smoothstep(.5, .64, q.y), an = (uNod + uTilt) * hw, cn = cos(an), sn = sin(an);
+      vec2 nk = vec2(0., .56); q = mix(q, nk + mat2(cn, sn, -sn, cn) * (q - nk) + vec2(uTilt * .1, uNod * .03) * hw, hw);
       float d = dot(q - uPts[0], q - uPts[0]), sg = 1.;
       for (int i = 0; i < 64; i++) {
         if (i >= uNP) break;
@@ -6039,8 +6126,14 @@ function drawBust(dt) {
   if (!bust.prog) bustSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
   // se mece apenas con el compás y respira
-  if (pulse.on) bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.012 * pulse.k;
-  bust.swayV += (-bust.sway * 18 - bust.swayV * 5) * dt; bust.sway += bust.swayV * dt;
+  if (pulse.on) { bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.03 * pulse.k; bust.nodV += 3.2 + 3 * pulse.k; }
+  // la cabeza: cabecea con cada golpe (y un poco con la caja y los platillos) y se ladea con la nota que se canta
+  if (hits.snare || hits.perc > 0.3) bust.nodV -= 1.6;
+  if (hits.voice) bust.tiltV += (Math.random() - 0.5) * 0.6;
+  bust.nodV += (-bust.nod * 160 - bust.nodV * 14) * dt; bust.nod += bust.nodV * dt;
+  const tiltT = voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.12 : 0;
+  bust.tiltV += ((tiltT - bust.tilt) * 30 - bust.tiltV * 7) * dt; bust.tilt += bust.tiltV * dt;
+  bust.swayV += (-bust.sway * 14 - bust.swayV * 4) * dt; bust.sway += bust.swayV * dt;
   // el foco: la voz la saca de la niebla; sin voz se queda soñando; cada bombo la enfoca un instante
   const vx_ = bandX(10, 40), lx_ = bandX(0, 10);   // lo que suena en la voz y en los graves, con sus altos y bajos
   const focus = Math.min(1, voice * 1.6 + vx_ * 0.45 + (dropHit ? 1 : 0));
@@ -6064,7 +6157,7 @@ function drawBust(dt) {
   const p = bust.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, (0.002 + energy * 0.006) * Math.sin(time * 1.3) + P * 0.02 + lx_ * 0.012);
+  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uNod, Math.max(-0.2, Math.min(0.25, bust.nod * 0.12))); gl.uniform1f(p.u.uTilt, bust.tilt); gl.uniform1f(p.u.uBreath, (0.002 + energy * 0.006) * Math.sin(time * 1.3) + P * 0.02 + lx_ * 0.012);
   gl.uniform1f(p.u.uS, Math.min(1, asp / 0.75));
   gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.5 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3 + vx_ * 0.35));
   gl.uniform1f(p.u.uRise, bust.rise); gl.uniform1f(p.u.uSyl, bust.syl); gl.uniform1f(p.u.uFr, bust.fr); gl.uniform1f(p.u.uGr, bust.gr);
@@ -6225,7 +6318,11 @@ function drawCats(dt) {
     c.hopV -= 9 * dt; c.hop = Math.max(0, c.hop + c.hopV * dt); if (c.hop === 0) c.hopV = Math.max(0, c.hopV);
     // escuchan: cabecean con cada golpe (cada uno con su propio gusto), la cola va de un lado a otro al
     // compás, la oreja se mueve con los platillos y parpadean despacio de vez en cuando
-    if (pulse.on) { c.nodV += (7.5 + 4 * pulse.k) * (0.85 + 0.15 * i); c.tlV += (pulse.count % 2 ? 1 : -1) * (2.2 + pulse.k); c.bobV -= 0.35 + 0.25 * pulse.k; }
+    if (pulse.on) { c.nodV += (11 + 7 * pulse.k) * (0.85 + 0.15 * i); c.tlV += (pulse.count % 2 ? 1 : -1) * (3.2 + 2 * pulse.k); c.bobV -= 0.6 + 0.5 * pulse.k; }
+    // la caja y la percusión: latigazo de cola y la oreja; los platillos: un leve giro de cabeza
+    if (hits.snare || hits.perc > 0.3) { c.tlV += (Math.random() < 0.5 ? -1 : 1) * 3.5; c.ear = 1; }
+    if (hits.hat && i === (pulse.count % 3)) c.nodV -= 4;
+    if (hits.voice) c.nodV += 3 * (1 - i * 0.3);
     c.nodV += (-c.nod * 150 - c.nodV * 15) * dt; c.nod += c.nodV * dt;
     c.bobV += (-c.bob * 220 - c.bobV * 16) * dt; c.bob += c.bobV * dt;   // y el cuerpo baja un poquito con el golpe
     c.tlV += (-c.tl * 30 - c.tlV * 4) * dt; c.tl += c.tlV * dt;
@@ -6237,8 +6334,8 @@ function drawCats(dt) {
     c.tlV += (cats.L[i] - 0.4) * dt * 3 * (i % 2 ? 1 : -1);
     c.blinkT -= dt; if (c.blinkT < 0) { c.blink = 1; c.blinkT = 3 + Math.random() * 5; }
     c.blink = Math.max(0, c.blink - dt * 2.5);
-    cats.U.set([c.x, c.y, c.s, c.ph], i * 4); cats.U.set([c.hop + c.bob * 0.05, 1, c.c, c.fog], 12 + i * 4);
-    cats.U3.set([Math.max(-0.1, c.nod * 0.85), Math.max(-1.2, Math.min(1.2, c.tl)), c.ear, Math.sin(Math.min(1, c.blink) * Math.PI)], i * 4);
+    cats.U.set([c.x, c.y, c.s, c.ph], i * 4); cats.U.set([c.hop + c.bob * 0.12, 1, c.c, c.fog], 12 + i * 4);
+    cats.U3.set([Math.max(-0.25, Math.min(0.6, c.nod * 1.1)), Math.max(-1.2, Math.min(1.2, c.tl)), c.ear, Math.sin(Math.min(1, c.blink) * Math.PI)], i * 4);
   });
   const blue = RGB.slice().sort((a, b) => (b[2] - (b[0] + b[1]) / 2) - (a[2] - (a[0] + a[1]) / 2))[0];
   const [hs] = hexToHsl(rgbToHex(...blue));
