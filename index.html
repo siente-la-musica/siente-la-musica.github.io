@@ -358,17 +358,17 @@
   .lv-cur { display: block; text-wrap: balance; }
   .lv-cur .w {
     display: inline-block; color: color-mix(in srgb, var(--fg) 42%, transparent); transform-origin: 50% 80%;
-    text-shadow: 0 0 .35em color-mix(in srgb, var(--bg) 70%, transparent), 0 0 .9em color-mix(in srgb, var(--bg) 50%, transparent);
+    text-shadow: none;   /* sin halos del color del fondo: manchaban lo que había alrededor de cada palabra */
     transition: color .35s, transform .45s cubic-bezier(.2,.8,.2,1), text-shadow .45s;
   }
-  .lv-cur .w.on { color: var(--c); transform: translateY(-.03em); text-shadow: 0 0 .3em color-mix(in srgb, var(--bg) 60%, transparent), 0 0 .5em color-mix(in srgb, var(--c) 45%, transparent); }
+  .lv-cur .w.on { color: var(--c); transform: translateY(-.03em); text-shadow: 0 0 .45em color-mix(in srgb, var(--c) 32%, transparent); }
   .lv-cur.plain .w { color: var(--c); }
   .lv-cur.enter .w { animation: wordIn .8s cubic-bezier(.2,.8,.2,1) both; animation-delay: calc(220ms + var(--i) * 45ms); }
   @keyframes wordIn { from { opacity: 0; filter: blur(.12em); transform: translateY(.4em) scale(.94); } }
   .lv-out { position: absolute; inset: 0 0 auto; animation: lineOut .7s cubic-bezier(.4,0,.6,1) forwards; }
   .lv-out .w { color: var(--c); }
   @keyframes lineOut { from { opacity: .55; } to { opacity: 0; transform: translateY(-1.6em) scale(1.04); filter: blur(.25em); letter-spacing: .05em; } }
-  .lv-next { margin-top: 1.1em; font-size: .34em; font-weight: 600; letter-spacing: 0; color: color-mix(in srgb, var(--fg) 70%, transparent); text-wrap: balance; text-shadow: 0 0 .5em var(--bg), 0 0 1.2em var(--bg); }
+  .lv-next { margin-top: 1.1em; font-size: .34em; font-weight: 600; letter-spacing: 0; color: color-mix(in srgb, var(--fg) 70%, transparent); text-wrap: balance; text-shadow: none; }
   .lv-msg { font-size: clamp(18px, 1.8vw, 80px); font-weight: 600; color: var(--muted); text-align: center; display: grid; gap: .8em; justify-items: center; }
   .lv-msg button { pointer-events: auto; font-size: .7em; padding: .6em 1.1em; background: var(--chip-on); color: var(--chip-on-fg); }
   .lv-meta {
@@ -2841,11 +2841,11 @@ function liquidWord(k, newest, lit) {   // deformación de una palabra: [escala 
   // las demás quedan quietas para que la línea se lea limpia
   const amt = (state.noFlash || calmMotion.matches ? 0.4 : 1) * (newest ? 1 : lit ? 0.25 : 0);
   const st = Math.max(-0.15, liquid.st) * amt;
-  return [1 - st * 0.06, 1 + st * 0.22, 0, -st * 0.02, Math.sin(time * 2.1 + k * 1.7) * mid * 1.2 * amt];
+  return [1 - st * 0.025, 1 + st * 0.09, 0, -st * 0.012, Math.sin(time * 2.1 + k * 1.7) * mid * 0.35 * amt];   // apenas: se lee limpia
 }
 function lvFrame() {
   if (state.mode !== 'lyrics' || lvEl.hidden) return;
-  lvStage.style.setProperty('--pulse', (1 + bass * 0.02 + beat * 0.03).toFixed(4));
+  lvStage.style.setProperty('--pulse', (1 + bass * 0.012 + beat * 0.018).toFixed(4));
   const pos = lyricPos(), ws = lvCur.querySelectorAll('.w');
   let newest = -1;
   ws.forEach((w, k) => {
@@ -4913,7 +4913,7 @@ function drawGlass(dt) {
   if (dropHit) glass.flash = 1; glass.flash *= Math.pow(0.02, dt);
   glassBackground(night);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.bg, 0, 0, W, H); ctx.restore();
-  const P = Math.max(0, pulse.x), glow = beatSoft * 0.04 + P * 0.16;
+  const P = Math.max(0, pulse.x), glow = beatSoft * 0.05 + P * 0.28;
   if (glow > 0.01) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), glow * (night ? 1 : 1.8)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late con cada golpe
   // la voz: detrás del vidrio se enciende una luz del color de la nota, como una ventana iluminada al fondo
   const gv = drawGlass.v = (drawGlass.v || 0) + (Math.min(1, voice * 1.5) - (drawGlass.v || 0)) * (1 - Math.pow(0.1, dt));
@@ -5285,7 +5285,8 @@ function drawTiles(dt) {
     for (const t of L) { const d = Math.hypot(t.x + t.s / 2 - cx0, t.y + t.s / 2 - cy0) / (t0.s * 1.8); t.flash = Math.max(t.flash, d < 1 ? (0.8 + pulse.k * 0.3) * (1 - d * 0.55) : 0.28 * pulse.k); }
     t0.popV += 5 + pulse.k * 4;
     tiles.last = { x: cx0, y: cy0 };
-    if (pulse.count % 4 === 0 || dropHit) tiles.waves.push({ x: cx0, y: cy0, r: 0, k: dropHit ? 1 : 0.55 });
+    if (pulse.count % 2 === 0 || dropHit) tiles.waves.push({ x: cx0, y: cy0, r: 0, k: dropHit ? 1 : 0.5 + 0.2 * pulse.k });
+    if (pulse.k > 0.6) { const near = L.filter(t => t !== t0 && Math.hypot(t.x + t.s / 2 - cx0, t.y + t.s / 2 - cy0) < t0.s * 1.6); for (let j = 0; j < Math.min(2, near.length); j++) near[Math.floor(Math.random() * near.length)].popV += 3 + pulse.k * 3; }   // los fuertes levantan también a los vecinos
     if (pulse.count % 16 === 0 || dropHit) { const k = Math.random(); L.forEach(t => { if (Math.random() < 0.4) t.colTo = (k + Math.random() * 0.35) % 1; }); }   // cambio de color con la frase
   }
   if (hits.mid > 0.3 && energy > 0.12 && !pulse.on) pick(2, 1, 0.55 + hits.mid * 0.3, tiles.last);
@@ -5303,7 +5304,7 @@ function drawTiles(dt) {
     let wv = 0; for (const w of tiles.waves) { const d = Math.hypot(t.x + t.s / 2 - w.x, t.y + t.s / 2 - w.y); wv += w.k * Math.exp(-Math.pow((d - w.r) / (MIN * 0.12), 2)); }
     const pv = [t.pop], vv = [t.popV]; springTo(pv, vv, [0], dt, 180, 0.35); t.pop = pv[0]; t.popV = vv[0];
     if (t.colTo != null) { const d = ((t.colTo - t.col + 1.5) % 1) - 0.5; t.col = (t.col + d * Math.min(1, dt * 3) + 1) % 1; if (Math.abs(d) < 0.01) t.colTo = null; }
-    t.I = Math.min(1.2, 0.02 + t.lv * 0.18 + t.flash * 1.1 + wv * 0.8);   // lo que manda es el golpe
+    t.I = Math.min(1.25, 0.03 + t.lv * 0.42 + t.flash * 1.15 + wv * 0.85);   // cada cuadro brilla con su sonido; el golpe manda
     if (t.pop > 0.02) popped.push(t); else drawTile(t, gap, night, 0);
   }
   popped.sort((a, b) => a.pop - b.pop).forEach(t => drawTile(t, gap, night, t.pop));   // los que sobresalen, encima
@@ -6223,12 +6224,22 @@ function drawCurtain(dt) {
   // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
   if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  curtain.fph = (curtain.fph || 0) + dt * (0.15 + energy * 2.2);   // las nubes de color se mueven con la música
   curtain.fields.forEach((f, k) => {
-    const x = W * (0.5 + 0.45 * Math.sin(time * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(time * f.sp * 1.3 + f.ph * 2));
+    const x = W * (0.5 + 0.45 * Math.sin(curtain.fph * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(curtain.fph * f.sp * 1.3 + f.ph * 2));
     const col = night ? RGB[f.c] : RGB[f.c].map(v => v + (255 - v) * 0.45);
     glowSpot(x, y, MIN * f.s * (1 + P * 0.06), col, (night ? 0.16 : 0.38) + energy * 0.1 + P * 0.08);
   });
   if (!night) glowSpot(W * (0.5 + 0.3 * Math.sin(time * 0.03)), H * 0.45, MIN * 0.6, [255, 255, 255], 0.55);   // un claro de luz
+  // hilos desenfocados (como en una foto con poca profundidad de campo): franjas de luz anchas y suaves
+  // que laten con los graves
+  if (!curtain.soft) curtain.soft = Array.from({ length: 7 }, (_, i) => ({ x: (i + 0.5 + (Math.random() - 0.5) * 0.8) / 7, w: 0.012 + Math.random() * 0.03, c: i % 3, ph: Math.random() * 6 }));
+  for (const sf of curtain.soft) {
+    const x = (sf.x + Math.sin(curtain.fph * 0.05 + sf.ph) * 0.01) * W, w = sf.w * W * (1 + P * 0.25), c = RGB[sf.c];
+    const g = ctx.createLinearGradient(x - w, 0, x + w, 0), a = (night ? 0.06 : 0.1) + bass * (night ? 0.12 : 0.1) + P * 0.1;
+    g.addColorStop(0, rgba(c, 0)); g.addColorStop(0.5, rgba(night ? c : c.map(v => v * 0.85), a)); g.addColorStop(1, rgba(c, 0));
+    ctx.fillStyle = g; ctx.fillRect(x - w, 0, w * 2, H);
+  }
   ctx.restore();
   const T = curtain.threads;
   // cada golpe enciende y estira unos destellos; los platillos, una chispa
@@ -6665,7 +6676,7 @@ function fireSetup() {
       float top = (.55 + .85 * smoothstep(.3, .72, big)) * (.42 + .95 * smoothstep(.38, .7, tong));
       float I = 1. - y / top;
       I += (n2 - .5) * .32 * smoothstep(.25, 1., y / top);             // bordes vivos que titilan
-      I = max(I, (.42 - y) * 2.2);                                      // la base de la fogata siempre llena (sin huecos)
+      I = max(I, (.26 - y) * 3.2);                                      // la base de la fogata siempre llena (sin huecos), sin franja plana
       I = clamp(I, 0., 1.);
       I *= .84 + .16 * n2;                                              // zonas más y menos calientes
       float a = smoothstep(0., .16, I);
