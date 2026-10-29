@@ -1485,7 +1485,7 @@ function onset(name, value, dt, dIn) {
   const f = flux[name]; const d = dIn !== undefined ? dIn : Math.max(0, value - f.prev); f.prev = value;
   f.avg += (d - f.avg) * Math.min(1, dt * 2);
   f.cd -= dt;
-  if (d > (f.avg * 2.4 + 0.035) / Math.sqrt(state.sens) && f.cd <= 0) { f.cd = name === 'bass' ? 0.18 : name === 'mid' || name === 'snare' ? 0.12 : name === 'voice' ? 0.14 : 0.08; return Math.min(1, d * 4); }
+  if (d > (f.avg * 2.4 + 0.035) / Math.pow(state.sens, 0.3) && f.cd <= 0) { f.cd = name === 'bass' ? 0.18 : name === 'mid' || name === 'snare' ? 0.12 : name === 'voice' ? 0.14 : 0.08; return Math.min(1, d * 4); }
   return 0;
 }
 
