@@ -646,7 +646,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), coverBg: store.get('coverBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'bw'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), coverBg: store.get('coverBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'palette'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -699,7 +699,7 @@ function resize() {
     if (typeof blobs !== 'undefined') for (const b of blobs) { b.x *= kx; b.y *= ky; b.maxR *= km; }
     if (inkCopy) ictx.drawImage(inkCopy, 0, 0, W, H);
     if (typeof drops !== 'undefined') { for (const d of drops) { d.x *= kx; d.y *= ky; d.floor *= ky; d.len *= km; } for (const q of ripples) { q.x *= kx; q.y *= ky; } splashes.length = 0; }
-    if (typeof glass !== 'undefined') { for (const d of [...glass.small, ...glass.big]) { d.x *= kx; d.y *= ky; d.r *= km; if (d.last != null) d.last *= ky; if (d.path) for (const q of d.path) { q[0] *= kx; q[1] *= ky; } } glass.key = W + 'x' + H; }   // el rastro también, o se dibujaría un escalón
+    if (typeof glass !== 'undefined') { for (const d of [...glass.small, ...glass.big]) { d.x *= kx; d.y *= ky; d.r *= km; if (d.last != null) d.last *= ky; if (d.px != null) { d.px *= kx; d.py *= ky; } } glass.key = W + 'x' + H; }   // el rastro también, o se dibujaría un escalón
     // Si solo cambió la calidad (la forma es la misma), el mosaico, los inflables y el cielo se conservan
     // escalados en vez de empezar de cero (antes los cuadros cambiaban de dibujo de golpe)
     if (Math.abs(kx - ky) < 0.02) {
@@ -1137,11 +1137,10 @@ function analyse(dt) {
   } else if (songBeatOn()) {
     songBeatSynth();
   } else {
-    // Demo: espectro sintético con un "bombo" cada medio segundo
-    const kick = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2)), 12);
+    // Sin música: solo una respiración lenta, sin golpes (nada de inventar un ritmo propio)
     for (let i = 0; i < BANDS; i++) {
       const x = i / BANDS;
-      raw[i] = Math.max(0, (0.55 - x * 0.35) * (0.55 + 0.45 * Math.sin(time * 1.7 + i * 0.35) * Math.sin(time * 0.6 + i * 0.12)) + kick * (1 - x) * 0.5);
+      raw[i] = Math.max(0, (0.3 - x * 0.2) * (0.55 + 0.45 * Math.sin(time * 0.5 + i * 0.35) * Math.sin(time * 0.23 + i * 0.12)));
     }
   }
   for (let i = 0; i < BANDS; i++) {
@@ -1159,9 +1158,16 @@ function analyse(dt) {
   const sBand = avg(raw, 44, 56), hBand = avg(raw, 56, BANDS);
   hits.snare = onset('snare', sBand, dt); hits.hat = onset('hat', hBand, dt);
   if (hits.snare && (vox.noisy < 0.03 || (hits.hat && hBand > sBand))) hits.snare = 0;   // si no suena a ruido o domina arriba, no era la caja
+  // ¿Los golpes reales caen en la rejilla del tempo? Solo entonces el tempo puede rellenar alguno que
+  // falte; si la canción va por otro lado (o el tempo se equivocó), no se inventa ningún golpe
+  if (hits.bass && analyser && tempo.period) {
+    const ph = (((performance.now() / 1000 - tempo.phaseRef) / tempo.period) % 1 + 1) % 1, off = Math.min(ph, 1 - ph) * tempo.period;
+    tempo.lock += ((off < 0.06 ? 1 : 0) - tempo.lock) * 0.2;
+  }
+  const locked = !analyser || tempo.lock > 0.65, perMs = tempo.period ? tempo.period * 1000 : 500;
   if (hits.bass) { beatRaw = Math.max(beatRaw, 0.55 + hits.bass * 0.45); lastBassHit = performance.now(); }
-  // El pulso «previsto» por el tempo solo sigue mientras haya golpes de verdad (no inventa latidos en las partes tranquilas)
-  if (beatTick && !hits.bass && performance.now() - lastBassHit < 1500) beatRaw = Math.max(beatRaw, 0.35 * Math.min(1, tempo.conf * 1.5));
+  // El pulso «previsto» solo cubre un golpe que faltó justo después de uno real, y solo si van a tiempo
+  if (beatTick && !hits.bass && locked && performance.now() - lastBassHit < perMs * 1.6) beatRaw = Math.max(beatRaw, 0.3 * Math.min(1, tempo.conf * 1.5));
   // Drop: tras un tramo flojo de graves, vuelven con fuerza
   eShort += (bass - eShort) * (1 - Math.pow(0.02, dt));
   eLong += (bass - eLong) * (1 - Math.pow(0.85, dt));
@@ -1185,7 +1191,7 @@ function analyse(dt) {
   let fill = false;
   if (real) pulse.due = 0;
   else if (pulse.due && nowP - pulse.due > 70) {
-    fill = tempo.conf > 0.5 && nowP - lastBassHit < 1500 && nowP - pulse.at > per * 0.75;
+    fill = tempo.conf > 0.5 && locked && nowP - lastBassHit < per * 1.6 && nowP - pulse.at > per * 0.75;
     pulse.due = 0;
   }
   if (real || fill) {
@@ -1216,7 +1222,7 @@ const hits = { bass: 0, mid: 0, high: 0, snare: 0, hat: 0, voice: 0 };
 // pulso, así las animaciones caen en el compás aunque el bombo sea suave.
 const ENV_HZ = 100, ENV_LEN = 800, env = new Float32Array(ENV_LEN), prevRaw = new Float32Array(BANDS);
 let envPos = 0, envAcc = 0, envFill = 0, tempoCalc = 0;
-const tempo = { bpm: 0, period: 0, conf: 0, phaseRef: 0, history: [], lastTick: 0 };
+const tempo = { bpm: 0, period: 0, conf: 0, phaseRef: 0, history: [], lastTick: 0, lock: 0 };
 let beatTick = false;
 let tempoLastT = 0;
 function tempoTick() {
@@ -1453,9 +1459,12 @@ function songBeatSynth() {
   beatTick = sp.playing && idx !== songBeat.lastIdx; songBeat.lastIdx = idx;
   if (!sp.playing) { for (let i = 0; i < BANDS; i++) raw[i] = 0.015; return; }   // en pausa, quieto
   const n4 = ((idx % 4) + 4) % 4;
-  const kick = Math.exp(-tms / 110) * (n4 === 0 ? 1 : 0.8);
-  const snare = n4 % 2 === 1 ? Math.exp(-tms / 150) : 0;
-  const hat = Math.exp(-(((b * 2) % 1) * P / 2) / 55) * 0.6;
+  // la batería sintética solo golpea fuerte si se sabe dónde cae el pulso (marcado a mano); si la fase
+  // es una estimación (por la letra), golpea suave; si no se sabe, no golpea: mejor respirar que ir a destiempo
+  const sure = songBeat.offset != null ? 1 : songBeat.lyrOff != null ? 0.45 : 0;
+  const kick = Math.exp(-tms / 110) * (n4 === 0 ? 1 : 0.8) * sure;
+  const snare = n4 % 2 === 1 ? Math.exp(-tms / 150) * sure : 0;
+  const hat = Math.exp(-(((b * 2) % 1) * P / 2) / 55) * 0.6 * sure;
   const sing = currentLyric() ? 0.4 : 0.08;
   const phrase = 0.5 + 0.5 * Math.sin(pos / (P * 16) * Math.PI * 2);   // sube y baja cada 16 tiempos
   for (let i = 0; i < BANDS; i++) {
@@ -1467,7 +1476,7 @@ function songBeatSynth() {
     v += sing * Math.exp(-Math.pow((x - 0.28) / 0.12, 2)) * (0.6 + 0.4 * Math.sin(time * 9 + i * 0.7));
     raw[i] = Math.max(0, Math.min(1, v * (0.88 + Math.random() * 0.12)));
   }
-  tempo.bpm = songBeat.bpm; tempo.period = P / 1000; tempo.conf = 1;
+  tempo.bpm = songBeat.bpm; tempo.period = P / 1000; tempo.conf = sure;
 }
 // Marcar el ritmo tocando: con 4 toques o más se calcula el tempo y dónde cae el pulso
 const tapper = { taps: [], timer: 0 };
@@ -1546,19 +1555,22 @@ function drawBars(dt) {
     const f = i / (n - 1) * (BANDS - 1) * 0.86, a = Math.floor(f), b = Math.min(BANDS - 1, a + 1);
     const sv = spec[a] * (1 - (f - a)) + spec[b] * (f - a), rv = raw[a] * (1 - (f - a)) + raw[b] * (f - a);
     // Curva que exagera: lo flojo sigue bajo y lo fuerte sube mucho; los agudos, algo realzados
-    barT[i] = Math.pow(rv * 0.65 + sv * 0.35, 0.85) * 1.15 * (1 + 0.55 * i / (n - 1));
-    if (hits.bass) barV[i] += hits.bass * 7 * Math.max(0, 1 - i / (n * 0.5));
-    if (hits.mid && i > n * 0.25 && i < n * 0.75) barV[i] += hits.mid * 4;
+    // más contraste que antes (son más bajas, así que se mueven más dentro de su espacio): lo suave
+    // queda abajo, lo fuerte salta hasta arriba, y los golpes las empujan con ganas
+    barT[i] = Math.pow(rv * 0.7 + sv * 0.3, 1.15) * 1.6 * (1 + 0.55 * i / (n - 1));
+    if (hits.bass) barV[i] += hits.bass * 11 * Math.max(0, 1 - i / (n * 0.5));
+    if (hits.mid && i > n * 0.25 && i < n * 0.75) barV[i] += hits.mid * 6;
+    if (hits.hat && i > n * 0.6) barV[i] += hits.hat * 4;
   }
-  springTo(barX, barV, barT, dt, 520, 0.45);
+  springTo(barX, barV, barT, dt, 650, 0.42);
   lctx.clearRect(0, 0, W, H);
   const gap = (W / n) * 0.3, bw = (W - gap * (n - 1)) / n, slot = bw + gap, x0 = 0;   // la primera y la última tocan los bordes
   // A lo ancho de toda la pantalla pero bajas: ocupan la franja de abajo y dejan el resto libre
-  const base = H * 0.985, maxH = H * (H > W ? 0.24 : 0.31), P = Math.max(0, pulse.x);
+  const base = H * 0.985, maxH = H * (H > W ? 0.3 : 0.38), P = Math.max(0, pulse.x);
   const barMel = melodyColor();
   for (let i = 0; i < n; i++) {
     // Arriba se comprime suave: lo fuerte sigue moviéndose en vez de quedarse pegado al techo
-    const v0 = Math.max(0, barX[i]), v = v0 < 0.7 ? v0 : 0.7 + 0.4 * Math.tanh((v0 - 0.7) / 0.4);
+    const v0 = Math.max(0, barX[i]), v = v0 < 0.85 ? v0 : 0.85 + 0.35 * Math.tanh((v0 - 0.85) / 0.35);
     // las barras de la zona de la voz toman el color de la nota mientras se canta
     const fb = i / (n - 1) * (BANDS - 1) * 0.86, wv = Math.min(1, voice * 1.5) * Math.max(0, Math.min(1, (fb - 19) / 4, (51 - fb) / 4));
     const h = bw * 0.6 + v * maxH, x = x0 + i * slot, c = mix(i / (n - 1)).map((x_, j) => x_ + (barMel[j] - x_) * wv * 0.65);
@@ -3740,7 +3752,10 @@ function drawArtistScene(dt) {
   smoothProfile(arRingT, 2);
   if (hits.bass) for (let i = 0; i < N; i++) arRingV[i] += hits.bass * 4;
   springTo(arRing, arRingV, arRingT, dt, 320, 0.5);
-  const cg = lctx.createConicGradient(time * 0.15, cx, cy);
+  // el giro de los colores y la ondulación avanzan con la música (sin música, quietos: nada se mueve por su lado)
+  const S_ = drawArtistScene.s || (drawArtistScene.s = { rot: 0, ph: 0 });
+  S_.rot += dt * energy * 0.6; S_.ph += dt * (energy * 2.4 + Math.max(0, pulse.x) * 3);
+  const cg = lctx.createConicGradient(S_.rot, cx, cy);
   COLORS.concat(COLORS[0]).forEach((c, i, a) => cg.addColorStop(i / (a.length - 1), c));
   lctx.strokeStyle = cg;
   for (const [amp, wide, alpha] of [[1, 0.006, 0.95], [1.5, 0.018, 0.35], [2.2, 0.04, 0.14]]) {
@@ -3749,7 +3764,7 @@ function drawArtistScene(dt) {
     lctx.beginPath();
     for (let i = 0; i <= N; i++) {
       const a = i / N * Math.PI * 2 - Math.PI / 2, v = Math.max(0, arRing[i % N]);
-      const rr = R + gap + R * 0.02 * amp + v * R * 0.28 * amp + Math.sin(a * 3 + time * 0.8) * R * 0.008 * amp;
+      const rr = R + gap + R * 0.02 * amp + v * R * 0.28 * amp + Math.sin(a * 3 + S_.ph) * R * 0.008 * amp * Math.min(1, energy * 3);
       i ? lctx.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr) : lctx.moveTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
     }
     lctx.closePath(); lctx.stroke();
@@ -4046,10 +4061,16 @@ function fluidSetup() {
         o = vec4(texture(uVelocity, vUv).xy - vec2(R - L, T - B), 0., 1.); }`),
     clear: P(`uniform sampler2D uTexture; uniform float value; void main() { o = value * texture(uTexture, vUv); }`),
     display: P(`uniform sampler2D uTexture; uniform float light;
-      void main() { vec3 c = texture(uTexture, vUv).rgb; c = c / (1. + c * 0.35);   // tono suave, sin quemarse
-        float a = clamp(max(c.r, max(c.g, c.b)) * 1.4, 0., 1.);
-        if (light > 0.5) c *= 1.5;
-        o = light > 0.5 ? vec4(c * a, a) : vec4(c, a); }`),
+      void main() { vec3 c = texture(uTexture, vUv).rgb;
+        if (light > 0.5) {   // de noche: luz de color que se suma, con un tono suave que no se quema
+          c = c / (1. + c * 0.35); float a = clamp(max(c.r, max(c.g, c.b)) * 1.4, 0., 1.);
+          o = vec4(c * 1.5 * a, a);
+        } else {   // de día: tinta con su color pleno sobre el papel (antes casi no se veía)
+          float m = max(c.r, max(c.g, c.b)); vec3 ink = c / max(m, 1e-4);
+          ink = mix(ink, ink * ink, .25) * .9;
+          float a = (1. - exp(-m * 14.)) * .92;
+          o = vec4(ink * a, a);
+        } }`),
   };
   fluid.ready = true; fluid.key = '';
 }
@@ -4089,7 +4110,7 @@ function fluidStep(dt) {
   u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(0, v.read));
   gl.uniform1f(u.dt, dt); gl.uniform1f(u.dissipation, 0.5 + (1 - energy) * 1.6); glBlit(v.write); v.swap();   // en lo suave el movimiento se calma rápido
   u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(1, fluid.dye.read));
-  gl.uniform1f(u.dissipation, 0.8 + (1 - energy) * 1.2); glBlit(fluid.dye.write); fluid.dye.swap();
+  gl.uniform1f(u.dissipation, 0.45 + (1 - energy) * 0.7); glBlit(fluid.dye.write); fluid.dye.swap();   // el color dura más: la pantalla se ve más colorida
 }
 const fluidColor = (c, k) => c.map(x => x / 255 * k);
 addEventListener('pointermove', e => {
@@ -4109,7 +4130,7 @@ function drawFluid(dt) {
       const a = Math.random() * Math.PI * 2, rr = 0.12 + Math.random() * 0.25;
       const x = 0.5 + Math.cos(a) * rr * (H / W), y = 0.5 + Math.sin(a) * rr;
       const sp_ = (700 + strength * 2200), dir = a + (Math.random() - 0.5) * 1.6 + Math.PI / 2 * (Math.random() < 0.5 ? 1 : -1);
-      fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[Math.floor(Math.random() * 3)], k), R(size));
+      fluidSplat(x, y, Math.cos(dir) * sp_, Math.sin(dir) * sp_, fluidColor(RGB[Math.floor(Math.random() * 3)], k * 1.25), R(size));
     }
   };
   if (pulse.on) {   // el golpe (o el tiempo que marca el tempo si falta uno)
@@ -4226,28 +4247,43 @@ function coverFlipAngle(dt) {
 // Archive (portadas alternativas, contraportadas, libretos). Se usan de fondo y en
 // tarjetas que flotan alrededor de la portada.
 const altArt = { key: '', cache: new Map(), imgs: [], bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: 0 };
-async function altArtFor(artist, album) {
+// MusicBrainz pide como mucho una consulta por segundo: todas pasan por esta fila (y si responde
+// «ocupado», se espera y se reintenta)
+let mbLast = 0, mbChain = Promise.resolve();
+function mbFetch(url) {
+  const run = async () => {
+    for (let tries = 0; tries < 3; tries++) {
+      const wait = Math.max(0, mbLast + 1100 - Date.now()); if (wait) await new Promise(r => setTimeout(r, wait));
+      mbLast = Date.now();
+      try { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (r.status !== 503) return r; } catch (e) {}
+      await new Promise(r => setTimeout(r, 1500 * (tries + 1)));
+    }
+    return null;
+  };
+  const pr = mbChain.then(run, run); mbChain = pr.catch(() => {}); return pr;
+}
+// Devuelve las portadas que encuentre (y avisa de cada una en cuanto llega); null si falló la consulta
+async function altArtFor(artist, album, onUrl) {
   const q = `releasegroup:"${album.replace(/"/g, '')}" AND artist:"${artist.replace(/"/g, '')}"`;
-  const r = await fetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=5&query=' + encodeURIComponent(q));
-  if (!r.ok) return [];
+  const r = await mbFetch('https://musicbrainz.org/ws/2/release-group/?fmt=json&limit=5&query=' + encodeURIComponent(q));
+  if (!r || !r.ok) return null;
   const rg = ((await r.json())['release-groups'] || []).find(g => g.score >= 85 && norm(g.title).startsWith(norm(album).slice(0, 12)));
   if (!rg || rg['primary-type'] === 'Single') return [];
-  await new Promise(x => setTimeout(x, 1100));   // MusicBrainz pide como mucho una consulta por segundo
-  const rr = await fetch(`https://musicbrainz.org/ws/2/release?release-group=${rg.id}&fmt=json&limit=40`);
-  if (!rr.ok) return [];
+  const rr = await mbFetch(`https://musicbrainz.org/ws/2/release?release-group=${rg.id}&fmt=json&limit=40`);
+  if (!rr || !rr.ok) return null;
   const rels = ((await rr.json()).releases || []).filter(x => x['cover-art-archive']?.artwork).slice(0, 8);
   const urls = [], seen = new Set();
-  for (const rel of rels) {
+  // las portadas de cada edición se piden a la vez y se van mostrando según llegan
+  await Promise.all(rels.map(async rel => {
     try {
       const c = await fetch('https://coverartarchive.org/release/' + rel.id);
-      if (!c.ok) continue;
+      if (!c.ok) return;
       for (const im of (await c.json()).images || []) {
         const u = im.thumbnails?.['500'] || im.thumbnails?.large || im.image;
-        if (u && !seen.has(im.id)) { seen.add(im.id); urls.push(u.replace(/^http:/, 'https:')); }
+        if (u && !seen.has(im.id) && urls.length < 12) { seen.add(im.id); const uu = u.replace(/^http:/, 'https:'); urls.push(uu); onUrl && onUrl(uu); }
       }
     } catch (e) {}
-    if (urls.length >= 12) break;
-  }
+  }));
   return urls;
 }
 async function loadAltArt(item) {
@@ -4255,15 +4291,23 @@ async function loadAltArt(item) {
   const single = !album || item.album?.album_type === 'single' || (item.album?.total_tracks && item.album.total_tracks <= 2) || norm(album) === norm(item.name);
   const key = single ? '' : norm(artist) + '|' + norm(album);
   if (key === altArt.key) return;
-  Object.assign(altArt, { key, imgs: [], bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: performance.now(), show: -1, showAt: performance.now() });
+  Object.assign(altArt, { key, imgs: [], urls: new Set(), bgIdx: 0, bgAt: 0, cur: null, prev: null, fade: 1, cycle: 0, cycleAt: performance.now(), show: -1, showAt: performance.now() });
   if (!key) return;
-  if (!altArt.cache.has(key)) altArt.cache.set(key, altArtFor(artist, album).catch(() => []));
-  const urls = await altArt.cache.get(key);
-  for (const u of urls) {
+  const add = async u => {
+    if (altArt.key !== key || altArt.urls.has(u)) return; altArt.urls.add(u);
     const { img, clean } = await loadImageClean(u);
-    if (altArt.key !== key) return;
-    if (img) { const bg = makeCoverBg(img); bg.clean = clean; altArt.imgs.push({ img, clean, bg }); }
+    if (altArt.key !== key || !img) return;
+    const bg = makeCoverBg(img); bg.clean = clean; altArt.imgs.push({ img, clean, bg });
+  };
+  if (!altArt.cache.has(key)) {
+    const pr = altArtFor(artist, album, u => add(u)).catch(() => null);
+    altArt.cache.set(key, pr);
+    pr.then(urls => { if (urls === null) {   // falló (servicio caído u ocupado): se olvida y se reintenta en un rato
+      altArt.cache.delete(key);
+      setTimeout(() => { if (altArt.key === key && !altArt.imgs.length && state.mode === 'cover' && sp.item) { altArt.key = ''; loadAltArt(sp.item); } }, 20000);
+    } });
   }
+  for (const u of (await altArt.cache.get(key)) || []) add(u);
 }
 function drawAltArt(dt, cx, cy, S) {
   const A = altArt.imgs, night = state.theme === 'dark', now = performance.now();
@@ -4507,7 +4551,7 @@ function starsInit() {
 function drawStars(dt) {
   const night = state.theme === 'dark';
   if (!starSky.list || starSky.key !== W + 'x' + H) starsInit();
-  if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
   ambient();
   const speed = 0.003 + Math.pow(energy, 1.3) * 0.035;   // con energía, el viaje acelera
   // Onda que recorre el cielo desde el centro en cada golpe, encendiendo las estrellas a su paso
@@ -4763,7 +4807,7 @@ function drawRain(dt) {
     const k = Math.min(1, lit + rs.flash * 0.6);
     // Estela: cuanto más rápido cae, más se estira
     const w = (1.7 + d.z * 2.8) * DPR, h = d.len * (0.75 + Math.min(1.6, rs.speed) * 0.55);
-    lctx.setTransform(1, 0, -wind, 1, d.x, d.y);
+    lctx.setTransform(1, 0, wind, 1, d.x, d.y);   // la estela queda detrás de la gota (del lado de donde viene)
     lctx.globalAlpha = (night ? 0.3 + d.z * 0.35 : 0.4 + d.z * 0.35) * (1 - k * 0.6);
     lctx.drawImage(dropSprites[0], -w / 2, -h, w, h);
     if (k > 0.02) {
@@ -4852,6 +4896,15 @@ function drawGlass(dt) {
   const gv = drawGlass.v = (drawGlass.v || 0) + (Math.min(1, voice * 1.5) - (drawGlass.v || 0)) * (1 - Math.pow(0.1, dt));
   if (gv > 0.02) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; glowSpot(W * (0.5 + 0.2 * Math.sin(time * 0.05)), H * 0.42, MIN * (0.35 + gv * 0.3), melodyColor(), gv * (night ? 0.35 : 0.5)); ctx.restore(); }
   const u = MIN / 1000;
+  // el vidrio limpio por los rastros de las gotas: lo de detrás se ve nítido y se vuelve a empañar en unos segundos
+  if (!glass.wet || glass.wet.width !== glass.sharp.width || glass.wet.height !== glass.sharp.height) {
+    glass.wet = document.createElement('canvas'); glass.wet.width = glass.sharp.width; glass.wet.height = glass.sharp.height; glass.wc = glass.wet.getContext('2d');
+    glass.view = document.createElement('canvas'); glass.view.width = glass.sharp.width; glass.view.height = glass.sharp.height; glass.vc = glass.view.getContext('2d');
+  }
+  glass.wc.globalCompositeOperation = 'destination-out'; glass.wc.fillStyle = `rgba(0,0,0,${1 - Math.pow(0.5, dt / 3.5)})`; glass.wc.fillRect(0, 0, glass.wet.width, glass.wet.height); glass.wc.globalCompositeOperation = 'source-over';
+  { const v = glass.vc; v.globalCompositeOperation = 'source-over'; v.clearRect(0, 0, glass.view.width, glass.view.height); v.drawImage(glass.sharp, 0, 0);
+    v.globalCompositeOperation = 'destination-in'; v.filter = CAN_BLUR ? 'blur(1.5px)' : 'none'; v.drawImage(glass.wet, 0, 0); v.filter = 'none'; v.globalCompositeOperation = 'source-over';
+    ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.view, 0, 0, W, H); ctx.restore(); }
   // gotitas quietas: llueve más con más energía
   const want = 70 + energy * 110;
   for (let k = 0; k < 6 && glass.small.length < want; k++) if (Math.random() < 0.5 + energy) glass.small.push({ x: Math.random() * W, y: Math.random() * H, r: u * (5 + Math.random() * Math.random() * 12), a: 0 });
@@ -4875,9 +4928,11 @@ function drawGlass(dt) {
     else d.vy *= Math.pow(0.05, dt);
     d.vy *= 1 + bass * 0.02;
     d.y += d.vy * dt; d.x += Math.sin(d.y * 0.02 + i) * u * 6 * dt;
-    // rastro húmedo: el vidrio queda más limpio por donde pasó la gota
-    (d.path = d.path || []).push([d.x, d.y]); if (d.path.length > 60) d.path.shift();
-    if (d.path.length > 2) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = 'rgba(255,255,255,.05)'; ctx.lineWidth = d.r * 0.9; ctx.lineCap = 'round'; ctx.beginPath(); d.path.forEach(([px, py], k) => k ? ctx.lineTo(px, py) : ctx.moveTo(px, py)); ctx.stroke(); ctx.restore(); }
+    // rastro: por donde pasó la gota el vidrio queda limpio (se ve nítido lo de detrás) y se empaña despacio
+    if (d.px != null) { const wc = glass.wc, kx = glass.wet.width / W, ky = glass.wet.height / H;
+      wc.lineCap = 'round'; wc.strokeStyle = 'rgba(255,255,255,.35)'; wc.lineWidth = d.r * 1.25 * kx; wc.beginPath(); wc.moveTo(d.px * kx, d.py * ky); wc.lineTo(d.x * kx, d.y * ky); wc.stroke();
+      wc.strokeStyle = '#fff'; wc.lineWidth = d.r * 0.75 * kx; wc.stroke(); }
+    d.px = d.x; d.py = d.y;
     // se come las gotitas que toca y deja un rastro de gotitas detrás
     for (let j = glass.small.length - 1; j >= 0; j--) { const s_ = glass.small[j]; if (Math.abs(s_.x - d.x) < d.r && Math.abs(s_.y - d.y) < d.r) { glass.small.splice(j, 1); d.r = Math.min(u * 38, d.r + s_.r * 0.08); } }
     if (d.y - d.last > d.r * 0.9) { d.last = d.y; if (Math.random() < 0.7) glass.small.push({ x: d.x + (Math.random() - 0.5) * d.r * 0.6, y: d.y - d.r * 1.2, r: d.r * (0.18 + Math.random() * 0.2), a: 1 }); }
@@ -5216,7 +5271,7 @@ function drawTiles(dt) {
   tiles.waves = tiles.waves.filter(w => w.k > 0.04 && w.r < Math.hypot(W, H));
   lctx.clearRect(0, 0, W, H);
   // fondo: noche honda o papel cálido; entre cuadro y cuadro, un respiro
-  { const [hh] = hexToHsl(rgbToHex(...mix(0.5))); ctx.fillStyle = night ? hsl(hh, 30, 5) : hsl(hh, 25, 95); ctx.fillRect(0, 0, W, H); }
+  { const [hh] = hexToHsl(rgbToHex(...mix(0.5))); ctx.fillStyle = night ? hsl(hh, 30, 5) : hsl(hh, 25, 95); ctx.fillRect(0, 0, W, H); drawBackdrop(0); }   // la portada de fondo, si está activa
   const gap = Math.max(3, MIN * 0.014), popped = [];
   for (const t of L) {
     const target = Math.pow(spec[t.band], 2.4);
@@ -5433,6 +5488,22 @@ function drawTubes(dt) {
 // Tamaño del lienzo de la tarjeta gráfica para cada escena: q es la fracción de la resolución real
 // (1 = nítido, píxel a píxel; las escenas muy suaves pueden ir algo por debajo sin que se note).
 // En pantallas 4K se limita a 2560 px de ancho: la diferencia no se ve y va mucho más ligero.
+// La portada de fondo (si la opción está activa) también se ve en los modos que pintan su propio fondo:
+// se pasa como textura y cada escena la mezcla en su fondo, igual que en las demás (detrás de todo)
+const GLSL_COVER = `uniform sampler2D uCov; uniform float uCovK; uniform vec4 uCovR;
+  vec3 withCover(vec3 bg) { if (uCovK <= 0.) return bg; return mix(bg, texture(uCov, (vUv - uCovR.xy) / uCovR.zw).rgb, uCovK); }`;
+const covGL = { tex: null, src: null };
+function glCoverBind(p, unit = 5) {
+  const gl = GLX.gl, img = state.coverBg && bgCur && bgCur.clean !== false ? bgCur : null;
+  if (!covGL.tex) covGL.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0 + unit);
+  if (img && covGL.src !== img) { try { glUpload(covGL.tex, img); covGL.src = img; } catch (e) { covGL.src = null; } }
+  gl.bindTexture(gl.TEXTURE_2D, covGL.tex); gl.activeTexture(gl.TEXTURE0);
+  gl.uniform1i(p.u.uCov, unit);
+  const night = state.theme === 'dark', S = Math.max(W, H) * 1.18, ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
+  gl.uniform1f(p.u.uCovK, img && covGL.src === img ? (night ? 0.36 : 0.2) * bgFade : 0);
+  gl.uniform4f(p.u.uCovR, ((W - S) / 2 + ox) / W, ((H - S) / 2 - oy) / H, S / W, S / H);
+}
 function glCanvas(q) {
   const cw = Math.max(2, Math.round(Math.min(W * q, 2560))), ch = Math.max(2, Math.round(cw * H / W));
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
@@ -5702,13 +5773,14 @@ function puffsSetup() {
     uniform vec3 uC0, uC1, uC2, uSky0, uSky1, uMel;
     uniform vec4 uA[48];    // x, y (altos de pantalla), radio, color — ya ordenados de atrás hacia delante
     uniform vec2 uZ[48];    // bruma (0 delante, 1 al fondo) y luz de su nube
-    ${GLSL_NOISE} ${GLSL_PAL}
+    ${GLSL_NOISE} ${GLSL_COVER} ${GLSL_PAL}
     void main() {
       float asp = uRes.x / uRes.y;
       vec2 p = vec2(vUv.x * asp, vUv.y);
       vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., vUv.y));
       // mientras se canta, una luz del color de la nota sale detrás de las nubes (como un sol)
       vec2 sd = p - uSun; sky += mix(uMel, vec3(1.), .35) * exp(-dot(sd, sd) / .09) * uVoice * (uNight > .5 ? .45 : .3);
+      sky = withCover(sky);
       vec3 col = sky;
       vec3 L = normalize(vec3(-.42, .7, .58));
       // cada bulto es una esfera grande y lisa con borde suave; se pintan de atrás hacia delante,
@@ -5791,7 +5863,7 @@ function drawPuffs(dt) {
   const [hs] = hexToHsl(rgbToHex(...blue));
   const sky0 = hexToRgb(hsl(hs, 62, night ? 14 : 63)).map(v => v / 255), sky1 = hexToRgb(hsl(hs + 20, 55, night ? 22 : 80)).map(v => v / 255);
   const [cw, ch] = glCanvas(0.75), gl = GLX.gl;
-  const p = puffs.prog; gl.useProgram(p.pr);
+  const p = puffs.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P + Math.max(0, puffs.lv[0]) * 0.3);
   gl.uniform1i(p.u.uN, n);
@@ -5821,7 +5893,7 @@ function bustSetup() {
   bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uSway, uBreath, uS, uSig, uVoice, uRise, uSyl, uFr, uGr;
     uniform vec3 uCol, uCol2, uDeep, uMel, uBg0, uBg1;
     uniform vec2 uPts[64]; uniform int uNP;
-    ${GLSL_NOISE}
+    ${GLSL_NOISE} ${GLSL_COVER}
     float figure(vec2 q) {
       float c = cos(uSway), s = sin(uSway);
       q = mat2(c, s, -s, c) * q; q.y /= 1. + uBreath;
@@ -5847,7 +5919,7 @@ function bustSetup() {
       float f = (.0012 + uFr * .0045) * (1. + low);
       vec3 a = cov(vec3(d - f, d, d + f), sg) * (1. - .55 * smoothstep(.16, -.06, q.y));
       float core = cov(vec3(d + .05), sg * 2.2 + .02).x;   // hondura: más color hacia dentro
-      vec3 bg = mix(uBg1, uBg0, vUv.y);
+      vec3 bg = withCover(mix(uBg1, uBg0, vUv.y));
       bg *= 1. - .1 * smoothstep(.45, 1.1, length(vUv - .5) * 1.6);   // viñeta suave
       // la luz de la voz: sube del pecho a la cabeza mientras se canta; cada sílaba la aviva
       vec2 lp = (q - vec2(0., mix(.2, .66, uRise))) / vec2(.15, .13);
@@ -5895,7 +5967,7 @@ function drawBust(dt) {
   const bg0 = night ? hexToRgb(hsl(hh, 30, 5)).map(v => v / 255) : hexToRgb(hsl(hh, 14, 97)).map(v => v / 255);
   const bg1 = night ? hexToRgb(hsl(hh + 20, 34, 10)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 18, 92)).map(v => v / 255);
   const [cw, ch] = glCanvas(0.5), gl = GLX.gl;   // va desenfocada: media resolución basta y se ve igual de suave
-  const p = bust.prog; gl.useProgram(p.pr);
+  const p = bust.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, 0.008 * Math.sin(time * 1.3) + P * 0.006);
@@ -5931,7 +6003,7 @@ function catsSetup() {
     uniform vec4 uCat2[3];  // salto, mirada (0 derecha), color, bruma
     uniform vec4 uCat3[3];  // cabeceo, vaivén de la cola, oreja, ojos cerrados
     uniform float uVoice; uniform vec3 uMel;
-    ${GLSL_NOISE} ${GLSL_PAL}
+    ${GLSL_NOISE} ${GLSL_COVER} ${GLSL_PAL}
     float sdEll(vec2 p, vec2 r) { return (length(p / r) - 1.) * min(r.x, r.y); }
     float sdCap(vec2 p, vec2 a, vec2 b, float r) { vec2 pa = p - a, ba = b - a; float t = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * t) - r; }
     float sdCap2(vec2 p, vec2 a, vec2 b, float ra, float rb) { vec2 pa = p - a, ba = b - a; float t = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * t) - mix(ra, rb, t); }
@@ -6002,6 +6074,7 @@ function catsSetup() {
       vec3 col = mix(uBg1, uBg0, smoothstep(0., 1., vUv.y));
       // niebla suave que se mueve
       col = mix(col, mix(uBg0, vec3(1.), uNight > .5 ? .05 : .4), (fbm(p * 1.5 + vec2(uTime * .02, 0.)) - .4) * .25);
+      col = withCover(col);
       for (int i = 0; i < 3; i++) {
         vec4 c = uCat[i], c2 = uCat2[i], c3 = uCat3[i];
         vec2 lp = (p - c.xy) / c.z; lp.x *= c2.y;                 // espejo si mira a la izquierda
@@ -6077,7 +6150,7 @@ function drawCats(dt) {
   const [hs] = hexToHsl(rgbToHex(...blue));
   const bg0 = hexToRgb(hsl(hs, 35, night ? 10 : 70)).map(v => v / 255), bg1 = hexToRgb(hsl(hs + 15, 30, night ? 16 : 82)).map(v => v / 255);
   const [cw, ch] = glCanvas(0.7), gl = GLX.gl;   // van en foco suave: no necesitan resolución completa
-  const p = cats.prog; gl.useProgram(p.pr);
+  const p = cats.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uMid, mid); gl.uniform1f(p.u.uHigh, hits.high ? 1 : Math.max(0, high - 0.3)); gl.uniform1f(p.u.uGlow, (night ? 0.8 : 0.5) + P * 0.5);
@@ -6119,7 +6192,7 @@ function drawCurtain(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
   if (curtain.key !== curtainCount()) curtainInit();   // todo va en proporciones: al cambiar la calidad sigue igual (antes se reiniciaba)
   // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
-  if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); }
+  if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   curtain.fields.forEach((f, k) => {
     const x = W * (0.5 + 0.45 * Math.sin(time * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(time * f.sp * 1.3 + f.ph * 2));
@@ -6210,13 +6283,13 @@ function orbsSetup() {
     uniform vec3 uX[6];       // seis tonos: los de la portada y sus vecinos en la rueda de color
     uniform vec4 uO[32];      // por orbe: nivel de su banda, giro del remolino, golpe de caja, destello
     uniform vec4 uO2[32];     // por orbe: chapoteo del líquido (x, y), giro en espiral, cuánto se revuelve
-    ${GLSL_NOISE}
+    ${GLSL_NOISE} ${GLSL_COVER}
     vec3 pal6(float k) { k = mod(k, 6.); int i = int(k); vec3 a = uX[i], b = uX[i < 5 ? i + 1 : 0]; return mix(a, b, smoothstep(.15, .85, fract(k))); }
     void main() {
       float asp = uRes.x / uRes.y, px = 1. / uRes.y;
       vec2 p = vec2(vUv.x * asp, vUv.y), cell = floor((p - uOff) / uS);
       // papel (de día, cálido y con fibra muy fina) o noche honda
-      vec3 col = uBg * (1. + (n(p * 90.) - .5) * (uNight > .5 ? .05 : .035) + (n(p * 3.) - .5) * .04);
+      vec3 col = withCover(uBg * (1. + (n(p * 90.) - .5) * (uNight > .5 ? .05 : .035) + (n(p * 3.) - .5) * .04));
       for (int jy = -1; jy <= 1; jy++) for (int jx = -1; jx <= 1; jx++) {   // la sombra puede caer en la celda vecina
         vec2 cl = cell + vec2(float(jx), float(jy));
         if (cl.x < 0. || cl.y < 0. || cl.x >= uCols || cl.y >= uRows) continue;
@@ -6301,7 +6374,7 @@ function drawOrbs(dt) {
   const X = []; RGB.forEach(c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); X.push(c.map(v => v / 255), hexToRgb(hsl(h_ + 38, Math.max(55, s_), Math.min(72, Math.max(48, l_ + 6)))).map(v => v / 255)); });
   const mel = melodyColor().map(v => v / 255);
   const [cw, ch] = glCanvas(1), gl = GLX.gl;
-  const p = orbs.prog; gl.useProgram(p.pr);
+  const p = orbs.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uOff, off[0], off[1]);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uS, S); gl.uniform1f(p.u.uCols, cols); gl.uniform1f(p.u.uRows, rows);
@@ -6331,11 +6404,11 @@ function harpSetup() {
     uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
     uniform sampler2D uDisp;
     uniform float uLv[${HARP_G}], uVib[${HARP_G}];
-    ${GLSL_NOISE} ${GLSL_PAL}
+    ${GLSL_NOISE} ${GLSL_COVER} ${GLSL_PAL}
     float lvAt(float x) { float f = clamp(x, 0., 1.) * ${HARP_G - 1}., i = floor(f); int a = int(i), b = min(a + 1, ${HARP_G - 1}); return mix(uLv[a], uLv[b], smoothstep(0., 1., f - i)); }
     void main() {
       vec2 uv = vUv; float t = 1. - uv.y;   // 0 arriba, 1 abajo
-      vec3 col = mix(uBg1, uBg0, uv.y), add = vec3(0.);
+      vec3 col = withCover(mix(uBg1, uBg0, uv.y)), add = vec3(0.);
       float D = texture(uDisp, vec2(uv.x, t)).r;
       int gi = int(clamp(uv.x, 0., .999) * ${HARP_G}.);
       float vib = uVib[gi] * sin(uTime * 40. + float(gi) * 1.7) * sin(3.1416 * min(t, 1.)) * .0045;
@@ -6511,7 +6584,7 @@ function drawHarp(dt) {
   const bg0 = night ? hexToRgb(hsl(hh, 40, 3)).map(x => x / 255) : hexToRgb(hsl(hh, 25, 97)).map(x => x / 255);
   const bg1 = night ? hexToRgb(hsl(hh + 25, 35, 6)).map(x => x / 255) : hexToRgb(hsl(hh + 25, 30, 90)).map(x => x / 255);
   const [cw, ch] = glCanvas(W > 1800 ? 0.8 : 1), gl = GLX.gl;   // en pantallas muy grandes, un poco menos: los hilos siguen finos
-  const p = harp.prog; gl.useProgram(p.pr);
+  const p = harp.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, harp.tex);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NX, NY, gl.RED, gl.FLOAT, u);
   gl.uniform1i(p.u.uDisp, 0);
@@ -6598,22 +6671,27 @@ function drawPaint(dt) {
     paint.last = [x, y]; paint.seq++;
     paintSplat(x, y, R, Math.random() * Math.PI * 2, pickCol(), k, drips);
   };
-  // un lanzamiento cada dos golpes (la pared respira, no se llena de golpe); la caja, a veces, una salpicadura
-  if (pulse.on && pulse.count % 2 === 0) throwAt(MIN * (0.05 + 0.06 * pulse.k + energy * 0.03), 0.5 + 0.5 * pulse.k, (Math.random() < 0.6 ? 1 : 0) + (pulse.k > 0.8 ? 1 : 0));
-  if (hits.snare && !pulse.on && Math.random() < 0.5) throwAt(MIN * (0.014 + 0.01 * Math.random()), 0.4, 0);
+  // cada golpe, un lanzamiento (su tamaño dice cuán fuerte fue); la caja salpica; con cada golpe
+  // los chorros dan un tirón hacia abajo (la pintura chorrea al ritmo)
+  if (pulse.on) {
+    throwAt(MIN * (0.028 + 0.075 * pulse.k * pulse.k + energy * 0.025), 0.4 + 0.6 * pulse.k, (pulse.k > 0.55 ? 1 : 0) + (pulse.k > 0.85 ? 1 : 0));
+    for (const d of paint.drips) d.v += MIN * (0.12 + 0.2 * pulse.k);
+  }
+  if (hits.snare && !pulse.on) throwAt(MIN * (0.014 + 0.012 * Math.random()), 0.5, 0);
   if (dropHit) for (let i = 0; i < 4; i++) throwAt(MIN * (0.1 + Math.random() * 0.06), 1, 3);
   if (hits.hat && paint.fresh.length) { const f = paint.fresh[Math.floor(Math.random() * paint.fresh.length)]; for (let i = 0; i < 6; i++) { const a = Math.random() * 6.28, d = f.R * (0.6 + Math.random() * 1.8); paint.dust.push({ x: f.x + Math.cos(a) * d, y: f.y + Math.sin(a) * d, t: 0, life: 0.5 + Math.random() * 0.6, col: f.col }); } }
   // los chorros bajan, más rápido mientras se canta, y se van frenando
   c.lineCap = 'round';
   for (let i = paint.drips.length - 1; i >= 0; i--) {
     const d = paint.drips[i], step = Math.min(d.left, d.v * (0.6 + voice * 1.6) * dt);
+    d.v = Math.max(MIN * 0.03, d.v * Math.pow(0.15, dt));   // tras el tirón del golpe, vuelve a ir lento
     c.strokeStyle = rgba(d.col, 1); c.lineWidth = d.w;
     c.beginPath(); c.moveTo(d.x, d.y); d.y += step; c.lineTo(d.x, d.y); c.stroke();
     d.left -= step; d.v *= Math.pow(0.8, dt); d.w *= Math.pow(0.9, dt * (1 + step / Math.max(1, d.w)));
     if (d.left <= 0.5 || d.w < 0.6) { c.fillStyle = rgba(d.col, 1); c.beginPath(); c.arc(d.x, d.y, d.w * 0.9, 0, Math.PI * 2); c.fill(); paint.drips.splice(i, 1); }   // la gota final
   }
-  // la pintura vieja se desvanece despacio (vida media de ~8 s)
-  c.globalCompositeOperation = 'destination-out'; c.fillStyle = `rgba(0,0,0,${1 - Math.pow(0.5, dt / 8)})`; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
+  // la pintura vieja se desvanece despacio (vida media de ~6 s)
+  c.globalCompositeOperation = 'destination-out'; c.fillStyle = `rgba(0,0,0,${1 - Math.pow(0.5, dt / 6)})`; c.fillRect(0, 0, W, H); c.globalCompositeOperation = 'source-over';
   // la pared
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   if (night) {
@@ -6623,6 +6701,7 @@ function drawPaint(dt) {
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, hsl(hh, 18, 95)); g.addColorStop(1, hsl(hh, 16, 89)); ctx.fillStyle = g;
   }
   ctx.fillRect(0, 0, W, H);
+  drawBackdrop(0);   // la portada de fondo, si está activa
   // la luz de la pintura fresca: respira con la voz y con el golpe (lo místico)
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (const f of paint.fresh) {
@@ -6630,14 +6709,18 @@ function drawPaint(dt) {
     glowSpot(f.x, f.y, f.R * (2.6 + voice * 1.2 + P * 0.6), night ? f.col : f.col.map(v => v + (255 - v) * 0.5), (night ? 0.22 : 0.22) * life * (0.45 + voice * 0.8 + P * 0.5));
   }
   ctx.restore();
-  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? 0.82 : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
+  // toda la pared late con el golpe: de noche la pintura brilla más en cada golpe; de día se aviva
+  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? Math.min(1, 0.62 + P * 0.55 + voice * 0.15) : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
+  if (!night && P > 0.02) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(0.35, P * 0.45); ctx.drawImage(paint.layer, 0, 0); ctx.restore(); }
   // el impacto: un anillo de luz que se abre y se apaga
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (let i = paint.rings.length - 1; i >= 0; i--) {
-    const r = paint.rings[i]; r.t += dt; const p = r.t / 0.45;
+    const r = paint.rings[i]; r.t += dt; const p = r.t / 0.4;
     if (p >= 1) { paint.rings.splice(i, 1); continue; }
-    ctx.strokeStyle = rgba(r.col.map(v => v + (255 - v) * 0.5), (1 - p) * (night ? 0.5 : 0.35)); ctx.lineWidth = Math.max(1, r.R * 0.08 * (1 - p));
-    ctx.beginPath(); ctx.arc(r.x, r.y, r.R * (1.1 + p * 1.8), 0, Math.PI * 2); ctx.stroke();
+    // el impacto: un destello en el instante del golpe y un anillo que se abre
+    if (r.t < 0.12) glowSpot(r.x, r.y, r.R * (2.2 + p * 2), night ? r.col : r.col.map(v => v + (255 - v) * 0.4), (1 - r.t / 0.12) * (night ? 0.7 : 0.45));
+    ctx.strokeStyle = rgba(r.col.map(v => v + (255 - v) * 0.5), (1 - p) * (night ? 0.6 : 0.45)); ctx.lineWidth = Math.max(1, r.R * 0.1 * (1 - p));
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.R * (1.1 + p * 2.2), 0, Math.PI * 2); ctx.stroke();
   }
   // polvo de brillo (platillos)
   for (let i = paint.dust.length - 1; i >= 0; i--) {
@@ -6661,11 +6744,11 @@ function eclSetup() {
     uniform vec3 uC0, uC1, uC2, uBg;
     uniform vec4 uE[6], uE2[6];   // x, y, radio, color · ancho de la corona, giro, llamarada, sol (1) o eclipse (0)
     uniform vec4 uS[48];          // puntitos: x, y, radio, color
-    ${GLSL_NOISE} ${GLSL_PAL}
+    ${GLSL_NOISE} ${GLSL_COVER} ${GLSL_PAL}
     void main() {
       float asp = uRes.x / uRes.y;
       vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = uBg * (1. + (fbm(p * 7.) - .5) * (uNight > .5 ? .2 : .05));   // papel con un poco de textura
+      vec3 col = withCover(uBg * (1. + (fbm(p * 7.) - .5) * (uNight > .5 ? .2 : .05)));   // papel con un poco de textura
       for (int i = 0; i < 6; i++) {
         if (i >= uNE) break;
         vec4 e = uE[i], e2 = uE2[i];
@@ -6741,7 +6824,7 @@ function drawEclipse(dt) {
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const bg = night ? hexToRgb(hsl(hh, 30, 6)).map(v => v / 255) : [0.95, 0.93, 0.88];   // papel crema de día
   const [cw, ch] = glCanvas(1), gl = GLX.gl;
-  const p = ecl.prog; gl.useProgram(p.pr);
+  const p = ecl.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1i(p.u.uNE, n); gl.uniform1i(p.u.uNS, ecl.dots.length);
@@ -6771,7 +6854,7 @@ function drawEclipse(dt) {
     ctx.strokeStyle = rgba(k === 2 ? RGB[2].map((v, j) => v + (melC[j] - v) * ln.vo) : RGB[k % 3], (night ? 0.3 : 0.4) + lvl[k] * 0.4);
     ctx.beginPath();
     for (let i = 0; i <= 140; i++) {
-      const t = i / 140, x = W * (0.05 + t * 0.9);
+      const t = i / 140, x = W * (-0.02 + t * 1.04);   // de borde a borde
       let y = 0.5 + 0.28 * Math.sin(t * (3 + k) + time * (0.15 + k * 0.03) + k * 1.7) * Math.sin(t * 2 + k);
       if (k === 0) for (const b of ln.bumps) { const z = (t - b.x) / 0.06; y -= b.a * Math.exp(-z * z); }
       else if (k === 1) y += Math.sin(t * 70 + time * 40) * ln.sn * 0.012;
