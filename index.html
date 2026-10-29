@@ -545,6 +545,7 @@
         <button data-mode="harp">Arpa</button>
         <button data-mode="paint">Pintura</button>
         <button data-mode="fire">Fuego</button>
+        <button data-mode="crystal">Cristal</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -3288,8 +3289,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -6644,6 +6645,105 @@ function drawHarp(dt) {
   if (night) bloom(GLX.c, 0.2 + P * 0.25);   // poco resplandor: los hilos se ven definidos
 }
 
+// ================= Escena: Cristal =================
+// Vidrio líquido (como el nuevo diseño de Apple): gotas grandes de vidrio que flotan sobre la portada,
+// se funden y se separan, y la deforman como lentes de verdad: más en el borde, con un leve arcoíris en
+// la orilla, un filo de luz y un destello. Con cada golpe las gotas se inflan y el vidrio ondula; la voz
+// hace crecer su gota, abrillanta el vidrio y lo tiñe con la nota; los platillos sacan destellos. Sin
+// portada (o con la opción apagada), el fondo es un degradado vivo con los colores de la paleta.
+const crystal = { prog: null, blobs: null, asp: 0, B: new Float32Array(40), tex: null, texSrc: null, rip: 0, ripT: 0, spark: 0, seq: 0 };
+function crystalSetup() {
+  crystal.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uRip, uRipT, uSpark, uHasCov; uniform int uN;
+    uniform vec3 uC0, uC1, uC2, uMel;
+    uniform vec4 uB[10];
+    uniform sampler2D uImg;
+    ${GLSL_NOISE} ${GLSL_PAL}
+    vec3 back(vec2 uv) {
+      if (uHasCov > .5) { float asp = uRes.x / uRes.y; vec2 q = uv - .5; q.x *= asp; return texture(uImg, q / (max(asp, 1.) * 1.04) + .5).rgb; }
+      vec2 p = uv * vec2(uRes.x / uRes.y, 1.);
+      float a = n(p * 1.1 + vec2(uTime * .02, 0.)), b = n(p * 1.7 - vec2(0., uTime * .018) + 4.);
+      return pal(a * 2.2 + b * 1.4);
+    }
+    // campo de las gotas y su pendiente (para la forma del vidrio)
+    vec3 fieldG(vec2 p) {
+      float F = 0.; vec2 G = vec2(0.);
+      for (int i = 0; i < 10; i++) { if (i >= uN) break; vec4 b = uB[i]; vec2 d = p - b.xy; float k = 1.7 / (b.z * b.z), w = exp2(-dot(d, d) * k); F += w; G -= w * 1.386 * k * d; }
+      return vec3(F, G);
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y);
+      vec3 fg = fieldG(p); float F = fg.x, thr = .5, px = 1.5 / uRes.y;
+      float inside = smoothstep(thr - .012, thr + .012, F);
+      float t = smoothstep(thr, thr + .7, F);                                  // grosor: fino en el borde, grueso al centro
+      vec3 nrm = normalize(vec3(-fg.yz * .06, 1.));
+      nrm.xy += sin(F * 26. - uRipT * 12.) * uRip * .09 * (1. - t * .5);         // el golpe hace ondular el vidrio
+      nrm = normalize(nrm);
+      // fuera: la portada (de noche, más tenue: el vidrio es la ventana a su color) y una sombra suave
+      float sh = fieldG(p - vec2(.012, -.02)).x;
+      vec3 out_ = back(uv) * (uNight > .5 ? .5 : 1.) * (1. - .16 * smoothstep(thr * .35, thr, sh) * (1. - inside));
+      // dentro: la portada vista a través del vidrio (se dobla más en la orilla) con un leve arcoíris
+      vec2 off = nrm.xy * (.05 + .1 * (1. - t)); off.x /= asp;
+      vec3 c = vec3(back(uv + off).r, back(uv + off * 1.07).g, back(uv + off * 1.14).b);
+      c = c * (uNight > .5 ? .95 : 1.04) + .02;
+      c = mix(c, c * mix(vec3(1.), uMel * 1.7, .5), uVoice * .25);            // la voz tiñe el vidrio
+      float fr = pow(1. - nrm.z, 2.2);
+      c = mix(c, vec3(1.), fr * .5);                                            // la orilla aclara (fresnel)
+      vec3 L = normalize(vec3(-.45, .55, .7)), Hh = normalize(L + vec3(0., 0., 1.));
+      c += pow(max(dot(nrm, Hh), 0.), 110.) * (.9 + uSpark * 1.4 + uVoice * .5); // destello
+      c += pow(max(dot(nrm, normalize(vec3(.5, -.45, .75))), 0.), 18.) * .12;    // luz suave abajo a la derecha
+      float edge = smoothstep(thr - .05, thr, F) * (1. - smoothstep(thr, thr + .05, F));
+      c += edge * .35;                                                          // filo de luz
+      vec3 col = mix(out_, c, inside);
+      col += (h(gl_FragCoord.xy) - .5) * .02;
+      o = vec4(col, 1.);
+    }`);
+}
+function crystalInit() {
+  const asp = W / H, n = asp > 1 ? 8 : 6, sz = [0.23, 0.2, 0.165, 0.145, 0.12, 0.105, 0.09, 0.075];
+  crystal.asp = asp;
+  crystal.blobs = Array.from({ length: n }, (_, i) => ({ x: (0.1 + 0.8 * Math.random()) * asp, y: 0.15 + 0.7 * Math.random(), vx: 0, vy: 0, r: sz[i] * (asp > 1 ? 1 : 0.85), hx: (0.12 + 0.76 * ((i * 0.618) % 1)) * asp, hy: 0.2 + 0.6 * ((i * 0.382) % 1), ph: Math.random() * 100, band: i % 3, g: 0 }));
+}
+function drawCrystal(dt) {
+  if (!glInit()) { drawLight(dt); return; }
+  if (!crystal.prog) crystalSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
+  if (!crystal.blobs || (asp > 1) !== (crystal.asp > 1)) crystalInit();
+  if (crystal.asp !== asp) { for (const b of crystal.blobs) { b.x *= asp / crystal.asp; b.hx *= asp / crystal.asp; } crystal.asp = asp; }
+  const Bs = crystal.blobs, n = Bs.length, lv = [bass, mid, high];
+  // flotan despacio hacia su sitio (que pasea con la música); cada golpe empuja una y ondula el vidrio
+  if (pulse.on) { const b = Bs[crystal.seq++ % n]; const a = Math.random() * 6.28; b.vx += Math.cos(a) * 0.12 * pulse.k; b.vy += Math.sin(a) * 0.12 * pulse.k; crystal.rip = Math.min(1.2, crystal.rip + 0.6 * pulse.k); crystal.ripT = 0; }
+  if (dropHit) for (const b of Bs) { b.vx += (Math.random() - 0.5) * 0.5; b.vy += (Math.random() - 0.5) * 0.5; }
+  crystal.rip *= Math.pow(0.12, dt); crystal.ripT += dt;
+  crystal.spark = Math.max(crystal.spark * Math.pow(0.02, dt), hits.hat ? 1 : 0);
+  const mv = 0.04 + energy * 0.6;
+  Bs.forEach((b, i) => {
+    const tx = b.hx + Math.sin(time * 0.07 * mv * 4 + b.ph) * 0.12 * asp, ty = b.hy + Math.cos(time * 0.05 * mv * 4 + b.ph) * 0.12;
+    b.vx += (tx - b.x) * 0.35 * mv * dt; b.vy += (ty - b.y) * 0.35 * mv * dt;
+    b.vx *= Math.pow(0.4, dt); b.vy *= Math.pow(0.4, dt); b.x += b.vx * dt; b.y += b.vy * dt;
+    b.g += ((i === 0 ? voice * 0.6 : 0) + lv[b.band] * 0.15 - b.g) * (1 - Math.pow(0.1, dt));   // la primera es la gota de la voz
+    crystal.B.set([b.x, b.y, b.r * (1 + P * 0.12 + b.g * 0.5), b.ph], i * 4);
+  });
+  // la portada en color (si está y la opción de fondo está activa)
+  const gl = GLX.gl, img = state.coverBg && coverClean ? coverClean : null;
+  if (!crystal.tex) crystal.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0);
+  if (img && crystal.texSrc !== img) { try { glUpload(crystal.tex, img); crystal.texSrc = img; } catch (e) { crystal.texSrc = null; } }
+  const [cw, ch] = glCanvas(0.9);
+  const p = crystal.prog; gl.useProgram(p.pr);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, crystal.tex); gl.uniform1i(p.u.uImg, 0);
+  gl.uniform1f(p.u.uHasCov, img && crystal.texSrc === img ? 1 : 0);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uRip, crystal.rip * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uRipT, crystal.ripT); gl.uniform1f(p.u.uSpark, crystal.spark);
+  gl.uniform1i(p.u.uN, n); gl.uniform4fv(p.u['uB[0]'], crystal.B);
+  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
+  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
 // ================= Escena: Fuego =================
 // Una fogata larga a lo ancho de toda la parte de abajo, como las Montañas: cada tramo arde con su parte
 // del sonido (los graves en el centro, donde la llama es más alta; los agudos hacia los lados). El
@@ -7031,7 +7131,7 @@ function drawEclipse(dt) {
   ctx.restore();
 }
 
-const scenes = { fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
