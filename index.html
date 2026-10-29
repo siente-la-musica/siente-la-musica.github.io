@@ -9,6 +9,9 @@
 <link rel="preconnect" href="https://api.spotify.com" crossorigin>
 <link rel="preconnect" href="https://accounts.spotify.com" crossorigin>
 <link rel="preconnect" href="https://i.scdn.co">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Syne:wght@600;700;800&family=Unbounded:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <meta name="theme-color" content="#000000">
@@ -28,7 +31,10 @@
     --chip-on-fg: #ffffff;
     --shadow: 0 10px 40px rgba(20, 20, 40, .12);
     --pop-bg: rgba(255, 255, 255, .95);
-    --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+    /* marca: Unbounded para el logotipo, Syne para los títulos con fuerza, Manrope para leer */
+    --font: "Manrope", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --font-brand: "Unbounded", "Manrope", system-ui, sans-serif;
+    --font-display: "Syne", "Manrope", system-ui, sans-serif;
   }
   :root[data-theme="dark"] {
     --bg: #000000;
@@ -167,7 +173,7 @@
     position: fixed; inset: 0 0 auto; text-align: center; pointer-events: none;
     padding: calc(56px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 0 max(16px, env(safe-area-inset-left, 0px));
   }
-  .intro h1 { margin: 0 0 8px; font-size: clamp(36px, 6vw, 64px); font-weight: 700; letter-spacing: -.04em; }
+  .intro h1 { margin: 0 0 8px; font-family: var(--font-brand); font-size: clamp(32px, 5.4vw, 58px); font-weight: 500; letter-spacing: -.02em; text-transform: lowercase; }
   .intro p { margin: 0 auto; max-width: 46ch; color: var(--muted); font-size: 16px; line-height: 1.55; text-wrap: balance; }
 
   .song {
@@ -683,6 +689,9 @@ const state = {
 };
 
 // ================= Lienzos =================
+// las letras de la marca también en lo que se dibuja (letra, títulos de los clips, la firma)
+const FONT_UI = '"Manrope", -apple-system, "Segoe UI", system-ui, sans-serif', FONT_DISPLAY = '"Syne", "Manrope", system-ui, sans-serif', FONT_BRAND = '"Unbounded", "Manrope", system-ui, sans-serif';
+if (document.fonts) ['800 40px Syne', '700 40px Syne', '500 40px Unbounded', '600 40px Manrope'].forEach(f => document.fonts.load(f).catch(() => {}));
 let canvas = document.getElementById('c');
 let ctx = canvas.getContext('2d');
 const layer = document.createElement('canvas');      // escena nítida
@@ -3427,7 +3436,7 @@ function wrapWords(words, maxW) {
   return lines;
 }
 function drawWordLines(words, lit, size, cx, cy, maxW, weight = 800) {
-  ctx.font = `${weight} ${size}px -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif`;
+  ctx.font = `${weight} ${size}px ${FONT_DISPLAY}`;
   const lines = wrapWords(words, maxW), lh = size * 1.12, space = ctx.measureText(' ').width;
   let k = 0;
   lines.forEach((ln, li) => {
@@ -3444,7 +3453,7 @@ function drawWordLines(words, lit, size, cx, cy, maxW, weight = 800) {
 function textFg(a = 1) { return state.theme === 'dark' ? `rgba(255,255,255,${a})` : `rgba(20,20,26,${a})`; }
 // Letra del clip en el estilo elegido
 function drawLyricStyled(ly, size, cx, cy, maxW) {
-  const st = state.lyricStyle, fam = '-apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif';
+  const st = state.lyricStyle, fam = FONT_DISPLAY;
   if (st === 'word') {   // una palabra enorme que salta al entrar
     const k = ly.shown - 1, w = ly.words[k] || '', since = ly.pos - (ly.at[k] || ly.start);
     const pop = 1 + 0.18 * Math.max(0, 1 - since / 220);
@@ -3524,9 +3533,9 @@ function drawRecOverlay() {
       ctx.save(); ctx.beginPath(); ctx.roundRect(x0, y0 - s_ / 2, s_, s_, 16 * u); ctx.clip();
       ctx.drawImage(coverClean, x0, y0 - s_ / 2, s_, s_); ctx.restore(); tx = x0 + s_ + 28 * u;
     }
-    ctx.fillStyle = textFg(); ctx.font = `700 ${44 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = textFg(); ctx.font = `700 ${44 * u}px ${FONT_UI}`;
     ctx.fillText(it.name.length > 34 ? it.name.slice(0, 33) + '…' : it.name, tx, y0 - 22 * u);
-    ctx.fillStyle = textFg(0.7); ctx.font = `500 ${34 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = textFg(0.7); ctx.font = `500 ${34 * u}px ${FONT_UI}`;
     ctx.fillText((it.artists || []).map(a => a.name).join(', '), tx, y0 + 26 * u);
   }
   ctx.textAlign = 'left';
@@ -3537,7 +3546,7 @@ function drawRecOverlay() {
   } else if (state.mode === 'artist' && it && arCenter) {
     const a = it.artists[0];
     ctx.textAlign = 'center';
-    ctx.fillStyle = textFg(0.6); ctx.font = `600 ${28 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = textFg(0.6); ctx.font = `600 ${28 * u}px ${FONT_UI}`;
     ctx.fillText('ESTÁS ESCUCHANDO A', W / 2, arCenter.cy + arCenter.R * 1.55);
     ctx.textAlign = 'left';
     drawWordLines(a.name.split(/\s+/), undefined, 104 * u, W / 2, arCenter.cy + arCenter.R * 1.55 + 110 * u, W * 0.86);
@@ -3559,7 +3568,7 @@ function drawRecOverlay() {
   }
   // Firma discreta
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
-  ctx.fillStyle = textFg(0.45); ctx.font = `600 ${24 * u}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+  ctx.fillStyle = textFg(0.45); ctx.font = `500 ${22 * u}px ${FONT_BRAND}`;
   ctx.fillText('siente-la-musica.github.io', W / 2, H * (vertical ? 0.055 : 0.94));
   ctx.restore();
 }
@@ -4773,7 +4782,7 @@ function drawCover(dt) {
     ctx.drawImage(GLX.c, x0, y0, S, S); ctx.restore();
   } else {
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = textFg(0.6); ctx.font = `600 ${Math.round(MIN * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = textFg(0.6); ctx.font = `600 ${Math.round(MIN * 0.03)}px ${FONT_UI}`;
     ctx.fillText(!spConnected() ? 'Conecta tu música para ver la portada' : !sp.item ? 'Pon algo de música' : 'Cargando la portada…', cx, cy);
     ctx.restore();
   }
@@ -4788,9 +4797,9 @@ function drawCover(dt) {
   if (it) {
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.shadowColor = night ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)'; ctx.shadowBlur = MIN * 0.02;
-    ctx.fillStyle = textFg(); ctx.font = `700 ${Math.round(MIN * (vertical ? 0.05 : 0.04))}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = textFg(); ctx.font = `700 ${Math.round(MIN * (vertical ? 0.05 : 0.04))}px ${FONT_UI}`;
     ctx.fillText(it.name.length > 40 ? it.name.slice(0, 39) + '…' : it.name, cx, y0 + S + MIN * 0.09);
-    ctx.fillStyle = textFg(0.65); ctx.font = `500 ${Math.round(MIN * (vertical ? 0.035 : 0.027))}px -apple-system, "Segoe UI", system-ui, sans-serif`;
+    ctx.fillStyle = textFg(0.65); ctx.font = `500 ${Math.round(MIN * (vertical ? 0.035 : 0.027))}px ${FONT_UI}`;
     ctx.fillText((it.artists || []).map(a => a.name).join(', '), cx, y0 + S + MIN * (vertical ? 0.15 : 0.135));
     ctx.restore();
   }
@@ -4980,7 +4989,7 @@ function drawStars(dt) {
       ctx.globalAlpha = life; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(x * W, y * H, r, 0, Math.PI * 2); ctx.fill();
     }
     if (cl.prog >= cl.e.length && cl.age > 2 && cl.age < 10) {   // el nombre, muy tenue
-      ctx.globalAlpha = life * 0.35; ctx.fillStyle = rgba(col, 1); ctx.font = `500 ${Math.round(MIN * 0.016)}px -apple-system, "Segoe UI", system-ui, sans-serif`; ctx.textAlign = 'center';
+      ctx.globalAlpha = life * 0.35; ctx.fillStyle = rgba(col, 1); ctx.font = `500 ${Math.round(MIN * 0.016)}px ${FONT_UI}`; ctx.textAlign = 'center';
       const by = Math.max(...cl.pts.map(q => q[1])), bx = cl.pts.reduce((a_, q) => a_ + q[0], 0) / cl.pts.length;
       ctx.fillText(cl.name, bx * W, by * H + MIN * 0.04);
     }
@@ -5343,7 +5352,7 @@ function drawStrobe(dt) {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   // Texto: ajustado al ancho, hasta 3 líneas, condensado y apenas desenfocado
-  const font = s_ => `500 ${s_}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+  const font = s_ => `700 ${s_}px ${FONT_DISPLAY}`;
   const maxW = W * 0.84 / 0.8;
   let size = MIN * 0.22, lines = [];
   for (let tries = 0; tries < 12; tries++) {
@@ -5441,7 +5450,7 @@ function drawVinyl(dt) {
     // botón de encendido con su luz, y 33 / 45
     const bx = x0 + R * 0.12, by = y0 + dh - R * 0.3;
     ctx.fillStyle = night ? '#3a3b42' : '#b4b6bd'; ctx.beginPath(); ctx.roundRect(bx, by, R * 0.42, R * 0.18, R * 0.03); ctx.fill();
-    ctx.fillStyle = textFg(0.55); ctx.font = `600 ${Math.round(R * 0.045)}px -apple-system, "Segoe UI", system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = textFg(0.55); ctx.font = `600 ${Math.round(R * 0.045)}px ${FONT_UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('START · STOP', bx + R * 0.21, by + R * 0.09);
     const led = playing ? [255, 70, 60] : [90, 30, 30];
     ctx.fillStyle = rgba(led, 1); ctx.shadowColor = playing ? 'rgba(255,60,50,.9)' : 'transparent'; ctx.shadowBlur = R * 0.06;
@@ -5507,7 +5516,7 @@ function drawVinyl(dt) {
     const label = ('SIENTE LA MÚSICA  ·  ' + (sp.item ? sp.item.name.toUpperCase().slice(0, 28) : '33⅓ RPM') + '  ·  LADO A  ·  ').split('');
     ctx.save(); ctx.translate(cx, cy); ctx.rotate(vinyl.ang);
     ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.lineWidth = R * 0.055; ctx.beginPath(); ctx.arc(0, 0, Rl * 0.86, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = `600 ${Math.round(R * 0.03)}px -apple-system, "Segoe UI", system-ui, sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = `600 ${Math.round(R * 0.03)}px ${FONT_UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     const step = Math.PI * 2 / Math.max(label.length, 40);
     label.forEach((ch, k) => { ctx.save(); ctx.rotate(k * step); ctx.translate(0, -Rl * 0.86); ctx.fillText(ch, 0, 0); ctx.restore(); });
     ctx.restore(); ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
