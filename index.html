@@ -544,6 +544,7 @@
         <button data-mode="eclipse">Eclipse</button>
         <button data-mode="harp">Arpa</button>
         <button data-mode="paint">Pintura</button>
+        <button data-mode="fire">Fuego</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -3287,9 +3288,9 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint'] },
-  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire'] },
+  high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
 function moodTick(dt) {
@@ -3444,14 +3445,15 @@ function glowSpot(x, y, r, col, a) {
 }
 function drawAura(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
-  ctx.save();
-  ctx.globalCompositeOperation = night ? 'lighter' : 'multiply';
-  const per = 2 * (W + H);
+  // de día, como la Luz: manchas de color luminoso pintadas encima del blanco (no 'multiply', que las
+  // dejaba pálidas) y luego un velo de tinta que les da profundidad
+  const sat = (c, l) => { const [h, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(88, s_), l)); };
+  const per = 2 * (W + H), spots = [];
   AURA.forEach((b, i) => {
     const v = avg(spec, b.band[0], b.band[1]);
     auraLevel[i] += (v - auraLevel[i]) * (1 - Math.pow(v > auraLevel[i] ? 0.00005 : 0.01, dt));
     const L = auraLevel[i];
-    auraPhase[i] += dt * b.speed * (1 + energy * 3);   // con más energía, la luz recorre el borde más rápido
+    auraPhase[i] += dt * b.speed * (0.3 + energy * 3.5);   // con más energía, la luz recorre el borde más rápido (sin música, casi quieta)
     // Posición sobre el contorno, un poco por fuera de la pantalla
     let d = (((auraPhase[i]) % 1 + 1) % 1) * per, x, y, nx, ny;
     if (d < W) { x = d; y = 0; nx = 0; ny = -1; }
@@ -3460,14 +3462,27 @@ function drawAura(dt) {
     else { x = 0; y = H - (d - 2 * W - H); nx = -1; ny = 0; }
     const r = MIN * b.size * (0.6 + L * 1.05 + beat * 0.15 + P * 0.2);
     x += nx * r * 0.18; y += ny * r * 0.18;
-    const col = night ? RGB[b.c] : RGB[b.c].map(c => 255 - (255 - c) * 0.9);
-    const sat_ = night ? col : col;
-    glowSpot(x, y, r * 1.1, sat_, Math.min(1, (night ? 0.36 + L * 0.95 : 0.28 + L * 0.75) + beat * 0.2 + P * 0.35));
+    spots.push({ x, y, r, L, c: RGB[b.c] });
   });
-  // Luz leve en el centro: mientras se canta crece y toma el color de la nota
   const av = drawAura.v = (drawAura.v || 0) + (Math.min(1, voice * 1.5) - (drawAura.v || 0)) * (1 - Math.pow(0.08, dt));
   const cc = mix(0.5), mc = melodyColor(), ac = cc.map((v, j) => v + (mc[j] - v) * av * 0.7);
-  glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.06 + P * 0.08 + av * 0.1), ac, (night ? 0.08 + energy * 0.3 : 0.06 + energy * 0.22) + beat * 0.08 + P * 0.16 + av * (night ? 0.15 : 0.1));
+  ctx.save();
+  if (night) {
+    ctx.globalCompositeOperation = 'lighter';
+    for (const sp_ of spots) glowSpot(sp_.x, sp_.y, sp_.r * 1.1, sp_.c, Math.min(1, 0.36 + sp_.L * 0.95 + beat * 0.2 + P * 0.35));
+    // Luz leve en el centro: mientras se canta crece y toma el color de la nota
+    glowSpot(W / 2, H / 2, Math.max(W, H) * (0.55 + beat * 0.06 + P * 0.08 + av * 0.1), ac, 0.08 + energy * 0.3 + beat * 0.08 + P * 0.16 + av * 0.15);
+  } else {
+    // el blanco entero se tiñe un poco con la música y respira con cada golpe
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.fillStyle = rgba(sat(cc, 86), 0.06 + energy * 0.12 + P * 0.08); ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'source-over';
+    for (const sp_ of spots) glowSpot(sp_.x, sp_.y, sp_.r * 1.15, sat(sp_.c, 62), Math.min(0.92, 0.38 + sp_.L * 0.55 + beat * 0.15 + P * 0.25));
+    ctx.globalCompositeOperation = 'multiply';   // velo de tinta: profundidad sin ensuciar
+    for (const sp_ of spots) glowSpot(sp_.x, sp_.y, sp_.r * 0.6, sat(sp_.c, 55), 0.16 + sp_.L * 0.22);
+    ctx.globalCompositeOperation = 'source-over';
+    glowSpot(W / 2, H / 2, Math.max(W, H) * (0.4 + P * 0.06 + av * 0.12), sat(ac, 70), 0.1 + energy * 0.18 + P * 0.12 + av * 0.2);
+  }
   ctx.restore();
 }
 
@@ -3506,9 +3521,12 @@ function drawInfinity(dt) {
   // Velocidad suavizada: acelera con la música sin tirones
   // Avanza solo con la música: en silencio casi se detiene, y cada golpe de graves da un empujón
   const target = 0.2 + Math.pow(energy, 1.2) * 4.5 + bass * 2;
-  if (hits.bass) camSpeed += hits.bass * 4;
-  camSpeed += (target - camSpeed) * (1 - Math.pow(0.08, dt));
-  camZ += dt * camSpeed;
+  // cada golpe da una oleada suave (sube en ~0,1 s y se va en ~0,5 s), sin tirones
+  if (hits.bass) drawInfinity.kv = (drawInfinity.kv || 0) + hits.bass * 3.4;
+  drawInfinity.kb = (drawInfinity.kb || 0) + ((drawInfinity.kv || 0) - (drawInfinity.kb || 0)) * (1 - Math.pow(0.0005, dt));
+  drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.12, dt);
+  camSpeed += (target - camSpeed) * (1 - Math.pow(0.15, dt));
+  camZ += dt * (camSpeed + drawInfinity.kb);
   infRot += dt * (0.06 + energy * 0.45);   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
   const P = Math.max(0, pulse.x);
   if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
@@ -3550,7 +3568,7 @@ function drawInfinity(dt) {
     for (const pz of vP) vg += Math.exp(-((z - pz) ** 2) / 1.2);
     vg = Math.min(1, vg);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
-    const R = sc * tunnelRadius(z) * (1 + v * 0.12 + P * 0.07 * (1 - dz / FAR));   // el túnel entero late con el golpe
+    const R = sc * tunnelRadius(z) * (1 + v * 0.14 + P * 0.1 * (1 - dz / FAR));   // el túnel entero late con el golpe
     const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
     lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)).map((c_, j) => c_ + (melC[j] - c_) * vg * 0.85), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + vg * 0.8 + beat * 0.4)));
     const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
@@ -5568,7 +5586,7 @@ function lavaSetup() {
         glow = (pow(clamp(F / .5, 0., 1.), 1.6) * .6 + (1. - exp(-Fw * Fw * 1.2)) * .55) * (1. - a) * uGlow; ga = .62;
       }
       // grano de película, distinto en cada fotograma
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .075;
+      col += (h(gl_FragCoord.xy) - .5) * .075;
       vec3 gc = mix(wide, cool, .5);
       o = vec4(col * a + gc * glow * ga, clamp(a + glow * ga, 0., 1.));
     }`);
@@ -5593,7 +5611,7 @@ function drawLava(dt) {
   if (lava.asp !== asp) { for (const b of lava.blobs) b.x *= asp / lava.asp; lava.asp = asp; }
   const B = lava.blobs, n = B.length;
   // Cada golpe calienta la siguiente gota (sube) y las infla a todas; la voz las mece; en un drop estallan
-  if (pulse.on) { const b = B[lava.seq++ % n]; b.heat = Math.min(1.5, b.heat + 0.22 * pulse.k); b.vy += 0.03 * pulse.k; }
+  if (pulse.on) { const b = B[lava.seq++ % n]; b.heat = Math.min(1.5, b.heat + 0.3 * pulse.k); b.vy += 0.045 * pulse.k; }
   if (hits.mid > 0.25) { const b = B[Math.floor(Math.random() * n)]; b.vx += (Math.random() - 0.5) * 0.08 * hits.mid; }
   if (hits.voice) { const b = B[Math.floor(Math.random() * n)]; b.heat = Math.min(1.5, b.heat + 0.1 * (0.5 + hits.voice)); }   // cada sílaba calienta una gota: la voz también las hace subir
   if (dropHit) for (const b of B) { b.vx += (Math.random() - 0.5) * 0.35; b.vy += 0.08 + Math.random() * 0.2; b.heat += 0.4; }
@@ -5623,7 +5641,7 @@ function drawLava(dt) {
   }
   // Media resolución: es todo suave y así va ligero también en el móvil
   const [cw, ch] = glCanvas(0.75), gl = GLX.gl;
-  B.forEach((b, i) => { const k = i * 4; lava.B[k] = b.x; lava.B[k + 1] = b.y; lava.B[k + 2] = b.r * (1 + P * 0.16 + bass * 0.05 + 0.05 * Math.sin(time * 0.5 + b.ph)); lava.B[k + 3] = b.c; });
+  B.forEach((b, i) => { const k = i * 4; lava.B[k] = b.x; lava.B[k + 1] = b.y; lava.B[k + 2] = b.r * (1 + P * 0.24 + bass * 0.07 + 0.05 * Math.sin(time * 0.5 + b.ph)); lava.B[k + 3] = b.c; });
   lava.t += dt * (0.35 + energy * 0.5);
   const p = lava.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
@@ -5693,7 +5711,7 @@ function dotsSetup() {
         col = mix(col, iri, line * .12);
         glow = pow(clamp(F / .5, 0., 1.), 1.5) * (1. - a) * uGlow; ga = .6;
       }
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .075;
+      col += (h(gl_FragCoord.xy) - .5) * .075;
       o = vec4(col * a + cool * glow * ga, clamp(a + glow * ga, 0., 1.));
     }`);
 }
@@ -5720,14 +5738,18 @@ function drawDots(dt) {
   }
   if (hits.voice) { hv.cx += hv.dir; if (hv.cx < 0 || hv.cx >= cols) { hv.dir = -hv.dir; hv.cx += 2 * hv.dir; } }
   if (melodyConf > 0.3 && voice > 0.1) hv.cy = Math.round((vox.note / 11) * (rows - 1));   // la nota: grave abajo, aguda arriba
-  if (hits.snare) { hs.cx = Math.floor(Math.random() * cols); hs.cy = Math.floor(Math.random() * rows); [hs.x, hs.y] = cellAt(hs.cx, hs.cy); hs.k = 1.1; }
+  if (hits.snare) {   // la caja contesta al bombo: aparece cerca de él, no en cualquier sitio
+    hs.cx = Math.max(0, Math.min(cols - 1, hb.cx + Math.round((Math.random() - 0.5) * 5))); hs.cy = Math.max(0, Math.min(rows - 1, hb.cy + Math.round((Math.random() - 0.5) * 3)));
+    [hs.x, hs.y] = cellAt(hs.cx, hs.cy); hs.vx = hs.vy = 0; hs.k = 1.1;
+  }
   if (dropHit) dots.hot.forEach(h_ => h_.k = 1.25);
   hb.k += (0.1 + energy * 0.25 - hb.k) * (1 - Math.pow(0.25, dt));
   hv.k += (Math.min(1.2, voice * 1.6) - hv.k) * (1 - Math.pow(0.1, dt));
   hs.k *= Math.pow(0.2, dt);
   dots.hot.forEach((h_, k) => {
     const [tx, ty] = cellAt(Math.max(0, Math.min(cols - 1, h_.cx)), Math.max(0, Math.min(rows - 1, h_.cy)));
-    h_.vx += ((tx - h_.x) * 70 - h_.vx * 13) * dt; h_.vy += ((ty - h_.y) * 70 - h_.vy * 13) * dt;   // se desliza al sitio nuevo
+    const kk = k === 1 ? 28 : 70, dd = k === 1 ? 9 : 13;   // la de la voz se desliza más despacio
+    h_.vx += ((tx - h_.x) * kk - h_.vx * dd) * dt; h_.vy += ((ty - h_.y) * kk - h_.vy * dd) * dt;   // se desliza al sitio nuevo
     h_.x += h_.vx * dt; h_.y += h_.vy * dt;
     dots.H[k * 4] = h_.x; dots.H[k * 4 + 1] = h_.y;
     dots.H[k * 4 + 2] = S * (0.9 + 0.35 * Math.min(1, h_.k));   // corrientes estrechas: unen unas pocas bolitas
@@ -5803,7 +5825,7 @@ function puffsSetup() {
         lit = mix(lit, sky, uZ[i].x * .3);                                  // bruma: las del fondo, más lejanas
         col = mix(col, lit, a);
       }
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .035;
+      col += (h(gl_FragCoord.xy) - .5) * .035;
       o = vec4(col, 1.);
     }`);
 }
@@ -5844,14 +5866,15 @@ function drawPuffs(dt) {
   const list = [];
   for (const c of puffs.clouds) {
     c.glow *= Math.pow(state.noFlash ? 0.3 : 0.06, dt);
-    c.x += c.vx * (0.4 + energy * 1.2) * dt;   // pasan despacio; con más energía, algo más rápido
+    c.x += c.vx * (0.08 + energy * 1.7) * dt;   // sin música casi quietas; con música pasan
     c.bobV = (c.bobV || 0) + (-(c.bob || 0) * 40 - (c.bobV || 0) * 7) * dt; c.bob = (c.bob || 0) + c.bobV * dt;
     if (c.x - c.w * 0.6 > asp) { c.x = -c.w * 0.6; c.glow = 0; }
     for (const l of c.lobes) {
       const lv = Math.max(0, puffs.lv[l.band]);
       // cada bulto respira despacio, crece un poco con su banda y todos se inflan con el golpe
-      const r = l.r * (1 + 0.035 * Math.sin(time * 0.4 + l.ph) + lv * 0.05 + P * 0.06);
-      list.push([c.x + l.dx + Math.sin(time * 0.2 + l.ph) * 0.006, c.base + (c.bob || 0) + l.dy + Math.cos(time * 0.17 + l.ph) * 0.005, r, l.c, l.z, c.layer ? 1 : 0, c.glow * (state.noFlash ? 0.4 : 1)]);
+      const r = l.r * (1 + (0.006 + energy * 0.03) * Math.sin(time * 0.4 + l.ph) + lv * 0.08 + P * 0.09);
+      const wob = 0.15 + energy * 1.2;
+      list.push([c.x + l.dx + Math.sin(time * 0.2 + l.ph) * 0.006 * wob, c.base + (c.bob || 0) + l.dy + Math.cos(time * 0.17 + l.ph) * 0.005 * wob, r, l.c, l.z, c.layer ? 1 : 0, c.glow * (state.noFlash ? 0.4 : 1)]);
     }
   }
   list.sort((a, b) => a[4] - b[4]);
@@ -5924,6 +5947,7 @@ function bustSetup() {
       // la luz de la voz: sube del pecho a la cabeza mientras se canta; cada sílaba la aviva
       vec2 lp = (q - vec2(0., mix(.2, .66, uRise))) / vec2(.15, .13);
       float L = exp(-dot(lp, lp)) * (uVoice * .55 + uSyl * .4) + exp(-dot(lp, lp) * .25) * uSyl * .15;
+      vec2 hp = (q - vec2(.0, .3)) / vec2(.16, .12); L += exp(-dot(hp, hp)) * uP * .55;   // con cada golpe, una luz que late en el pecho
       vec3 fig;
       if (uNight > .5) {
         fig = mix(uCol * .72, mix(uCol2, vec3(1.), .12), core * .85) * (1. + uP * .25);   // dos tonos: borde de un color, dentro de otro
@@ -5937,7 +5961,7 @@ function bustSetup() {
       // aura: la luz de la figura se abre en el aire (más con el bombo y la energía)
       float od = max(d, 0.), aura = exp(-od / (.05 + uP * .025)) * (1. - a.y);
       col += (uNight > .5 ? uCol * .32 : (mix(uCol, vec3(1.), .5) - bg) * .2) * aura * (.7 + uP * .8);
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * (.035 + uGr * .05);
+      col += (h(gl_FragCoord.xy) - .5) * (.035 + uGr * .05);
       o = vec4(col, 1.);
     }`);
 }
@@ -5970,9 +5994,9 @@ function drawBust(dt) {
   const p = bust.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, 0.008 * Math.sin(time * 1.3) + P * 0.006);
+  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uBreath, (0.002 + energy * 0.006) * Math.sin(time * 1.3) + P * 0.02);
   gl.uniform1f(p.u.uS, Math.min(1, asp / 0.75));
-  gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.3 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3));
+  gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.5 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3));
   gl.uniform1f(p.u.uRise, bust.rise); gl.uniform1f(p.u.uSyl, bust.syl); gl.uniform1f(p.u.uFr, bust.fr); gl.uniform1f(p.u.uGr, bust.gr);
   gl.uniform3fv(p.u.uCol, bust.col); gl.uniform3fv(p.u.uCol2, deep2); gl.uniform3fv(p.u.uDeep, deep); gl.uniform3fv(p.u.uMel, mel);
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
@@ -6092,7 +6116,7 @@ function catsSetup() {
         // volumen: lomo y cabeza con luz, barriga y patas algo más hondas, y el cuerpo más claro por dentro
         float belly = smoothstep(.45, .3, lp.y);
         vec3 fur = mix(mix(base, vec3(1.), .18), mix(base, vec3(1.), .42), top * .8) * (.84 + .16 * inner) * (1. - belly * .14);
-        fur *= 1. + uP * .15 + uVoice * .12;
+        fur *= 1. + uP * .35 + uVoice * .15;
         float fuzz = exp(-max(d0, 0.) / (.045 * c.z)) * (1. - a) * (.55 + .45 * fbm(lp * 70. + c.w));   // pelusa fuera del cuerpo
         float glow = exp(-max(d, 0.) / (.07 * c.z + .02)) * (1. - a) * uGlow;
         col = mix(col, mix(fur, col, c2.w * .35), a);
@@ -6107,7 +6131,7 @@ function catsSetup() {
         col = mix(col, ec, eye * (1. - c2.w * .4));
         col += mix(uMel, vec3(1.), .3) * exp(-dot(lp - ep, lp - ep) / .004) * uVoice * (uNight > .5 ? .35 : .12) * (1. - c2.w * .5);
       }
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .07;
+      col += (h(gl_FragCoord.xy) - .5) * .07;
       o = vec4(col, 1.);
     }`);
 }
@@ -6126,7 +6150,7 @@ function drawCats(dt) {
   if (!cats.list || (asp > 1) !== (cats.asp > 1)) catsInit();
   if (cats.asp !== asp) { cats.list.forEach(c => c.x *= asp / cats.asp); cats.asp = asp; }
   // el paso sigue el tempo: un ciclo de paso = 4 golpes (una pisada por golpe); sin música, despacio
-  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5, moving = Math.min(1, 0.25 + energy * 2.5);
+  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5, moving = Math.min(1, 0.05 + energy * 3);   // sin música casi se detienen
   cats.list.forEach((c, i) => {
     c.ph += dt / (4 * per) * moving;
     if (pulse.on) c.ph = c.ph * 0.6 + (Math.round(c.ph * 4) / 4) * 0.4;   // la pisada se acerca al golpe
@@ -6321,7 +6345,7 @@ function orbsSetup() {
           float v = n(q * .9 + o2.w * w + vec2(0., t * .07)) * .65 + n(q * 2.3 - w + t * .1) * .35;
           vec3 m = pal6(v * 5. + seed * .6 + t * .05);
           // luz propia con su banda, la ola y la caja; tiñe con el color de la nota que suena
-          float glow = o.x * .55 + wave * .6 + o.z * .7;
+          float glow = o.x * .8 + wave * .75 + o.z * .7;
           m = mix(m, mix(m, uMel, .35 * uVoice) * 1.25 + .08, clamp(glow, 0., 1.));
           // cristal: luz suave, borde que aclara (fresnel), reflejo de ventana y un destello con los platillos
           vec3 L = normalize(vec3(-.5, .6, .62));
@@ -6339,7 +6363,7 @@ function orbsSetup() {
           col += pal6(seed) * exp(-(r - 1.) * 5.) * (.08 + o.x * .25 + wave * .3);
         }
       }
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .035;   // grano fino
+      col += (h(gl_FragCoord.xy) - .5) * .035;   // grano fino
       o = vec4(col, 1.);
     }`);
 }
@@ -6360,7 +6384,7 @@ function drawOrbs(dt) {
     orbs.lv[i] += (v - orbs.lv[i]) * (1 - Math.pow(v > orbs.lv[i] ? 1e-4 : 0.02, dt));   // sube al instante, baja suave
     orbs.ph[i] += dt * (0.05 + orbs.lv[i] * 2.4 + voice * 0.7);   // fluye cuanto más suena lo suyo
     // el bombo sacude el líquido: chapotea dentro del cristal y vuelve oscilando
-    if (pulse.on) { orbs.svy[i] -= (0.8 + 0.9 * pulse.k) * (0.45 + orbs.lv[i]); orbs.svx[i] += (Math.random() - 0.5) * 0.9 * (0.4 + orbs.lv[i]); }
+    if (pulse.on) { orbs.svy[i] -= (1.1 + 1.3 * pulse.k) * (0.45 + orbs.lv[i]); orbs.svx[i] += (Math.random() - 0.5) * 1.3 * (0.4 + orbs.lv[i]); }
     orbs.svx[i] += (-orbs.sx[i] * 60 - orbs.svx[i] * 3.6) * dt; orbs.svy[i] += (-orbs.sy[i] * 60 - orbs.svy[i] * 3.6) * dt;
     orbs.sx[i] += orbs.svx[i] * dt; orbs.sy[i] += orbs.svy[i] * dt;
     orbs.twv[i] += (-orbs.tw[i] * 22 - orbs.twv[i] * 2.6) * dt; orbs.tw[i] += orbs.twv[i] * dt;
@@ -6400,7 +6424,7 @@ const harp = { prog: null, tex: null, u: new Float32Array(HARP_NX * HARP_NY), v:
   lv: new Float32Array(HARP_G), lvV: new Float32Array(HARP_G), lvT: new Float32Array(HARP_G), vib: new Float32Array(HARP_G),
   ptr: null, down: false, key: new Float32Array(12), flow: 0, tip: 0, dir: 1, syl: 0, sylX: 0.5, bus: null, notes: [] };
 function harpSetup() {
-  harp.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uN, uTip, uFlow, uSyl, uSylX;
+  harp.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uN, uTip, uFlow, uSyl, uSylX, uHueT;
     uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
     uniform sampler2D uDisp;
     uniform float uLv[${HARP_G}], uVib[${HARP_G}];
@@ -6417,7 +6441,7 @@ function harpSetup() {
       float bend = -clamp(sl, -1.2, 1.2) * .014 * smoothstep(.72, 1., t / lenH);
       // brillo a gran escala: pliegues de luz y sombra que se mueven despacio, y su color
       float fold = n(vec2(uv.x * 5.5 - D * 20., uTime * .04)), sheet = .25 + .75 * smoothstep(-.25, .45, fold);
-      float hueX = uv.x * 1.3 + n(vec2(uv.x * 2.2, uTime * .02 + 3.)) * .9;
+      float hueX = uv.x * 1.3 + n(vec2(uv.x * 2.2, uHueT * .6 + 3.)) * .9 + uHueT;   // el color corre de lado a lado con la música
       for (int L = 0; L < 2; L++) {
         float fl = float(L), N = uN * (fl > 0. ? 1. : .55);
         float s = (uv.x - (D + vib + bend) * (fl > 0. ? 1. : .5)) * N, i0 = floor(s);
@@ -6431,12 +6455,13 @@ function harpSetup() {
           // luz que viene de arriba y se apaga hacia abajo, con la punta encendida
           float body = mix(1., .28, pow(along, .8)) * smoothstep(len + .003, len - .005, t);
           float tz = (t - len) / .016, tip = exp(-tz * tz) * (fl > 0. ? .75 : .12);
-          float b = (.15 + .85 * r2 * r2) * (fl > 0. ? 1. : .45) * sheet;
+          float b = (.26 + .74 * r2 * r2) * (fl > 0. ? 1. : .45) * sheet;
           // estelas de luz que bajan (como un viaje por el Bifrost): cabeza brillante y cola larga hacia arriba
           float pz = along - fract(uFlow * (.6 + r3 * .8) + r1 * 7.), flow = (pz < 0. ? exp(pz / .16) : exp(-pz * pz / .0003)) * step(.78, r3) * uVoice * step(t, len) * .8;
           float sx = ((i + .5) / N - uSylX) / .035, syl = exp(-sx * sx) * uSyl * body;
-          vec3 sc = pal(hueX + r1 * .35 + fl * .5);
-          sc = mix(sc, vec3(1.), .12 + .4 * r3 * r3);
+          vec3 sc = pal(hueX + (r1 - .5) * .7 + fl * .5);                // hilos vecinos de colores distintos (como el Bifrost)
+          sc = mix(sc, uMel, uVoice * .3);                                 // mientras se canta, todo se tiñe de la nota
+          sc = mix(sc, vec3(1.), .05 + .22 * r3 * r3);
           vec3 hot = mix(sc, vec3(1.), .65), mel = mix(uMel, vec3(1.), .3);
           float tipK = (.6 + uTip * .9 + uP * .35) * (.5 + .5 * sheet);
           if (uNight > .5) add += line * (sc * body * b + hot * tip * tipK + mel * (flow + syl * 1.3));
@@ -6448,11 +6473,11 @@ function harpSetup() {
       }
       if (uNight > .5) {
         col += add * (1. + uP * .25);
-        float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .5) * exp(-eg * eg) * (.1 + uTip * .1 + uP * .08) * sheet;   // el borde, una línea de luz continua
+        float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .25) * exp(-eg * eg) * (.1 + uTip * .1 + uP * .08) * sheet;   // el borde, una línea de luz de color
       } else {   // un resplandor de color por el borde de la cortina, como luz sobre el papel
         float eg = (t - lenH) / .07; col = mix(col, mix(pal(hueX), vec3(1.), .35), exp(-eg * eg) * (.18 + uP * .1));
       }
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .025;
+      col += (h(gl_FragCoord.xy) - .5) * .025;
       o = vec4(col, 1.);
     }`);
   const gl = GLX.gl; harp.tex = gl.createTexture();
@@ -6574,6 +6599,7 @@ function drawHarp(dt) {
   harp.syl *= Math.pow(0.08, dt);
   harp.tip = Math.max(harp.tip * Math.pow(0.03, dt), hits.hat ? 0.8 : 0);
   harp.flow += dt * (0.2 + voice * 1.3 + energy * 0.25);
+  harp.hue = (harp.hue || 0) + dt * (0.015 + energy * 0.12) + (pulse.on ? 0.025 * pulse.k : 0);
   for (let k = 0; k < 12; k++) harp.key[k] += (chromaNow[k] - harp.key[k]) * (1 - Math.pow(0.92, dt));
   // el cursor: con el ratón quieto un rato, los hilos vuelven a su sitio; al levantar el dedo, también
   const q = harp.ptr;
@@ -6583,15 +6609,15 @@ function drawHarp(dt) {
   const [hh] = hexToHsl(rgbToHex(...RGB.slice().sort((a, b) => sat(b) - sat(a))[0]));
   const bg0 = night ? hexToRgb(hsl(hh, 40, 3)).map(x => x / 255) : hexToRgb(hsl(hh, 25, 97)).map(x => x / 255);
   const bg1 = night ? hexToRgb(hsl(hh + 25, 35, 6)).map(x => x / 255) : hexToRgb(hsl(hh + 25, 30, 90)).map(x => x / 255);
-  const [cw, ch] = glCanvas(W > 1800 ? 0.8 : 1), gl = GLX.gl;   // en pantallas muy grandes, un poco menos: los hilos siguen finos
+  const [cw, ch] = glCanvas(W > 2200 ? 0.85 : 1), gl = GLX.gl;   // nítido; solo en pantallas enormes, un poco menos
   const p = harp.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, harp.tex);
   gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, NX, NY, gl.RED, gl.FLOAT, u);
   gl.uniform1i(p.u.uDisp, 0);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uN, Math.max(160, Math.min(720, cw / 3.2)));
-  gl.uniform1f(p.u.uTip, harp.tip); gl.uniform1f(p.u.uFlow, harp.flow); gl.uniform1f(p.u.uSyl, harp.syl); gl.uniform1f(p.u.uSylX, harp.sylX);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uN, Math.max(180, Math.min(860, cw / 2.7)));
+  gl.uniform1f(p.u.uTip, harp.tip); gl.uniform1f(p.u.uFlow, harp.flow); gl.uniform1f(p.u.uSyl, harp.syl); gl.uniform1f(p.u.uSylX, harp.sylX); gl.uniform1f(p.u.uHueT, harp.hue);
   gl.uniform3fv(p.u.uC0, RGB[0].map(x => x / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(x => x / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(x => x / 255));
   gl.uniform3fv(p.u.uMel, melodyColor().map(x => x / 255)); gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.uniform1fv(p.u['uLv[0]'], harp.lv); gl.uniform1fv(p.u['uVib[0]'], harp.vib);
@@ -6599,7 +6625,127 @@ function drawHarp(dt) {
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
-  if (night) bloom(GLX.c, 0.3 + P * 0.3);
+  if (night) bloom(GLX.c, 0.2 + P * 0.25);   // poco resplandor: los hilos se ven definidos
+}
+
+// ================= Escena: Fuego =================
+// Una fogata larga a lo ancho de toda la parte de abajo, como las Montañas: cada tramo arde con su parte
+// del sonido (los graves en el centro, donde la llama es más alta; los agudos hacia los lados). El
+// bombo aviva el fuego entero, la caja suelta un puñado de chispas, los platillos brillan en chispitas,
+// la voz sube la lengua del centro y pinta el corazón de la llama con el color de la nota, y en un
+// drop todo se levanta. Sus colores son los de la portada y van cambiando con las frases.
+const FIRE_G = 48;
+const fire = { prog: null, lv: new Float32Array(FIRE_G), lvV: new Float32Array(FIRE_G), lvT: new Float32Array(FIRE_G), t: 0, flare: 0, flareV: 0, shift: 0, shiftT: 0, embers: [], vo: 0 };
+function fireSetup() {
+  fire.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uT, uFlare, uVoice, uHgt;
+    uniform vec3 uK0, uK1, uK2, uK3, uMel, uBg0, uBg1;
+    uniform float uLv[${FIRE_G}];
+    ${GLSL_NOISE} ${GLSL_COVER}
+    float lvAt(float x) { float f = clamp(x, 0., 1.) * ${FIRE_G - 1}., i = floor(f); int a = int(i), b = min(a + 1, ${FIRE_G - 1}); return mix(uLv[a], uLv[b], smoothstep(0., 1., f - i)); }
+    // de oscuro (punta) a muy caliente (base): los colores de la portada, del más hondo al más claro
+    vec3 ramp(float t) { t = clamp(t, 0., 1.) * 3.; return t < 1. ? mix(uK0, uK1, t) : t < 2. ? mix(uK1, uK2, t - 1.) : mix(uK2, uK3, t - 2.); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 uv = vUv;
+      vec3 bg = withCover(mix(uBg0, uBg1, uv.y));
+      // la altura de la llama en esta x (lo que suena ahí), más alta con el bombo, la voz y el drop
+      float vc = exp(-pow((uv.x - .5) / .14, 2.)) * uVoice * .35;
+      float hx = uHgt * (.5 + .5 * lvAt(uv.x) + vc) * (1. + .3 * uP + uFlare);
+      // el fuego sube en lenguas: una turbulencia ancha decide qué tan alto llega cada tramo, otra más
+      // estrecha separa las lenguas (que se afilan arriba: solo su centro llega a la punta) y una fina titila
+      float y = uv.y / max(hx, .012), X = uv.x * asp;
+      X += (n(vec2(X * 1.5, uv.y * 1.4 - uT * .6)) - .5) * .4 * min(y, 1.5) * hx;   // arriba las lenguas se inclinan y ondean
+      float big = n(vec2(X * 2., uv.y * 1. - uT * .45));
+      float tong = n(vec2(X * 7.5, uv.y * 1.8 - uT * 1.3)) * .75 + n(vec2(X * 15., uv.y * 3.4 - uT * 2.1)) * .25;
+      float n2 = fbm(vec2(X * 16., uv.y * 4.6 - uT * 2.5) + tong * 1.5);
+      float top = (.55 + .85 * smoothstep(.3, .72, big)) * (.42 + .95 * smoothstep(.38, .7, tong));
+      float I = 1. - y / top;
+      I += (n2 - .5) * .32 * smoothstep(.25, 1., y / top);             // bordes vivos que titilan
+      I = max(I, (.42 - y) * 2.2);                                      // la base de la fogata siempre llena (sin huecos)
+      I = clamp(I, 0., 1.);
+      I *= .84 + .16 * n2;                                              // zonas más y menos calientes
+      float a = smoothstep(0., .16, I);
+      vec3 col;
+      if (uNight > .5) {
+        vec3 f = ramp(pow(I, 1.15) * (.95 + .2 * uP));   // el cuerpo de la llama en tonos medios; solo el corazón llega al blanco
+        f = mix(f, mix(uMel, vec3(1.), .25), smoothstep(.55, .95, I) * uVoice * .55);   // el corazón toma el color de la nota
+        col = bg + f * a * (1.15 + uP * .35);
+        // la luz del fuego en el aire, por encima de las llamas
+        col += uK2 * exp(-max(uv.y - hx * .6, 0.) / (.18 + uHgt * .2)) * (.1 + uP * .1 + uFlare * .2) * (1. - a);
+      } else {
+        // de día, como la Luz: color luminoso y saturado encima del papel (sin blanquear el corazón)
+        vec3 f = mix(uK1, uK2, smoothstep(.1, .55, I)); f = mix(f, uK3, smoothstep(.55, .95, I));
+        f = mix(f, uMel, smoothstep(.55, .95, I) * uVoice * .5);
+        col = mix(bg, f, a * .95);
+        col *= 1. - .18 * smoothstep(.3, .9, I) * a;                    // velo de tinta: profundidad
+        col = mix(col, mix(bg, uK2, .35), exp(-max(uv.y - hx * .6, 0.) / (.16 + uHgt * .2)) * (.12 + uP * .1) * (1. - a));
+      }
+      col += (h(gl_FragCoord.xy) - .5) * .03;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawFire(dt) {
+  if (!glInit()) { drawMountains(dt); return; }
+  if (!fire.prog) fireSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), G = FIRE_G;
+  // lo que suena en cada tramo (simétrico, como las Montañas: los graves en el centro)
+  for (let g = 0; g < G; g++) fire.lvT[g] = Math.min(1.15, Math.pow(specAt(g / (G - 1)), 0.9) * 1.25);
+  smoothProfile(fire.lvT, 2);
+  if (hits.bass) for (let g = 0; g < G; g++) fire.lvV[g] += hits.bass * 3 * Math.exp(-Math.pow((g / (G - 1) - 0.5) * 2.2, 2));
+  springTo(fire.lv, fire.lvV, fire.lvT, dt, 160, 0.55);
+  // el bombo aviva todo; en un drop, la llamarada
+  if (dropHit) fire.flareV += 2.4;
+  fire.flareV += (-fire.flare * 30 - fire.flareV * 7) * dt; fire.flare = Math.max(-0.1, fire.flare + fire.flareV * dt);
+  fire.t += dt * (0.3 + energy * 1.5 + P * 0.8);   // sin música, llamas perezosas; con música, vivas
+  fire.vo += (Math.min(1, voice * 1.5) - fire.vo) * (1 - Math.pow(0.08, dt));
+  // los colores cambian con las frases (cada 16 golpes) y en los drops: el corazón pasa a otro color
+  if (pulse.on && pulse.count % 16 === 0 || dropHit) fire.shiftT = (fire.shiftT + 1) % RGB.length;
+  fire.shift += (fire.shiftT - fire.shift) * (1 - Math.pow(0.15, dt));
+  const lum = c => c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11, n = RGB.length;
+  const order = RGB.map((c, i) => RGB[(i + Math.round(fire.shift)) % n]);
+  const [c1, c2, c3] = [order[0], order[1 % n], order[2 % n]].sort((a, b) => lum(a) - lum(b)).map(c => c.map(v => v / 255));
+  const sat = (c, l) => { const [h, s_] = hexToHsl(rgbToHex(...c.map(v => v * 255))); return hexToRgb(hsl(h, Math.max(80, s_), l)).map(v => v / 255); };
+  const K = night ? [c1.map(v => v * 0.25), sat(c1, 42), sat(c2, 56), sat(c3, 78).map(v => v + (1 - v) * 0.35)] : [sat(c1, 80), sat(c1, 62), sat(c2, 56), sat(c3, 52)];
+  const [hh] = hexToHsl(rgbToHex(...c2.map(v => v * 255)));
+  const bg0 = night ? hexToRgb(hsl(hh, 40, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 30, 90)).map(v => v / 255);
+  const bg1 = night ? hexToRgb(hsl(hh + 20, 30, 3)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 20, 97)).map(v => v / 255);
+  const [cw, ch] = glCanvas(0.75), gl = GLX.gl;
+  const p = fire.prog; gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uT, fire.t); gl.uniform1f(p.u.uFlare, Math.max(0, fire.flare) * 0.5); gl.uniform1f(p.u.uVoice, fire.vo);
+  gl.uniform1f(p.u.uHgt, H > W ? 0.38 : 0.5);
+  ['uK0', 'uK1', 'uK2', 'uK3'].forEach((k, i) => gl.uniform3fv(p.u[k], K[i]));
+  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
+  gl.uniform1fv(p.u['uLv[0]'], fire.lv);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  // chispas: salen de donde la llama es más alta; el golpe suelta un puñado, la caja otro, los platillos brillitos
+  const hFrac = H > W ? 0.38 : 0.5, E = fire.embers;
+  const spawn = (n_, x0, spread, k) => { for (let i = 0; i < n_ && E.length < 260; i++) {
+    const x = x0 != null ? x0 + (Math.random() - 0.5) * spread : Math.random();
+    const g = Math.min(G - 1, Math.max(0, Math.round(x * (G - 1)))), top = hFrac * (0.5 + 0.5 * fire.lv[g]) * 0.7;
+    E.push({ x: x * W, y: H * (1 - top * Math.random()), vx: (Math.random() - 0.5) * MIN * 0.05, vy: -MIN * (0.12 + Math.random() * 0.25) * k, life: 1.2 + Math.random() * 1.6, t: 0, r: (0.8 + Math.random() * 1.6) * DPR, c: Math.random() < 0.5 ? K[2] : K[3], sp: Math.floor(Math.random() * 3) });
+  } };
+  if (Math.random() < dt * (2 + energy * 30)) spawn(1, null, 0, 1);
+  if (pulse.on) spawn(6 + Math.round(14 * pulse.k), 0.5, 0.6, 1 + pulse.k * 0.6);
+  if (hits.snare) spawn(10, 0.15 + Math.random() * 0.7, 0.08, 1.3);
+  if (hits.hat) spawn(3, null, 0, 0.8);
+  if (dropHit) spawn(60, 0.5, 1, 2);
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  for (let i = E.length - 1; i >= 0; i--) {
+    const e = E[i]; e.t += dt; const q_ = e.t / e.life;
+    if (q_ >= 1) { E.splice(i, 1); continue; }
+    e.vx += (Math.sin(e.t * 3 + i) * MIN * 0.04) * dt; e.vy *= Math.pow(0.6, dt);
+    e.x += e.vx * dt; e.y += e.vy * dt;
+    const a = Math.sin(Math.min(1, q_ * 3) * Math.PI / 2) * (1 - q_), c = e.c.map(v => Math.round(v * 255));
+    ctx.fillStyle = rgba(night ? c.map(v => v + (255 - v) * 0.4) : c, a * (night ? 0.95 : 0.8));
+    ctx.beginPath(); ctx.arc(e.x, e.y, e.r * (1 - q_ * 0.5), 0, Math.PI * 2); ctx.fill();
+    if (night && SPRITES[e.sp]) { const g_ = e.r * 6; ctx.globalAlpha = a * 0.5; ctx.drawImage(SPRITES[e.sp], e.x - g_, e.y - g_, g_ * 2, g_ * 2); ctx.globalAlpha = 1; }   // halo suave
+  }
+  ctx.restore();
+  if (night) bloom(GLX.c, 0.32 + P * 0.3 + Math.max(0, fire.flare) * 0.3);
 }
 
 // ================= Escena: Pintura =================
@@ -6779,7 +6925,7 @@ function eclSetup() {
         if (uNight > .5) col += c * k * .7; else col = mix(col, c, k * .75);
         col = mix(col, vec3(.02), smoothstep(s.z * 1.04, s.z * .96, r));
       }
-      col += (h(gl_FragCoord.xy + fract(uTime * 7.3) * 113.) - .5) * .06;
+      col += (h(gl_FragCoord.xy) - .5) * .06;
       o = vec4(col, 1.);
     }`);
 }
@@ -6839,8 +6985,9 @@ function drawEclipse(dt) {
   // toca su parte: por el primero corre una ola con cada bombo, el segundo tiembla con la caja, el
   // tercero canta (ondula con la voz, más apretado cuanto más aguda la nota, y toma su color) y el
   // cuarto brilla con los platillos. Se engrosan y se encienden cuando suena lo suyo.
-  if (!ecl.ln) ecl.ln = { bumps: [], sn: 0, hat: 0, vo: 0 };
+  if (!ecl.ln) ecl.ln = { bumps: [], sn: 0, hat: 0, vo: 0, ph: 0 };
   const ln = ecl.ln;
+  ln.ph += dt * (0.03 + energy * 0.7);   // su vaivén avanza con la música (sin música, quietas)
   if (pulse.on) ln.bumps.push({ x: -0.05, a: 0.05 + 0.05 * pulse.k });
   ln.bumps.forEach(b => { b.x += dt * 0.75; b.a *= Math.pow(0.55, dt); }); ln.bumps = ln.bumps.filter(b => b.x < 1.15);
   ln.sn = Math.max(ln.sn * Math.pow(0.02, dt), hits.snare ? 1 : 0);
@@ -6855,7 +7002,7 @@ function drawEclipse(dt) {
     ctx.beginPath();
     for (let i = 0; i <= 140; i++) {
       const t = i / 140, x = W * (-0.02 + t * 1.04);   // de borde a borde
-      let y = 0.5 + 0.28 * Math.sin(t * (3 + k) + time * (0.15 + k * 0.03) + k * 1.7) * Math.sin(t * 2 + k);
+      let y = 0.5 + 0.28 * Math.sin(t * (3 + k) + ln.ph * (1 + k * 0.2) + k * 1.7) * Math.sin(t * 2 + k);
       if (k === 0) for (const b of ln.bumps) { const z = (t - b.x) / 0.06; y -= b.a * Math.exp(-z * z); }
       else if (k === 1) y += Math.sin(t * 70 + time * 40) * ln.sn * 0.012;
       else if (k === 2) y += Math.sin(t * (22 + noteK * 30) - time * 7) * ln.vo * 0.018 * (0.6 + 0.4 * Math.sin(t * 3.1416));
@@ -6868,7 +7015,7 @@ function drawEclipse(dt) {
   ctx.restore();
 }
 
-const scenes = { paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
