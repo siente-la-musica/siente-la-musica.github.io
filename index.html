@@ -6205,7 +6205,7 @@ function drawCats(dt) {
   if (!cats.list || (asp > 1) !== (cats.asp > 1)) catsInit();
   if (cats.asp !== asp) { cats.list.forEach(c => c.x *= asp / cats.asp); cats.asp = asp; }
   // el paso sigue el tempo: un ciclo de paso = 4 golpes (una pisada por golpe); sin música, despacio
-  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5, moving = Math.min(1, 0.05 + energy * 3);   // sin música casi se detienen
+  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5, moving = Math.min(1.15, 0.05 + energy * 1.3 + bandX(0, BANDS) * 0.5);   // sin música casi se detienen; en lo suave pasean, en lo fuerte trotan
   cats.list.forEach((c, i) => {
     c.ph += dt / (4 * per) * moving;
     if (pulse.on) c.ph = c.ph * 0.6 + (Math.round(c.ph * 4) / 4) * 0.4;   // la pisada se acerca al golpe
