@@ -555,6 +555,7 @@
         <button data-mode="paint">Pintura</button>
         <button data-mode="fire">Fuego</button>
         <button data-mode="crystal">Cristal</button>
+        <button data-mode="silk">Seda</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -3426,8 +3427,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
+  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
+  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -4661,11 +4662,14 @@ function drawMagnet(dt) {
   t.globalCompositeOperation = night ? 'lighter' : 'source-over'; t.lineCap = 'round';
   const lv = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)];
   // En lo tranquilo flotan despacio; con la música fuerte se aceleran (así se siente la diferencia)
-  const drive = 0.65 + 0.35 * Math.min(1, energy * 1.8), P = Math.max(0, pulse.x);
+  // sin música casi se quedan quietas; en lo tranquilo flotan; con la música fuerte se aceleran
+  mag.act = (mag.act || 0) + (Math.min(1, energy * 2.5) - (mag.act || 0)) * (1 - Math.pow(0.15, dt));
+  const drive = 0.06 + 0.94 * mag.act * (0.65 + 0.35 * Math.min(1, energy * 1.8)), P = Math.max(0, pulse.x);
+  mag.ph = (mag.ph || 0) + dt * (0.03 + energy * 1.6);
   // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
   const att = [0, 1, 2].map(k => {
     // giran cerca del centro (con la música se abren un poco, sin irse a los bordes)
-    const a = time * (0.25 + k * 0.08) * (1 + energy * 0.6) + k * 2.1, r = MIN * (0.05 + lv[k] * 0.11);
+    const a = mag.ph * (0.6 + k * 0.2) + k * 2.1, r = MIN * (0.05 + lv[k] * 0.11);
     return [W / 2 + Math.cos(a) * r * 1.4, H / 2 + Math.sin(a * 1.3) * r];
   });
   const usePtr = mag.pointer && (mag.down || performance.now() - mag.pointer.at < 2000);
@@ -4690,8 +4694,8 @@ function drawMagnet(dt) {
     // siguen volviendo; así nunca se quedan dando vueltas por fuera)
     if (burst || (kick && b === 0 && d < s * 0.22)) { const k = (burst ? 0.55 : kick * 0.6) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     else if (syl && b === 1 && d < s * 0.18) { const k = syl * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
-    mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35, dt);
-    mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35, dt);
+    mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35 * (0.3 + 0.7 * mag.act), dt);
+    mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35 * (0.3 + 0.7 * mag.act), dt);
     const v2 = mag.vx[i] * mag.vx[i] + mag.vy[i] * mag.vy[i];
     if (v2 > maxV * maxV * 4) { const k = maxV * 2 / Math.sqrt(v2); mag.vx[i] *= k; mag.vy[i] *= k; }
     const ox = mag.x[i], oy = mag.y[i];
@@ -5240,10 +5244,10 @@ function drawVinyl(dt) {
   // Con Spotify se sabe si suena; con solo audio, se da por parado tras 3 s seguidos de silencio
   // (así las partes suaves de una canción no levantan el brazo)
   vinyl.quiet = energy > 0.03 ? 0 : (vinyl.quiet || 0) + dt;
-  const playing = spConnected() && sp.item ? sp.playing : (!analyser || vinyl.quiet < 3);
+  const playing = spConnected() && sp.item ? sp.playing : (!!analyser && vinyl.quiet < 1);   // si no suena nada, el disco se detiene
   const rps = tempo.conf > 0.3 && tempo.bpm ? Math.max(0.3, Math.min(0.9, tempo.bpm / 240)) : 0.555;
   const goal = playing ? rps : 0;
-  vinyl.spin += (goal - vinyl.spin) * (1 - Math.pow(goal > vinyl.spin ? 0.02 : 0.25, dt));   // arranca rápido, frena despacio
+  vinyl.spin += (goal - vinyl.spin) * (1 - Math.pow(goal > vinyl.spin ? 0.02 : 0.1, dt));   // arranca rápido, frena despacio
   if (dropHit) { vinyl.scratch = 2.5; vinyl.hopV += 0.8; vinyl.flashes.push({ t: 0 }); }   // en un drop, el disco se acelera un instante
   if (hits.bass) vinyl.hopV += hits.bass * 0.25;   // la aguja salta un poco con cada golpe
   vinyl.scratch *= Math.pow(0.02, dt);
@@ -5604,7 +5608,7 @@ function drawTubes(dt) {
   if (dropHit) for (let i = 0; i < 140; i++) tube.confetti.push({ x: Math.random() * W, y: -Math.random() * H * 0.3, vx: (Math.random() - 0.5) * MIN * 0.2, vy: MIN * (0.15 + Math.random() * 0.25), r: Math.random() * 6, vr: (Math.random() - 0.5) * 10, c: Math.floor(Math.random() * 3), s: MIN * (0.006 + Math.random() * 0.008) });
   for (const m of tube.men) {
     // el aire: la música; en silencio se desinflan, en un drop se levantan de golpe
-    const goal = Math.min(1.6, 0.1 + bandX(0, BANDS) * 1.1 + Math.pow(energy, 0.9) * 0.4 + beatSoft * 0.7 + (dropHit ? 1 : 0));
+    const goal = Math.min(1.6, 0.03 + bandX(0, BANDS) * 1.1 + Math.pow(energy, 0.9) * 0.4 + beatSoft * 0.7 + (dropHit ? 1 : 0));
     m.air += (goal - m.air) * (1 - Math.pow(goal > m.air ? 0.02 : 0.3, dt));
     // Coreografía al compás: en cada golpe un soplo de aire (se estira), un latigazo que alterna
     // izquierda y derecha (y cada muñeco va al contrario que su vecino) y un brazo arriba
@@ -5638,7 +5642,7 @@ function drawTubes(dt) {
     ctx.fillStyle = rgba(c.map(v => v * 0.45), 1); ctx.beginPath(); ctx.ellipse(hx, hy, w * 0.12, w * 0.44, ang, 0, Math.PI * 2); ctx.fill();
     ctx.lineCap = 'round';
     for (let j = 0; j < 9; j++) {
-      const f = j / 8 * 2 - 1, fl = Math.sin(time * (8 + j) + j * 1.3 + m.ph) * (0.18 + high * 0.5 + Pk * 0.35);
+      const f = j / 8 * 2 - 1, fl = Math.sin(time * (8 + j) + j * 1.3 + m.ph) * (0.02 + Math.min(1, energy * 3) * 0.16 + high * 0.5 + Pk * 0.35);   // sin aire, el pelo cuelga quieto
       const a0 = ang + f * 0.6 + fl, L = w * (1 + 0.35 * Math.sin(j * 2.1 + m.ph) + Pk * 0.3);
       const sx0 = hx + nx * w * 0.36 * f, sy0 = hy + ny * w * 0.36 * f;
       const mx_ = sx0 + Math.cos(a0) * L * 0.55, my_ = sy0 + Math.sin(a0) * L * 0.55, a1 = a0 + fl * 1.6 + f * 0.4;
@@ -6846,6 +6850,92 @@ function drawHarp(dt) {
 // la orilla, un filo de luz y un destello. Con cada golpe las gotas se inflan y el vidrio ondula; la voz
 // hace crecer su gota, abrillanta el vidrio y lo tiñe con la nota; los platillos sacan destellos. Sin
 // portada (o con la opción apagada), el fondo es un degradado vivo con los colores de la paleta.
+// ================= Escena: Seda (cintas de color que se pliegan con la música) =================
+// Tres cintas anchas cruzan la pantalla y se doblan como seda en el aire: cada una escucha su parte
+// (graves, voces, agudos) y se ondula con ella; el bombo manda una ola que recorre la cinta, la caja la
+// retuerce, los platillos le sacan brillo y la voz la tiñe del color de la nota. En silencio, quietas.
+const silk = { prog: null, ph: [0, 0, 0], tw: [0, 0, 0], lv: new Float32Array(3), amp: new Float32Array(3), waves: [], U: new Float32Array(12), Wv: new Float32Array(16), spark: 0, twV: [0, 0, 0] };
+function silkSetup() {
+  silk.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uSpark; uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
+    uniform vec4 uR[3];    // fase, amplitud, giro, nivel
+    uniform vec4 uW[4];    // olas del bombo: posición, fuerza, cinta, -
+    ${GLSL_NOISE} ${GLSL_PAL}
+    // centro, giro y ancho de la cinta k en la posición x
+    void ribbon(int k, float x, out float c, out float th, out float w) {
+      vec4 r = uR[k]; float fk = float(k);
+      c = .5 + (fk - 1.) * .2 + r.y * (.16 * sin(x * 2.1 + r.x + fk * 2.) + .08 * sin(x * 4.3 - r.x * 1.3 + fk) + .04 * sin(x * 7.9 + r.x * 2.1));
+      for (int i = 0; i < 4; i++) { vec4 wv = uW[i]; if (int(wv.z + .5) == k) c += wv.y * .1 * exp(-pow((x - wv.x) * 2.2, 2.)) * sin((x - wv.x) * 8.); }
+      th = r.z + x * (1.4 + fk * .3) + .6 * sin(x * 1.7 + r.x * .7);
+      w = .085 + .05 * r.w + .02 * fk;
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = mix(uBg1, uBg0, vUv.y);
+      float x = p.x / asp * 3.1416 * 1.3;
+      for (int k = 0; k < 3; k++) {
+        float c, th, w; ribbon(k, x, c, th, w);
+        float ct = cos(th), hw = w * (.12 + .88 * abs(ct));   // de canto se ve fina; de frente, ancha
+        float v = (p.y - c) / hw;
+        float a = smoothstep(1.02, .9, abs(v));
+        if (a <= 0.) continue;
+        // color: cada cara de la cinta es un degradado distinto de la paleta (la de atrás, más honda)
+        float fk = float(k), u = vUv.x * .8 + fk * .9;
+        vec3 front = pal(u + v * .25 * sign(ct) + uR[k].x * .05), back = pal(u + 1.4 - v * .2) * .62;
+        vec3 base = mix(back, front, smoothstep(-.18, .18, ct));   // al darse la vuelta, el color cambia de cara sin corte
+        base = mix(base, base * mix(vec3(1.), uMel * 1.6, .55), uVoice * .45);
+        // volumen: luz suave que cruza la cinta, más fuerte donde se gira hacia la luz
+        float sh = sqrt(max(0., 1. - v * v));
+        float lit = .55 + .45 * sh * (.5 + .5 * abs(ct)) + .25 * pow(max(0., sin(th * 2. + v)), 6.) * (1. + uSpark * 2.);
+        vec3 rc = base * lit * (1. + uR[k].w * .35 + uP * .2);
+        rc += smoothstep(.75, 1., abs(v)) * (1. - abs(ct)) * .25;   // filo de luz al girar
+        // sombra que cae sobre lo de atrás
+        col *= 1. - .25 * smoothstep(2.4, .9, abs((p.y + .02 - c) / hw)) * (1. - a);
+        col = mix(col, rc, a);
+      }
+      // grano fino, como en una impresión
+      col += (h(gl_FragCoord.xy) - .5) * (uNight > .5 ? .07 : .05);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawSilk(dt) {
+  if (!glInit()) { drawMountains(dt); return; }
+  if (!silk.prog) silkSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  const lv = [bandX(0, 12), bandX(12, 38), bandX(38, BANDS)];
+  for (let k = 0; k < 3; k++) {
+    silk.lv[k] += (lv[k] - silk.lv[k]) * (1 - Math.pow(lv[k] > silk.lv[k] ? 0.0005 : 0.03, dt));
+    silk.amp[k] += ((0.25 + silk.lv[k] * 1.5) * (0.15 + 0.85 * Math.min(1, energy * 2.5)) - silk.amp[k]) * (1 - Math.pow(0.05, dt));
+    silk.ph[k] += dt * (0.02 + energy * 1.4 + silk.lv[k] * 0.8) * (k % 2 ? -1 : 1);   // en silencio, quietas
+    silk.twV[k] += (-silk.tw[k] * 6 - silk.twV[k] * 2.2) * dt; silk.tw[k] += silk.twV[k] * dt;   // el giro de la caja vuelve con un vaivén
+  }
+  // el bombo: una ola que corre por la cinta de los graves; la caja retuerce la del medio; la percusión, la de arriba
+  if (pulse.on) silk.waves.push({ x: Math.random() * 4, k: 0, f: 0.5 + pulse.k, t: 0 });
+  if (hits.snare) silk.twV[1] += 2.2;
+  if (hits.perc > 0.3) silk.waves.push({ x: Math.random() * 4, k: 2, f: 0.4 + hits.perc * 0.5, t: 0 });
+  if (hits.voice) silk.waves.push({ x: Math.random() * 4, k: 1, f: 0.35 + hits.voice * 0.4, t: 0 });
+  silk.spark = Math.max(silk.spark * Math.pow(0.03, dt), hits.hat ? 1 : 0);
+  silk.waves = silk.waves.filter(w => { w.t += dt; w.x += dt * 2.2; return w.t < 1.6; }).slice(-4);
+  silk.Wv.fill(0);
+  silk.waves.forEach((w, i) => silk.Wv.set([w.x, w.f * Math.exp(-w.t * 2.2), w.k, 0], i * 4));
+  for (let k = 0; k < 3; k++) silk.U.set([silk.ph[k], silk.amp[k], silk.tw[k], silk.lv[k]], k * 4);
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const bg0 = night ? hexToRgb(hsl(hh, 35, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 30, 94)).map(v => v / 255);
+  const bg1 = night ? hexToRgb(hsl(hh + 30, 30, 3)).map(v => v / 255) : hexToRgb(hsl(hh + 30, 25, 86)).map(v => v / 255);
+  const [cw, ch] = glCanvas(0.85), gl = GLX.gl;
+  const p = silk.prog; gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uSpark, silk.spark);
+  gl.uniform4fv(p.u['uR[0]'], silk.U); gl.uniform4fv(p.u['uW[0]'], silk.Wv);
+  const sat = c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(75, s_), Math.min(62, Math.max(45, l_)))).map(v => v / 255); };
+  gl.uniform3fv(p.u.uC0, sat(RGB[0])); gl.uniform3fv(p.u.uC1, sat(RGB[1])); gl.uniform3fv(p.u.uC2, sat(RGB[2]));
+  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
 const crystal = { prog: null, blobs: null, asp: 0, B: new Float32Array(40), tex: null, texSrc: null, rip: 0, ripT: 0, spark: 0, seq: 0 };
 function crystalSetup() {
   crystal.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uRip, uRipT, uSpark, uHasCov; uniform int uN;
@@ -7343,7 +7433,7 @@ function drawEclipse(dt) {
   ctx.restore();
 }
 
-const scenes = { crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
