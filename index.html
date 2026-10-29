@@ -3424,6 +3424,7 @@ function drawBokeh(dt) {
   ambient();
   bloom(layer, night ? 0.55 : 0.35);
   ctx.drawImage(layer, 0, 0);
+  if (!night) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = 0.55; ctx.drawImage(layer, 0, 0); ctx.restore(); }   // de día, un velo de tinta: color con profundidad (como la Luz)
 }
 
 // ================= Escena: Aura (luz de color que respira en los bordes) =================
@@ -4000,8 +4001,12 @@ function skySetup() {
         col += light * .06;   // un leve brillo en el aire entre nubes
         a = max(a, clamp(length(light) * .08, 0., .5));
       } else {
-        col = mix(vec3(.78, .8, .86), vec3(1.), shade) + light * .55 * d;
-        a = clamp(d * 1.15, 0., 1.);
+        // de día, como la Luz: las nubes toman el color de las luces (saturado) y la sombra les da
+        // profundidad; sin luces cerca, un lila suave (antes eran blancas sobre blanco)
+        float li = length(light); vec3 lc = light / max(max(light.r, max(light.g, light.b)), .001);
+        vec3 base = mix(vec3(.74, .72, .86), lc * .9, clamp(li * 1.1 + .2, 0., .92));
+        col = mix(base * .72, mix(base, vec3(1.), .3), shade);
+        a = clamp(d * 1.2, 0., 1.);
       }
       o = vec4(col * a, a);
     }`);
@@ -4797,7 +4802,7 @@ function drawRain(dt) {
   lctx.fillStyle = water; lctx.fillRect(0, surf, W, H - surf);
   for (const l of L) {
     const g = lctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 1.6);
-    g.addColorStop(0, rgba(l.c, Math.min(0.45, (night ? 0.08 : 0.06) * l.I))); g.addColorStop(1, rgba(l.c, 0));
+    g.addColorStop(0, rgba(l.c, Math.min(night ? 0.45 : 0.6, (night ? 0.08 : 0.2) * l.I))); g.addColorStop(1, rgba(l.c, 0));
     lctx.fillStyle = g; lctx.fillRect(l.x - l.r * 1.6, l.y - l.r * 1.6, l.r * 3.2, l.r * 3.2);
     const fy = H * 0.9, rg = lctx.createRadialGradient(l.x, fy, 0, l.x, fy, l.r);
     rg.addColorStop(0, rgba(l.c, Math.min(0.4, 0.09 * l.I))); rg.addColorStop(1, rgba(l.c, 0));
@@ -4808,7 +4813,7 @@ function drawRain(dt) {
   const ripple = (x, z, k, big) => { ripples.push({ x, y: surf + (H - surf) * (0.1 + z * 0.85), z, t: 0, life: big ? 1.6 : 0.7 + Math.random() * 0.4, k, big }); };
   if (hits.high) for (let i = 0; i < 3 + Math.round(hits.high * 6); i++) { const l = L[Math.floor(Math.random() * 3)]; ripple(l.x + (Math.random() - 0.5) * l.r * 1.6, Math.random(), 0.6 + hits.high * 0.4, false); }
   if (hits.bass) { const l = L[0]; ripple(l.x, 0.4 + Math.random() * 0.4, 0.8 + hits.bass * 0.4, true); }
-  const wind = rs.wind, base = night ? [200, 210, 230] : [70, 80, 100];
+  const wind = rs.wind, base = night ? [200, 210, 230] : [45, 55, 80];
   const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
   if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c)), ...L.map(l => makeGlint(l.c))]; }
   for (let di = drops.length - 1; di >= 0; di--) {
@@ -4872,17 +4877,17 @@ function glassBackground(night) {
   if (!glass.sharp || glass.sharp.width !== bw || glass.sharp.height !== bh) { glass.sharp = document.createElement('canvas'); glass.sharp.width = bw; glass.sharp.height = bh; glass.sc = glass.sharp.getContext('2d'); glass.bg = document.createElement('canvas'); glass.bg.width = bw; glass.bg.height = bh; glass.bgc = glass.bg.getContext('2d'); }
   const x = glass.sc, img = recording ? coverClean : (coverClean || coverAny);
   x.globalCompositeOperation = 'source-over';
-  x.fillStyle = night ? '#07070b' : '#cfd3dc'; x.fillRect(0, 0, bw, bh);
+  x.fillStyle = night ? '#07070b' : '#e9e6ee'; x.fillRect(0, 0, bw, bh);
   if (img && state.coverBg !== false) {
     const k = Math.max(bw / img.width, bh / img.height), dw = img.width * k, dh = img.height * k;
     x.globalAlpha = night ? 0.9 : 1; x.drawImage(img, (bw - dw) / 2, (bh - dh) / 2, dw, dh); x.globalAlpha = 1;
   }
   // luces que respiran con la música (como una ciudad tras el vidrio)
-  x.globalCompositeOperation = night ? 'lighter' : 'soft-light';
+  x.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (let i = 0; i < 9; i++) {
     const px = (0.1 + ((i * 0.37) % 0.85)) * bw + Math.sin(time * 0.1 + i) * bw * 0.03, py = (0.25 + ((i * 0.53) % 0.6)) * bh;
     const lv = spec[Math.floor(i / 9 * BANDS * 0.8)], P = Math.max(0, pulse.x), r = bh * (0.12 + lv * 0.18 + beatSoft * 0.03 + P * 0.07);
-    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], Math.min(1, (img ? 0.12 : 0.3) + lv * 0.4 + beatSoft * 0.15 + P * 0.5))); g.addColorStop(1, rgba(RGB[i % 3], 0));
+    const g = x.createRadialGradient(px, py, 0, px, py, r); g.addColorStop(0, rgba(RGB[i % 3], Math.min(1, (img ? 0.12 : night ? 0.3 : 0.42) + lv * 0.4 + beatSoft * 0.15 + P * 0.5))); g.addColorStop(1, rgba(RGB[i % 3], 0));
     x.fillStyle = g; x.fillRect(px - r, py - r, r * 2, r * 2);
   }
   if (glass.flash > 0.01) { x.globalCompositeOperation = 'lighter'; x.fillStyle = `rgba(220,230,255,${glass.flash * (state.noFlash ? 0.25 : 0.7)})`; x.fillRect(0, 0, bw, bh); }
@@ -6242,9 +6247,9 @@ function drawCurtain(dt) {
     const x0 = t.x * W, sx = Math.sin(time * 0.5 + t.ph) * sway * t.w, yEnd = t.len * H;
     const xAt = y => x0 + sx * Math.pow(Math.min(1, y / yEnd), 1.4);
     // el hilo, de su color y apenas brillante
-    const tc = night ? RGB[t.c].map(v => v * 0.6 + 90) : RGB[t.c].map(v => v * 0.75);
+    const tc = night ? RGB[t.c].map(v => v * 0.6 + 90) : RGB[t.c].map(v => v * 0.62);
     const g = lctx.createLinearGradient(0, 0, 0, yEnd);
-    g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, night ? 0.32 : 0.4)); g.addColorStop(0.9, rgba(tc, night ? 0.26 : 0.32)); g.addColorStop(1, rgba(tc, 0));
+    g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, night ? 0.32 : 0.6)); g.addColorStop(0.9, rgba(tc, night ? 0.26 : 0.5)); g.addColorStop(1, rgba(tc, 0));
     lctx.strokeStyle = g; lctx.lineWidth = lw * t.thick;
     lctx.beginPath(); lctx.moveTo(x0, 0); lctx.quadraticCurveTo(x0 + sx * 0.25, yEnd * 0.55, xAt(yEnd), yEnd); lctx.stroke();
     for (let i = t.beads.length - 1; i >= 0; i--) {
@@ -6466,8 +6471,8 @@ function harpSetup() {
           float tipK = (.6 + uTip * .9 + uP * .35) * (.5 + .5 * sheet);
           if (uNight > .5) add += line * (sc * body * b + hot * tip * tipK + mel * (flow + syl * 1.3));
           else {
-            vec3 silk = mix(sc, sc * sc, .35);   // de día, hilos de seda de color sobre blanco
-            col = mix(col, silk, clamp(line * (body * b * 1.1 + tip * tipK * .9 + flow * .8 + syl), 0., .92));
+            vec3 silk = mix(sc, sc * sc, .5);    // de día, hilos de seda de color sobre blanco (con cuerpo)
+            col = mix(col, silk, clamp(line * (body * b * 1.9 + tip * tipK * 1.2 + flow + syl * 1.3), 0., .95));
           }
         }
       }
