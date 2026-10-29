@@ -4215,13 +4215,13 @@ function drawFluid(dt) {
     }
   };
   if (pulse.on) {   // el golpe (o el tiempo que marca el tempo si falta uno)
-    const kb = (hits.bass || pulse.k * 0.6) * (0.35 + bandX(0, 12) * 0.9);   // en la estrofa, golpes suaves; en el estribillo, estallidos
+    const kb = (hits.bass || pulse.k * 0.6) * (0.15 + dynL * dynL * 0.95);   // en la estrofa, golpes suaves; en el estribillo, estallidos
     ring(2 + Math.round(kb * 2), kb, 0.35 + kb * 0.3, 0.45 + kb * 0.5);
     // Onda expansiva: cada golpe estalla desde un punto distinto, con tinta nueva y brillante
     const ox = 0.25 + Math.random() * 0.5, oy = 0.3 + Math.random() * 0.4;
     for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(ox + Math.cos(a) * 0.05 * H / W, oy + Math.sin(a) * 0.05, Math.cos(a) * 2600 * kb, Math.sin(a) * 2600 * kb, fluidColor(RGB[k % 3], 0.12 * kb), R(0.12)); }
   }
-  if (hits.mid) { const km = hits.mid * (0.35 + bandX(10, 38) * 0.9); ring(1 + Math.round(km), km * 0.6, 0.18, 0.3 + km * 0.3); }
+  if (hits.mid) { const km = hits.mid * (0.15 + dynL * dynL * 0.95); ring(1 + Math.round(km), km * 0.6, 0.18, 0.3 + km * 0.3); }
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
   if (Math.random() < energy * dt * 6) ring(1, energy * 0.4, 0.15, 0.15 + energy * 0.25);
   // la voz: cada sílaba suelta un hilo de tinta del color de la nota que sube suave desde abajo
@@ -4234,7 +4234,7 @@ function drawFluid(dt) {
   fluid.emitA = (fluid.emitA || 0) + dt * (0.15 + energy * 0.6);
   const bandsE = [bandX(0, 8), bandX(8, 20), bandX(20, 34), bandX(34, 48), bandX(48, BANDS)];
   for (let i = 0; i < 5; i++) {
-    const lv = Math.pow(bandsE[i], 2.2);   // solo empujan fuerte cuando su parte suena de verdad
+    const lv = Math.pow(bandsE[i], 2.2) * (0.3 + dynL * 0.7);   // solo empujan fuerte cuando su parte suena de verdad
     if (lv < 0.06) continue;
     const a = fluid.emitA + i * Math.PI * 2 / 5, rr = 0.22 + lv * 0.08;
     const x = 0.5 + Math.cos(a) * rr * (H / W), y = 0.5 + Math.sin(a) * rr;
