@@ -1191,7 +1191,7 @@ function analyse(dt) {
     let rise = 0;
     for (let b = NB - fresh; b < NB; b++) {
       let lo = 1e9; for (let j = b - 12; j < b; j++) lo = Math.min(lo, env_[j]);
-      if (env_[b] / kickPeak > 0.4) rise = Math.max(rise, (env_[b] - lo) / kickPeak);   // sin fuerza de verdad no hay golpe
+      if (env_[b] / kickPeak > 0.22) rise = Math.max(rise, (env_[b] - lo) / kickPeak);   // sin fuerza de verdad no hay golpe
     }
     lowF = Math.max(lowF, rise * 0.5);
   }
@@ -6769,11 +6769,11 @@ function drawCrystal(dt) {
   if (crystal.asp !== asp) { for (const b of crystal.blobs) { b.x *= asp / crystal.asp; b.hx *= asp / crystal.asp; } crystal.asp = asp; }
   const Bs = crystal.blobs, n = Bs.length;
   // flotan despacio hacia su sitio (que pasea con la música); cada golpe empuja una y ondula el vidrio
-  if (pulse.on) { const b = Bs[crystal.seq++ % n]; const a = Math.random() * 6.28; b.vx += Math.cos(a) * 0.12 * pulse.k; b.vy += Math.sin(a) * 0.12 * pulse.k; crystal.rip = Math.min(1.2, crystal.rip + 0.6 * pulse.k); crystal.ripT = 0; }
+  if (pulse.on) { const b = Bs[crystal.seq++ % n]; const a = Math.random() * 6.28; b.vx += Math.cos(a) * 0.12 * pulse.k; b.vy += Math.sin(a) * 0.12 * pulse.k; crystal.rip = Math.min(1.4, crystal.rip + (0.25 + bandX(0, 12) * 0.8) * pulse.k); crystal.ripT = 0; }
   if (dropHit) for (const b of Bs) { b.vx += (Math.random() - 0.5) * 0.5; b.vy += (Math.random() - 0.5) * 0.5; }
   crystal.rip *= Math.pow(0.12, dt); crystal.ripT += dt;
   crystal.spark = Math.max(crystal.spark * Math.pow(0.02, dt), hits.hat ? 1 : 0);
-  const mv = 0.04 + energy * 0.6;
+  const mv = 0.03 + energy * 0.35 + bandX(0, BANDS) * 0.6;   // en lo suave flotan; en el estribillo bailan
   // se tocan y se funden un momento, pero se vuelven a separar (no acaban todas en una sola mancha)
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
     const a = Bs[i], c = Bs[j], dx = c.x - a.x, dy = c.y - a.y, d = Math.hypot(dx, dy) + 1e-4, m = (a.r + c.r) * 1.05;
@@ -6789,7 +6789,7 @@ function drawCrystal(dt) {
     const k0 = Math.floor(i / n * BANDS * 0.8), k1 = Math.min(BANDS, k0 + Math.max(3, Math.floor(BANDS / n)));   // cada gota escucha su tramo del espectro
     const gt = (i === 0 ? voice * 0.6 : 0) + bandX(k0, k1) * 0.6;
     b.g += (gt - b.g) * (1 - Math.pow(gt > b.g ? 0.0005 : 0.01, dt));   // la primera es la gota de la voz
-    crystal.B.set([b.x, b.y, b.r * (0.82 + P * 0.18 + b.g * 0.5), b.ph], i * 4);
+    crystal.B.set([b.x, b.y, b.r * (0.78 + P * 0.18 + b.g * 0.65), b.ph], i * 4);
   });
   // la portada en color (si está y la opción de fondo está activa)
   const gl = GLX.gl, img = state.coverBg && coverClean ? coverClean : null;
