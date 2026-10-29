@@ -5340,7 +5340,7 @@ function drawTiles(dt) {
   if (!tiles.order) tiles.order = L.map((t, i) => i).filter(i => L[i].n >= 2).sort((a, b) => (L[a].x - L[b].x) || (L[a].y - L[b].y));
   if (pulse.on && tiles.order.length) {
     const t0 = L[tiles.order[pulse.count % tiles.order.length]], cx0 = t0.x + t0.s / 2, cy0 = t0.y + t0.s / 2;
-    const dyn = 0.4 + bandX(0, 12) * 0.85;   // en la estrofa el golpe es un brillo; en el estribillo, un estallido
+    const dyn = 0.2 + dynL * dynL * 0.9;   // en la estrofa el golpe es un brillo; en el estribillo, un estallido
     for (const t of L) { const d = Math.hypot(t.x + t.s / 2 - cx0, t.y + t.s / 2 - cy0) / (t0.s * (1.2 + dyn * 0.8)); t.flash = Math.max(t.flash, d < 1 ? (0.8 + pulse.k * 0.3) * (1 - d * 0.55) * dyn : 0.28 * pulse.k * dyn); }
     t0.popV += 5 + pulse.k * 4;
     tiles.last = { x: cx0, y: cy0 };
