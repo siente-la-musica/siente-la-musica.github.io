@@ -3852,7 +3852,10 @@ function drawInfinity(dt) {
   // La cámara sigue el camino y mira en la dirección en que avanza
   const cam = tunnelPath(camZ), ahead = tunnelPath(camZ + 0.5);
   const hx = (ahead[0] - cam[0]) / 0.5, hy = (ahead[1] - cam[1]) / 0.5;
-  const roll = Math.sin(camZ * 0.04) * 0.06;
+  // la melodía inclina la cámara (nota aguda a un lado, grave al otro), como un vuelo que se deja llevar
+  const tiltT = voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.22 * Math.min(1, voice * 2) : 0;
+  drawInfinity.tilt = (drawInfinity.tilt || 0) + (tiltT - (drawInfinity.tilt || 0)) * (1 - Math.pow(0.2, dt));
+  const roll = Math.sin(camZ * 0.04) * 0.06 + drawInfinity.tilt;
   const cr = Math.cos(roll), sr = Math.sin(roll);
   const project = (x, y, z) => {
     const dz = z - camZ;
@@ -3866,6 +3869,18 @@ function drawInfinity(dt) {
 
   lctx.clearRect(0, 0, W, H);
   lctx.lineCap = 'round'; lctx.lineJoin = 'round';
+  // la caja manda una onda hacia el fondo (al revés que el bombo); en un drop, todo el túnel se enciende
+  const sP = drawInfinity.sp || (drawInfinity.sp = []);
+  if (hits.snare || hits.perc > 0.35) sP.push(camZ + FAR * 0.95);
+  for (let i = sP.length - 1; i >= 0; i--) { sP[i] -= dt * 16; if (sP[i] < camZ) sP.splice(i, 1); }
+  drawInfinity.flash = Math.max((drawInfinity.flash || 0) * Math.pow(0.08, dt), dropHit ? 1 : 0);
+  // la luz al final del túnel: respira con la música, toma el color de la nota cuando se canta y late con el golpe
+  { const far = tunnelPath(camZ + FAR * 0.6), [fx, fy] = project(far[0], far[1], camZ + FAR * 0.6), av = Math.min(1, voice * 1.5);
+    const fc = mix(0.5).map((c_, j) => c_ + (melC[j] - c_) * av * 0.8), fa = (night ? 0.18 : 0.22) * (0.2 + bandX(0, BANDS) * 1.2 + P * 0.6 + av * 0.5 + drawInfinity.flash);
+    lctx.save(); if (night) lctx.globalCompositeOperation = 'lighter';
+    const g = lctx.createRadialGradient(fx, fy, 0, fx, fy, MIN * (0.25 + P * 0.08 + av * 0.1));
+    g.addColorStop(0, rgba(night ? fc : fc.map(v => v * 0.85), Math.min(0.9, fa))); g.addColorStop(1, rgba(fc, 0));
+    lctx.fillStyle = g; lctx.fillRect(0, 0, W, H); lctx.restore(); }
   const k0 = Math.ceil((camZ + 0.3) / SP), k1 = Math.floor((camZ + FAR) / SP);
   for (let k = k1; k >= k0; k--) {
     const z = k * SP, dz = z - camZ;
@@ -3878,12 +3893,16 @@ function drawInfinity(dt) {
     const v = bandX(Math.min(band, BANDS - 2), Math.min(band, BANDS - 2) + 2);   // con sus altos y bajos
     let glow = 0, vg = 0; for (const pz of pulses) glow += Math.exp(-((z - pz) ** 2) / 0.8);
     for (const pz of vP) vg += Math.exp(-((z - pz) ** 2) / 1.2);
+    for (const pz of sP) glow += 0.7 * Math.exp(-((z - pz) ** 2) / 0.6);
+    glow += drawInfinity.flash * 0.8;
     vg = Math.min(1, vg);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
     const R = sc * tunnelRadius(z) * (0.95 + v * 0.2 + P * 0.1 * (1 - dz / FAR));   // el túnel entero late con el golpe
-    const hue = (A.hue * (1 - f) + B.hue * f + k * 0.012) % 2;
-    lctx.strokeStyle = rgba(mix(1 - Math.abs(hue - 1)).map((c_, j) => c_ + (melC[j] - c_) * vg * 0.85), Math.min(1, alpha * (night ? 0.85 : 0.8) * (1 + glow * 1.2 + vg * 0.8 + beat * 0.4)));
-    const lw = sc * 0.007 * (1 + v * 2.5 + glow * 1.5);
+    const hue = (A.hue * (1 - f) + B.hue * f + k * 0.035) % 2;   // los anillos recorren los colores de la paleta
+    // de día el color va más hondo y la línea más gruesa, para que no se pierda en el blanco
+    const lc = mix(1 - Math.abs(hue - 1)).map((c_, j) => c_ + (melC[j] - c_) * vg * 0.85);
+    lctx.strokeStyle = rgba(night ? lc : lc.map(c_ => c_ * 0.78), Math.min(1, alpha * (night ? 0.85 : 0.95) * (1 + glow * 1.2 + vg * 0.8 + beat * 0.4)));
+    const lw = sc * (night ? 0.007 : 0.011) * (1 + v * 2.5 + glow * 1.5);
     // Las líneas de menos de un píxel parpadean: se mantienen a 1 px y se atenúan en su lugar
     lctx.lineWidth = Math.max(DPR, lw);
     if (lw < DPR) lctx.globalAlpha = Math.max(0.15, lw / DPR);
@@ -3910,7 +3929,8 @@ function drawInfinity(dt) {
     lctx.globalAlpha = 1;
   }
   // Destellos que pasan junto a las paredes y dan sensación de velocidad
-  const want = 3 + (high + energy) * 30;
+  const want = (high + energy) * 30;
+  if (hits.hat) for (let i = 0; i < 4; i++) streaks.push({ a: Math.random() * Math.PI * 2, r: 0.7 + Math.random() * 0.2, z: camZ + FAR * (0.3 + Math.random() * 0.5), len: 0.6 + Math.random() * 1.4, c: Math.random() });   // los platillos: ráfaga de destellos
   if (streaks.length < want && Math.random() < 0.5) streaks.push({ a: Math.random() * Math.PI * 2, r: 0.7 + Math.random() * 0.2, z: camZ + FAR * (0.5 + Math.random() * 0.5), len: 0.5 + Math.random() * 1.2, c: Math.random() });
   for (let i = streaks.length - 1; i >= 0; i--) {
     const st = streaks[i];
@@ -3920,7 +3940,7 @@ function drawInfinity(dt) {
     const P = project(pa[0] + Math.cos(st.a) * ra, pa[1] + Math.sin(st.a) * ra, st.z);
     const Q = project(pb[0] + Math.cos(st.a) * rb, pb[1] + Math.sin(st.a) * rb, zb);
     const alpha = Math.pow(1 - (st.z - camZ) / FAR, 1.5) * smooth(Math.min(1, (st.z - camZ - 0.4) / 1));
-    lctx.strokeStyle = rgba(mix(st.c), alpha * 0.85);
+    lctx.strokeStyle = rgba(night ? mix(st.c) : mix(st.c).map(c_ => c_ * 0.75), alpha * 0.85);
     lctx.lineWidth = Math.max(DPR, P[2] * 0.005);
     lctx.beginPath(); lctx.moveTo(P[0], P[1]); lctx.lineTo(Q[0], Q[1]); lctx.stroke();
   }
