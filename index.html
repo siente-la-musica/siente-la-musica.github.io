@@ -4012,6 +4012,7 @@ function lightning(cl, strength) {   // el relámpago nace en un bulto y se prop
   for (const pf of cl.puffs) pf.delay = Math.hypot(pf.x - start.x, pf.y - start.y) * 0.12, pf.pending = strength;
 }
 function drawClouds(dt) {
+  drawClouds.t = (drawClouds.t || 0) + dt * (0.05 + Math.min(1, energy * 2.5) * 0.95);
   if (glInit()) { try { drawSkyClouds(dt); return; } catch (e) { console.error(e); } }
   drawCloudsPuffs(dt);
 }
@@ -4042,8 +4043,9 @@ function drawCloudsPuffs(dt) {
         if (pf.delay >= 0) { pf.delay -= dt; if (pf.delay < 0) { pf.flash = Math.max(pf.flash, pf.pending); pf.delay = -1; } }
         pf.flash *= Math.pow(0.012, dt);
         // El bulto se mueve un poco alrededor de su sitio: la nube cambia de forma
-        const px = cx + (pf.x + Math.sin(time * pf.sp + pf.ph) * 0.06 * (1 + mid)) * S;
-        const py = cy + (pf.y + Math.cos(time * pf.sp * 0.8 + pf.ph) * 0.04) * S;
+        const ct_ = drawClouds.t || 0;   // su propio reloj: avanza con la música, en silencio se detiene
+        const px = cx + (pf.x + Math.sin(ct_ * pf.sp + pf.ph) * 0.06 * (1 + mid)) * S;
+        const py = cy + (pf.y + Math.cos(ct_ * pf.sp * 0.8 + pf.ph) * 0.04) * S;
         const r = pf.r * S * (1 + L * 0.12) * 1.6;
         // Cuerpo de la nube
         lctx.globalCompositeOperation = 'source-over';
@@ -4188,7 +4190,7 @@ function drawSkyClouds(dt) {
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
   sky.lvT[0] = Math.pow(bass, 0.8); sky.lvT[1] = Math.pow(mid, 0.8); sky.lvT[2] = Math.pow(high, 0.8);
   springTo(sky.lv, sky.lvV, sky.lvT, dt, 200, 0.5);
-  sky.t += dt * (1 + energy * 1.5);   // con más energía, las nubes se transforman más rápido
+  sky.t += dt * (0.04 + Math.min(1, energy * 2.5) * 0.96 + energy * 1.5);   // en silencio quietas; con más energía, se transforman más rápido
   const fk = state.noFlash ? 0.35 : 1;
   const flash = (x, y, k) => { sky.flashes.push({ x, y, k, c: Math.floor(Math.random() * 3) }); if (sky.flashes.length > 3) sky.flashes.shift(); };
   if (hits.bass) flash(0.15 + Math.random() * 0.7, 0.35 + Math.random() * 0.45, (1 + hits.bass) * fk);
@@ -4197,7 +4199,7 @@ function drawSkyClouds(dt) {
   sky.pointerLv += ((performance.now() - sky.pointerAt < 2500 ? 1 : 0) - sky.pointerLv) * (1 - Math.pow(0.05, dt));
   const L = [];
   // Tres luces que pasean por dentro, una por banda
-  for (let i = 0; i < 3; i++) L.push(0.5 + 0.36 * Math.sin(time * (0.07 + i * 0.03) + i * 2.1), 0.55 + 0.22 * Math.sin(time * (0.05 + i * 0.02) + i * 1.3), 0.08 + Math.max(0, sky.lv[i]) * 2.1, i);
+  for (let i = 0; i < 3; i++) L.push(0.5 + 0.36 * Math.sin(sky.t * (0.07 + i * 0.03) + i * 2.1), 0.55 + 0.22 * Math.sin(sky.t * (0.05 + i * 0.02) + i * 1.3), 0.08 + Math.max(0, sky.lv[i]) * 2.1, i);
   for (let i = 0; i < 3; i++) { const f = sky.flashes[i]; L.push(f ? f.x : 0, f ? f.y : 0, f ? f.k * 0.9 : 0, f ? f.c : 0); }
   L.push(sky.pointer[0], sky.pointer[1], sky.pointerLv * (0.9 + bass * 0.6), 3);   // la linterna del ratón
   const p = sky.prog; gl.useProgram(p.pr);
@@ -6858,42 +6860,47 @@ const silk = { prog: null, ph: [0, 0, 0], tw: [0, 0, 0], lv: new Float32Array(3)
 function silkSetup() {
   silk.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uSpark; uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
     uniform vec4 uR[3];    // fase, amplitud, giro, nivel
-    uniform vec4 uW[4];    // olas del bombo: posición, fuerza, cinta, -
+    uniform vec4 uW[4];    // olas: posición, fuerza, cinta, -
     ${GLSL_NOISE} ${GLSL_PAL}
-    // centro, giro y ancho de la cinta k en la posición x
-    void ribbon(int k, float x, out float c, out float th, out float w) {
+    // una tela ancha que avanza a lo largo de la pantalla y se pliega (al girar se ve de canto y se afina)
+    void sheet(int k, float x, out float c, out float th, out float w) {
       vec4 r = uR[k]; float fk = float(k);
-      c = .5 + (fk - 1.) * .2 + r.y * (.16 * sin(x * 2.1 + r.x + fk * 2.) + .08 * sin(x * 4.3 - r.x * 1.3 + fk) + .04 * sin(x * 7.9 + r.x * 2.1));
-      for (int i = 0; i < 4; i++) { vec4 wv = uW[i]; if (int(wv.z + .5) == k) c += wv.y * .1 * exp(-pow((x - wv.x) * 2.2, 2.)) * sin((x - wv.x) * 8.); }
-      th = r.z + x * (1.4 + fk * .3) + .6 * sin(x * 1.7 + r.x * .7);
-      w = .085 + .05 * r.w + .02 * fk;
+      c = .5 + (fk - .5) * .22 + r.y * (.13 * sin(x * 1.3 + r.x + fk * 2.4) + .05 * sin(x * 2.7 - r.x * 1.2 + fk));
+      for (int i = 0; i < 4; i++) { vec4 wv = uW[i]; if (int(wv.z + .5) == k) c += wv.y * .07 * exp(-pow((x - wv.x) * 1.6, 2.)) * sin((x - wv.x) * 5.); }
+      th = r.z + x * (.9 + fk * .25) + .9 * sin(x * .8 + r.x * .6 + fk * 1.7);
+      w = (.36 - fk * .1) * (1. + .1 * r.w);
     }
     void main() {
-      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      float asp = uRes.x / uRes.y;
+      // la tela corre por el lado largo de la pantalla
+      vec2 uv = asp >= 1. ? vUv : vUv.yx; float L = max(asp, 1. / asp);
+      float x = uv.x * L * 2.4, y = uv.y;
       vec3 col = mix(uBg1, uBg0, vUv.y);
-      float x = p.x / asp * 3.1416 * 1.3;
-      for (int k = 0; k < 3; k++) {
-        float c, th, w; ribbon(k, x, c, th, w);
-        float ct = cos(th), hw = w * (.12 + .88 * abs(ct));   // de canto se ve fina; de frente, ancha
-        float v = (p.y - c) / hw;
-        float a = smoothstep(1.02, .9, abs(v));
-        if (a <= 0.) continue;
-        // color: cada cara de la cinta es un degradado distinto de la paleta (la de atrás, más honda)
-        float fk = float(k), u = vUv.x * .8 + fk * .9;
-        vec3 front = pal(u + v * .25 * sign(ct) + uR[k].x * .05), back = pal(u + 1.4 - v * .2) * .62;
-        vec3 base = mix(back, front, smoothstep(-.18, .18, ct));   // al darse la vuelta, el color cambia de cara sin corte
-        base = mix(base, base * mix(vec3(1.), uMel * 1.6, .55), uVoice * .45);
-        // volumen: luz suave que cruza la cinta, más fuerte donde se gira hacia la luz
-        float sh = sqrt(max(0., 1. - v * v));
-        float lit = .55 + .45 * sh * (.5 + .5 * abs(ct)) + .25 * pow(max(0., sin(th * 2. + v)), 6.) * (1. + uSpark * 2.);
-        vec3 rc = base * lit * (1. + uR[k].w * .35 + uP * .2);
-        rc += smoothstep(.75, 1., abs(v)) * (1. - abs(ct)) * .25;   // filo de luz al girar
-        // sombra que cae sobre lo de atrás
-        col *= 1. - .25 * smoothstep(2.4, .9, abs((p.y + .02 - c) / hw)) * (1. - a);
+      float g1 = h(gl_FragCoord.xy), g2 = h(gl_FragCoord.xy * 1.731 + 17.3);
+      for (int k = 1; k >= 0; k--) {   // primero la de atrás
+        float c, th, w; sheet(k, x, c, th, w);
+        float ct = cos(th), hw = w * (.06 + .94 * abs(ct));
+        float v = (y - c) / hw;
+        float a = smoothstep(1., .985, abs(v));
+        if (a <= 0.) { col *= 1. - .35 * exp(-pow(max(0., abs(v) - 1.) * hw * 18., 2.)) * (uNight > .5 ? 1. : .5); continue; }   // sombra suave
+        // una cara fría (del 1.º al 2.º color) y la otra cálida (del 3.º al 2.º), en degradados largos
+        float fk = float(k), t = clamp(.5 + .5 * v, 0., 1.) + (g1 - .5) * .22;   // el grano también mueve el degradado
+        vec3 front = mix(uC0, uC1, smoothstep(0., 1., t * .8 + .2 * sin(x * .5 + fk)));
+        vec3 back = mix(uC2, mix(uC1, uC2, .4), smoothstep(.1, 1., 1. - t));
+        float face = smoothstep(-.25, .25, ct);
+        vec3 base = mix(back, front, face);
+        // donde la tela se da la vuelta aparece un filo cálido y algo de turquesa (como en la seda)
+        float fold = 1. - abs(ct);
+        base = mix(base, mix(uC2, vec3(1., .85, .75), .35), fold * fold * .55);
+        base = mix(base, base * mix(vec3(1.), uMel * 1.7, .6), uVoice * .4);
+        float lam = .3 + .7 * pow(abs(ct), .55) + .15 * uR[k].w + .12 * uP;   // se oscurece hacia el pliegue: volumen de tela
+        vec3 rc = base * lam;
+        // grano de impresión: la luz hecha de puntitos (más brillantes con los platillos)
+        rc *= .8 + .4 * g2;
+        rc += step(.982 - uSpark * .02, g1) * (.35 + uSpark * .5) * lam;
         col = mix(col, rc, a);
       }
-      // grano fino, como en una impresión
-      col += (h(gl_FragCoord.xy) - .5) * (uNight > .5 ? .07 : .05);
+      col += (g2 - .5) * (uNight > .5 ? .035 : .04);
       o = vec4(col, 1.);
     }`);
 }
@@ -6919,15 +6926,15 @@ function drawSilk(dt) {
   silk.waves.forEach((w, i) => silk.Wv.set([w.x, w.f * Math.exp(-w.t * 2.2), w.k, 0], i * 4));
   for (let k = 0; k < 3; k++) silk.U.set([silk.ph[k], silk.amp[k], silk.tw[k], silk.lv[k]], k * 4);
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
-  const bg0 = night ? hexToRgb(hsl(hh, 35, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 30, 94)).map(v => v / 255);
-  const bg1 = night ? hexToRgb(hsl(hh + 30, 30, 3)).map(v => v / 255) : hexToRgb(hsl(hh + 30, 25, 86)).map(v => v / 255);
-  const [cw, ch] = glCanvas(0.85), gl = GLX.gl;
+  const bg0 = night ? hexToRgb(hsl(hh, 30, 4)).map(v => v / 255) : hexToRgb(hsl(hh, 25, 96)).map(v => v / 255);
+  const bg1 = night ? hexToRgb(hsl(hh + 30, 20, 1.5)).map(v => v / 255) : hexToRgb(hsl(hh + 30, 20, 90)).map(v => v / 255);
+  const [cw, ch] = glCanvas(1), gl = GLX.gl;
   const p = silk.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uSpark, silk.spark);
   gl.uniform4fv(p.u['uR[0]'], silk.U); gl.uniform4fv(p.u['uW[0]'], silk.Wv);
-  const sat = c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(75, s_), Math.min(62, Math.max(45, l_)))).map(v => v / 255); };
+  const sat = c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), Math.min(60, Math.max(50, l_)))).map(v => v / 255); };
   gl.uniform3fv(p.u.uC0, sat(RGB[0])); gl.uniform3fv(p.u.uC1, sat(RGB[1])); gl.uniform3fv(p.u.uC2, sat(RGB[2]));
   gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
