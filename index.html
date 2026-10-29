@@ -6021,11 +6021,6 @@ function drawBust(dt) {
 // orejas se mueven con los platillos, los ojos se encienden con la voz (y parpadean despacio, como
 // hacen los gatos contentos) y en un drop dan un saltito. Cada pisada cae en un golpe (el paso sigue
 // el tempo). Cada gato lleva un color de la portada.
-const CAT_BODY = new Float32Array([[-0.48, 0.5], [-0.44, 0.545], [-0.36, 0.585], [-0.25, 0.605], [-0.12, 0.598], [0.02, 0.585], [0.14, 0.592], [0.25, 0.612],
-  [0.33, 0.628], [0.39, 0.66], [0.425, 0.71], [0.44, 0.77], [0.447, 0.825], [0.468, 0.92], [0.52, 0.852], [0.56, 0.856], [0.586, 0.862], [0.618, 0.93],
-  [0.634, 0.834], [0.662, 0.8], [0.686, 0.766], [0.706, 0.731], [0.711, 0.714], [0.701, 0.695], [0.672, 0.68], [0.632, 0.668], [0.58, 0.652], [0.52, 0.615],
-  [0.47, 0.56], [0.44, 0.49], [0.41, 0.42], [0.36, 0.365], [0.26, 0.345], [0.12, 0.35], [-0.02, 0.37], [-0.14, 0.395], [-0.24, 0.41], [-0.33, 0.405],
-  [-0.42, 0.42], [-0.49, 0.455]].flat());
 const cats = { prog: null, list: null, asp: 0, U: new Float32Array(48), U3: new Float32Array(12) };
 function catsSetup() {
   cats.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uMid, uHigh, uGlow;
@@ -6046,19 +6041,19 @@ function catsSetup() {
       return -sqrt(d.x) * sign(d.y);
     }
     float smin(float a, float b, float k) { float h = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h) - k * h * (1. - h); }
-    // contorno del cuerpo de un gato de perfil (lomo, nuca, orejas, hocico, pecho, barriga y anca)
-    uniform vec2 uBody[40]; uniform int uNB;
-    float bodyPoly(vec2 q) {
-      float d = dot(q - uBody[0], q - uBody[0]), sg = 1.;
-      for (int i = 0; i < 40; i++) {
-        if (i >= uNB) break;
-        vec2 a = uBody[i], b = uBody[i + 1 < uNB ? i + 1 : 0], e = b - a, w = q - a;
-        vec2 pb = w - e * clamp(dot(w, e) / dot(e, e), 0., 1.);
-        d = min(d, dot(pb, pb));
-        bvec3 cond = bvec3(q.y >= a.y, q.y < b.y, e.x * w.y > e.y * w.x);
-        if (all(cond) || all(not(cond))) sg = -sg;
-      }
-      return sg * sqrt(d);
+    // cuerpo de un gato de perfil hecho de volúmenes suaves: anca redonda, lomo, pecho hondo,
+    // cuello corto, cabeza redonda con mejillas, hocico pequeño y orejas triangulares
+    float catBody(vec2 q) {
+      float d = sdEll(q - vec2(-.29, .44), vec2(.19, .16));                   // anca
+      d = smin(d, sdCap2(q, vec2(-.25, .47), vec2(.24, .455), .138, .145), .08); // lomo y barriga
+      d = smin(d, sdEll(q - vec2(.27, .42), vec2(.16, .165)), .06);            // pecho
+      d = smin(d, sdCap2(q, vec2(.33, .5), vec2(.46, .6), .11, .1), .06);      // cuello
+      vec2 hq = q - vec2(.53, .665);
+      float hd = sdEll(hq, vec2(.135, .122));                                   // cabeza
+      hd = smin(hd, sdEll(hq - vec2(.095, -.04), vec2(.062, .052)), .04);       // hocico
+      hd = smin(hd, sdTri(q, vec2(.425, .73), vec2(.465, .845), vec2(.535, .765)) + .006, .03);    // oreja de allá
+      hd = smin(hd, sdTri(q, vec2(.51, .765), vec2(.57, .865), vec2(.635, .75)) + .006, .03);  // oreja de acá
+      return smin(d, hd, .04);
     }
     // pata corta y gruesa en dos tramos; la articulación se dobla hacia atrás (codo o corvejón)
     float leg(vec2 p, vec2 top, float ph, float thick, float hind) {
@@ -6072,7 +6067,7 @@ function catsSetup() {
       return hind > .5 ? smin(d, sdEll(p - top - vec2(-.02, .04), vec2(.11, .085)), .05) : d;   // el muslo, redondo
     }
     float tail(vec2 q, float ph, float sw) {
-      vec2 a = vec2(-.46, .52); float ang = 3.55 + sw * .3, d = 1e3;   // sale hacia atrás y sube en curva, con la punta enroscada
+      vec2 a = vec2(-.45, .48); float ang = 3.55 + sw * .3, d = 1e3;   // sale hacia atrás y sube en curva, con la punta enroscada
       for (int k = 0; k < 7; k++) {
         float fk = float(k);
         ang += -.3 - (fk > 4. ? .3 : 0.) + .1 * sin(uTime * 1.3 + fk * .8) * (.4 + uMid * .8) + sw * .12;
@@ -6083,20 +6078,20 @@ function catsSetup() {
       return d;
     }
     // patas del lado de allá (más oscuras, detrás del cuerpo) y gato completo
-    float catFar(vec2 q, float ph) { return min(leg(q, vec2(.3, .4), ph + .75, .046, 0.), leg(q, vec2(-.33, .42), ph + .5, .05, 1.)); }
+    float catFar(vec2 q, float ph) { return min(leg(q, vec2(.28, .36), ph + .75, .054, 0.), leg(q, vec2(-.31, .38), ph + .5, .058, 1.)); }
     // la cabeza gira desde el cuello (cabeceo) y la oreja de delante se mueve: se deforma el punto
-    const vec2 NECK = vec2(.43, .6);
-    float headW(vec2 q) { return smoothstep(.34, .47, q.x) * smoothstep(.42, .58, q.y); }
+    const vec2 NECK = vec2(.4, .54);
+    float headW(vec2 q) { return smoothstep(.3, .43, q.x) * smoothstep(.36, .52, q.y); }
     vec2 headInv(vec2 q, float nod, float ear) {
       float w = headW(q), an = nod * w, c = cos(an), s = sin(an);
       q = NECK + mat2(c, s, -s, c) * (q - NECK) + vec2(0., nod * .07 * w);
-      q.x -= ear * .03 * smoothstep(.8, .92, q.y) * smoothstep(.5, .6, q.x);   // la oreja de delante se gira
+      q.x -= ear * .03 * smoothstep(.74, .86, q.y) * smoothstep(.47, .57, q.x);   // la oreja de delante se gira
       return q;
     }
     float cat(vec2 q, float ph, vec4 c3) {
-      float d = bodyPoly(headInv(q, c3.x, c3.z)) - .02;
-      d = smin(d, leg(q, vec2(.32, .4), ph + .25, .05, 0.), .05);
-      d = smin(d, leg(q, vec2(-.31, .42), ph, .055, 1.), .05);
+      float d = catBody(headInv(q, c3.x, c3.z));
+      d = smin(d, leg(q, vec2(.3, .36), ph + .25, .058, 0.), .05);
+      d = smin(d, leg(q, vec2(-.29, .38), ph, .064, 1.), .05);
       return smin(d, tail(q, ph, c3.y), .03);
     }
     void main() {
@@ -6130,8 +6125,8 @@ function catsSetup() {
         col = mix(col, mix(fur, col, c2.w * .35), fuzz * .45);
         col += base * glow * (uNight > .5 ? .45 : .25) * (1. - c2.w * .5);
         // el ojo: va con la cabeza; se enciende con la voz y parpadea despacio
-        float an = c3.x * headW(vec2(.6, .77)), cs = cos(an), sn = sin(an);
-        vec2 ep = NECK + mat2(cs, -sn, sn, cs) * (vec2(.6, .77) - NECK) - vec2(0., c3.x * .07);
+        float an = c3.x * headW(vec2(.585, .685)), cs = cos(an), sn = sin(an);
+        vec2 ep = NECK + mat2(cs, -sn, sn, cs) * (vec2(.585, .685) - NECK) - vec2(0., c3.x * .07);
         vec2 e = (lp - ep) / vec2(.03, .018 * (1. - c3.w * .85) + .002);
         float eye = smoothstep(1., .5, length(e)) * a;
         vec3 ec = uNight > .5 ? mix(mix(base, vec3(1.), .5), mix(uMel, vec3(1.), .4), uVoice) * (.7 + uVoice * .9) : mix(base * .25, uMel * .6, uVoice * .6);
@@ -6189,7 +6184,6 @@ function drawCats(dt) {
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.uniform4fv(p.u['uCat[0]'], cats.U.subarray(0, 12)); gl.uniform4fv(p.u['uCat2[0]'], cats.U.subarray(12, 24)); gl.uniform4fv(p.u['uCat3[0]'], cats.U3);
   gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
-  gl.uniform2fv(p.u['uBody[0]'], CAT_BODY); gl.uniform1i(p.u.uNB, CAT_BODY.length / 2);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
