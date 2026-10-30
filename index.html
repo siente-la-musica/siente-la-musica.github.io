@@ -2329,13 +2329,16 @@ let bgCur = null, bgPrev = null, bgFade = 1;
 const imgCache = new Map();
 function loadImageClean(url) {
   if (imgCache.has(url)) return imgCache.get(url);
+  // con límite de 12 s; si falla (red lenta o caída), no se recuerda el fallo: la próxima vez se intenta de nuevo
   const pr = new Promise(res => {
+    let done = false; const end = v => { if (!done) { done = true; clearTimeout(to); res(v); } };
+    const to = setTimeout(() => end({ img: null, clean: false }), 12000);
     const a = new Image(); a.crossOrigin = 'anonymous';
-    a.onload = () => res({ img: a, clean: true });
-    a.onerror = () => { const b = new Image(); b.onload = () => res({ img: b, clean: false }); b.onerror = () => res({ img: null, clean: false }); b.src = url; };
+    a.onload = () => end({ img: a, clean: true });
+    a.onerror = () => { const b = new Image(); b.onload = () => end({ img: b, clean: false }); b.onerror = () => end({ img: null, clean: false }); b.src = url; };
     a.src = url;
   });
-  imgCache.set(url, pr); return pr;
+  imgCache.set(url, pr); pr.then(r => { if (!r.img) imgCache.delete(url); }); return pr;
 }
 let coverClean = null;
 function makeCoverBg(img) {
@@ -2374,12 +2377,14 @@ function setCover(url) {
   coverUrl = url; coverColors = null;
   if (!url) { coverAny = null; setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
   // Fondo: imagen normal, siempre se puede dibujar
-  loadImageClean(url).then(({ img, clean }) => {
+  const tryLoad = (n = 0) => loadImageClean(url).then(({ img, clean }) => {
     if (coverUrl !== url) return;
+    if (!img) { if (n < 4) setTimeout(() => tryLoad(n + 1), 2000 * (n + 1)); return; }   // no llegó: se reintenta en unos segundos
     const bg = makeCoverBg(img); bg.clean = clean; setBackdrop(bg);
     coverClean = clean ? img : null; coverAny = img;
     cover3dImage(url, clean ? img : null);
   });
+  tryLoad();
   // Colores: hace falta leer los píxeles; si el servidor no lo permite, se ignora
   const img = new Image(); img.crossOrigin = 'anonymous';
   img.onload = () => {
@@ -4663,7 +4668,7 @@ function mbFetch(url) {
     for (let tries = 0; tries < 3; tries++) {
       const wait = Math.max(0, mbLast + 1100 - Date.now()); if (wait) await new Promise(r => setTimeout(r, wait));
       mbLast = Date.now();
-      try { const r = await fetch(url, { headers: { Accept: 'application/json' } }); if (r.status !== 503) return r; } catch (e) {}
+      try { const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 10000); const r = await fetch(url, { headers: { Accept: 'application/json' }, signal: ctl.signal }).finally(() => clearTimeout(to)); if (r.status !== 503) return r; } catch (e) {}
       await new Promise(r => setTimeout(r, 1500 * (tries + 1)));
     }
     return null;
@@ -4684,7 +4689,8 @@ async function altArtFor(artist, album, onUrl) {
   // las portadas de cada edición se piden a la vez y se van mostrando según llegan
   await Promise.all(rels.map(async rel => {
     try {
-      const c = await fetch('https://coverartarchive.org/release/' + rel.id);
+      const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 10000);   // si el archivo tarda, se sigue sin esa edición
+      const c = await fetch('https://coverartarchive.org/release/' + rel.id, { signal: ctl.signal }).finally(() => clearTimeout(to));
       if (!c.ok) return;
       for (const im of (await c.json()).images || []) {
         const u = im.thumbnails?.['500'] || im.thumbnails?.large || im.image;
