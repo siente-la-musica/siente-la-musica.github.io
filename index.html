@@ -3276,6 +3276,9 @@ async function pickVideoConfig(w, h) {
 // Prepara la grabación (mientras corre la cuenta atrás): elige el códec y mira el formato del sonido
 async function recPrepare() {
   recSize = recFmt === 'v' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+  // si la grabadora del navegador ya sabe hacer MP4 (Chrome y Edge recientes), se usa esa: graba la imagen y el
+  // sonido seguidos aunque la animación vaya cargada. La de cuadro a cuadro queda solo de respaldo
+  if (window.MediaRecorder && ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'].some(t => MediaRecorder.isTypeSupported(t))) return null;
   if (!('VideoEncoder' in window) || !('VideoFrame' in window)) return null;
   try { if (!window.Mp4Muxer) await loadScript('lib/mp4-muxer.js'); } catch (e) {}
   if (!window.Mp4Muxer) return null;   // sin la librería: la grabadora del navegador
@@ -3621,7 +3624,7 @@ function drawRecOverlay() {
     ctx.save(); ctx.beginPath(); ctx.arc(x0 + lr, y, lr, 0, 7); ctx.clip(); ctx.drawImage(logo.cv, x0, y - lr, lr * 2, lr * 2); ctx.restore();
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y);
     // y la página, debajo y más discreta, para quien quiera la app
-    ctx.textAlign = 'center'; ctx.font = `700 ${20 * u}px ${FONT_UI}`; ctx.fillStyle = textFg(0.7); ctx.fillText('siente-la-musica.github.io', W / 2, y + lr + 20 * u); }
+    ctx.textAlign = 'center'; ctx.font = `700 ${23 * u}px ${FONT_UI}`; ctx.fillStyle = textFg(0.8); ctx.fillText("siente-la-musica.github.io", W / 2, y + lr + 22 * u); }
   ctx.restore();
 }
 const artistClean = new Map();
@@ -7684,8 +7687,7 @@ function adapt(dt) {
   coolDown -= dt;
   // Baja la resolución si el equipo no llega, y solo la sube tras mucho rato holgado. Cada cambio se nota
   // un instante, así que tras bajar dos veces seguidas se queda fija (evita el «sube y baja» constante).
-  const capped = lib.web && sp.deviceId === lib.webId && sp.playing && !recording;   // a 30 cuadros a propósito: no es lentitud
-  if (dt > (capped ? 0.045 : 0.026)) { slowFor += dt; fastFor = 0; } else if (dt < 0.014) { fastFor += dt; slowFor = 0; } else { fastFor = 0; }
+  if (dt > 0.026) { slowFor += dt; fastFor = 0; } else if (dt < 0.014) { fastFor += dt; slowFor = 0; } else { fastFor = 0; }
   if (lib.web && sp.deviceId === lib.webId && sp.playing && renderScale > 0.8 && !recording) { renderScale = 0.8; resize(); }   // con el reproductor en el navegador, menos carga
   if (slowFor > 3 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.1); slowFor = 0; coolDown = 120; drops_ += 1; resize(); }
   else if (fastFor > 30 && coolDown <= 0 && drops_ < 2 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
@@ -7694,11 +7696,6 @@ function adapt(dt) {
 let frameErrors = 0;
 function frame(now) {
   requestAnimationFrame(frame);   // se programa primero: un fallo no puede parar la animación
-  // si Spotify suena en este mismo navegador, se dibuja a 30 cuadros por segundo: así le queda aire al
-  // reproductor y la música no se corta (salvo al grabar, que necesita todos los cuadros)
-  const webPlaying = lib.web && sp.deviceId && sp.deviceId === lib.webId && sp.playing;
-  if (webPlaying && !recording && now - (frame.last || 0) < 31) return;
-  frame.last = now;
   try { render(now); frameErrors = 0; }
   catch (e) {
     console.error(e);
