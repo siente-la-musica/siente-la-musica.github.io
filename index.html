@@ -174,6 +174,12 @@
     box-shadow: 0 18px 60px color-mix(in srgb, var(--c1, #888) 55%, transparent), 0 0 0 1px rgba(255,255,255,.06); }
   .intro .handle { pointer-events: auto; display: inline-block; margin: -2px 0 14px; font-family: var(--font-brand); font-size: 14px; color: var(--muted); text-decoration: none; }
   .intro .handle:hover { color: var(--fg); }
+  .tt-link { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-top: 4px; border-radius: 14px; text-decoration: none; color: var(--fg); font-weight: 600; font-size: 13px;
+    background: linear-gradient(135deg, color-mix(in srgb, var(--c1, #888) 22%, transparent), color-mix(in srgb, var(--c2, #888) 16%, transparent)); }
+  .tt-link small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
+  .tt-link > span:nth-child(2) { flex: 1; }
+  .tt-dot { width: 30px; height: 30px; border-radius: 50%; flex: none; background: url(icons/icon-192.png) center / cover; box-shadow: 0 2px 10px rgba(0,0,0,.25); }
+  .tt-link:hover { filter: brightness(1.08); }
   .status {
     position: fixed; top: calc(62px + env(safe-area-inset-top, 0px)); left: max(18px, env(safe-area-inset-left, 0px));
     font-size: 13px; color: var(--muted); transition: opacity .5s;
@@ -506,7 +512,7 @@
   <div>
     <canvas class="intro-logo" id="introLogo" width="320" height="320" aria-hidden="true"></canvas>
     <h1>Siente la música</h1>
-    <a class="handle" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener">@sientelamusicaco</a>
+    <a class="handle" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener">Síguenos en TikTok · @sientelamusicaco</a>
     <p>Pulsa <b>Audio del PC</b>, elige <b>Pantalla completa</b> o la pestaña donde suena la música, y activa <b>Compartir audio del sistema</b>.</p>
     <button class="see" id="btnSee" type="button">Ver las animaciones</button>
   </div>
@@ -663,6 +669,7 @@
       <div class="row-set"><span>Color del estrobo</span>
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
+      <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
     </div>
   </div>
   <div class="group">
@@ -3577,7 +3584,8 @@ function drawRecOverlay() {
   const it = spConnected() && sp.item;
   // Canción arriba a la izquierda (fuera de la zona de botones de TikTok)
   if (it && state.mode !== 'artist' && state.mode !== 'cover') {
-    const x0 = W * 0.07, y0 = H * (vertical ? 0.11 : 0.1), s_ = 120 * u;
+    // en vertical, bajo la franja de «Siguiendo / Para ti» y el botón LIVE de TikTok (la zona segura empieza ~14 %)
+    const x0 = W * 0.07, y0 = H * (vertical ? 0.165 : 0.1), s_ = 120 * u;
     let tx = x0;
     if (coverClean) {
       ctx.save(); ctx.beginPath(); ctx.roundRect(x0, y0 - s_ / 2, s_, s_, 16 * u); ctx.clip();
@@ -3591,7 +3599,7 @@ function drawRecOverlay() {
   ctx.textAlign = 'left';
   const ly = currentLyric();
   if (state.mode === 'lyrics' && it) {
-    if (ly) drawLyricStyled(ly, (vertical ? 92 : 104) * u, W / 2, H * 0.5, W * 0.84);
+    if (ly) drawLyricStyled(ly, (vertical ? 92 : 104) * u, vertical ? W * 0.46 : W / 2, H * 0.5, vertical ? W * 0.74 : W * 0.84);
     else drawWordLines([lyricsMessage() || '♪'], undefined, 56 * u, W / 2, H * 0.5, W * 0.84, 600);
   } else if (state.mode === 'artist' && it && arCenter) {
     const a = it.artists[0];
@@ -3614,13 +3622,14 @@ function drawRecOverlay() {
     }
   } else if (lyricsOn && ly) {
     // Subtítulos en el tercio inferior, por encima de la zona de texto de TikTok
-    drawLyricStyled(ly, (vertical ? 64 : 58) * u, W / 2, H * (vertical ? 0.66 : 0.8), W * 0.8);
+    // en vertical, algo a la izquierda y más estrecha: la columna de botones de TikTok ocupa el borde derecho
+    drawLyricStyled(ly, (vertical ? 64 : 58) * u, vertical ? W * 0.45 : W / 2, H * (vertical ? 0.64 : 0.8), vertical ? W * 0.7 : W * 0.8);
   }
   // Firma discreta
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
   // la firma: el aura viva y el usuario de TikTok, como en el perfil
-  { ctx.font = `500 ${24 * u}px ${FONT_BRAND}`; const tag = '@sientelamusicaco', tw = ctx.measureText(tag).width, lr = 22 * u, gap = 12 * u;
-    const y = H * (vertical ? 0.055 : 0.94), x0 = W / 2 - (lr * 2 + gap + tw) / 2;
+  { ctx.font = `500 ${30 * u}px ${FONT_BRAND}`; const tag = '@sientelamusicaco', tw = ctx.measureText(tag).width, lr = 28 * u, gap = 14 * u;
+    const y = H * (vertical ? 0.245 : 0.94), x0 = W / 2 - (lr * 2 + gap + tw) / 2;   // en vertical, dentro de la zona segura (bajo el título)
     ctx.save(); ctx.beginPath(); ctx.arc(x0 + lr, y, lr, 0, 7); ctx.clip(); ctx.drawImage(logo.cv, x0, y - lr, lr * 2, lr * 2); ctx.restore();
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y);
     // y la página, debajo y más discreta, para quien quiera la app
