@@ -7684,7 +7684,9 @@ function adapt(dt) {
   coolDown -= dt;
   // Baja la resolución si el equipo no llega, y solo la sube tras mucho rato holgado. Cada cambio se nota
   // un instante, así que tras bajar dos veces seguidas se queda fija (evita el «sube y baja» constante).
-  if (dt > 0.026) { slowFor += dt; fastFor = 0; } else if (dt < 0.014) { fastFor += dt; slowFor = 0; } else { fastFor = 0; }
+  const capped = lib.web && sp.deviceId === lib.webId && sp.playing && !recording;   // a 30 cuadros a propósito: no es lentitud
+  if (dt > (capped ? 0.045 : 0.026)) { slowFor += dt; fastFor = 0; } else if (dt < 0.014) { fastFor += dt; slowFor = 0; } else { fastFor = 0; }
+  if (lib.web && sp.deviceId === lib.webId && sp.playing && renderScale > 0.8 && !recording) { renderScale = 0.8; resize(); }   // con el reproductor en el navegador, menos carga
   if (slowFor > 3 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.1); slowFor = 0; coolDown = 120; drops_ += 1; resize(); }
   else if (fastFor > 30 && coolDown <= 0 && drops_ < 2 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
 }
@@ -7692,6 +7694,11 @@ function adapt(dt) {
 let frameErrors = 0;
 function frame(now) {
   requestAnimationFrame(frame);   // se programa primero: un fallo no puede parar la animación
+  // si Spotify suena en este mismo navegador, se dibuja a 30 cuadros por segundo: así le queda aire al
+  // reproductor y la música no se corta (salvo al grabar, que necesita todos los cuadros)
+  const webPlaying = lib.web && sp.deviceId && sp.deviceId === lib.webId && sp.playing;
+  if (webPlaying && !recording && now - (frame.last || 0) < 31) return;
+  frame.last = now;
   try { render(now); frameErrors = 0; }
   catch (e) {
     console.error(e);
