@@ -3619,7 +3619,9 @@ function drawRecOverlay() {
   { ctx.font = `500 ${24 * u}px ${FONT_BRAND}`; const tag = '@sientelamusicaco', tw = ctx.measureText(tag).width, lr = 22 * u, gap = 12 * u;
     const y = H * (vertical ? 0.055 : 0.94), x0 = W / 2 - (lr * 2 + gap + tw) / 2;
     ctx.save(); ctx.beginPath(); ctx.arc(x0 + lr, y, lr, 0, 7); ctx.clip(); ctx.drawImage(logo.cv, x0, y - lr, lr * 2, lr * 2); ctx.restore();
-    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y); }
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y);
+    // y la página, debajo y más discreta, para quien quiera la app
+    ctx.textAlign = 'center'; ctx.font = `700 ${20 * u}px ${FONT_UI}`; ctx.fillStyle = textFg(0.7); ctx.fillText('siente-la-musica.github.io', W / 2, y + lr + 20 * u); }
   ctx.restore();
 }
 const artistClean = new Map();
