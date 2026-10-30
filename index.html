@@ -174,6 +174,10 @@
     box-shadow: 0 18px 60px color-mix(in srgb, var(--c1, #888) 55%, transparent), 0 0 0 1px rgba(255,255,255,.06); }
   .intro .handle { pointer-events: auto; display: inline-block; margin: -2px 0 14px; font-family: var(--font-brand); font-size: 14px; color: var(--muted); text-decoration: none; }
   .intro .handle:hover { color: var(--fg); }
+  .rec-exact { display: flex; align-items: center; gap: 4px; }
+  .rec-exact input { width: 74px; text-align: center; font: 600 14px var(--font); font-variant-numeric: tabular-nums; color: var(--fg); background: var(--chip); border: 1px solid transparent; border-radius: 8px; padding: 5px 6px; outline: none; }
+  .rec-exact input:focus { border-color: color-mix(in srgb, var(--c1, #888) 60%, transparent); }
+  .rec-exact button { padding: 4px 8px; font-size: 12px; border-radius: 8px; }
   .tt-link { display: flex; align-items: center; gap: 12px; padding: 10px 12px; margin-top: 4px; border-radius: 14px; text-decoration: none; color: var(--fg); font-weight: 600; font-size: 13px;
     background: linear-gradient(135deg, color-mix(in srgb, var(--c1, #888) 22%, transparent), color-mix(in srgb, var(--c2, #888) 16%, transparent)); }
   .tt-link small { display: block; font-weight: 400; color: var(--muted); font-size: 11.5px; margin-top: 1px; }
@@ -637,7 +641,7 @@
       <div class="seg" role="group" aria-label="Sonido"><button data-snd="1" aria-pressed="true">Con el sonido del PC</button><button data-snd="0">Sin sonido</button></div>
       <div class="seg" role="group" aria-label="Duración"><button data-dur="10">10 s</button><button data-dur="15" aria-pressed="true">15 s</button><button data-dur="30">30 s</button><button data-dur="60">60 s</button><button data-dur="0">Libre</button></div>
       <div class="rec-when" id="recWhen" hidden>
-        <div class="row-set"><span>Empieza en</span><span class="time" id="recWhenLbl">0:00</span></div>
+        <div class="row-set"><span>Empieza en</span><span class="rec-exact"><button type="button" id="recBack" aria-label="Medio segundo antes">−½</button><input id="recExact" inputmode="decimal" spellcheck="false" aria-label="Minuto exacto (m:ss.s)" placeholder="0:00.0"><button type="button" id="recFwd" aria-label="Medio segundo después">+½</button></span><span class="time" id="recWhenLbl" hidden>0:00</span></div>
         <input type="range" id="recStart" min="0" max="200" step="0.5" value="0" aria-label="Momento en que empieza el clip">
         <div class="rec-line" id="recLine"></div>
         <div class="seg" role="group" aria-label="Atajos"><button id="recChorus">Ir al estribillo</button><button id="recNow" aria-pressed="true">Desde donde va</button></div>
@@ -3230,6 +3234,7 @@ function chorusAt() {   // el estribillo: la línea que más se repite (la prime
 }
 function recWhenShow(ms) {
   recWhenLbl.textContent = ms == null ? 'donde va ahora' : fmt(ms);
+  { const ex = document.getElementById('recExact'); if (ex && document.activeElement !== ex) { ex.value = ms == null ? '' : fmtExact(ms); ex.placeholder = ms == null ? 'donde va' : '0:00.0'; } }
   const l = lineAt(ms == null ? lyricPos() : ms);
   recLine.textContent = l ? '«' + l + '»' : '';
   document.getElementById('recNow').setAttribute('aria-pressed', ms == null);
@@ -3243,6 +3248,15 @@ function recWhenSetup() {
   recWhenShow(recStartAt);
 }
 recStartEl.oninput = () => { recStartAt = recStartEl.value * 1000; recWhenShow(recStartAt); };
+// el minuto exacto, escrito (1:23.5, 83.5 o 1:23) o ajustado de medio segundo en medio segundo
+const recExact = document.getElementById('recExact');
+const parseTime = t => { t = String(t).trim().replace(',', '.'); const m = t.match(/^(?:(\d+):)?(\d+(?:\.\d+)?)$/); return m ? ((+m[1] || 0) * 60 + +m[2]) * 1000 : null; };
+function fmtExact(ms) { const t = Math.max(0, ms) / 1000, m = Math.floor(t / 60), sx = (t - m * 60).toFixed(1); return m + ':' + (sx < 10 ? '0' : '') + sx; }
+const recSetStart = ms => { ms = Math.max(0, Math.min(sp.duration || ms, ms)); recStartAt = ms; recStartEl.value = (ms / 1000).toFixed(1); recWhenShow(ms); };
+recExact.onchange = () => { const ms = parseTime(recExact.value); if (ms == null) { recExact.value = recStartAt == null ? '' : fmtExact(recStartAt); return; } recSetStart(ms); };
+recExact.onkeydown = e => { if (e.key === 'Enter') recExact.blur(); };
+document.getElementById('recBack').onclick = () => recSetStart((recStartAt ?? lyricPos()) - 500);
+document.getElementById('recFwd').onclick = () => recSetStart((recStartAt ?? lyricPos()) + 500);
 document.getElementById('recNow').onclick = () => { recStartAt = null; recStartEl.value = (lyricPos() / 1000).toFixed(1); recWhenShow(null); };
 document.getElementById('recChorus').onclick = () => { const t = chorusAt(); if (t == null) return; recStartAt = t; recStartEl.value = (t / 1000).toFixed(1); recWhenShow(t); };
 document.querySelectorAll('[data-fmt]').forEach(b => b.onclick = () => { recFmt = b.dataset.fmt; document.querySelectorAll('[data-fmt]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
@@ -7792,6 +7806,11 @@ function adapt(dt) {
 let frameErrors = 0;
 function frame(now) {
   requestAnimationFrame(frame);   // se programa primero: un fallo no puede parar la animación
+  // tope de cuadros: en pantallas de 120-144 Hz se dibujaba hasta 144 veces por segundo (calienta el equipo sin
+  // verse mejor). Ahora 60 como máximo, y al grabar 30, que es justo lo que lleva el clip
+  const cap = recording ? 30 : 60;
+  if (now - (frame.last || 0) < 1000 / cap - 3) return;
+  frame.last = now;
   try { render(now); frameErrors = 0; }
   catch (e) {
     console.error(e);
