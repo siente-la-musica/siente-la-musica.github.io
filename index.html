@@ -732,7 +732,7 @@ const CAN_BLUR = typeof g1c.filter === 'string';   // Chrome, Edge, Firefox, Saf
 
 // Se dibuja a la resolución real de la pantalla (hasta 8K). Si el equipo no llega
 // a ~40 fps, renderScale baja un poco y vuelve a subir cuando hay margen.
-const MAX_PIXELS = 7680 * 4320;
+const MAX_PIXELS = 3840 * 2160;   // como mucho 4K: más no se nota y solo calienta
 let W, H, DPR, MIN, renderScale = 1, recSize = null, recording = false;
 function sizeTo(c, w, h) { c.width = Math.max(1, Math.round(w)); c.height = Math.max(1, Math.round(h)); }
 function resize() {
@@ -6042,7 +6042,11 @@ function glCoverBind(p, unit = 5) {
   gl.uniform4f(p.u.uCovR, ((W - S) / 2 + ox) / W, ((H - S) / 2 - oy) / H, S / W, S / H);
 }
 function glCanvas(q) {
-  const cw = Math.max(2, Math.round(Math.min(W * q, 2560))), ch = Math.max(2, Math.round(cw * H / W));
+  // como mucho ~2,2 millones de píxeles (un 1080p): en pantallas retina o 4K los efectos se dibujaban a 5-8
+  // millones por cuadro y calentaban el equipo; son suaves, así que al ampliarlos se ven igual
+  let cw = Math.max(2, Math.round(Math.min(W * q, 2560)));
+  if (cw * cw * H / W > 2.2e6) cw = Math.round(Math.sqrt(2.2e6 * W / H));
+  const ch = Math.max(2, Math.round(cw * H / W));
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
   return [cw, ch];
 }
