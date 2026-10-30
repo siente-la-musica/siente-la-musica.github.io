@@ -3475,24 +3475,26 @@ function drawWordLines(words, lit, size, cx, cy, maxW, weight = 800) {
 // Se dibuja una vez por fotograma en un lienzo pequeño y de ahí va a la bienvenida, a la esquina y a la
 // firma de los clips. Cada anillo escucha su tramo del espectro (los de dentro, los graves); el golpe lo
 // enciende y la voz aviva la luz del centro. En silencio queda quieto, como la foto de perfil.
-const logo = { cv: document.createElement('canvas'), ph: 0, lv: new Float32Array(9) };
-logo.cv.width = logo.cv.height = 256;
+const logo = { cv: document.createElement('canvas'), raw: document.createElement('canvas'), ph: 0, lv: new Float32Array(9), acc: 0 };
+logo.cv.width = logo.cv.height = 160; logo.raw.width = logo.raw.height = 160;
 const LOGO_COLS = ['#ff7ab8', '#ffd36b', '#6ef0c8', '#ff6a4d', '#b56bff'];
 function logoTick(dt) {
-  const c = logo.cv.getContext('2d'), S = 256, m = S / 1024, P = Math.max(0, pulse.x);
+  // liviano: se dibuja a 30 cuadros por segundo, los anillos sin desenfoque y un solo desenfoque al final
   logo.ph += dt * (0.05 + energy * 1.6);
   for (let k = 0; k < 9; k++) { const k0 = Math.min(BANDS - 4, Math.floor(k / 9 * BANDS * 0.8)), v = bandX(k0, k0 + 4); logo.lv[k] += (v - logo.lv[k]) * (1 - Math.pow(v > logo.lv[k] ? 0.0005 : 0.04, dt)); }
+  logo.acc += dt; if (logo.acc < 1 / 30) return; logo.acc = 0;
+  const S = 160, m = S / 1024, P = Math.max(0, pulse.x), c = logo.raw.getContext('2d');
   const bg = c.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S * 0.7); bg.addColorStop(0, '#2a1d6e'); bg.addColorStop(1, '#0e0a24');
-  c.filter = 'none'; c.globalAlpha = 1; c.fillStyle = bg; c.fillRect(0, 0, S, S);
+  c.globalAlpha = 1; c.fillStyle = bg; c.fillRect(0, 0, S, S);
   for (let k = 8; k >= 0; k--) {
     const lv = logo.lv[k], amp = 0.03 + lv * 0.07 + P * 0.02;
-    c.save(); c.filter = `blur(${(8 + k * 3) * m}px)`; c.strokeStyle = LOGO_COLS[k % 5];
-    c.globalAlpha = Math.min(1, (0.75 - k * 0.05) * (0.75 + lv * 0.5 + P * 0.3)); c.lineWidth = (26 + k * 3) * m * (1 + lv * 0.35);
+    c.strokeStyle = LOGO_COLS[k % 5]; c.globalAlpha = Math.min(1, (0.75 - k * 0.05) * (0.75 + lv * 0.5 + P * 0.3)); c.lineWidth = (26 + k * 3) * m * (1 + lv * 0.35);
     c.beginPath();
-    for (let a = 0; a <= 6.3; a += 0.05) { const r = (70 + k * 48) * m * (1 + amp * Math.sin(a * 6 + k + logo.ph * (k % 2 ? 1 : -1)) + P * 0.04 * (1 - k / 9)); const x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r; a ? c.lineTo(x, y) : c.moveTo(x, y); }
-    c.closePath(); c.stroke(); c.restore();
+    for (let a = 0; a <= 6.3; a += 0.1) { const r = (70 + k * 48) * m * (1 + amp * Math.sin(a * 6 + k + logo.ph * (k % 2 ? 1 : -1)) + P * 0.04 * (1 - k / 9)); const x = S / 2 + Math.cos(a) * r, y = S / 2 + Math.sin(a) * r; a ? c.lineTo(x, y) : c.moveTo(x, y); }
+    c.closePath(); c.stroke();
   }
-  c.save(); c.filter = `blur(${28 * m}px)`; c.fillStyle = '#fff4dc'; c.globalAlpha = Math.min(1, 0.75 + P * 0.25 + voice * 0.4); c.beginPath(); c.arc(S / 2, S / 2, (60 + P * 20 + voice * 30) * m, 0, 7); c.fill(); c.restore();
+  c.fillStyle = '#fff4dc'; c.globalAlpha = Math.min(1, 0.75 + P * 0.25 + voice * 0.4); c.beginPath(); c.arc(S / 2, S / 2, (60 + P * 20 + voice * 30) * m, 0, 7); c.fill(); c.globalAlpha = 1;
+  const o = logo.cv.getContext('2d'); o.filter = 'blur(2.6px)'; o.drawImage(logo.raw, 0, 0); o.filter = 'none';
   for (const id of ['brandLogo', 'introLogo']) { const el = document.getElementById(id); if (el && el.getClientRects().length) { const g = el.getContext('2d'); g.clearRect(0, 0, el.width, el.height); g.save(); g.beginPath(); g.arc(el.width / 2, el.height / 2, el.width / 2, 0, 7); g.clip(); g.drawImage(logo.cv, 0, 0, el.width, el.height); g.restore(); } }
 }
 function textFg(a = 1) { return state.theme === 'dark' ? `rgba(255,255,255,${a})` : `rgba(20,20,26,${a})`; }
