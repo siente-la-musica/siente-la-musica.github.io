@@ -3337,7 +3337,12 @@ function startRecording(prep) {
   catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
   recChunks = [];
   recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
-  recorder.onstop = () => { const type = (recMime || 'video/webm').split(';')[0]; finishRecording(new Blob(recChunks, { type }), type.includes('mp4') ? 'mp4' : 'webm'); };
+  recorder.onstop = async () => {
+    const type = (recMime || 'video/webm').split(';')[0], durMs = performance.now() - recT0;
+    let blob = new Blob(recChunks, { type });
+    if (type.includes('mp4')) { try { blob = new Blob([mp4WithDuration(new Uint8Array(await blob.arrayBuffer()), durMs)], { type }); } catch (e) { console.error(e); } }
+    finishRecording(blob, type.includes('mp4') ? 'mp4' : 'webm');
+  };
   recorder.start(500);
 }
 function startWebCodecs({ vcfg, track, acfg }) {
@@ -3401,6 +3406,33 @@ async function stopRecording() {
   }
   if (recorder && recorder.state !== 'inactive') recorder.stop();
 }
+// La grabadora del navegador hace un MP4 «por trozos» sin la duración escrita: muchos reproductores no dejan
+// moverse por él y TikTok, Instagram o Meta a veces no lo procesan. Aquí se escribe la duración en la cabecera
+// (mvhd, tkhd, mdhd) y se añade la caja mehd, sin tocar la imagen ni el sonido.
+function mp4WithDuration(b, ms) {
+  const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), u32 = o => dv.getUint32(o), typ = o => String.fromCharCode(b[o + 4], b[o + 5], b[o + 6], b[o + 7]);
+  const kids = (start, end) => { const out = []; for (let o = start; o + 8 <= end;) { let size = u32(o); if (size === 1) size = Number(dv.getBigUint64(o + 8)); if (size === 0) size = end - o; if (size < 8) break; out.push({ o, size, t: typ(o) }); o += size; } return out; };
+  const moov = kids(0, b.length).find(x => x.t === 'moov'); if (!moov) return b;
+  const setDur = (box, scaleAt, durAt64, durAt32, timescale) => { const v = b[box.o + 8]; const ts = timescale || u32(box.o + (v ? scaleAt[1] : scaleAt[0])); const d = Math.round(ms / 1000 * ts); if (v) dv.setBigUint64(box.o + durAt64, BigInt(d)); else dv.setUint32(box.o + durAt32, d); return ts; };
+  const mk = kids(moov.o + 8, moov.o + moov.size);
+  const mvhd = mk.find(x => x.t === 'mvhd'); if (!mvhd) return b;
+  const movieTs = setDur(mvhd, [20, 28], 32, 24);
+  for (const trak of mk.filter(x => x.t === 'trak')) {
+    const tk = kids(trak.o + 8, trak.o + trak.size), tkhd = tk.find(x => x.t === 'tkhd'), mdia = tk.find(x => x.t === 'mdia');
+    if (tkhd) setDur(tkhd, [0, 0], 36, 28, movieTs);
+    if (mdia) { const mdhd = kids(mdia.o + 8, mdia.o + mdia.size).find(x => x.t === 'mdhd'); if (mdhd) setDur(mdhd, [20, 28], 32, 24); }
+  }
+  const mvex = mk.find(x => x.t === 'mvex');
+  if (!mvex || kids(mvex.o + 8, mvex.o + mvex.size).some(x => x.t === 'mehd')) return b;
+  // mehd (versión 0): tamaño 16, la duración total en la escala de la película; se inserta al principio de mvex
+  const mehd = new Uint8Array(16), mv = new DataView(mehd.buffer);
+  mv.setUint32(0, 16); mehd.set([109, 101, 104, 100], 4); mv.setUint32(8, 0); mv.setUint32(12, Math.round(ms / 1000 * movieTs));
+  const out = new Uint8Array(b.length + 16);
+  out.set(b.subarray(0, mvex.o + 8), 0); out.set(mehd, mvex.o + 8); out.set(b.subarray(mvex.o + 8), mvex.o + 24);
+  const od = new DataView(out.buffer);
+  od.setUint32(moov.o, u32(moov.o) + 16); od.setUint32(mvex.o, u32(mvex.o) + 16);
+  return out;
+}
 function finishRecording(blob, ext, err) {
   recording = false; recSize = null; document.body.classList.remove('recording');
   btnRec.innerHTML = '<span class="rec-dot"></span>Grabar';
@@ -3413,26 +3445,75 @@ function finishRecording(blob, ext, err) {
 }
 
 // --- Empezar: deja la canción lista, cuenta 3-2-1 y graba justo cuando empieza a sonar ---
+// --- Llevar la canción al punto elegido, de verdad, antes de grabar ---
+// Spotify obedece con retraso: se pausa, se mueve y se COMPRUEBA que quedó quieta ahí (hasta 3 intentos);
+// al soltarla se comprueba que suena desde ese punto. Así el clip nunca empieza antes ni salta hacia atrás.
+const webDev = () => !!(lib.web && sp.deviceId && sp.deviceId === lib.webId);
+async function spState() {
+  if (webDev()) { const st = await lib.web.getCurrentState().catch(() => null); if (st) return { playing: !st.paused, pos: st.position }; }
+  const d = await spApi('/me/player').catch(() => null);
+  return d ? { playing: !!d.is_playing, pos: d.progress_ms || 0 } : null;
+}
 async function recCue(ms) {   // la canción quieta en el punto elegido
-  if (nowSource() === 'file' && audioEl) { audioEl.pause(); audioEl.currentTime = ms / 1000; return; }
-  const dev = sp.deviceId ? '&device_id=' + encodeURIComponent(sp.deviceId) : '';
-  try { await spApi('/me/player/pause?' + dev.slice(1), { method: 'PUT' }); } catch (e) {}
-  try { await spApi('/me/player/seek?position_ms=' + Math.round(ms) + dev, { method: 'PUT' }); } catch (e) {}
-  sp.playing = false; sp.progress = ms; sp.at = performance.now(); sp.lockUntil = performance.now() + 2500; lyricIndex = -2; lvIndex = -2; spPatch();
+  if (nowSource() === 'file' && audioEl) {
+    audioEl.pause(); audioEl.currentTime = ms / 1000;
+    await Promise.race([new Promise(r => audioEl.addEventListener('seeked', r, { once: true })), sleep(1500)]);
+    return true;
+  }
+  const dev = sp.deviceId ? 'device_id=' + encodeURIComponent(sp.deviceId) : '';
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (webDev()) { await lib.web.pause().catch(() => {}); await lib.web.seek(Math.round(ms)).catch(() => {}); }
+    else {
+      try { await spApi('/me/player/pause?' + dev, { method: 'PUT' }); } catch (e) {}
+      await sleep(300);
+      try { await spApi('/me/player/seek?position_ms=' + Math.round(ms) + (dev ? '&' + dev : ''), { method: 'PUT' }); } catch (e) {}
+    }
+    sp.playing = false; sp.progress = ms; sp.at = performance.now(); sp.lockUntil = performance.now() + 4000; lyricIndex = -2; lvIndex = -2; spPatch();
+    const t0 = performance.now();
+    while (performance.now() - t0 < 2500) {
+      await sleep(250);
+      const st = await spState();
+      if (st && !st.playing && Math.abs(st.pos - ms) < 1200) return true;
+    }
+  }
+  return false;
+}
+// Suelta la canción (desde ms si se da) y espera a que de verdad suene desde ahí
+async function recGo(ms) {
+  if (nowSource() === 'file' && audioEl) {
+    if (ms != null) audioEl.currentTime = ms / 1000;
+    const playing = new Promise(r => audioEl.addEventListener('playing', r, { once: true }));
+    audioEl.play().catch(() => {});
+    await Promise.race([playing, sleep(3000)]);
+    return;
+  }
+  if (nowSource() !== 'spotify') return;
+  const dev = sp.deviceId ? '?device_id=' + encodeURIComponent(sp.deviceId) : '';
+  try {
+    if (webDev()) { if (ms != null) await lib.web.seek(Math.round(ms)).catch(() => {}); await lib.web.resume(); }
+    else await spApi('/me/player/play' + dev, { method: 'PUT', body: JSON.stringify(ms != null ? { position_ms: Math.round(ms) } : {}) });
+  } catch (e) { recPlay(); }
+  sp.playing = true; if (ms != null) sp.progress = ms; sp.at = performance.now(); sp.lockUntil = performance.now() + 4000; spPatch();
+  const t0 = performance.now();
+  while (performance.now() - t0 < 5000) {
+    await sleep(150);
+    const st = await spState();
+    if (st && st.playing && (ms == null || (st.pos >= ms - 400 && st.pos < ms + 3000))) { sp.progress = st.pos; sp.at = performance.now(); return; }
+  }
 }
 function recPlay() {
   if (nowSource() === 'file' && audioEl) audioEl.play().catch(() => {});
   else if (nowSource() === 'spotify') spControl('play');
 }
-async function recWaitForMusic() {   // espera a que de verdad suene (máx. 6 s)
+async function recWaitForMusic(maxMs = 6000) {   // espera a que de verdad suene
   const t0 = performance.now();
   if (analyser) {
     let n = 0;
-    while (performance.now() - t0 < 6000) { await nextFrame(); if (hits.bass || energy > 0.08) return; if (energy > 0.04) { if (++n >= 2) return; } else n = 0; }
+    while (performance.now() - t0 < maxMs) { await nextFrame(); if (hits.bass || energy > 0.08) return; if (energy > 0.04) { if (++n >= 2) return; } else n = 0; }
     return;
   }
   if (nowSource() === 'file' && audioEl) { while (audioEl.paused && performance.now() - t0 < 4000) await sleep(50); return; }
-  if (nowSource() === 'spotify') while (performance.now() - t0 < 5000) { await sleep(250); try { const d = await spApi('/me/player'); if (d && d.is_playing) return; } catch (e) {} }
+  if (nowSource() === 'spotify') while (performance.now() - t0 < 5000) { await sleep(250); const st = await spState(); if (st && st.playing) return; }
 }
 document.getElementById('btnRecStart').onclick = async () => {
   closePops();
@@ -3442,14 +3523,17 @@ document.getElementById('btnRecStart').onclick = async () => {
   cd.innerHTML = '<span class="cd-wait">Preparando…</span>'; cd.hidden = false;
   const target = recStartAt != null && canSeek() ? recStartAt : null; recStartAt = null;
   const prepP = recPrepare().catch(() => null);
-  if (target != null) await recCue(target);
+  if (target != null) {
+    cd.innerHTML = '<span class="cd-wait">Llevando la canción al punto elegido…</span>';
+    if (!await recCue(target)) { cd.hidden = true; showSong('<div class="meta"><div class="title">Spotify no quiso moverse a ese punto</div><div class="note">Revisa tu conexión e inténtalo de nuevo.</div></div>'); return; }
+  }
   const prep = await prepP;
   if (!prep && !legacy) { cd.hidden = true; showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div></div>'); return; }
   for (const n of [3, 2, 1]) { cd.textContent = n; await sleep(800); }
   const src = nowSource();
-  if (target != null || (src === 'spotify' && !sp.playing) || (src === 'file' && audioEl && audioEl.paused)) recPlay();
   cd.innerHTML = '<span class="cd-wait">♪ Esperando la música…</span>';
-  await recWaitForMusic();
+  if (target != null || (src === 'spotify' && !sp.playing) || (src === 'file' && audioEl && audioEl.paused)) await recGo(target);
+  await recWaitForMusic(target != null ? 1500 : 6000);
   cd.hidden = true;
   startRecording(prep);
 };
@@ -3591,10 +3675,13 @@ function drawRecOverlay() {
       ctx.save(); ctx.beginPath(); ctx.roundRect(x0, y0 - s_ / 2, s_, s_, 16 * u); ctx.clip();
       ctx.drawImage(coverClean, x0, y0 - s_ / 2, s_, s_); ctx.restore(); tx = x0 + s_ + 28 * u;
     }
+    // título y artistas recortados a lo que cabe (con «…»), nunca se salen de la pantalla
+    const maxW = W * (vertical ? 0.8 : 0.6) - (tx - x0);
+    const fit = t => { if (ctx.measureText(t).width <= maxW) return t; while (t.length > 1 && ctx.measureText(t + '…').width > maxW) t = t.slice(0, -1); return t.trimEnd() + '…'; };
     ctx.fillStyle = textFg(); ctx.font = `700 ${44 * u}px ${FONT_UI}`;
-    ctx.fillText(it.name.length > 34 ? it.name.slice(0, 33) + '…' : it.name, tx, y0 - 22 * u);
+    ctx.fillText(fit(it.name), tx, y0 - 22 * u);
     ctx.fillStyle = textFg(0.7); ctx.font = `500 ${34 * u}px ${FONT_UI}`;
-    ctx.fillText((it.artists || []).map(a => a.name).join(', '), tx, y0 + 26 * u);
+    ctx.fillText(fit((it.artists || []).map(a => a.name).join(', ')), tx, y0 + 26 * u);
   }
   ctx.textAlign = 'left';
   const ly = currentLyric();
