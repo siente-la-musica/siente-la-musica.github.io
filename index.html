@@ -3050,6 +3050,17 @@ function parseLRC(text) {
   }
   return out.sort((a, b) => a.t - b.t);
 }
+// Respaldo propio (servidor/letras.js en Cloudflare): si LRCLIB falla, busca la letra con tiempos en otras fuentes
+const LYRICS_BACKUP = '';   // p. ej. 'https://letras-siente.tu-usuario.workers.dev'
+async function fetchBackup(artist, title, dur) {
+  const base = LYRICS_BACKUP || store.get('lyricsBackup', '');
+  if (!base) return null;
+  try {
+    const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
+    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '' }), { signal: c.signal }).finally(() => clearTimeout(t));
+    if (!r.ok) return null; const j = await r.json(); return j && (j.syncedLyrics || j.plainLyrics) ? j : null;
+  } catch (e) { return null; }
+}
 async function fetchLyrics(item) {
   const artist = item.artists?.[0]?.name || '', dur = Math.round((item.duration_ms || 0) / 1000);
   // el título sin «- Remastered 2011», «(feat. …)», «- Live», «(with …)»: así lo encuentra aunque Spotify lo nombre distinto
@@ -3067,16 +3078,18 @@ async function fetchLyrics(item) {
   }
   // si no, se busca por título y artista; luego todo junto (sirve si el artista está escrito distinto)
   let r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist })).catch(() => null);
-  if (!r || !r.ok) {   // LRCLIB caído: plan B, la letra sin sincronizar de lyrics.ovh
+  if (!r || !r.ok) {   // LRCLIB caído: primero el respaldo propio (con tiempos); si no, la letra sin sincronizar de lyrics.ovh
+    const bk = await fetchBackup(artist, title, dur); if (bk) return bk;
     const o = await timed('https://api.lyrics.ovh/v1/' + encodeURIComponent(artist) + '/' + encodeURIComponent(title)).catch(() => null);
     if (o && o.ok) { const j = await o.json().catch(() => null); if (j && j.lyrics) return { plainLyrics: j.lyrics.replace(/^Paroles de la chanson.*\r?\n/i, ''), fallback: true }; }
     throw new Error('lrclib');
   }
   let found = pick(await r.json());
   if (found) return found;
-  r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ q: artist + ' ' + title }));
-  if (r.ok) found = pick(await r.json());
-  return found || null;
+  r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ q: artist + ' ' + title })).catch(() => null);
+  if (r && r.ok) found = pick(await r.json());
+  if (found && found.syncedLyrics) return found;
+  return (await fetchBackup(artist, title, dur)) || found || null;   // LRCLIB no la tiene sincronizada: se prueba el respaldo
 }
 // ================= Sincronizar una letra a mano (cuando el servicio no la tiene o está caído) =================
 const syncEl = document.getElementById('sync'), syncText = document.getElementById('syncText');
