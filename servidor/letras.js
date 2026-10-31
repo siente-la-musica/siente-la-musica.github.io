@@ -6,7 +6,12 @@
 // Uso:  GET https://<tu-worker>.workers.dev/?artist=Harry%20Styles&title=Sign%20of%20the%20Times&duration=341
 // Respuesta: { syncedLyrics, plainLyrics, source } o { none: true }
 //
-// Variables del Worker:
+// Y con IA:  POST https://<tu-worker>.workers.dev/alinear   (cuerpo: unos segundos de audio de la canción)
+// Whisper (Workers AI de Cloudflare) escucha la voz y devuelve cada palabra con su segundo exacto:
+// Respuesta: { text, words: [{ word, start, end }] }
+//
+// Vínculos y variables del Worker:
+//   AI      (vínculo de Workers AI) para /alinear
 //   ORIGEN  (opcional) la web que puede usarlo, p. ej. https://siente-la-musica.github.io
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36';
@@ -66,11 +71,22 @@ export default {
   async fetch(request, env) {
     const origin = request.headers.get('Origin') || '';
     const allowed = !env.ORIGEN || origin === env.ORIGEN || !origin;
-    const cors = { 'Access-Control-Allow-Origin': allowed ? (origin || '*') : 'null', 'Access-Control-Allow-Methods': 'GET, OPTIONS' };
+    const cors = { 'Access-Control-Allow-Origin': allowed ? (origin || '*') : 'null', 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
     const json = (b, status = 200, extra = {}) => new Response(JSON.stringify(b), { status, headers: { ...cors, 'Content-Type': 'application/json', ...extra } });
     if (request.method === 'OPTIONS') return new Response(null, { headers: cors });
     if (!allowed) return json({ error: 'origen no permitido' }, 403);
-    const u = new URL(request.url), artist = u.searchParams.get('artist') || '', title = u.searchParams.get('title') || '';
+    const u = new URL(request.url);
+    if (u.pathname.replace(/\/$/, '') === '/alinear') {
+      if (request.method !== 'POST') return json({ error: 'usa POST con el audio' }, 405);
+      if (!env.AI) return json({ error: 'falta el vínculo de Workers AI (nombre: AI)' }, 500);
+      const buf = new Uint8Array(await request.arrayBuffer());
+      if (!buf.length || buf.length > 8 * 1024 * 1024) return json({ error: 'audio vacío o demasiado grande' }, 400);
+      try {
+        const out = await env.AI.run('@cf/openai/whisper', { audio: [...buf] });
+        return json({ text: out.text || '', words: (out.words || []).map(w => ({ word: w.word, start: w.start, end: w.end })) });
+      } catch (e) { return json({ error: 'la IA no pudo escuchar el audio: ' + (e.message || e) }, 502); }
+    }
+    const artist = u.searchParams.get('artist') || '', title = u.searchParams.get('title') || '';
     const duration = +u.searchParams.get('duration') || 0;
     if (!artist || !title) return json({ error: 'faltan artist y title' }, 400);
     // una respuesta encontrada se guarda un día en la caché de Cloudflare
