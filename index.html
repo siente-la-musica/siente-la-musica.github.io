@@ -673,7 +673,7 @@
         <div class="seg" role="group" aria-label="Atajos"><button id="recChorus">Ir al estribillo</button><button id="recNow" aria-pressed="true">Desde donde va</button></div>
       </div>
       <div class="row-set"><span>Estilo de la letra</span>
-        <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button><button data-lstyle="liquid">Líquida</button></div>
+        <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="subs">Subtítulos</button><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button><button data-lstyle="liquid">Líquida</button></div>
       </div>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
@@ -3706,6 +3706,22 @@ function textFg(a = 1) { return state.theme === 'dark' ? `rgba(255,255,255,${a})
 // Letra del clip en el estilo elegido
 function drawLyricStyled(ly, size, cx, cy, maxW) {
   const st = state.lyricStyle, fam = FONT_LYRIC;
+  if (st === 'subs') {   // como los subtítulos de la pantalla: la línea entera, sobria, y la siguiente tenue debajo
+    const a = Math.min(1, (ly.pos - ly.start) / 180);
+    ctx.save(); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.65)' : 'rgba(255,255,255,.75)'; ctx.shadowBlur = size * 0.35;
+    const fs = size * 0.92; ctx.font = `700 ${fs}px ${fam}`;
+    const lines = wrapWords(ly.words, maxW), lh = fs * 1.2, sp_ = ctx.measureText(' ').width;
+    const y0 = cy - (lines.length - 1) * lh / 2;
+    ctx.globalAlpha = a; ctx.fillStyle = textFg();
+    lines.forEach((ln, li) => { const t = ln.join(' '), w = ctx.measureText(t).width; ctx.fillText(t, cx - w / 2, y0 + li * lh); });
+    if (ly.next) {
+      const nf = size * 0.5; ctx.font = `500 ${nf}px ${fam}`; ctx.fillStyle = textFg(0.55); ctx.globalAlpha = 1;
+      const nl = wrapWords(ly.next.split(/\s+/).filter(Boolean), maxW).slice(0, 2);
+      nl.forEach((ln, li) => { const t = ln.join(' '), w = ctx.measureText(t).width; ctx.fillText(t, cx - w / 2, y0 + (lines.length - 1) * lh + lh * 0.55 + nf * 1.25 * (li + 1)); });
+    }
+    ctx.restore(); return;
+  }
   if (st === 'word') {   // una palabra enorme que salta al entrar
     const k = ly.shown - 1, w = ly.words[k] || '', since = ly.pos - (ly.at[k] || ly.start);
     const pop = 1 + 0.18 * Math.max(0, 1 - since / 220);
@@ -5586,7 +5602,7 @@ function currentLyric() {
   if (i < 0 || !Ls[i].text) return null;
   const words = Ls[i].text.split(/\s+/).filter(Boolean);
   const at = wordTimes(Ls[i].text, Ls[i].t, Ls[i + 1] ? Ls[i + 1].t : Ls[i].t + 4000);
-  return { text: Ls[i].text, words, at, pos, start: Ls[i].t, end: Ls[i + 1] ? Ls[i + 1].t : Ls[i].t + 4000, shown: Math.max(1, at.filter(t => pos >= t).length) };
+  return { text: Ls[i].text, next: (Ls[i + 1] && Ls[i + 1].text) || '', words, at, pos, start: Ls[i].t, end: Ls[i + 1] ? Ls[i + 1].t : Ls[i].t + 4000, shown: Math.max(1, at.filter(t => pos >= t).length) };
 }
 function strobeColors() {
   const night = state.theme === 'dark';
