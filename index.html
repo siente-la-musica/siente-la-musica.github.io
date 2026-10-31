@@ -555,7 +555,8 @@
   <div class="sync-edit" id="syncEdit">
     <p class="sync-note">Pega o corrige la letra (una línea por renglón). Luego dale a empezar y toca <b>Espacio</b> (o el botón) justo cuando empieza cada línea.</p>
     <textarea id="syncText" spellcheck="false" placeholder="Pega aquí la letra…"></textarea>
-    <div class="sync-row"><button class="primary" id="syncFromStart">Empezar desde el inicio</button><button id="syncFromHere">Empezar desde aquí</button></div>
+    <div class="sync-row"><button class="primary" id="syncAuto">✨ Que se sincronice sola</button><button id="syncFromStart">A mano desde el inicio</button><button id="syncFromHere">A mano desde aquí</button></div>
+    <p class="sync-note" id="syncAutoNote">«Sola»: pon la canción un poco antes de la parte que quieres, pulsa el botón y déjala sonar. La app escucha la voz y ubica cada línea. Necesita <b>Conectar audio → Audio del PC</b>.</p>
   </div>
   <div class="sync-tap" id="syncTap" hidden>
     <div class="sync-prev" id="syncPrev"></div><div class="sync-cur" id="syncCur"></div><div class="sync-next" id="syncNext"></div>
@@ -3105,7 +3106,75 @@ function syncMark() {
   sync.marks.push(Math.max(0, lyricPos() - 250 - 120));   // la posición real menos un instante de reacción
   syncShow();
 }
+// --- Sola: escucha la voz mientras suena y ubica cada línea donde empieza a cantar tras una pausa ---
+function syncAutoStart() {
+  if (!analyser) { spToast('Para que se sincronice sola, pulsa Conectar audio → Audio del PC'); return; }
+  sync.lines = syncText.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean); sync.marks = [];
+  if (!sync.lines.length) { syncText.focus(); return; }
+  sync.auto = []; sync.listening = true;
+  document.getElementById('syncEdit').hidden = true; document.getElementById('syncTap').hidden = false;
+  document.getElementById('syncPrev').textContent = '';
+  document.getElementById('syncCur').textContent = '👂 Escuchando…';
+  document.getElementById('syncNext').textContent = 'Deja sonar la parte del clip y pulsa Terminar cuando acabe la última línea';
+  document.getElementById('syncMark').hidden = true; document.getElementById('syncUndo').hidden = true;
+  if (!sp.playing) recGo(null);
+}
+function syncTick() {
+  if (!sync.listening) return;
+  sync.auto.push([lyricPos() - 250, voice, hits.voice ? 1 : 0]);
+  const secs = sync.auto.length ? (sync.auto[sync.auto.length - 1][0] - sync.auto[0][0]) / 1000 : 0;
+  document.getElementById('syncCount').textContent = `${secs.toFixed(0)} s escuchados · ${sync.lines.length} líneas por ubicar`;
+}
+function syncSolve() {
+  const S = sync.auto, N = sync.lines.length;
+  if (S.length < 30) return null;
+  // voz suavizada y umbral según cómo canta esta canción
+  const v = []; let e = 0; for (const s_ of S) { e += (s_[1] - e) * 0.5; v.push(e); }
+  const sorted = v.slice().sort((a, b) => a - b), thr = Math.max(0.1, sorted[Math.floor(sorted.length * 0.85)] * 0.45);
+  // la detección de voz llega un poco tarde: el arranque real es donde la curva empezó a subir (se busca hacia atrás)
+  const rise = i => { let k = i; while (k > 0 && v[k - 1] > thr * 0.3 && v[k - 1] < v[k] + 0.02) k--; return S[k][0] - 470; };   // ~0,47 s: lo que tarda en reconocerse la voz
+  const C = [], kind = new Map(); let off = -1e9, on = false, lastOn = S[0][0];
+  for (let i = 0; i < S.length; i++) {
+    const t = S[i][0], voiced = v[i] > thr;
+    if (voiced && !on) { if (t - off > 200 || !C.length) { const r = rise(i); C.push(r); kind.set(r, 0); sync.__on = { r, t }; } on = true; }
+    if (!voiced && on) { on = false; off = t; const o = sync.__on; if (o && t - o.t < 350) { C.splice(C.indexOf(o.r), 1); kind.delete(o.r); } }   // un destello corto no es una frase cantada
+    if (voiced) lastOn = t;
+  }
+  // también los arranques de sílaba fuertes cuentan (por si no hay pausas entre líneas), pero valen menos
+  for (const s_ of S) if (s_[2] && !C.some(c => Math.abs(c - s_[0]) < 300)) { C.push(s_[0] - 470); kind.set(s_[0] - 470, 1); }
+  C.sort((a, b) => a - b);
+  const endT = Math.max(lastOn + 300, C[C.length - 1] + 500);
+  if (C.length < N) {   // poca información: se reparte el tiempo cantado según lo larga que es cada línea
+    const t0 = C[0] ?? S[0][0], tot = sync.lines.reduce((a, l) => a + l.length, 0); let acc = 0;
+    return sync.lines.map(l => { const t = t0 + (endT - t0) * acc / tot; acc += l.length; return { t: Math.round(t), text: l }; });
+  }
+  // cada línea dura más o menos según sus letras: se eligen N arranques que mejor encajen con eso
+  const len = sync.lines.map(l => Math.max(4, l.length)), rate = (endT - C[0]) / len.reduce((a, b) => a + b, 0), M = C.length;
+  const INF = 1e18, dp = Array.from({ length: N }, () => new Float64Array(M).fill(INF)), from = Array.from({ length: N }, () => new Int32Array(M).fill(-1));
+  const cost = (dur, l) => { const ex = rate * l, d = (dur - ex) / Math.max(400, ex); return d * d; };
+  // la primera línea entra donde empieza a cantar (el primer arranque tras una pausa); otros arranques cuestan algo
+  const first = Math.max(0, C.findIndex(c => kind.get(c) === 0));
+  for (let j = 0; j < M; j++) dp[0][j] = j === first ? 0 : 0.8 + (kind.get(C[j]) ? 0.6 : 0);
+  for (let i = 1; i < N; i++) for (let j = i; j < M; j++) for (let k = i - 1; k < j; k++) {
+    if (dp[i - 1][k] >= INF) continue; const c = dp[i - 1][k] + cost(C[j] - C[k], len[i - 1]) + (kind.get(C[j]) ? 0.6 : 0);
+    if (c < dp[i][j]) { dp[i][j] = c; from[i][j] = k; }
+  }
+  let bj = -1, best = INF; for (let j = N - 1; j < M; j++) { const c = dp[N - 1][j] + cost(endT - C[j], len[N - 1]); if (c < best) { best = c; bj = j; } }
+  if (bj < 0) return null;
+  const idx = []; for (let i = N - 1, j = bj; i >= 0; i--) { idx.unshift(j); j = from[i][j]; }
+  return sync.lines.map((l, i) => ({ t: Math.round(Math.max(0, C[idx[i]])), text: l }));
+}
 function syncDone() {
+  document.getElementById('syncMark').hidden = false; document.getElementById('syncUndo').hidden = false;
+  if (sync.listening) {
+    sync.listening = false;
+    const lines = syncSolve(); syncEl.hidden = true;
+    if (!lines || !sync.item) { spToast('No alcancé a escuchar suficiente voz. Prueba otra vez dejando sonar la parte completa'); return; }
+    const ly = { lines }; lyricsCache.set(sync.item.id, ly); lyricsSave(sync.item.id, ly);
+    if (sp.item && sp.item.id === sync.item.id) { lyrics = ly; lyricIndex = -2; lvIndex = -2; }
+    spToast(`Letra sincronizada sola: ${lines.length} líneas. Si alguna va corrida, puedes repetir o hacerlo a mano`);
+    return;
+  }
   const lines = sync.marks.map((t, i) => ({ t: Math.round(t), text: sync.lines[i] }));
   syncEl.hidden = true;
   if (!lines.length || !sync.item) return;
@@ -3113,12 +3182,13 @@ function syncDone() {
   if (sp.item && sp.item.id === sync.item.id) { lyrics = ly; lyricIndex = -2; lvIndex = -2; }
   spToast(`Letra sincronizada: ${lines.length} líneas guardadas para esta canción`);
 }
+document.getElementById('syncAuto').onclick = syncAutoStart;
 document.getElementById('syncFromStart').onclick = () => syncStart(true);
 document.getElementById('syncFromHere').onclick = () => syncStart(false);
 document.getElementById('syncMark').onclick = syncMark;
 document.getElementById('syncUndo').onclick = () => { sync.marks.pop(); syncShow(); };
 document.getElementById('syncDone').onclick = syncDone;
-document.getElementById('syncClose').onclick = () => { syncEl.hidden = true; };
+document.getElementById('syncClose').onclick = () => { syncEl.hidden = true; sync.listening = false; document.getElementById('syncMark').hidden = false; document.getElementById('syncUndo').hidden = false; };
 addEventListener('keydown', e => {
   if (syncEl.hidden || document.getElementById('syncTap').hidden) return;
   if (e.code === 'Space') { e.preventDefault(); e.stopPropagation(); syncMark(); }
@@ -7947,7 +8017,7 @@ function render(now) {
   colorTick(dt);
   if (state.mode !== 'strobe') drawBackdrop(dt);
   (scenes[state.mode] || drawBars)(dt);
-  logoTick(dt);
+  logoTick(dt); syncTick();
   liquidTick(dt); lvFrame(); arFrame();
   if (transA > 0 && transC.width === W) {
     ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = transA * transA;
