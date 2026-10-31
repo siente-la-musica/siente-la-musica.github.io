@@ -3033,23 +3033,33 @@ async function fetchLyrics(item) {
     return list.find(x => x.syncedLyrics && Math.abs(x.duration - dur) <= 6) || list.find(x => x.syncedLyrics && Math.abs(x.duration - dur) <= 20) || list.find(x => Math.abs(x.duration - dur) <= 20) || null;
   };
   if (dur) {   // coincidencia exacta solo si se conoce la duración
-    const r = await timed('https://lrclib.net/api/get?' + new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur }));
-    if (r.ok) { const d = await r.json(); if (d.syncedLyrics || d.plainLyrics || d.instrumental) return d; }
+    const r = await timed('https://lrclib.net/api/get?' + new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur })).catch(() => null);
+    if (r && r.ok) { const d = await r.json(); if (d.syncedLyrics || d.plainLyrics || d.instrumental) return d; }
   }
   // si no, se busca por título y artista; luego todo junto (sirve si el artista está escrito distinto)
-  let r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist }));
-  if (!r.ok) throw new Error('lrclib');
+  let r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist })).catch(() => null);
+  if (!r || !r.ok) {   // LRCLIB caído: plan B, la letra sin sincronizar de lyrics.ovh
+    const o = await timed('https://api.lyrics.ovh/v1/' + encodeURIComponent(artist) + '/' + encodeURIComponent(title)).catch(() => null);
+    if (o && o.ok) { const j = await o.json().catch(() => null); if (j && j.lyrics) return { plainLyrics: j.lyrics.replace(/^Paroles de la chanson.*\r?\n/i, ''), fallback: true }; }
+    throw new Error('lrclib');
+  }
   let found = pick(await r.json());
   if (found) return found;
   r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ q: artist + ' ' + title }));
   if (r.ok) found = pick(await r.json());
   return found || null;
 }
+function lyricsStore() { try { return JSON.parse(localStorage.getItem('pulso.lyrics') || '{}'); } catch (e) { return {}; } }
+function lyricsSave(id, ly) {
+  try { const all = lyricsStore(); all[id] = ly; const keys = Object.keys(all); while (keys.length > 300) delete all[keys.shift()]; localStorage.setItem('pulso.lyrics', JSON.stringify(all)); } catch (e) {}
+}
 async function loadLyrics(item) {
   lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null;
   if (!item || !item.artists) return;   // sin canción, o es un podcast
   if (!lyricsOn && state.mode !== 'lyrics' && state.mode !== 'strobe') return;
   if (lyricsCache.has(item.id)) { lyrics = lyricsCache.get(item.id); return; }
+  // las letras ya encontradas se guardan en este navegador: siguen saliendo aunque el servicio se caiga
+  const saved = lyricsStore()[item.id]; if (saved) { lyrics = saved; lyricsCache.set(item.id, saved); return; }
   lyrics = { loading: true };
   let data = null;
   try { data = await fetchLyrics(item); } catch (e) { data = undefined; }
@@ -3059,8 +3069,8 @@ async function loadLyrics(item) {
     : data.instrumental ? { instrumental: true }
     : data.syncedLyrics ? { lines: parseLRC(data.syncedLyrics) }
     : { plain: data.plainLyrics.split(/\r?\n/).filter(l => l.trim()) };
-  if (!lyrics.error) lyricsCache.set(item.id, lyrics);
-  else setTimeout(() => { if (lyricsFor === item.id && lyrics && lyrics.error) loadLyrics(item); }, 8000);   // la red falló: se reintenta sola
+  if (!lyrics.error) { lyricsCache.set(item.id, lyrics); if (lyrics.lines || (lyrics.plain && !data.fallback)) lyricsSave(item.id, lyrics); }
+  else { item.__tries = (item.__tries || 0) + 1; setTimeout(() => { if (lyricsFor === item.id && lyrics && lyrics.error) loadLyrics(item); }, Math.min(60000, 8000 * item.__tries)); }   // la red o el servicio fallaron: se reintenta sola, cada vez más espaciado
   lyricIndex = -2;
 }
 function lyricsMessage() {
@@ -3068,7 +3078,7 @@ function lyricsMessage() {
   if (!sp.item) return 'Pon algo de música';
   if (!sp.item.artists) return 'Los podcasts no tienen letra';
   if (!lyrics || lyrics.loading) return 'Buscando la letra…';
-  if (lyrics.error) return 'No se pudo conectar con el servicio de letras';
+  if (lyrics.error) return 'El servicio de letras no responde ahora mismo · reintentando…';
   if (lyrics.none) return 'No encontré la letra de esta canción';
   if (lyrics.instrumental) return '♪ Instrumental';
   return '';
