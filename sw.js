@@ -1,7 +1,7 @@
 // Permite instalar la página como app y abrirla sin conexión.
 // La página se pide primero a la red (así siempre llega la última versión) y, si no hay
 // conexión, se usa la copia guardada. Las imágenes se sirven desde la copia y se renuevan por detrás.
-const CACHE = 'siente-v40';
+const CACHE = 'siente-v41';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -3022,18 +3022,28 @@ function parseLRC(text) {
   return out.sort((a, b) => a.t - b.t);
 }
 async function fetchLyrics(item) {
-  const artist = item.artists?.[0]?.name || '', title = item.name || '', dur = Math.round((item.duration_ms || 0) / 1000);
-  let r;
+  const artist = item.artists?.[0]?.name || '', dur = Math.round((item.duration_ms || 0) / 1000);
+  // el título sin «- Remastered 2011», «(feat. …)», «- Live», «(with …)»: así lo encuentra aunque Spotify lo nombre distinto
+  const raw = item.name || '', title = raw.replace(/\s*[-–]\s*(remaster(ed)?|live|radio edit|single version|mono|stereo|bonus|from ).*$/i, '').replace(/\s*[([](feat|ft|with|con)\.?\s[^)\]]*[)\]]/gi, '').trim() || raw;
+  const timed = (u, ms = 9000) => { const c = new AbortController(), t = setTimeout(() => c.abort(), ms); return fetch(u, { signal: c.signal }).finally(() => clearTimeout(t)); };
+  const pick = list => {
+    list = list.filter(x => x.syncedLyrics || x.plainLyrics);
+    list.sort((a, b) => (!!b.syncedLyrics - !!a.syncedLyrics) || Math.abs(a.duration - dur) - Math.abs(b.duration - dur));
+    if (!dur) return list[0] || null;
+    return list.find(x => x.syncedLyrics && Math.abs(x.duration - dur) <= 6) || list.find(x => x.syncedLyrics && Math.abs(x.duration - dur) <= 20) || list.find(x => Math.abs(x.duration - dur) <= 20) || null;
+  };
   if (dur) {   // coincidencia exacta solo si se conoce la duración
-    r = await fetch('https://lrclib.net/api/get?' + new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur }));
-    if (r.ok) return r.json();
+    const r = await timed('https://lrclib.net/api/get?' + new URLSearchParams({ track_name: title, artist_name: artist, album_name: item.album?.name || '', duration: dur }));
+    if (r.ok) { const d = await r.json(); if (d.syncedLyrics || d.plainLyrics || d.instrumental) return d; }
   }
-  // Si no hay coincidencia exacta, se busca y se elige la de duración más parecida
-  r = await fetch('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist }));
-  if (!r.ok) return null;
-  const list = (await r.json()).filter(x => x.syncedLyrics || x.plainLyrics);
-  list.sort((a, b) => (!!b.syncedLyrics - !!a.syncedLyrics) || Math.abs(a.duration - dur) - Math.abs(b.duration - dur));
-  return (dur ? list.find(x => Math.abs(x.duration - dur) <= 5) : list[0]) || null;
+  // si no, se busca por título y artista; luego todo junto (sirve si el artista está escrito distinto)
+  let r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ track_name: title, artist_name: artist }));
+  if (!r.ok) throw new Error('lrclib');
+  let found = pick(await r.json());
+  if (found) return found;
+  r = await timed('https://lrclib.net/api/search?' + new URLSearchParams({ q: artist + ' ' + title }));
+  if (r.ok) found = pick(await r.json());
+  return found || null;
 }
 async function loadLyrics(item) {
   lyrics = null; lyricIndex = -2; lyricsFor = item ? item.id : null;
@@ -3050,6 +3060,7 @@ async function loadLyrics(item) {
     : data.syncedLyrics ? { lines: parseLRC(data.syncedLyrics) }
     : { plain: data.plainLyrics.split(/\r?\n/).filter(l => l.trim()) };
   if (!lyrics.error) lyricsCache.set(item.id, lyrics);
+  else setTimeout(() => { if (lyricsFor === item.id && lyrics && lyrics.error) loadLyrics(item); }, 8000);   // la red falló: se reintenta sola
   lyricIndex = -2;
 }
 function lyricsMessage() {
