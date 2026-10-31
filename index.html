@@ -676,6 +676,7 @@
       <div class="row-set"><span>Estilo de la letra</span>
         <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="subs">Subtítulos</button><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button><button data-lstyle="liquid">Líquida</button></div>
       </div>
+      <button id="recSync" type="button">✨ Sincronizar la letra de esta canción</button>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
     </div>
@@ -2291,7 +2292,7 @@ function spRender() {
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
-        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="spSync"><span style="width:16px;text-align:center">♪</span>Sincronizar letra a mano</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
+        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="spSync"><span style="width:16px;text-align:center">✨</span>Sincronizar letra (sola o a mano)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
         (!analyser ? `<button id="spTap"><span style="width:16px;text-align:center">♩</span>Marcar el ritmo (tocando)</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
         (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
@@ -3183,6 +3184,7 @@ function syncDone() {
   spToast(`Letra sincronizada: ${lines.length} líneas guardadas para esta canción`);
 }
 document.getElementById('syncAuto').onclick = syncAutoStart;
+document.getElementById('recSync').onclick = () => { closePops(); syncOpen(); };
 document.getElementById('syncFromStart').onclick = () => syncStart(true);
 document.getElementById('syncFromHere').onclick = () => syncStart(false);
 document.getElementById('syncMark').onclick = syncMark;
@@ -3224,8 +3226,8 @@ function lyricsMessage() {
   if (!sp.item) return 'Pon algo de música';
   if (!sp.item.artists) return 'Los podcasts no tienen letra';
   if (!lyrics || lyrics.loading) return 'Buscando la letra…';
-  if (lyrics.error) return 'El servicio de letras no responde ahora mismo · reintentando… (o sincronízala tú: ⋯ → Sincronizar letra)';
-  if (lyrics.none) return 'No encontré la letra · puedes sincronizarla tú: ⋯ → Sincronizar letra a mano';
+  if (lyrics.error) return 'El servicio de letras no responde ahora mismo · reintentando… (o ⋯ → ✨ Sincronizar letra)';
+  if (lyrics.none) return 'No encontré la letra · ⋯ → ✨ Sincronizar letra';
   if (lyrics.instrumental) return '♪ Instrumental';
   return '';
 }
@@ -3239,7 +3241,7 @@ function showLyricNote(text) {
 }
 function subtitlesTick() {
   if (!lyricsOn || ['lyrics', 'artist', 'strobe', 'cover'].includes(state.mode) || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
-  const msg = lyricsMessage() || (lyrics.plain ? 'Esta letra no trae tiempos · sincronízala en ⋯ → Sincronizar letra a mano' : '');
+  const msg = lyricsMessage() || (lyrics.plain ? 'Esta letra no trae tiempos · ⋯ → ✨ Sincronizar letra' : '');
   if (msg) { if (lyCur.textContent !== msg) showLyricNote(msg); lyricIndex = -3; return; }
   const L = lyrics.lines, pos = lyricPos();
   let i = -1; while (i + 1 < L.length && L[i + 1].t <= pos) i++;
