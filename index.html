@@ -2192,7 +2192,7 @@ function spUpdate(d, src = 'spotify') {
   sp.playing = !!(d && d.is_playing);
   sp.duration = (item && item.duration_ms) || 0;
   let prog = (d && d.progress_ms) || 0;
-  if (src === 'spotify' && webDev() && sameSong && Math.abs(prog + (performance.now() - at) - est) < 1500) prog = null;   // suena aquí: manda el reloj exacto del reproductor del navegador
+  if (src === 'spotify' && webDev() && sameSong && performance.now() - sdkClock.okAt < 3000 && Math.abs(prog + (performance.now() - at) - est) < 1500) prog = null;   // suena aquí: manda el reloj exacto del reproductor del navegador
   else if (sameSong) {   // la misma canción sonando: diferencias pequeñas se suavizan para que la letra no dé saltitos
     const want = prog + (performance.now() - at), diff = want - est;
     if (Math.abs(diff) < 600) prog = est + diff * 0.3, sp.at = performance.now(), sp.progress = prog, prog = null;
@@ -3731,14 +3731,18 @@ function finishRecording(blob, ext, err) {
 // al soltarla se comprueba que suena desde ese punto. Así el clip nunca empieza antes ni salta hacia atrás.
 const webDev = () => !!(lib.web && sp.deviceId && sp.deviceId === lib.webId);
 // cuando Spotify suena en esta página, su reproductor sabe el segundo exacto: se consulta cada segundo
+const sdkClock = { last: null, okAt: -1e9 };
 setInterval(async () => {
   if (!webDev() || !sp.playing || document.hidden || performance.now() < (sp.lockUntil || 0)) return;
   const st = await lib.web.getCurrentState().catch(() => null);
   const ct = st && st.track_window && st.track_window.current_track;
   if (!ct || st.paused || (ct.id !== sp.item?.id && ct.linked_from?.id !== sp.item?.id)) return;
-  const pos = st.position + (st.timestamp && Date.now() - st.timestamp < 3000 ? Math.max(0, Date.now() - st.timestamp) : 0), diff = pos - spPos();
-  if (Math.abs(diff) > 3000) return;
-  sp.progress = spPos() + (Math.abs(diff) < 400 ? diff * 0.4 : diff); sp.at = performance.now();
+  // solo se le cree si su reloj avanza de verdad (a veces repite el segundo de la última orden, p. ej. tras mover la canción)
+  const now = performance.now(), last = sdkClock.last; sdkClock.last = { pos: st.position, t: now, id: ct.id };
+  if (!last || last.id !== ct.id || Math.abs((st.position - last.pos) - (now - last.t)) > 250) return;
+  sdkClock.okAt = now;
+  const diff = st.position - spPos();
+  sp.progress = spPos() + (Math.abs(diff) < 400 ? diff * 0.4 : diff); sp.at = now;
 }, 1000);
 async function spState() {
   if (webDev()) { const st = await lib.web.getCurrentState().catch(() => null); if (st) return { playing: !st.paused, pos: st.position }; }
