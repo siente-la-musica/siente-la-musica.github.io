@@ -2301,7 +2301,7 @@ function spRender() {
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
-        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="lyEarly" title="La letra sale tarde">Letra antes (−0,25 s)</button><button id="lyLate" title="La letra sale adelantada">Letra después (+0,25 s)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
+        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="lyFix" title="Borra lo guardado de esta canción y la vuelve a buscar">↻ Arreglar la letra de esta canción</button><button id="lyEarly" title="La letra sale tarde">Letra antes (−0,25 s)</button><button id="lyLate" title="La letra sale adelantada">Letra después (+0,25 s)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
         (!analyser ? `<button id="spTap"><span style="width:16px;text-align:center">♩</span>Marcar el ritmo (tocando)</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
         (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
@@ -2326,6 +2326,7 @@ function spRender() {
   songEl.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => b.dataset.sp === 'shuffle' || b.dataset.sp === 'repeat' ? spPlayMode(b.dataset.sp) : spControl(b.dataset.sp));
   const rd = document.getElementById('spRadio'); if (rd) rd.onclick = e => { e.stopPropagation(); sp.more = false; songEl.classList.remove('open-more'); spRadio(sp.item); };
   const moreAct = (id, fn) => { const b = document.getElementById(id); if (b) b.onclick = e => { e.stopPropagation(); sp.more = false; songEl.classList.remove('open-more'); fn(); }; };
+  { const f = document.getElementById('lyFix'); if (f) f.onclick = e => { e.stopPropagation(); closePops(); lyReset(); }; }
   { const a = document.getElementById('lyEarly'), b = document.getElementById('lyLate'); if (a) a.onclick = e => { e.stopPropagation(); lyOffAdd(250); }; if (b) b.onclick = e => { e.stopPropagation(); lyOffAdd(-250); }; }
   moreAct('spLikeM', () => spLike(sp.item)); moreAct('spAddPl', () => spAddToPlaylist(sp.item)); moreAct('spQueue', spShowQueue);
   moreAct('spGoAr', () => { libOpen(); openArtist(sp.item.artists[0]); }); moreAct('spGoAl', () => { libOpen(); openAlbum(sp.item.album); });
@@ -3066,7 +3067,7 @@ async function fetchBackup(artist, title, dur) {
   if (!base) return null;
   try {
     const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
-    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '', v: '2' }), { signal: c.signal }).finally(() => clearTimeout(t));
+    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '', v: '2', ...(Date.now() - lyFresh < 30000 ? { fresh: String(lyFresh) } : {}) }), { signal: c.signal }).finally(() => clearTimeout(t));
     if (!r.ok) return null; const j = await r.json(); return j && (j.syncedLyrics || j.plainLyrics) ? j : null;
   } catch (e) { return null; }
 }
@@ -3328,6 +3329,17 @@ function lyricsMessage() {
 // cada canción recuerda su ajuste de «letra antes / después»
 let lyOffC = { id: null, v: 0 };
 const lyOff = () => { const id = sp.item && sp.item.id; if (lyOffC.id !== id) { let v = 0; try { v = JSON.parse(localStorage.getItem('pulso.lyoff') || '{}')[id] || 0; } catch (e) {} lyOffC = { id, v }; } return lyOffC.v; };
+// «Arreglar la letra»: se olvida todo lo guardado de esta canción (letra, ajuste de tiempo) y se vuelve a buscar y a medir
+let lyFresh = 0;
+function lyReset() {
+  const it = sp.item; if (!it) return;
+  try { const all = lyricsStore(); delete all[it.id]; localStorage.setItem('pulso.lyrics', JSON.stringify(all)); } catch (e) {}
+  try { const o = JSON.parse(localStorage.getItem('pulso.lyoff') || '{}'); delete o[it.id]; localStorage.setItem('pulso.lyoff', JSON.stringify(o)); } catch (e) {}
+  lyOffC = { id: null, v: 0 }; lyricsCache.delete(it.id); lyFresh = Date.now();
+  sdkClock.last = null; sdkClock.okAt = -1e9; sp.lockUntil = 0;
+  lyricIndex = -2; lvIndex = -2; loadLyrics(it); spLoop();
+  spToast('↻ Buscando la letra de nuevo y volviendo a medir el tiempo');
+}
 function lyOffAdd(ms) { if (!sp.item) return; try { const all = JSON.parse(localStorage.getItem('pulso.lyoff') || '{}'); all[sp.item.id] = (all[sp.item.id] || 0) + ms; localStorage.setItem('pulso.lyoff', JSON.stringify(all)); lyOffC = { id: sp.item.id, v: all[sp.item.id] }; spToast('Letra ' + (all[sp.item.id] > 0 ? 'antes' : all[sp.item.id] < 0 ? 'después' : 'en su punto') + (all[sp.item.id] ? ' · ' + (Math.abs(all[sp.item.id]) / 1000).toFixed(2).replace('.', ',') + ' s' : '')); } catch (e) {} lyricIndex = -2; lvIndex = -2; }
 function lyricPos() { return sp.progress + (sp.playing ? performance.now() - sp.at : 0) + 250 + lyOff(); }   // un pelín adelantada se lee mejor
 
