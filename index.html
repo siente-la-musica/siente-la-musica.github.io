@@ -555,7 +555,8 @@
   <div class="sync-edit" id="syncEdit">
     <p class="sync-note">Pega o corrige la letra (una línea por renglón). Luego dale a empezar y toca <b>Espacio</b> (o el botón) justo cuando empieza cada línea.</p>
     <textarea id="syncText" spellcheck="false" placeholder="Pega aquí la letra…"></textarea>
-    <div class="sync-row"><button class="primary" id="syncFromHere">Empezar desde aquí</button><button id="syncFromStart">Desde el inicio</button></div>
+    <div class="sync-row"><button class="primary" id="syncAI">✨ Sincronizar con IA</button><button id="syncFromHere">A mano desde aquí</button><button id="syncFromStart">A mano desde el inicio</button></div>
+    <p class="sync-note"><b>Con IA:</b> pon la canción justo antes de la parte que vas a grabar, pulsa el botón y déjala sonar; pulsa <b>Terminar</b> cuando acabe esa parte (máx. 60 s). La IA escucha la voz y ubica cada línea. Si no pegas letra, la escribe ella con lo que entiende. Necesita <b>Audio del PC</b> conectado.</p>
   </div>
   <div class="sync-tap" id="syncTap" hidden>
     <div class="sync-prev" id="syncPrev"></div><div class="sync-cur" id="syncCur"></div><div class="sync-next" id="syncNext"></div>
@@ -675,7 +676,7 @@
       <div class="row-set"><span>Estilo de la letra</span>
         <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="subs">Subtítulos</button><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button><button data-lstyle="liquid">Líquida</button></div>
       </div>
-      <button id="recSync" type="button">♪ Sincronizar la letra a mano</button>
+      <button id="recSync" type="button">✨ Sincronizar la letra (con IA)</button>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
     </div>
@@ -2291,7 +2292,7 @@ function spRender() {
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
-        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="spSync"><span style="width:16px;text-align:center">♪</span>Sincronizar letra a mano</button><button id="lyEarly" title="La letra sale tarde">Letra antes (−0,25 s)</button><button id="lyLate" title="La letra sale adelantada">Letra después (+0,25 s)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
+        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="spSync"><span style="width:16px;text-align:center">✨</span>Sincronizar letra (con IA)</button><button id="lyEarly" title="La letra sale tarde">Letra antes (−0,25 s)</button><button id="lyLate" title="La letra sale adelantada">Letra después (+0,25 s)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
         (!analyser ? `<button id="spTap"><span style="width:16px;text-align:center">♩</span>Marcar el ritmo (tocando)</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
         (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
@@ -3051,7 +3052,7 @@ function parseLRC(text) {
   return out.sort((a, b) => a.t - b.t);
 }
 // Respaldo propio (servidor/letras.js en Cloudflare): si LRCLIB falla, busca la letra con tiempos en otras fuentes
-const LYRICS_BACKUP = '';   // p. ej. 'https://letras-siente.tu-usuario.workers.dev'
+const LYRICS_BACKUP = 'https://letras-siente.sientelamusicaco.workers.dev';   // servidor/letras.js en Cloudflare
 async function fetchBackup(artist, title, dur) {
   const base = LYRICS_BACKUP || store.get('lyricsBackup', '');
   if (!base) return null;
@@ -3120,7 +3121,94 @@ function syncMark() {
   sync.marks.push(Math.max(0, lyricPos() - lyOff() - 250 - 120));   // la posición real menos un instante de reacción
   syncShow();
 }
+// --- Con IA: se graba el audio de la parte elegida, Whisper (en el servidor de Cloudflare) dice qué palabra suena en
+// qué segundo, y cada línea de la letra toma el momento de sus palabras ---
+const normW = w => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ']/g, '');
+function lev(a, b) { const m = a.length, n = b.length, d = Array.from({ length: m + 1 }, (_, i) => [i]); for (let j = 1; j <= n; j++) d[0][j] = j;
+  for (let i = 1; i <= m; i++) for (let j = 1; j <= n; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); return d[m][n]; }
+const sim = (a, b) => a === b ? 1 : (a.length > 3 && b.length > 3 && lev(a, b) <= Math.max(1, Math.floor(Math.min(a.length, b.length) / 4))) ? 0.7 : 0;
+async function syncAIStart() {
+  const base = LYRICS_BACKUP || store.get('lyricsBackup', '');
+  const track = recAudioTrack();
+  if (!base) { spToast('Falta el servidor de letras'); return; }
+  if (!track) { spToast('Para sincronizar con IA, pulsa Conectar audio → Audio del PC'); return; }
+  sync.lines = syncText.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const mr = new MediaRecorder(new MediaStream([track.clone()]), { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '' }), ch = [];
+  sync.ai = { mr, ch, t0: lyricPos() - lyOff() - 250 };
+  mr.ondataavailable = e => e.data.size && ch.push(e.data);
+  mr.start(250);
+  sync.ai.timer = setTimeout(() => { if (sync.ai && sync.ai.mr.state === 'recording') syncDone(); }, 60000);
+  document.getElementById('syncEdit').hidden = true; document.getElementById('syncTap').hidden = false;
+  document.getElementById('syncPrev').textContent = ''; document.getElementById('syncCur').textContent = '👂 Escuchando…';
+  document.getElementById('syncNext').textContent = 'Deja sonar la parte del clip y pulsa Terminar cuando acabe';
+  document.getElementById('syncMark').hidden = true; document.getElementById('syncUndo').hidden = true;
+  if (!sp.playing) recGo(null);
+}
+async function toWav16k(blob) {   // la IA entiende mejor un WAV mono de 16 kHz (y pesa poco)
+  const ac = new (window.AudioContext || window.webkitAudioContext)(), buf = await ac.decodeAudioData(await blob.arrayBuffer()); ac.close();
+  const off = new OfflineAudioContext(1, Math.ceil(buf.duration * 16000), 16000), src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0), n = pcm.length, out = new DataView(new ArrayBuffer(44 + n * 2));
+  const w = (o, t) => [...t].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
+  out.setUint32(24, 16000, true); out.setUint32(28, 32000, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 32767, true);
+  return new Blob([out.buffer], { type: 'audio/wav' });
+}
+function alignWords(lines, words, t0) {
+  const W = words.map(w => ({ n: normW(w.word), t: t0 + w.start * 1000 })).filter(w => w.n);
+  if (!W.length) return null;
+  if (!lines.length) {   // sin letra pegada: las líneas salen de lo que entendió la IA (se corta en los respiros)
+    const out = []; let cur = [], start = 0, last = -1e9;
+    words.forEach(w => { const t = t0 + w.start * 1000; if (cur.length && (t - last > 600 || cur.length >= 8)) { out.push({ t: Math.round(start), text: cur.join(' ') }); cur = []; } if (!cur.length) start = t; cur.push(w.word.trim()); last = t0 + w.end * 1000; });
+    if (cur.length) out.push({ t: Math.round(start), text: cur.join(' ') });
+    return out;
+  }
+  // alineación palabra a palabra (como un «diff»): cada palabra de la letra busca su pareja en lo que oyó la IA
+  const L = []; lines.forEach((l, li) => l.split(/\s+/).forEach(w => { const n = normW(w); if (n) L.push({ n, li }); }));
+  const A = L.length, B = W.length, sc = Array.from({ length: A + 1 }, () => new Float32Array(B + 1)), bt = Array.from({ length: A + 1 }, () => new Int8Array(B + 1));
+  for (let i = 1; i <= A; i++) for (let j = 1; j <= B; j++) {
+    const m = sc[i - 1][j - 1] + sim(L[i - 1].n, W[j - 1].n) * 2 - 0.3, u = sc[i - 1][j] - 0.2, l = sc[i][j - 1] - 0.2;
+    if (m >= u && m >= l) { sc[i][j] = m; bt[i][j] = 0; } else if (u >= l) { sc[i][j] = u; bt[i][j] = 1; } else { sc[i][j] = l; bt[i][j] = 2; }
+  }
+  const tOf = new Array(A).fill(null);
+  let i = A, j = B; while (i > 0 && j > 0) { const b = bt[i][j]; if (b === 0) { if (sim(L[i - 1].n, W[j - 1].n)) tOf[i - 1] = W[j - 1].t; i--; j--; } else if (b === 1) i--; else j--; }
+  const lineT = lines.map(() => null);
+  L.forEach((x, k) => { if (tOf[k] != null && lineT[x.li] == null) lineT[x.li] = tOf[k] - (k && L[k - 1].li === x.li ? 250 * L.slice(0, k).filter(y => y.li === x.li).length : 0); });
+  const has = lineT.map((t, k) => t != null ? k : -1).filter(k => k >= 0);
+  if (has.length < 2) return null;
+  const out = [];
+  for (let k = has[0]; k <= has[has.length - 1]; k++) {   // solo la parte que se escuchó; lo de en medio sin pareja se interpola
+    let t = lineT[k];
+    if (t == null) { const a = has.filter(x => x < k).pop(), b = has.find(x => x > k); t = lineT[a] + (lineT[b] - lineT[a]) * (k - a) / (b - a); }
+    out.push({ t: Math.round(Math.max(0, t)), text: lines[k] });
+  }
+  for (let k = 1; k < out.length; k++) if (out[k].t <= out[k - 1].t) out[k].t = out[k - 1].t + 300;
+  return out;
+}
+async function syncAIFinish() {
+  const ai = sync.ai; sync.ai = null; clearTimeout(ai.timer);
+  document.getElementById('syncCur').textContent = '✨ La IA está escuchando la voz…'; document.getElementById('syncNext').textContent = 'Unos segundos';
+  await new Promise(r => { ai.mr.onstop = r; ai.mr.stop(); });
+  try {
+    const wav = await toWav16k(new Blob(ai.ch, { type: ai.mr.mimeType || 'audio/webm' }));
+    const base = (LYRICS_BACKUP || store.get('lyricsBackup', '')).replace(/\/$/, '');
+    const r = await fetch(base + '/alinear', { method: 'POST', body: wav, headers: { 'Content-Type': 'audio/wav' } });
+    const j = await r.json();
+    if (!r.ok || !j.words) throw new Error(j.error || 'sin respuesta');
+    const lines = alignWords(sync.lines, j.words, ai.t0);
+    syncEl.hidden = true;
+    if (!lines || !lines.length) { spToast('La IA no reconoció la letra en esa parte. Prueba con una parte donde la voz se oiga más clara'); return; }
+    const old = (lyricsCache.get(sync.item.id) || {}).lines || [];
+    // se combina con lo que ya hubiera fuera de esta parte
+    const merged = old.filter(x => x.t < lines[0].t - 500 || x.t > lines[lines.length - 1].t + 4000).concat(lines).sort((a, b) => a.t - b.t);
+    const ly = { lines: merged }; lyricsCache.set(sync.item.id, ly); lyricsSave(sync.item.id, ly);
+    if (sp.item && sp.item.id === sync.item.id) { lyrics = ly; lyricIndex = -2; lvIndex = -2; }
+    spToast(`✨ Letra sincronizada con IA: ${lines.length} líneas`);
+  } catch (e) { syncEl.hidden = true; spToast('No se pudo sincronizar con IA: ' + esc(e.message || e)); }
+  finally { document.getElementById('syncMark').hidden = false; document.getElementById('syncUndo').hidden = false; }
+}
 function syncDone() {
+  if (sync.ai) { syncAIFinish(); return; }
   const lines = sync.marks.map((t, i) => ({ t: Math.round(t), text: sync.lines[i] }));
   syncEl.hidden = true;
   if (!lines.length || !sync.item) return;
@@ -3129,12 +3217,13 @@ function syncDone() {
   spToast(`Letra sincronizada: ${lines.length} líneas guardadas para esta canción`);
 }
 document.getElementById('recSync').onclick = () => { closePops(); syncOpen(); };
+document.getElementById('syncAI').onclick = syncAIStart;
 document.getElementById('syncFromStart').onclick = () => syncStart(true);
 document.getElementById('syncFromHere').onclick = () => syncStart(false);
 document.getElementById('syncMark').onclick = syncMark;
 document.getElementById('syncUndo').onclick = () => { sync.marks.pop(); syncShow(); };
 document.getElementById('syncDone').onclick = syncDone;
-document.getElementById('syncClose').onclick = () => { syncEl.hidden = true; };
+document.getElementById('syncClose').onclick = () => { syncEl.hidden = true; if (sync.ai) { try { sync.ai.mr.stop(); } catch (e) {} clearTimeout(sync.ai.timer); sync.ai = null; } document.getElementById('syncMark').hidden = false; document.getElementById('syncUndo').hidden = false; };
 addEventListener('keydown', e => {
   if (syncEl.hidden || document.getElementById('syncTap').hidden) return;
   if (e.code === 'Space') { e.preventDefault(); e.stopPropagation(); syncMark(); }
