@@ -54,6 +54,9 @@ function score(nt, na, st, sa, duration, sdur, want = '') {
 function goodLrc(lrc, source, title = '') {
   if (!lrc) return null;
   lrc = lrc.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\r/g, '');
+  // [offset:+500] significa «todo 0,5 s antes»: se aplica a cada tiempo
+  const off = +((lrc.match(/^\[offset:\s*([+-]?\d+)\s*\]/im) || [])[1] || 0);
+  if (off) lrc = lrc.replace(/\[(\d+):(\d+(?:\.\d+)?)\]/g, (_, m, sec) => { const t = Math.max(0, (+m * 60 + +sec) * 1000 - off) / 1000; return `[${String(Math.floor(t / 60)).padStart(2, '0')}:${(t % 60).toFixed(2).padStart(5, '0')}]`; });
   const timed_ = lrc.split('\n').filter(x => /^\[\d+:\d+(\.\d+)?\]\s*\S/.test(x));
   if (timed_.length <= 5) return null;
   // la primera línea a veces es solo «Título - Artista»: se quita
@@ -94,14 +97,27 @@ async function fromKugou(artist, title, duration, log) {
   const nt = norm(title), na = norm(artist);
   const best = cands.map(c => ({ c, sc: score(nt, na, c.song, c.singer, duration, (c.duration || 0) / 1000, title) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
   log.kugou += `, ${cands.length} letras, ${best.length} parecidas`;
-  for (const { c } of best.slice(0, 3)) {
-    const d = await timed(`https://lyrics.kugou.com/download?ver=1&client=pc&id=${c.id}&accesskey=${c.accesskey}&fmt=lrc&charset=utf8`, { headers });
-    if (!d.ok) continue;
-    const j = await d.json(); if (!j.content) continue;
-    const bin = atob(j.content), bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
-    const ok = goodLrc(new TextDecoder('utf-8').decode(bytes), 'kugou', title); if (ok) return ok;
-  }
-  return null;
+  // se bajan las mejores y se elige la que de verdad es de esta versión: sin «live» en la cabecera,
+  // y que su última línea no pase del final de la canción (si pasa, es de una versión más larga)
+  const tries = await Promise.all(best.slice(0, 5).map(async ({ c, sc }) => {
+    try {
+      const d = await timed(`https://lyrics.kugou.com/download?ver=1&client=pc&id=${c.id}&accesskey=${c.accesskey}&fmt=lrc&charset=utf8`, { headers });
+      if (!d.ok) return null;
+      const j = await d.json(); if (!j.content) return null;
+      const raw = new TextDecoder('utf-8').decode(Uint8Array.from(atob(j.content), ch => ch.charCodeAt(0)));
+      const head = (raw.match(/^\[0?0:0\d(?:\.\d+)?\]([^\n]*)/m) || [])[1] || '';
+      const ok = goodLrc(raw, 'kugou', title); if (!ok) return null;
+      const times = [...ok.syncedLyrics.matchAll(/\[(\d+):(\d+(?:\.\d+)?)\]/g)].map(m => +m[1] * 60 + +m[2]), last = Math.max(...times);
+      let q = sc;
+      if (VERSION.test(head + ' ' + c.song) && !VERSION.test(title)) q -= 5;
+      if (duration && last > duration + 3) q -= 5;
+      if (duration && c.duration) q -= Math.abs(c.duration / 1000 - duration) / 10;
+      return { ok, q, info: `${c.song} · ${Math.round((c.duration || 0) / 1000)}s · última línea ${Math.round(last)}s · ${head.slice(0, 60)} → ${q.toFixed(1)}` };
+    } catch (e) { return null; }
+  }));
+  const good = tries.filter(Boolean).sort((a, b) => b.q - a.q);
+  log.kugouOpciones = good.map(x => x.info);
+  return good.length && good[0].q >= 3 ? good[0].ok : null;
 }
 
 // 4) QQ Music

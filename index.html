@@ -3067,7 +3067,7 @@ async function fetchBackup(artist, title, dur) {
   if (!base) return null;
   try {
     const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
-    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '', v: '2', ...(Date.now() - lyFresh < 30000 ? { fresh: String(lyFresh) } : {}) }), { signal: c.signal }).finally(() => clearTimeout(t));
+    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '', v: '3', ...(Date.now() - lyFresh < 30000 ? { fresh: String(lyFresh) } : {}) }), { signal: c.signal }).finally(() => clearTimeout(t));
     if (!r.ok) return null; const j = await r.json(); return j && (j.syncedLyrics || j.plainLyrics) ? j : null;
   } catch (e) { return null; }
 }
