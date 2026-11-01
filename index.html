@@ -554,7 +554,7 @@
   <div class="sync-head"><b>Sincronizar letra</b><span id="syncSong"></span><button class="ib" id="syncClose" aria-label="Cerrar">✕</button></div>
   <div class="sync-edit" id="syncEdit">
     <p class="sync-note">Pega o corrige la letra (una línea por renglón). Luego dale a empezar y toca <b>Espacio</b> (o el botón) justo cuando empieza cada línea.</p>
-    <textarea id="syncText" spellcheck="false" placeholder="Pega aquí la letra…"></textarea>
+    <textarea id="syncText" spellcheck="false" placeholder="No hace falta escribir nada: la IA escucha la canción y escribe la letra sola"></textarea>
     <div class="sync-row"><button class="primary" id="syncAI">✨ Sincronizar con IA</button><button id="syncFromHere">A mano desde aquí</button><button id="syncFromStart">A mano desde el inicio</button></div>
     <p class="sync-note"><b>Con IA:</b> pon la canción justo antes de la parte que vas a grabar, pulsa el botón y déjala sonar; pulsa <b>Terminar</b> cuando acabe esa parte (máx. 60 s). La IA escucha la voz y ubica cada línea. Si no pegas letra, la escribe ella con lo que entiende. Necesita <b>Audio del PC</b> conectado.</p>
   </div>
@@ -2317,7 +2317,7 @@ function spRender() {
   songEl.querySelectorAll('[data-sp]').forEach(b => b.onclick = () => b.dataset.sp === 'shuffle' || b.dataset.sp === 'repeat' ? spPlayMode(b.dataset.sp) : spControl(b.dataset.sp));
   const rd = document.getElementById('spRadio'); if (rd) rd.onclick = e => { e.stopPropagation(); sp.more = false; songEl.classList.remove('open-more'); spRadio(sp.item); };
   const moreAct = (id, fn) => { const b = document.getElementById(id); if (b) b.onclick = e => { e.stopPropagation(); sp.more = false; songEl.classList.remove('open-more'); fn(); }; };
-  moreAct('spSync', syncOpen);
+  moreAct('spSync', () => { syncOpen(); if (!syncEl.hidden) syncAIStart(); });
   { const a = document.getElementById('lyEarly'), b = document.getElementById('lyLate'); if (a) a.onclick = e => { e.stopPropagation(); lyOffAdd(250); }; if (b) b.onclick = e => { e.stopPropagation(); lyOffAdd(-250); }; }
   moreAct('spLikeM', () => spLike(sp.item)); moreAct('spAddPl', () => spAddToPlaylist(sp.item)); moreAct('spQueue', spShowQueue);
   moreAct('spGoAr', () => { libOpen(); openArtist(sp.item.artists[0]); }); moreAct('spGoAl', () => { libOpen(); openAlbum(sp.item.album); });
@@ -3101,7 +3101,23 @@ function syncOpen() {
   const ly = lyrics || {};
   syncText.value = ly.lines ? ly.lines.map(l => l.text).filter(Boolean).join('\n') : ly.plain ? ly.plain.join('\n') : '';
   document.getElementById('syncEdit').hidden = false; document.getElementById('syncTap').hidden = true; syncEl.hidden = false;
-  if (!syncText.value) syncText.focus();
+  if (!syncText.value) syncFindText(it);
+}
+// la letra se busca sola en internet; si no aparece en ningún lado, la IA la escribe mientras escucha (no hay que pegar nada)
+async function syncFindText(it) {
+  const artist = (it.artists[0] || {}).name || '', raw = it.name || '';
+  const title = raw.replace(/\s*[-–]\s*(remaster(ed)?|live|radio edit|single version|mono|stereo|bonus|from ).*$/i, '').replace(/\s*[([](feat|ft|with|con)\.?\s[^)\]]*[)\]]/gi, '').trim() || raw;
+  const timed = (u, ms = 9000) => { const c = new AbortController(), t = setTimeout(() => c.abort(), ms); return fetch(u, { signal: c.signal }).finally(() => clearTimeout(t)); };
+  syncText.placeholder = '🔎 Buscando la letra…';
+  let txt = '';
+  try { const bk = await fetchBackup(artist, title, Math.round((it.duration_ms || 0) / 1000)); if (bk) txt = (bk.plainLyrics || bk.syncedLyrics || '').replace(/\[[^\]]*\]/g, ''); } catch (e) {}
+  if (!txt) try {
+    const o = await timed('https://api.lyrics.ovh/v1/' + encodeURIComponent(artist) + '/' + encodeURIComponent(title));
+    if (o.ok) { const j = await o.json(); txt = (j.lyrics || '').replace(/^Paroles de la chanson.*\r?\n/i, ''); }
+  } catch (e) {}
+  if (sync.item !== it || syncText.value) return;
+  syncText.value = txt.split(/\r?\n/).map(l => l.trim()).filter(Boolean).join('\n');
+  syncText.placeholder = 'No hace falta escribir nada: la IA escucha la canción y escribe la letra sola';
 }
 function syncShow() {
   const k = sync.marks.length, L = sync.lines;
@@ -3210,6 +3226,7 @@ async function syncAIFinish() {
   try {
     const wav = await toWav16k(new Blob(ai.ch, { type: ai.mr.mimeType || 'audio/webm' }));
     const base = (LYRICS_BACKUP || store.get('lyricsBackup', '')).replace(/\/$/, '');
+    if (!sync.lines.length) sync.lines = syncText.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);   // la letra que llegó mientras escuchaba
     // la letra pegada se le da a la IA como pista: así sabe qué palabras esperar y no se las inventa
     const prompt = sync.lines.join(' ').slice(0, 600);
     const r = await fetch(base + '/alinear' + (prompt ? '?prompt=' + encodeURIComponent(prompt) : ''), { method: 'POST', body: wav, headers: { 'Content-Type': 'audio/wav' } });
