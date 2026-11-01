@@ -1,6 +1,6 @@
 // Cloudflare Worker de respaldo para las letras sincronizadas.
-// Si LRCLIB está caído o no tiene la canción, busca la letra con tiempos (formato LRC) en NetEase, que tiene
-// millones de canciones de todo el mundo. La página no puede preguntarle directamente (el navegador lo
+// Si LRCLIB está caído o no tiene la canción, busca la letra con tiempos (formato LRC) en NetEase, Kugou y
+// QQ Music, que tienen millones de canciones de todo el mundo. La página no puede preguntarle directamente (el navegador lo
 // bloquea), así que este Worker pregunta por ella y le devuelve la respuesta con permiso para leerla.
 //
 // Uso:  GET https://<tu-worker>.workers.dev/?artist=Harry%20Styles&title=Sign%20of%20the%20Times&duration=341
@@ -37,32 +37,83 @@ async function fromLrclib(artist, title, duration) {
   } catch (e) { return null; }
 }
 
+// Puntuación común: el mismo título, el mismo artista y una duración parecida
+function score(nt, na, st, sa, duration, sdur) {
+  st = norm(st); sa = norm(sa);
+  let sc = 0;
+  if (st === nt) sc += 3; else if (st && (st.startsWith(nt) || nt.startsWith(st))) sc += 2;
+  if (sa && (sa.includes(na) || na.includes(sa.split(' ')[0] || '~'))) sc += 2;
+  if (duration && sdur) { const d = Math.abs(sdur - duration); sc += d <= 3 ? 2 : d <= 10 ? 1 : d > 30 ? -3 : 0; }
+  return sc;
+}
+// Una letra LRC sirve si tiene tiempos reales en varias líneas (no solo créditos)
+function goodLrc(lrc, source) {
+  if (!lrc) return null;
+  lrc = lrc.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\r/g, '');
+  const timed_ = lrc.split('\n').filter(x => /^\[\d+:\d+(\.\d+)?\]\s*\S/.test(x));
+  if (timed_.length <= 5) return null;
+  const clean = lrc.split('\n').filter(x => !/^\[\d+:\d+(\.\d+)?\]\s*(作词|作曲|编曲|制作人|词|曲|Lyrics by|Composed by|Written by)\s*[:：]/i.test(x) && !/^\[(ti|ar|al|by|offset|id|hash|sign|qq|total|language):/i.test(x)).join('\n');
+  return { syncedLyrics: clean, plainLyrics: clean.replace(/\[[^\]]*\]/g, '').trim(), source };
+}
+
 // 2) NetEase: se busca la canción y se pide su letra LRC
-async function fromNetease(artist, title, duration) {
+async function fromNetease(artist, title, duration, log) {
   const headers = { 'User-Agent': UA, Referer: 'https://music.163.com/', 'Content-Type': 'application/x-www-form-urlencoded', Cookie: 'appver=2.0.2; os=pc' };
   const body = new URLSearchParams({ s: `${title} ${artist}`, type: '1', limit: '15', offset: '0' });
   const r = await timed('https://music.163.com/api/search/get/web', { method: 'POST', headers, body });
+  log.netease = 'búsqueda ' + r.status;
   if (!r.ok) return null;
   const songs = ((await r.json()).result || {}).songs || [];
   const nt = norm(title), na = norm(artist);
-  const scored = songs.map(s => {
-    const st = norm(s.name), sa = (s.artists || []).map(a => norm(a.name)).join(' ');
-    let score = 0;
-    if (st === nt) score += 3; else if (st.startsWith(nt) || nt.startsWith(st)) score += 2;
-    if (sa.includes(na) || na.includes(sa.split(' ')[0] || '~')) score += 2;
-    if (duration && s.duration) { const d = Math.abs(s.duration / 1000 - duration); score += d <= 3 ? 2 : d <= 10 ? 1 : d > 30 ? -3 : 0; }
-    return { s, score };
-  }).filter(x => x.score >= 4).sort((a, b) => b.score - a.score);
-  for (const { s } of scored.slice(0, 3)) {
+  const best = songs.map(s => ({ s, sc: score(nt, na, s.name, (s.artists || []).map(a => a.name).join(' '), duration, s.duration / 1000) }))
+    .filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
+  log.netease += `, ${songs.length} canciones, ${best.length} parecidas`;
+  for (const { s } of best.slice(0, 3)) {
     const l = await timed(`https://music.163.com/api/song/lyric?id=${s.id}&lv=1&kv=1&tv=-1`, { headers });
     if (!l.ok) continue;
-    const j = await l.json();
-    const lrc = j.lrc && j.lrc.lyric;
-    // sin tiempos reales (o solo créditos) no sirve
-    if (lrc && /\[\d+:\d+(\.\d+)?\]\s*\S/.test(lrc) && lrc.split('\n').filter(x => /\[\d+:\d+/.test(x)).length > 5) {
-      const clean = lrc.split('\n').filter(x => !/^\[\d+:\d+(\.\d+)?\]\s*(作词|作曲|编曲|制作人|词|曲)\s*[:：]/.test(x)).join('\n');
-      return { syncedLyrics: clean, plainLyrics: clean.replace(/\[[^\]]*\]/g, '').trim(), source: 'netease' };
-    }
+    const ok = goodLrc(((await l.json()).lrc || {}).lyric, 'netease'); if (ok) return ok;
+  }
+  return null;
+}
+
+// 3) Kugou: tiene su propio buscador de letras con tiempos
+async function fromKugou(artist, title, duration, log) {
+  const headers = { 'User-Agent': UA };
+  const q = new URLSearchParams({ ver: '1', man: 'yes', client: 'pc', keyword: `${artist} - ${title}`, duration: String(Math.round(duration * 1000) || ''), hash: '' });
+  const r = await timed('https://lyrics.kugou.com/search?' + q, { headers });
+  log.kugou = 'búsqueda ' + r.status;
+  if (!r.ok) return null;
+  const cands = (await r.json()).candidates || [];
+  const nt = norm(title), na = norm(artist);
+  const best = cands.map(c => ({ c, sc: score(nt, na, c.song, c.singer, duration, (c.duration || 0) / 1000) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
+  log.kugou += `, ${cands.length} letras, ${best.length} parecidas`;
+  for (const { c } of best.slice(0, 3)) {
+    const d = await timed(`https://lyrics.kugou.com/download?ver=1&client=pc&id=${c.id}&accesskey=${c.accesskey}&fmt=lrc&charset=utf8`, { headers });
+    if (!d.ok) continue;
+    const j = await d.json(); if (!j.content) continue;
+    const bin = atob(j.content), bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
+    const ok = goodLrc(new TextDecoder('utf-8').decode(bytes), 'kugou'); if (ok) return ok;
+  }
+  return null;
+}
+
+// 4) QQ Music
+async function fromQQ(artist, title, duration, log) {
+  const headers = { 'User-Agent': UA, Referer: 'https://y.qq.com/' };
+  const q = new URLSearchParams({ w: `${title} ${artist}`, format: 'json', p: '1', n: '10', cr: '1' });
+  const r = await timed('https://c.y.qq.com/soso/fcgi-bin/client_search_cp?' + q, { headers });
+  log.qq = 'búsqueda ' + r.status;
+  if (!r.ok) return null;
+  const t = (await r.text()).replace(/^[^{]*/, '').replace(/\)\s*;?\s*$/, '');
+  const list = ((JSON.parse(t).data || {}).song || {}).list || [];
+  const nt = norm(title), na = norm(artist);
+  const best = list.map(s => ({ s, sc: score(nt, na, s.songname, (s.singer || []).map(a => a.name).join(' '), duration, s.interval) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
+  log.qq += `, ${list.length} canciones, ${best.length} parecidas`;
+  for (const { s } of best.slice(0, 3)) {
+    const l = await timed(`https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${s.songmid}&format=json&nobase64=1&g_tk=5381`, { headers });
+    if (!l.ok) continue;
+    const lt = (await l.text()).replace(/^[^{]*/, '').replace(/\)\s*;?\s*$/, '');
+    const ok = goodLrc(JSON.parse(lt).lyric, 'qq'); if (ok) return ok;
   }
   return null;
 }
@@ -104,7 +155,14 @@ export default {
     // una respuesta encontrada se guarda un día en la caché de Cloudflare
     const cache = caches.default, key = new Request(u.toString(), { method: 'GET' });
     const hit = await cache.match(key); if (hit) return new Response(hit.body, { headers: { ...cors, 'Content-Type': 'application/json' } });
-    const found = (await fromLrclib(artist, title, duration)) || (await fromNetease(artist, title, duration).catch(() => null));
+    // se prueba cada fuente por turno; con ?debug=1 se ve qué respondió cada una
+    const log = {}, debug = u.searchParams.has('debug');
+    let found = await fromLrclib(artist, title, duration); log.lrclib = found ? 'sí' : 'no';
+    for (const src of [fromNetease, fromKugou, fromQQ]) {
+      if (found) break;
+      try { found = await src(artist, title, duration, log); } catch (e) { log[src.name] = 'error: ' + (e.message || e); }
+    }
+    if (debug) return json({ found: found ? found.source : null, log, preview: found ? found.syncedLyrics.slice(0, 300) : '' });
     const res = json(found || { none: true }, 200, found ? { 'Cache-Control': 'public, max-age=86400' } : {});
     if (found) await cache.put(key, res.clone());
     return res;
