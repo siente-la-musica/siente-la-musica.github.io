@@ -3732,7 +3732,11 @@ function finishRecording(blob, ext, err) {
   resize(); blobs.length = 0; lights.length = 0;
   if (!blob) { showSong(`<div class="meta"><div class="title">No se pudo guardar el clip</div><div class="note">${esc(err && err.message || 'Error al codificar')}. Prueba otra vez o cambia de navegador.</div></div>`); return; }
   const url = URL.createObjectURL(blob);
-  const name = 'siente-la-musica' + (sp.item ? '-' + sp.item.name.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') : '') + '.' + ext;
+  // el archivo lleva la canción y sus artistas: «siente-la-musica-training-season-dua-lipa.mp4»
+  const slug = t => t.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9ñ]+/g, '-').replace(/^-|-$/g, '');
+  const songT = sp.item ? (sp.item.name || '').replace(/\s*[([](feat|ft|with|con)\.?\s[^)\]]*[)\]]/gi, '').replace(/\s*[-–]\s*(remaster(ed)?|live|radio edit).*$/i, '') : '';
+  const arts = sp.item ? (sp.item.artists || []).map(a => a.name).join(' ') : '';
+  const name = ('siente-la-musica' + (songT ? '-' + slug(songT) : '') + (arts ? '-' + slug(arts) : '')).slice(0, 110).replace(/-$/, '') + '.' + ext;
   const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
   showSong(`<div class="meta"><div class="title">Clip guardado</div><div class="note">Se descargó «${esc(name)}» (${(blob.size / 1048576).toFixed(1)} MB).${ext === 'webm' ? ' TikTok acepta este formato; si tu editor no, conviértelo a MP4.' : ''}</div><div class="row"><a href="${url}" download="${esc(name)}">Descargar otra vez</a></div></div>`);
 }
