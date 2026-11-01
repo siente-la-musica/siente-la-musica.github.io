@@ -3146,13 +3146,31 @@ async function syncAIStart() {
 }
 async function toWav16k(blob) {   // la IA entiende mejor un WAV mono de 16 kHz (y pesa poco)
   const ac = new (window.AudioContext || window.webkitAudioContext)(), buf = await ac.decodeAudioData(await blob.arrayBuffer()); ac.close();
-  const off = new OfflineAudioContext(1, Math.ceil(buf.duration * 16000), 16000), src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  // se quitan los graves (bombo, bajo) y lo muy agudo: queda sobre todo la banda de la voz, que es lo que la IA debe oír
+  const off = new OfflineAudioContext(1, Math.ceil(buf.duration * 16000), 16000), src = off.createBufferSource(); src.buffer = buf;
+  const hp = off.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 180; hp.Q.value = 0.7;
+  const lp = off.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 6000; lp.Q.value = 0.7;
+  src.connect(hp); hp.connect(lp); lp.connect(off.destination); src.start();
   const pcm = (await off.startRendering()).getChannelData(0), n = pcm.length, out = new DataView(new ArrayBuffer(44 + n * 2));
+  // ¿llegó sonido? si la grabación está en silencio, la IA se inventa frases («Thanks for watching»), así que no se envía
+  let e = 0, pk = 0; for (let i = 0; i < n; i++) { const v = Math.abs(pcm[i]); e += v * v; if (v > pk) pk = v; }
+  const rms = Math.sqrt(e / Math.max(1, n));
+  if (n < 16000 * 3) throw new Error('la parte escuchada es muy corta: deja sonar al menos 5 segundos');
+  if (rms < 0.004) throw new Error('no llegó sonido de la canción. Revisa que en Conectar audio → Audio del PC compartas la pestaña o pantalla donde suena Spotify, con «Compartir audio» activado');
+  const g = Math.min(8, 0.7 / Math.max(pk, 1e-4));   // se sube el volumen si llegó bajito
+  for (let i = 0; i < n; i++) pcm[i] *= g;
   const w = (o, t) => [...t].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
   w(0, 'RIFF'); out.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); out.setUint32(16, 16, true); out.setUint16(20, 1, true); out.setUint16(22, 1, true);
   out.setUint32(24, 16000, true); out.setUint32(28, 32000, true); out.setUint16(32, 2, true); out.setUint16(34, 16, true); w(36, 'data'); out.setUint32(40, n * 2, true);
   for (let i = 0; i < n; i++) out.setInt16(44 + i * 2, Math.max(-1, Math.min(1, pcm[i])) * 32767, true);
   return new Blob([out.buffer], { type: 'audio/wav' });
+}
+// frases que Whisper se inventa cuando no oye voz (vienen de subtítulos de YouTube): se descartan
+const AI_FAKE = /thanks? (you )?for watching|subscribe|like and share|see you (in the )?next|subt[ií]tulos|amara\.org|gracias por ver|suscr[ií]bete|ご視聴|字幕/i;
+function aiCleanWords(words) {
+  const text = words.map(w => w.word.trim()).join(' ').replace(/\s+/g, ' ');
+  if (AI_FAKE.test(text) && words.length < 25) return [];
+  return words.filter(w => w.word && !/^[\s♪\[\]().,!?-]*$/.test(w.word) && w.end >= w.start);
 }
 function alignWords(lines, words, t0) {
   const W = words.map(w => ({ n: normW(w.word), t: t0 + w.start * 1000 })).filter(w => w.n);
@@ -3192,10 +3210,14 @@ async function syncAIFinish() {
   try {
     const wav = await toWav16k(new Blob(ai.ch, { type: ai.mr.mimeType || 'audio/webm' }));
     const base = (LYRICS_BACKUP || store.get('lyricsBackup', '')).replace(/\/$/, '');
-    const r = await fetch(base + '/alinear', { method: 'POST', body: wav, headers: { 'Content-Type': 'audio/wav' } });
+    // la letra pegada se le da a la IA como pista: así sabe qué palabras esperar y no se las inventa
+    const prompt = sync.lines.join(' ').slice(0, 600);
+    const r = await fetch(base + '/alinear' + (prompt ? '?prompt=' + encodeURIComponent(prompt) : ''), { method: 'POST', body: wav, headers: { 'Content-Type': 'audio/wav' } });
     const j = await r.json();
     if (!r.ok || !j.words) throw new Error(j.error || 'sin respuesta');
-    const lines = alignWords(sync.lines, j.words, ai.t0);
+    const words = aiCleanWords(j.words);
+    if (words.length < 3) throw new Error('la IA no distinguió la voz (la música tapa el canto o no llegó sonido). Prueba con una parte donde la voz se oiga más clara');
+    const lines = alignWords(sync.lines, words, ai.t0);
     syncEl.hidden = true;
     if (!lines || !lines.length) { spToast('La IA no reconoció la letra en esa parte. Prueba con una parte donde la voz se oiga más clara'); return; }
     const old = (lyricsCache.get(sync.item.id) || {}).lines || [];

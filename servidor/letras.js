@@ -81,10 +81,22 @@ export default {
       if (!env.AI) return json({ error: 'falta el vínculo de Workers AI (nombre: AI)' }, 500);
       const buf = new Uint8Array(await request.arrayBuffer());
       if (!buf.length || buf.length > 8 * 1024 * 1024) return json({ error: 'audio vacío o demasiado grande' }, 400);
+      // el modelo grande (large-v3-turbo) entiende mucho mejor el canto con música; la letra va como pista
+      const prompt = (u.searchParams.get('prompt') || '').slice(0, 800);
+      let b64 = ''; for (let i = 0; i < buf.length; i += 0x8000) b64 += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000));
+      b64 = btoa(b64);
       try {
-        const out = await env.AI.run('@cf/openai/whisper', { audio: [...buf] });
-        return json({ text: out.text || '', words: (out.words || []).map(w => ({ word: w.word, start: w.start, end: w.end })) });
-      } catch (e) { return json({ error: 'la IA no pudo escuchar el audio: ' + (e.message || e) }, 502); }
+        const out = await env.AI.run('@cf/openai/whisper-large-v3-turbo', { audio: b64, vad_filter: true, ...(prompt ? { initial_prompt: prompt } : {}) });
+        // se descartan los tramos donde la IA misma cree que no hay voz
+        const segs = (out.segments || []).filter(s => !(s.no_speech_prob > 0.75));
+        const words = segs.flatMap(s => (s.words || []).map(w => ({ word: w.word, start: w.start, end: w.end })));
+        return json({ text: segs.map(s => s.text).join(' ').trim(), words, model: 'large-v3-turbo' });
+      } catch (e) {
+        try {   // si el grande falla, el pequeño de siempre
+          const out = await env.AI.run('@cf/openai/whisper', { audio: [...buf] });
+          return json({ text: out.text || '', words: (out.words || []).map(w => ({ word: w.word, start: w.start, end: w.end })), model: 'whisper' });
+        } catch (e2) { return json({ error: 'la IA no pudo escuchar el audio: ' + (e2.message || e2) }, 502); }
+      }
     }
     const artist = u.searchParams.get('artist') || '', title = u.searchParams.get('title') || '';
     const duration = +u.searchParams.get('duration') || 0;
