@@ -2140,6 +2140,7 @@ async function spPoll() {
     }
   }
   const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 10000);
+  const tAsk = performance.now();
   let r; try { r = await fetch('https://api.spotify.com/v1/me/player?additional_types=episode', { headers: { Authorization: 'Bearer ' + sp.token }, signal: ctl.signal }); } finally { clearTimeout(to); }
   const fast = performance.now() < (sp.burstUntil || 0);
   if (r.status === 204) { if (!fast) spUpdate(null); return fast ? 600 : document.hidden ? 20000 : 8000; }
@@ -2151,6 +2152,8 @@ async function spPoll() {
   if (r.status === 429) return (Number(r.headers.get('Retry-After')) || 30) * 1000;
   if (!r.ok) return 15000;
   const d = await r.json();
+  // el segundo que dice Spotify es de cuando contestó, no de cuando llegó la respuesta: se toma la mitad del viaje
+  if (d) d.__at = tAsk + (performance.now() - tAsk) / 2;
   sp.deviceId = d?.device?.id || null;
   if (d?.device && d.device.volume_percent != null && !(performance.now() < (sp.volLock || 0))) sp.volume = d.device.volume_percent;
   spUpdate(d);
@@ -2183,12 +2186,19 @@ function spUpdate(d, src = 'spotify') {
     if (!close) return;
     sp.lockUntil = 0;
   }
-  const wasPlaying = sp.playing;
+  const wasPlaying = sp.playing, est = spPos(), at = (d && d.__at) || performance.now();
+  const sameSong = !changed && sp.playing && d && d.is_playing;
   sp.item = item || null;
   sp.playing = !!(d && d.is_playing);
-  sp.progress = (d && d.progress_ms) || 0;
   sp.duration = (item && item.duration_ms) || 0;
-  sp.at = performance.now();
+  let prog = (d && d.progress_ms) || 0;
+  if (src === 'spotify' && webDev() && sameSong && Math.abs(prog + (performance.now() - at) - est) < 1500) prog = null;   // suena aquí: manda el reloj exacto del reproductor del navegador
+  else if (sameSong) {   // la misma canción sonando: diferencias pequeñas se suavizan para que la letra no dé saltitos
+    const want = prog + (performance.now() - at), diff = want - est;
+    if (Math.abs(diff) < 600) prog = est + diff * 0.3, sp.at = performance.now(), sp.progress = prog, prog = null;
+    else { sp.progress = prog; sp.at = at; prog = null; }
+  }
+  if (prog != null) { sp.progress = prog; sp.at = at; }
   if (changed) { sp.lockUntil = 0; songEl.classList.remove('switching'); }
   if (changed) {
     sp.dismissed = false;
@@ -3720,6 +3730,16 @@ function finishRecording(blob, ext, err) {
 // Spotify obedece con retraso: se pausa, se mueve y se COMPRUEBA que quedó quieta ahí (hasta 3 intentos);
 // al soltarla se comprueba que suena desde ese punto. Así el clip nunca empieza antes ni salta hacia atrás.
 const webDev = () => !!(lib.web && sp.deviceId && sp.deviceId === lib.webId);
+// cuando Spotify suena en esta página, su reproductor sabe el segundo exacto: se consulta cada segundo
+setInterval(async () => {
+  if (!webDev() || !sp.playing || document.hidden || performance.now() < (sp.lockUntil || 0)) return;
+  const st = await lib.web.getCurrentState().catch(() => null);
+  const ct = st && st.track_window && st.track_window.current_track;
+  if (!ct || st.paused || (ct.id !== sp.item?.id && ct.linked_from?.id !== sp.item?.id)) return;
+  const pos = st.position + (st.timestamp && Date.now() - st.timestamp < 3000 ? Math.max(0, Date.now() - st.timestamp) : 0), diff = pos - spPos();
+  if (Math.abs(diff) > 3000) return;
+  sp.progress = spPos() + (Math.abs(diff) < 400 ? diff * 0.4 : diff); sp.at = performance.now();
+}, 1000);
 async function spState() {
   if (webDev()) { const st = await lib.web.getCurrentState().catch(() => null); if (st) return { playing: !st.paused, pos: st.position }; }
   const d = await spApi('/me/player').catch(() => null);
