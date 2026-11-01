@@ -38,20 +38,27 @@ async function fromLrclib(artist, title, duration) {
 }
 
 // Puntuación común: el mismo título, el mismo artista y una duración parecida
-function score(nt, na, st, sa, duration, sdur) {
+// en vivo, remix, acústica, karaoke… solo si se pidió esa versión
+const VERSION = /\b(live|en vivo|ao vivo|remix|acoustic|ac[uú]stic[oa]|karaoke|instrumental|cover|sped up|slowed|nightcore|8d|version|ver\.)\b|伴奏|现场|翻唱|纯音乐/i;
+function score(nt, na, st, sa, duration, sdur, want = '') {
+  const raw = st || '';
   st = norm(st); sa = norm(sa);
   let sc = 0;
+  if (VERSION.test(raw) && !VERSION.test(want)) sc -= 3;
   if (st === nt) sc += 3; else if (st && (st.startsWith(nt) || nt.startsWith(st))) sc += 2;
   if (sa && (sa.includes(na) || na.includes(sa.split(' ')[0] || '~'))) sc += 2;
   if (duration && sdur) { const d = Math.abs(sdur - duration); sc += d <= 3 ? 2 : d <= 10 ? 1 : d > 30 ? -3 : 0; }
   return sc;
 }
 // Una letra LRC sirve si tiene tiempos reales en varias líneas (no solo créditos)
-function goodLrc(lrc, source) {
+function goodLrc(lrc, source, title = '') {
   if (!lrc) return null;
   lrc = lrc.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/\r/g, '');
   const timed_ = lrc.split('\n').filter(x => /^\[\d+:\d+(\.\d+)?\]\s*\S/.test(x));
   if (timed_.length <= 5) return null;
+  // la primera línea a veces es solo «Título - Artista»: se quita
+  const nt = norm(title);
+  lrc = lrc.split('\n').filter((x, i) => { const m = x.match(/^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/); return !(m && +m[1] === 0 && +m[2] < 1 && / - /.test(m[3]) && nt && norm(m[3]).startsWith(nt)); }).join('\n');
   const clean = lrc.split('\n').filter(x => !/^\[\d+:\d+(\.\d+)?\]\s*(作词|作曲|编曲|制作人|词|曲|Lyrics by|Composed by|Written by)\s*[:：]/i.test(x) && !/^\[(ti|ar|al|by|offset|id|hash|sign|qq|total|language):/i.test(x)).join('\n');
   return { syncedLyrics: clean, plainLyrics: clean.replace(/\[[^\]]*\]/g, '').trim(), source };
 }
@@ -65,13 +72,13 @@ async function fromNetease(artist, title, duration, log) {
   if (!r.ok) return null;
   const songs = ((await r.json()).result || {}).songs || [];
   const nt = norm(title), na = norm(artist);
-  const best = songs.map(s => ({ s, sc: score(nt, na, s.name, (s.artists || []).map(a => a.name).join(' '), duration, s.duration / 1000) }))
+  const best = songs.map(s => ({ s, sc: score(nt, na, s.name, (s.artists || []).map(a => a.name).join(' '), duration, s.duration / 1000, title) }))
     .filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
   log.netease += `, ${songs.length} canciones, ${best.length} parecidas`;
   for (const { s } of best.slice(0, 3)) {
     const l = await timed(`https://music.163.com/api/song/lyric?id=${s.id}&lv=1&kv=1&tv=-1`, { headers });
     if (!l.ok) continue;
-    const ok = goodLrc(((await l.json()).lrc || {}).lyric, 'netease'); if (ok) return ok;
+    const ok = goodLrc(((await l.json()).lrc || {}).lyric, 'netease', title); if (ok) return ok;
   }
   return null;
 }
@@ -85,14 +92,14 @@ async function fromKugou(artist, title, duration, log) {
   if (!r.ok) return null;
   const cands = (await r.json()).candidates || [];
   const nt = norm(title), na = norm(artist);
-  const best = cands.map(c => ({ c, sc: score(nt, na, c.song, c.singer, duration, (c.duration || 0) / 1000) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
+  const best = cands.map(c => ({ c, sc: score(nt, na, c.song, c.singer, duration, (c.duration || 0) / 1000, title) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
   log.kugou += `, ${cands.length} letras, ${best.length} parecidas`;
   for (const { c } of best.slice(0, 3)) {
     const d = await timed(`https://lyrics.kugou.com/download?ver=1&client=pc&id=${c.id}&accesskey=${c.accesskey}&fmt=lrc&charset=utf8`, { headers });
     if (!d.ok) continue;
     const j = await d.json(); if (!j.content) continue;
     const bin = atob(j.content), bytes = Uint8Array.from(bin, ch => ch.charCodeAt(0));
-    const ok = goodLrc(new TextDecoder('utf-8').decode(bytes), 'kugou'); if (ok) return ok;
+    const ok = goodLrc(new TextDecoder('utf-8').decode(bytes), 'kugou', title); if (ok) return ok;
   }
   return null;
 }
@@ -107,13 +114,13 @@ async function fromQQ(artist, title, duration, log) {
   const t = (await r.text()).replace(/^[^{]*/, '').replace(/\)\s*;?\s*$/, '');
   const list = ((JSON.parse(t).data || {}).song || {}).list || [];
   const nt = norm(title), na = norm(artist);
-  const best = list.map(s => ({ s, sc: score(nt, na, s.songname, (s.singer || []).map(a => a.name).join(' '), duration, s.interval) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
+  const best = list.map(s => ({ s, sc: score(nt, na, s.songname, (s.singer || []).map(a => a.name).join(' '), duration, s.interval, title) })).filter(x => x.sc >= 4).sort((a, b) => b.sc - a.sc);
   log.qq += `, ${list.length} canciones, ${best.length} parecidas`;
   for (const { s } of best.slice(0, 3)) {
     const l = await timed(`https://c.y.qq.com/lyric/fcgi-bin/fcg_query_lyric_new.fcg?songmid=${s.songmid}&format=json&nobase64=1&g_tk=5381`, { headers });
     if (!l.ok) continue;
     const lt = (await l.text()).replace(/^[^{]*/, '').replace(/\)\s*;?\s*$/, '');
-    const ok = goodLrc(JSON.parse(lt).lyric, 'qq'); if (ok) return ok;
+    const ok = goodLrc(JSON.parse(lt).lyric, 'qq', title); if (ok) return ok;
   }
   return null;
 }
