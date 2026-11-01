@@ -3056,7 +3056,7 @@ async function fetchBackup(artist, title, dur) {
   if (!base) return null;
   try {
     const c = new AbortController(), t = setTimeout(() => c.abort(), 12000);
-    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '' }), { signal: c.signal }).finally(() => clearTimeout(t));
+    const r = await fetch(base.replace(/\/$/, '') + '/?' + new URLSearchParams({ artist, title, duration: dur || '', v: '2' }), { signal: c.signal }).finally(() => clearTimeout(t));
     if (!r.ok) return null; const j = await r.json(); return j && (j.syncedLyrics || j.plainLyrics) ? j : null;
   } catch (e) { return null; }
 }
@@ -3266,7 +3266,18 @@ addEventListener('keydown', e => {
   else if (e.key === 'Backspace') { e.preventDefault(); sync.marks.pop(); syncShow(); }
   else if (e.key === 'Enter') { e.preventDefault(); syncDone(); }
 }, true);
-(function () { try { if (localStorage.getItem('pulso.lyfix') === '1') return;
+// algunas letras traen como primera línea «Título (versión) - Artista»: no es parte de lo que se canta
+function dropTitleLine(lines, item) {
+  const n = x => (x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  const t = n((item.name || '').replace(/\s*[-(\[].*$/, '')), a = n(item.artists?.[0]?.name);
+  return lines.filter((l, i) => !(i < 2 && l.t < 1500 && (/ - /.test(l.text) || /\(live|saturday night/i.test(l.text)) && (n(l.text).startsWith(t) || (a && n(l.text).includes(a)))));
+}
+// segunda limpieza: se olvidan las letras guardadas que vinieron de una versión en vivo o con la línea del título
+(function () { try { if (localStorage.getItem('pulso.lyfix') === '2') return;
+  const all = JSON.parse(localStorage.getItem('pulso.lyrics') || '{}');
+  for (const k in all) { const L = all[k] && all[k].lines; if (L && L.slice(0, 3).some(l => /\blive\b|saturday night|en vivo| - /i.test(l.text || ''))) delete all[k]; }
+  localStorage.setItem('pulso.lyrics', JSON.stringify(all)); localStorage.setItem('pulso.lyfix', '2'); } catch (e) {} })();
+(function () { try { if (localStorage.getItem('pulso.lyfix')) return;
   const all = JSON.parse(localStorage.getItem('pulso.lyrics') || '{}');
   for (const k in all) if (all[k] && all[k].lines && all[k].lines.length < 12) delete all[k];
   localStorage.setItem('pulso.lyrics', JSON.stringify(all)); localStorage.setItem('pulso.lyfix', '1'); } catch (e) {} })();
@@ -3288,7 +3299,7 @@ async function loadLyrics(item) {
   lyrics = data === undefined ? { error: true }
     : !data ? { none: true }
     : data.instrumental ? { instrumental: true }
-    : data.syncedLyrics ? { lines: parseLRC(data.syncedLyrics) }
+    : data.syncedLyrics ? { lines: dropTitleLine(parseLRC(data.syncedLyrics), item) }
     : { plain: data.plainLyrics.split(/\r?\n/).filter(l => l.trim()) };
   if (!lyrics.error) { lyricsCache.set(item.id, lyrics); if (lyrics.lines || (lyrics.plain && !data.fallback)) lyricsSave(item.id, lyrics); }
   else { item.__tries = (item.__tries || 0) + 1; setTimeout(() => { if (lyricsFor === item.id && lyrics && lyrics.error) loadLyrics(item); }, Math.min(60000, 8000 * item.__tries)); }   // la red o el servicio fallaron: se reintenta sola, cada vez más espaciado
