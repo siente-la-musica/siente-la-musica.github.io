@@ -920,6 +920,8 @@ function colorTick(dt) {
   colorTick.gray = (colorTick.gray || 0) + (still - (colorTick.gray || 0)) * (1 - Math.pow(still ? 0.25 : 0.02, dt));   // se apaga en ~1 s, se enciende rápido
   fade = Math.max(fade * 0.85, colorTick.gray * 0.92);
   if (fade > 0) { const n = NEUTRAL[state.theme === 'dark' ? 'dark' : 'light']; goal = goal.map(c => c.map((v, k) => v + (n[k] - v) * fade)); }
+  // «la letra se ve»: si la línea nombra un color, la paleta se va hacia ese color mientras dura (y vuelve después)
+  if (typeof lfx !== 'undefined' && lfx.tint && lfx.tintK > 0.01) { const t = lfx.tint; goal = goal.map((c, i) => c.map((v, k) => v + (t[k] * (0.85 + i * 0.08) - v) * Math.min(1, lfx.tintK) * 0.7)); }
   const k = 1 - Math.pow(0.12, dt);   // ≈ 1,5 s para fundirse
   let moved = 0;
   RGB.forEach((c, i) => c.forEach((v, j) => { const d = goal[i][j] - v; c[j] = v + d * k; moved = Math.max(moved, Math.abs(d)); }));
@@ -8442,20 +8444,32 @@ const LYRIC_FX = [
   ['rain', /\b(lluvia|llueve|llover|llor(o|as|a|ar|ando|amos)|lagrimas?|rain(ing|y)?|cry(ing)?|cried|tears?|storm(y)?)\b/],
   ['love', /\b(amor|amo|amas|te quiero|corazon|enamorad[oa]s?|besos?|besar|beso|love|lover|heart|kiss(es|ing)?|baby|bebe|mi vida)\b/],
   ['stars', /\b(estrellas?|brillar|brilla|brillo|noche|luna|cielo|galaxia|universo|stars?|shine|shining|night|moon|sky|galaxy|heaven|cielos)\b/],
-  ['sun', /\b(sol|soleado|verano|amanecer|dia|luz|sun(shine|light|ny)?|summer|morning|light|golden|oro|dorado)\b/],
+  ['butterfly', /\b(mariposas?|butterfl(y|ies))\b/],
+  ['gems', /\b(diamantes?|joyas?|oro|dorad[oa]s?|dinero|plata|millonari\w*|money|cash|gold(en)?|diamonds?|jewels?|rich|bling)\b/],
+  ['sun', /\b(sol|soleado|verano|amanecer|dia|luz|sun(shine|light|ny)?|summer|morning|light)\b/],
   ['sea', /\b(mar|oceano|olas?|playa|agua|nadar|ocean|sea|waves?|beach|water|swim(ming)?|underwater)\b/],
   ['flowers', /\b(flor(es)?|rosas?|jardin|primavera|petalos?|flowers?|roses?|garden|bloom(ing)?|spring|daisy|lily)\b/],
   ['party', /\b(bail(a|ar|ando|amos|e)|perreo|perrear|fiesta|disco|discoteca|club|party|dance|dancing|dancefloor|celebra(r|te)?|rumba|parisera|classics?)\b/],
   ['snow', /\b(nieve|frio|fria|hielo|invierno|helad[oa]|snow(ing)?|cold|ice|frozen|winter|freezing)\b/],
+  ['wind', /\b(viento|brisa|vuela|volar|wind|breeze|blow(ing)?|fly(ing)?|aire)\b/],
+  ['smoke', /\b(humo|fum\w*|niebla|smoke|smoking|fog|haze|high)\b/],
+  ['city', /\b(ciudad|calles?|city|streets?|downtown|neon|avenida)\b/],
+  ['speed', /\b(rapido|velocidad|maneja\w*|carro|coche|moto|drive|driving|fast|speed|race|racing|car)\b/],
+  ['phone', /\b(llam\w*|telefono|celular|call(ing|ed)?|phone|text(ing)?|mensajes?)\b/],
+  ['clock', /\b(tiempo|reloj|horas?|minutos?|segundos?|time|clock|hours?|minutes?|seconds?|forever|siempre)\b/],
+  ['eyes', /\b(ojos|mirada|mirar|mirame|mira|eyes|look(ing)?|stare|see)\b/],
   ['storm', /\b(rayos?|relampagos?|tormenta|truenos?|electric[oa]?|electricidad|thunder|lightning|electric|power|explota|explode|boom|bomb)\b/],
 ];
-const lfx = { line: '', kinds: [], k: 0, parts: [], flash: 0, sun: 0 };
+const lfx = { line: '', kinds: [], k: 0, parts: [], flash: 0, sun: 0, tint: null, tintK: 0, dn: 0, dnK: 0, word: '', wordC: null, wordK: 0, sus: 0, susK: 0, rings: [], chorus: 0, last: 0, moodK: 0 };
+const LFX_COLORS = [[/\b(rojo|roja|rojos|red|scarlet|carmesi)\b/, [255, 55, 75]], [/\b(azul|azules|blue)\b/, [55, 115, 255]], [/\b(verde|verdes|green)\b/, [40, 210, 120]],
+  [/\b(amarillo|amarilla|yellow)\b/, [255, 215, 50]], [/\b(dorad[oa]s?|oro|gold(en)?)\b/, [255, 190, 70]], [/\b(morad[oa]|violeta|lila|purple|violet|lavender)\b/, [160, 80, 255]],
+  [/\b(rosa|rosad[oa]|pink)\b/, [255, 105, 180]], [/\b(naranja|orange)\b/, [255, 140, 40]], [/\b(plata|plateado|silver)\b/, [205, 215, 235]], [/\b(blanco|blanca|white)\b/, [245, 245, 255]]];
 const lfxNorm = t => (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 // el contexto de la canción entera: si la letra es triste no salen soles ni confeti aunque se nombren
 // (una canción triste que dice «sol» no se llena de soles); si es alegre, todo vale
 const LFX_SAD = /\b(triste|tristeza|llor\w*|lagrimas?|dolor|duele|sufr\w*|adios|olvid\w*|perd\w*|extrañ\w*|extran\w*|soledad|vacio|roto|rota|muero|morir|sad|sadness|cry\w*|tears?|alone|lonely|pain|hurts?|goodbye|broken|miss(ing)?|lost|die|dying|cold|empty|sorry|regret)\b/g;
 const LFX_HAPPY = /\b(feliz|felicidad|alegr\w*|baila\w*|fiesta|sonri\w*|gozar|disfrut\w*|rumba|perreo|happy|smile|dance|dancing|party|fun|celebrat\w*|tonight|vibe|good time|sunshine)\b/g;
-const LFX_OK = { sad: ['rain', 'stars', 'snow', 'sea', 'storm', 'love'], happy: null, mid: null };
+const LFX_OK = { sad: ['rain', 'stars', 'snow', 'sea', 'storm', 'love', 'wind', 'smoke', 'city', 'clock', 'eyes', 'phone'], happy: null, mid: null };
 function lyricFxMood() {
   const id = sp.item && sp.item.id;
   if (lfx.moodFor === id && lfx.moodN === (lyrics && lyrics.lines ? lyrics.lines.length : 0)) return lfx.mood;
@@ -8466,14 +8480,28 @@ function lyricFxMood() {
   const score = tot ? (hap - sad) / tot : 0;
   lfx.mood = score < -0.15 || (score < 0.1 && minor && mood.lvl < 0.35) ? 'sad' : score > 0.15 ? 'happy' : 'mid';
   lfx.moodFor = id; lfx.moodN = lyrics && lyrics.lines ? lyrics.lines.length : 0;
+  lfx.repMap = new Map();
+  for (const l of (lyrics && lyrics.lines) || []) { const k = lfxNorm(l.text).trim(); if (!k) continue; const e = lfx.repMap.get(k) || { n: 0, last: 0 }; e.n++; e.last = Math.max(e.last, l.t); lfx.repMap.set(k, e); }
+  const top = [...lfx.repMap.values()].map(e => e.n).sort((a, b) => b - a);
+  lfx.repMin = Math.max(2, top[Math.min(3, top.length - 1)] || 2);   // las 3-4 líneas más repetidas
   return lfx.mood;
 }
 function lyricFxTick(dt) {
   const L = state.lyricFx && state.mode !== 'strobe' ? currentLyric() : null, text = L ? L.text : '';
   if (text !== lfx.line) {   // línea nueva: ¿de qué habla? (cada línea puede encender hasta dos cosas, si van con la canción)
     lfx.line = text; const t = lfxNorm(text), ok = LFX_OK[lyricFxMood()];
-    const kinds = LYRIC_FX.filter(([k, re]) => (!ok || ok.includes(k)) && re.test(t)).map(([k]) => k).slice(0, 2);
-    if (kinds.length) { lfx.kinds = kinds; lfx.hold = 1; } else lfx.hold = 0;
+    // una sola cosa por línea (la primera que se nombre), para que se vea bonito y no se llene la pantalla
+    const hit = LYRIC_FX.find(([k, re]) => (!ok || ok.includes(k)) && re.test(t));
+    if (hit) { lfx.kinds = [hit[0]]; lfx.hold = 1; const m = t.match(hit[1]); lfx.word = m ? text.substr(m.index, m[0].length) : ''; lfx.wordC = null; } else { lfx.hold = 0; }
+    const cw = LFX_COLORS.find(([re]) => re.test(t)); if (cw) lfx.tint = cw[1];
+    lfx.tintOn = !!cw;
+    lfx.dnT = /\b(noche|night|oscur\w*|dark(ness)?|midnight|medianoche)\b/.test(t) ? -1 : /\b(dia|amanecer|morning|sunrise|daylight|manana)\b/.test(t) ? 1 : 0;
+    if (text) { const ex = /[!¡]/.test(text) || /^\s*(ey|hey|oh|uh|wow|yeah|eh|wo+|ay)\b/i.test(t), qu = /[?¿]/.test(text);
+      if (ex || qu) lfx.rings.push({ r: 0, k: ex ? 1 : 0.55, q: !ex && qu, t: 0 }); }
+    // el estribillo: las líneas que más se repiten en la letra. La última vez que suena, el gran final
+    const rep_ = lfx.repMap && lfx.repMap.get(t);
+    lfx.chorusT = rep_ && rep_.n >= lfx.repMin ? 1 : 0;
+    lfx.lastT = rep_ && rep_.n >= lfx.repMin && L && L.start >= rep_.last - 50 ? 1 : 0;
   }
   lfx.k += ((lfx.hold && lfx.kinds.length ? 1 : 0) - lfx.k) * (1 - Math.pow(lfx.hold ? 0.05 : 0.3, dt));   // entra en ~0,4 s; se va despacio
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), live = lfx.k > 0.02 ? lfx.k : 0, u = MIN / 700;
@@ -8489,15 +8517,83 @@ function lyricFxTick(dt) {
   if (on('flowers')) spawn(many(dt * 8 * rate + burst * 2 * live), () => ({ t: 'petal', x: rnd() * W * 1.2, y: -20, vx: -(30 + rnd() * 60) * u, vy: (40 + rnd() * 60) * u, s: (6 + rnd() * 8) * u, life: 1, c: col(), ph: rnd() * 6, rot: rnd() * 6 }));
   if (on('party') && pulse.on) spawn(Math.round((10 + pulse.k * 18) * live), () => { const a = -Math.PI / 2 + (rnd() - 0.5) * 1.6, v = (300 + rnd() * 500) * u; return { t: 'confetti', x: W * (0.15 + rnd() * 0.7), y: H + 5, vx: Math.cos(a) * v, vy: Math.sin(a) * v, s: (4 + rnd() * 5) * u, life: 1, c: col(), rot: rnd() * 6, ph: rnd() * 6 }; });
   if (on('snow')) spawn(many(dt * 18 * rate), () => ({ t: 'snow', x: rnd() * W, y: -10, vx: 0, vy: (40 + rnd() * 50) * u, s: (2 + rnd() * 4) * u, life: 1, c: 0, ph: rnd() * 6 }));
+  if (on('wind')) spawn(many(dt * 22 * rate), () => ({ t: 'wind', x: -40, y: rnd() * H, vx: (500 + rnd() * 500) * u, vy: (rnd() - 0.5) * 40 * u, s: (30 + rnd() * 60) * u, life: 1, c: col(), ph: rnd() * 6 }));
+  if (on('butterfly')) spawn(many(dt * 2 * rate + burst * 0.5 * live), () => ({ t: 'fly', x: rnd() * W, y: H + 20, vx: (rnd() - 0.5) * 50 * u, vy: -(40 + rnd() * 50) * u, s: (9 + rnd() * 8) * u, life: 1, c: col(), ph: rnd() * 6 }));
+  if (on('gems')) spawn(many(dt * 8 * rate + burst * 3 * live), () => ({ t: 'gem', x: rnd() * W, y: rnd() * H * 0.9, vx: 0, vy: 10 * u, s: (6 + rnd() * 9) * u, life: 1, c: col(), ph: rnd() * 6, rot: rnd() * 6, dec: 0.7 + rnd() * 0.6 }));
+  if (on('smoke')) spawn(many(dt * 3 * rate), () => ({ t: 'smoke', x: rnd() * W, y: H + 40, vx: (rnd() - 0.5) * 20 * u, vy: -(25 + rnd() * 30) * u, s: (60 + rnd() * 90) * u, life: 1, c: col(), ph: rnd() * 6 }));
+  if (on('speed')) spawn(many(dt * 30 * rate), () => { const a = rnd() * 6.28; return { t: 'speed', x: W / 2 + Math.cos(a) * MIN * 0.1, y: H / 2 + Math.sin(a) * MIN * 0.1, vx: Math.cos(a) * 900 * u, vy: Math.sin(a) * 900 * u, s: (20 + rnd() * 40) * u, life: 1, c: col() }; });
+  if (on('phone') && pulse.on) lfx.rings.push({ r: MIN * 0.03, k: 0.6 * live, q: false, t: 0 });
+  lfx.city = (lfx.city || 0) + ((on('city') ? live : 0) - (lfx.city || 0)) * (1 - Math.pow(0.1, dt));
+  lfx.clk = (lfx.clk || 0) + ((on('clock') ? live : 0) - (lfx.clk || 0)) * (1 - Math.pow(0.1, dt));
+  lfx.eye = (lfx.eye || 0) + ((on('eyes') ? live : 0) - (lfx.eye || 0)) * (1 - Math.pow(0.1, dt));
+  if (pulse.on) lfx.tick = (lfx.tick || 0) + 1;
   if (on('storm') && pulse.on && pulse.k > 0.4) lfx.flash = Math.max(lfx.flash, (0.5 + pulse.k * 0.5) * live * (state.noFlash ? 0.25 : 1));
   lfx.flash *= Math.pow(0.004, dt);
   lfx.sun += ((on('sun') ? live : 0) - lfx.sun) * (1 - Math.pow(0.1, dt));
-  if (!lfx.parts.length && lfx.flash < 0.01 && lfx.sun < 0.01) return;
-  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  const fx = state.lyricFx && state.mode !== 'strobe' && !!text;
+  lfx.tintK += ((fx && lfx.tintOn ? 1 : 0) - lfx.tintK) * (1 - Math.pow(lfx.tintOn ? 0.1 : 0.3, dt));
+  lfx.dn += ((fx ? lfx.dnT || 0 : 0) - lfx.dn) * (1 - Math.pow(0.15, dt));
+  lfx.chorus += ((fx ? lfx.chorusT || 0 : 0) - lfx.chorus) * (1 - Math.pow(0.08, dt));
+  lfx.last += ((fx ? lfx.lastT || 0 : 0) - lfx.last) * (1 - Math.pow(0.08, dt));
+  lfx.wordK += ((fx && lfx.hold && lfx.word ? 1 : 0) - lfx.wordK) * (1 - Math.pow(lfx.hold ? 0.08 : 0.25, dt));
+  // notas largas: si la voz se sostiene sin sílabas nuevas, la luz crece hasta que suelta
+  if (fx && voice > 0.22 && !hits.voice) lfx.sus += dt; else if (hits.voice || voice < 0.12) lfx.sus = Math.max(0, lfx.sus - dt * 4);
+  lfx.susK += (Math.min(1, Math.max(0, (lfx.sus - 0.45) / 1.6)) - lfx.susK) * (1 - Math.pow(0.05, dt));
+  const md = state.lyricFx && sp.item ? (lfx.mood === 'sad' ? -1 : lfx.mood === 'happy' ? 1 : 0) : 0;
+  lfx.moodK += (md - lfx.moodK) * (1 - Math.pow(0.3, dt));
+  const anyAmb = Math.abs(lfx.dn) > 0.02 || lfx.chorus > 0.02 || lfx.wordK > 0.02 || lfx.susK > 0.02 || lfx.rings.length || Math.abs(lfx.moodK) > 0.02;
+  if (!lfx.parts.length && lfx.flash < 0.01 && lfx.sun < 0.01 && !anyAmb) return;
+  ctx.save();
+  // el ánimo de la canción tiñe el ambiente, muy suave: frío y quieto si es triste, cálido si es alegre
+  if (Math.abs(lfx.moodK) > 0.02) { ctx.globalCompositeOperation = 'soft-light'; ctx.fillStyle = lfx.moodK < 0 ? `rgba(60,100,210,${-lfx.moodK * 0.22})` : `rgba(255,165,80,${lfx.moodK * 0.16})`; ctx.fillRect(0, 0, W, H); }
+  // «noche» oscurece un poco; «amanecer» aclara
+  if (lfx.dn < -0.02) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(20,20,45,${-lfx.dn * 0.22})`; ctx.fillRect(0, 0, W, H); }
+  if (lfx.dn > 0.02) { ctx.globalCompositeOperation = 'screen'; ctx.fillStyle = `rgba(255,236,210,${lfx.dn * 0.12})`; ctx.fillRect(0, 0, W, H); }
+  ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  // el estribillo: un marco de luz de la canción que late con el golpe (y en el último, más)
+  if (lfx.chorus > 0.02) {
+    const k = lfx.chorus * (0.5 + P * 0.8 + energy * 0.4) * (1 + lfx.last * 0.8), c = mix(0.5 + 0.5 * Math.sin(time * 0.3));
+    for (const [x, y] of [[0, H / 2], [W, H / 2]]) { const g = ctx.createRadialGradient(x, y, 0, x, y, Math.max(W, H) * 0.55); g.addColorStop(0, rgba(c, (night ? 0.16 : 0.12) * k)); g.addColorStop(1, rgba(c, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+    if (lfx.last > 0.3 && pulse.on) for (let i = 0; i < 10; i++) lfx.parts.push({ t: 'star', x: Math.random() * W, y: Math.random() * H * 0.9, vx: 0, vy: 0, s: (5 + Math.random() * 9) * u, life: 1, c: i % 3, ph: Math.random() * 6, dec: 0.8 });
+  }
+  // la nota larga: una luz del color de la nota que crece en el centro
+  if (lfx.susK > 0.02) { const c = melodyColor(), r = MIN * (0.25 + lfx.susK * 0.5), g = ctx.createRadialGradient(W / 2, H * 0.48, 0, W / 2, H * 0.48, r); g.addColorStop(0, rgba(night ? c.map(v => v + (255 - v) * 0.3) : c, (night ? 0.3 : 0.2) * lfx.susK)); g.addColorStop(1, rgba(c, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  // ¡exclamación!: un anillo que estalla; ¿pregunta?: un anillo lento y suave que queda flotando
+  for (let i = lfx.rings.length - 1; i >= 0; i--) {
+    const g_ = lfx.rings[i]; g_.t += dt; g_.r += dt * MIN * (g_.q ? 0.25 : 1.4); const a = (1 - g_.t / (g_.q ? 2.2 : 1)) * g_.k;
+    if (a <= 0) { lfx.rings.splice(i, 1); continue; }
+    ctx.strokeStyle = rgba(night ? mix(0.5).map(v => v + (255 - v) * 0.4) : mix(0.5).map(v => v * 0.7), a * 0.5); ctx.lineWidth = MIN * (g_.q ? 0.004 : 0.008) * a;
+    ctx.beginPath(); ctx.arc(W / 2, H * 0.48, g_.r, 0, Math.PI * 2); ctx.stroke();
+  }
+  // la palabra de luz: lo que se nombra, escrito grande y suave detrás, que respira con el golpe
+  if (lfx.wordK > 0.02 && lfx.word) {
+    if (!lfx.wordC || lfx.wordC.w !== lfx.word || lfx.wordC.n !== night || lfx.wordC.W !== W) {
+      const c = document.createElement('canvas'), x = c.getContext('2d'), fs = Math.round(MIN * 0.24), col = mix(0.5);
+      x.font = `600 ${fs}px ${FONT_DISPLAY}`; const tw = Math.ceil(x.measureText(lfx.word.toLowerCase()).width) + fs;
+      c.width = Math.min(W * 1.2, tw); c.height = Math.round(fs * 1.8); x.font = `600 ${fs}px ${FONT_DISPLAY}`; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.shadowColor = rgba(col, 0.9); x.shadowBlur = fs * 0.35; x.fillStyle = rgba(night ? col.map(v => v + (255 - v) * 0.5) : col.map(v => v * 0.75), 1);
+      x.fillText(lfx.word.toLowerCase(), c.width / 2, c.height / 2);
+      lfx.wordC = { c, w: lfx.word, n: night, W };
+    }
+    const c = lfx.wordC.c, sc = Math.min(1, W * 0.9 / c.width) * (1 + P * 0.04 + lfx.susK * 0.05);
+    ctx.globalAlpha = lfx.wordK * (night ? 0.2 : 0.16) * (0.8 + P * 0.5);
+    ctx.drawImage(c, W / 2 - c.width * sc / 2, H * 0.42 - c.height * sc / 2, c.width * sc, c.height * sc); ctx.globalAlpha = 1;
+  }
   if (lfx.sun > 0.01) {   // el sol: un resplandor cálido desde arriba que late con el golpe
     const x = W * 0.82, y = -H * 0.05, r = MIN * (0.7 + P * 0.08 + energy * 0.2), g = ctx.createRadialGradient(x, y, 0, x, y, r), c = mix(0.15).map(v => v + (255 - v) * 0.35);
     g.addColorStop(0, rgba(c, 0.35 * lfx.sun)); g.addColorStop(1, rgba(c, 0)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
+  // la ciudad: una fila de ventanas encendidas abajo, que se prenden con el golpe
+  if (lfx.city > 0.02) { const n = 40, bw = W / n; for (let i = 0; i < n; i++) { const h = H * (0.06 + 0.1 * ((Math.sin(i * 12.9898) * 43758.5453) % 1 + 1) % 1); const on_ = ((i * 7 + (lfx.tick || 0)) % 5) < 3;
+      ctx.fillStyle = rgba(night ? RGB[i % 3].map(v => v + (255 - v) * 0.3) : RGB[i % 3].map(v => v * 0.7), lfx.city * (on_ ? 0.1 + P * 0.1 : 0.03)); ctx.fillRect(i * bw + bw * 0.25, H - h, bw * 0.5, h); } }
+  // el reloj: un anillo con doce marcas; la del compás se enciende en cada golpe
+  if (lfx.clk > 0.02) { const R = MIN * 0.36, c = mix(0.5); for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2 - Math.PI / 2, lit = i === (lfx.tick || 0) % 12;
+      ctx.strokeStyle = rgba(night ? c.map(v => v + (255 - v) * 0.4) : c.map(v => v * 0.7), lfx.clk * (lit ? 0.7 : 0.15)); ctx.lineWidth = MIN * (lit ? 0.008 : 0.004);
+      ctx.beginPath(); ctx.moveTo(W / 2 + Math.cos(a) * R * 0.9, H * 0.48 + Math.sin(a) * R * 0.9); ctx.lineTo(W / 2 + Math.cos(a) * R, H * 0.48 + Math.sin(a) * R); ctx.stroke(); } }
+  // los ojos: dos luces que miran y parpadean
+  if (lfx.eye > 0.02) { const bl = Math.abs(Math.sin(time * 0.9)) > 0.97 ? 0.15 : 1, c = melodyColor();
+    for (const sx of [-1, 1]) { const x = W / 2 + sx * MIN * 0.16 + Math.sin(time * 0.5) * MIN * 0.03, y = H * 0.4, r = MIN * 0.07;
+      ctx.save(); ctx.translate(x, y); ctx.scale(1, bl * 0.55); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, r); g.addColorStop(0, rgba(night ? c.map(v => v + (255 - v) * 0.5) : c, lfx.eye * 0.5)); g.addColorStop(1, rgba(c, 0)); ctx.fillStyle = g; ctx.fillRect(-r, -r, r * 2, r * 2); ctx.restore(); } }
   if (lfx.flash > 0.01) { ctx.fillStyle = rgba(mix(0.6).map(v => v + (255 - v) * 0.7), lfx.flash * (night ? 0.35 : 0.25)); ctx.fillRect(0, 0, W, H); }
   for (let i = lfx.parts.length - 1; i >= 0; i--) {
     const q = lfx.parts[i];
@@ -8506,6 +8602,9 @@ function lyricFxTick(dt) {
     if (q.t === 'petal') { q.rot += dt * 2; q.x += Math.sin(q.ph * 2) * 30 * u * dt; }
     if (q.t === 'heart' || q.t === 'bubble') q.x += Math.sin(q.ph * 1.6) * 20 * u * dt;
     if (q.t === 'snow') q.x += Math.sin(q.ph * 1.2) * 25 * u * dt;
+    if (q.t === 'fly') { q.x += Math.sin(q.ph * 1.3) * 40 * u * dt; }
+    if (q.t === 'smoke') { q.s += dt * 20 * u; q.life -= dt * 0.12; }
+    if (q.t === 'gem') q.life -= dt * q.dec * 0.7;
     if (q.t === 'star') q.life -= dt * q.dec * 0.6; else if (q.t === 'ember') q.life -= dt * 0.5; else if (q.t === 'confetti') q.life -= dt * 0.45;
     if (q.y < -60 || q.y > H + 60 || q.x < -60 || q.x > W + 60 || q.life <= 0) { lfx.parts.splice(i, 1); continue; }
     const a = Math.min(1, q.life * 1.5) * Math.min(1, lfx.k * 1.5 + 0.2), c = RGB[q.c], hot = c.map(v => v + (255 - v) * 0.5), dk = c.map(v => v * 0.7);
@@ -8520,6 +8619,13 @@ function lyricFxTick(dt) {
       case 'bubble': { ctx.globalAlpha = a * 0.7; ctx.strokeStyle = rgba(fill, 1); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.arc(q.x, q.y, q.s, 0, 7); ctx.stroke(); ctx.fillStyle = rgba(fill, 0.5); ctx.beginPath(); ctx.arc(q.x - q.s * 0.35, q.y - q.s * 0.35, q.s * 0.2, 0, 7); ctx.fill(); break; }
       case 'petal': { ctx.globalAlpha = a * 0.85; ctx.fillStyle = rgba(fill, 1); ctx.beginPath(); ctx.ellipse(q.x, q.y, q.s, q.s * 0.45 * Math.abs(Math.cos(q.rot)), q.rot, 0, 7); ctx.fill(); break; }
       case 'confetti': { ctx.globalAlpha = a; ctx.fillStyle = rgba(fill, 1); ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.rot); ctx.fillRect(-q.s, -q.s * 0.4 * Math.abs(Math.cos(q.ph * 5)), q.s * 2, q.s * 0.8 * Math.abs(Math.cos(q.ph * 5)) + 0.5); ctx.restore(); break; }
+      case 'wind': { ctx.globalAlpha = a * 0.35; ctx.strokeStyle = rgba(fill, 1); ctx.lineWidth = 1.2 * u; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.quadraticCurveTo(q.x - q.s * 0.5, q.y + Math.sin(q.ph * 3) * 6 * u, q.x - q.s, q.y); ctx.stroke(); break; }
+      case 'fly': { const f = Math.abs(Math.sin(q.ph * 9)) * 0.8 + 0.2; ctx.globalAlpha = a * 0.8; ctx.fillStyle = rgba(fill, 1);
+        for (const sg of [-1, 1]) { ctx.beginPath(); ctx.ellipse(q.x + sg * q.s * 0.45 * f, q.y - q.s * 0.15, q.s * 0.5 * f, q.s * 0.42, sg * 0.5, 0, 7); ctx.fill(); ctx.beginPath(); ctx.ellipse(q.x + sg * q.s * 0.32 * f, q.y + q.s * 0.3, q.s * 0.32 * f, q.s * 0.26, -sg * 0.4, 0, 7); ctx.fill(); } break; }
+      case 'gem': { const tw = Math.max(0, Math.sin(q.ph * 4)), r = q.s; ctx.globalAlpha = a * (0.35 + tw * 0.65); ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(Math.PI / 4 + q.rot * 0.1);
+        ctx.fillStyle = rgba(night ? c.map(v => v + (255 - v) * 0.6) : dk, 1); ctx.fillRect(-r * 0.5, -r * 0.5, r, r); ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.fillRect(-r * 0.5, -r * 0.5, r * 0.45, r * 0.45); ctx.restore(); break; }
+      case 'smoke': { ctx.globalAlpha = a * (night ? 0.12 : 0.1); ctx.drawImage(SPRITES[q.c], q.x - q.s, q.y - q.s, q.s * 2, q.s * 2); break; }
+      case 'speed': { ctx.globalAlpha = a * 0.4; ctx.strokeStyle = rgba(fill, 1); ctx.lineWidth = 1.5 * u; const d = Math.hypot(q.vx, q.vy) || 1; ctx.beginPath(); ctx.moveTo(q.x, q.y); ctx.lineTo(q.x - q.vx / d * q.s, q.y - q.vy / d * q.s); ctx.stroke(); break; }
       case 'snow': { ctx.globalAlpha = a * 0.85; ctx.fillStyle = night ? 'rgba(255,255,255,1)' : rgba(dk, 1); ctx.beginPath(); ctx.arc(q.x, q.y, q.s, 0, 7); ctx.fill(); break; }
     }
   }
