@@ -8541,7 +8541,7 @@ function lyricFxTick(dt) {
   lfx.susK += (Math.min(1, Math.max(0, (lfx.sus - 0.45) / 1.6)) - lfx.susK) * (1 - Math.pow(0.05, dt));
   const md = state.lyricFx && sp.item ? (lfx.mood === 'sad' ? -1 : lfx.mood === 'happy' ? 1 : 0) : 0;
   lfx.moodK += (md - lfx.moodK) * (1 - Math.pow(0.3, dt));
-  const anyAmb = Math.abs(lfx.dn) > 0.02 || lfx.chorus > 0.02 || lfx.wordK > 0.02 || lfx.susK > 0.02 || lfx.rings.length || Math.abs(lfx.moodK) > 0.02;
+  const anyAmb = Math.abs(lfx.dn) > 0.02 || lfx.chorus > 0.02 || lfx.susK > 0.02 || lfx.rings.length || Math.abs(lfx.moodK) > 0.02;
   if (!lfx.parts.length && lfx.flash < 0.01 && lfx.sun < 0.01 && !anyAmb) return;
   ctx.save();
   // el ánimo de la canción tiñe el ambiente, muy suave: frío y quieto si es triste, cálido si es alegre
@@ -8566,7 +8566,7 @@ function lyricFxTick(dt) {
     ctx.beginPath(); ctx.arc(W / 2, H * 0.48, g_.r, 0, Math.PI * 2); ctx.stroke();
   }
   // la palabra de luz: lo que se nombra, escrito grande y suave detrás, que respira con el golpe
-  if (lfx.wordK > 0.02 && lfx.word) {
+  if (false && lfx.wordK > 0.02 && lfx.word) {   // la palabra escrita en el fondo: quitada (se veía mejor sin ella)
     if (!lfx.wordC || lfx.wordC.w !== lfx.word || lfx.wordC.n !== night || lfx.wordC.W !== W) {
       const c = document.createElement('canvas'), x = c.getContext('2d'), fs = Math.round(MIN * 0.24), col = mix(0.5);
       x.font = `600 ${fs}px ${FONT_DISPLAY}`; const tw = Math.ceil(x.measureText(lfx.word.toLowerCase()).width) + fs;
