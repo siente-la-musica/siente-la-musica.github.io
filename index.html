@@ -4140,7 +4140,7 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['livecover', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
+  calm:   { name: 'tranquila', modes: ['comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
   medium: { name: 'media',     modes: ['loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
@@ -8451,11 +8451,28 @@ const LYRIC_FX = [
 ];
 const lfx = { line: '', kinds: [], k: 0, parts: [], flash: 0, sun: 0 };
 const lfxNorm = t => (t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+// el contexto de la canción entera: si la letra es triste no salen soles ni confeti aunque se nombren
+// (una canción triste que dice «sol» no se llena de soles); si es alegre, todo vale
+const LFX_SAD = /\b(triste|tristeza|llor\w*|lagrimas?|dolor|duele|sufr\w*|adios|olvid\w*|perd\w*|extrañ\w*|extran\w*|soledad|vacio|roto|rota|muero|morir|sad|sadness|cry\w*|tears?|alone|lonely|pain|hurts?|goodbye|broken|miss(ing)?|lost|die|dying|cold|empty|sorry|regret)\b/g;
+const LFX_HAPPY = /\b(feliz|felicidad|alegr\w*|baila\w*|fiesta|sonri\w*|gozar|disfrut\w*|rumba|perreo|happy|smile|dance|dancing|party|fun|celebrat\w*|tonight|vibe|good time|sunshine)\b/g;
+const LFX_OK = { sad: ['rain', 'stars', 'snow', 'sea', 'storm', 'love'], happy: null, mid: null };
+function lyricFxMood() {
+  const id = sp.item && sp.item.id;
+  if (lfx.moodFor === id && lfx.moodN === (lyrics && lyrics.lines ? lyrics.lines.length : 0)) return lfx.mood;
+  const all = lfxNorm(((lyrics && lyrics.lines) || []).map(l => l.text).join(' \n '));
+  const sad = (all.match(LFX_SAD) || []).length, hap = (all.match(LFX_HAPPY) || []).length, tot = sad + hap;
+  // la música también cuenta: tono menor y poca energía empujan a «triste»
+  const minor = musicKey.minor && musicKey.conf > 0.3 ? 1 : 0;
+  const score = tot ? (hap - sad) / tot : 0;
+  lfx.mood = score < -0.15 || (score < 0.1 && minor && mood.lvl < 0.35) ? 'sad' : score > 0.15 ? 'happy' : 'mid';
+  lfx.moodFor = id; lfx.moodN = lyrics && lyrics.lines ? lyrics.lines.length : 0;
+  return lfx.mood;
+}
 function lyricFxTick(dt) {
   const L = state.lyricFx && state.mode !== 'strobe' ? currentLyric() : null, text = L ? L.text : '';
-  if (text !== lfx.line) {   // línea nueva: ¿de qué habla? (cada línea puede encender hasta dos cosas)
-    lfx.line = text; const t = lfxNorm(text);
-    const kinds = LYRIC_FX.filter(([, re]) => re.test(t)).map(([k]) => k).slice(0, 2);
+  if (text !== lfx.line) {   // línea nueva: ¿de qué habla? (cada línea puede encender hasta dos cosas, si van con la canción)
+    lfx.line = text; const t = lfxNorm(text), ok = LFX_OK[lyricFxMood()];
+    const kinds = LYRIC_FX.filter(([k, re]) => (!ok || ok.includes(k)) && re.test(t)).map(([k]) => k).slice(0, 2);
     if (kinds.length) { lfx.kinds = kinds; lfx.hold = 1; } else lfx.hold = 0;
   }
   lfx.k += ((lfx.hold && lfx.kinds.length ? 1 : 0) - lfx.k) * (1 - Math.pow(lfx.hold ? 0.05 : 0.3, dt));   // entra en ~0,4 s; se va despacio
