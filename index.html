@@ -211,6 +211,17 @@
   }
   .intro h1 { margin: 0 0 8px; font-family: var(--font-brand); font-size: clamp(32px, 5.4vw, 58px); font-weight: 500; letter-spacing: -.02em; text-transform: lowercase; }
   .intro p { margin: 0 auto; max-width: 46ch; color: var(--muted); font-size: 16px; line-height: 1.55; text-wrap: balance; }
+  .intro .tag { font-family: var(--font-display); font-size: clamp(17px, 2vw, 21px); color: var(--fg); opacity: .8; margin-bottom: 26px; }
+  .intro-go { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; pointer-events: auto; margin: 0 auto 18px; max-width: 640px; }
+  .intro-go .go { display: inline-flex; align-items: center; gap: 9px; padding: 12px 18px; border-radius: 999px; font-size: 15px; font-weight: 600;
+    background: var(--glass); border: 1px solid var(--glass-line); color: var(--fg); box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5); transition: transform .2s, box-shadow .3s; }
+  .intro-go .go span { font-size: 16px; opacity: .85; }
+  .intro-go .go:hover { transform: translateY(-2px); }
+  .intro-go .go.main { background: linear-gradient(120deg, #2fb4ff, #8a5cff 55%, #ff4fa8); color: #fff; border-color: transparent;   /* los colores de la marca: se ven aunque aún no suene nada */
+    box-shadow: 0 10px 30px rgba(138, 92, 255, .4), 0 0 calc(var(--pulse, 0) * 30px) color-mix(in srgb, var(--c1, #888) 70%, transparent); }
+  .intro .hint { font-size: 13px; opacity: .8; }
+  .intro .see { margin-top: 0; }
 
   .song {
     position: fixed; top: calc(16px + env(safe-area-inset-top, 0px)); right: max(16px, env(safe-area-inset-right, 0px));
@@ -263,6 +274,9 @@
   .song .ctl button.main { width: 34px; height: 34px; margin: 0 2px; background: var(--fg); color: var(--bg); box-shadow: 0 4px 14px rgba(0,0,0,.25); }
   .song .ctl button.main:hover { background: var(--fg); transform: scale(1.06); }
   .song .ctl button.dots { width: 28px; color: var(--muted); }
+  .song .ctl button.find { width: 30px; color: var(--muted); }
+  .song .ctl button.find svg { width: 17px; height: 17px; }
+  .song .ctl button.find[aria-pressed="true"] { color: var(--fg); background: color-mix(in srgb, var(--fg) 12%, transparent); }
   .song .title .like { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; margin-left: 6px; vertical-align: -4px; background: none; color: var(--muted); border-radius: 50%; }
   .song .title .like svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
   .song .title .like[aria-pressed="true"] { color: #ff4f7b; }
@@ -530,8 +544,13 @@
     <canvas class="intro-logo" id="introLogo" width="320" height="320" aria-hidden="true"></canvas>
     <h1>Siente la música</h1>
     <a class="handle" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener">Síguenos en TikTok · @sientelamusicaco</a>
-    <p>Pulsa <b>Audio del PC</b>, elige <b>Pantalla completa</b> o la pestaña donde suena la música, y activa <b>Compartir audio del sistema</b>.</p>
-    <button class="see" id="btnSee" type="button">Ver las animaciones</button>
+    <p class="tag">Tu música, hecha luz y color.</p>
+    <div class="intro-go">
+      <button class="go main" id="introAudio" type="button"><span>🎧</span>Escuchar el audio del PC</button>
+      <button class="go" id="introSp" type="button"><span>♫</span>Conectar Spotify</button>
+      <button class="go see" id="btnSee" type="button"><span>✦</span>Ver las animaciones</button>
+    </div>
+    <p class="hint" id="introHint">Al compartir, elige la pestaña donde suena la música (o Pantalla completa) y activa <b>Compartir audio</b>.</p>
   </div>
 </div>
 
@@ -887,7 +906,13 @@ function colorTick(dt) {
     const left = sp.duration - (sp.progress + performance.now() - sp.at);
     fade = Math.max(0, Math.min(1, 1 - left / 5000));   // últimos 5 s
   }
-  if (fade > 0) { const n = NEUTRAL[state.theme === 'dark' ? 'dark' : 'light']; goal = goal.map(c => c.map((v, k) => v + (n[k] - v) * fade * 0.85)); }
+  // sin música (en pausa, o en silencio un par de segundos) todo pasa a blanco y negro; vuelve el color al sonar
+  const paused = typeof sp !== 'undefined' && sp.item && !sp.playing && (typeof spConnected !== 'function' || spConnected());
+  colorTick.quiet = energy > 0.04 ? 0 : (colorTick.quiet || 0) + dt;
+  const still = paused || colorTick.quiet > 2.5 ? 1 : 0;
+  colorTick.gray = (colorTick.gray || 0) + (still - (colorTick.gray || 0)) * (1 - Math.pow(still ? 0.25 : 0.02, dt));   // se apaga en ~1 s, se enciende rápido
+  fade = Math.max(fade * 0.85, colorTick.gray * 0.92);
+  if (fade > 0) { const n = NEUTRAL[state.theme === 'dark' ? 'dark' : 'light']; goal = goal.map(c => c.map((v, k) => v + (n[k] - v) * fade)); }
   const k = 1 - Math.pow(0.12, dt);   // ≈ 1,5 s para fundirse
   let moved = 0;
   RGB.forEach((c, i) => c.forEach((v, j) => { const d = goal[i][j] - v; c[j] = v + d * k; moved = Math.max(moved, Math.abs(d)); }));
@@ -983,6 +1008,10 @@ document.querySelectorAll('#modes button').forEach(b => {
   const label = document.createElement('span'); label.textContent = b.textContent; b.textContent = ''; b.append(img, label);
 });
 bindPop('btnMode', 'popMode'); bindPop('btnSpotify', 'popMusic');
+document.getElementById('introAudio').onclick = e => { e.stopPropagation(); document.getElementById('btnSystem').click(); };
+document.getElementById('introSp').onclick = e => { e.stopPropagation(); document.getElementById('btnSpotify').click(); };
+// en el celular no se puede oír el audio de otras apps: ahí lo principal es conectar Spotify
+if (matchMedia('(pointer: coarse)').matches && !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; }
 document.getElementById('btnSee').onclick = e => { e.stopPropagation(); document.getElementById('btnMode').click(); }; bindPop('btnSettings', 'popSettings'); bindPop('btnRec', 'popRec');
 // Ajustes
 const sensEl = document.getElementById('sens'), noFlashEl = document.getElementById('noFlash');
@@ -2297,7 +2326,7 @@ function spRender() {
       `<div class="pbg"></div>` +
       (cover ? `<img class="cover" src="${esc(cover)}" alt="">` : '<div class="cover"></div>') +
       `<div class="meta"><div class="title">${esc(it.name)}${src === 'spotify' && it.type !== 'episode' ? `<button class="like" id="spLike" aria-label="${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}" aria-pressed="${!!sp.liked}">${ICON.heart}</button>` : ''}</div><div class="sub"><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span class="artist" data-paused="${!play}">${esc(artist)}</span>${sp.duration ? '<span class="time"><span id="spTimeA">0:00</span> · <span id="spTimeB"></span></span>' : ''}</div></div>` +
-      `<div class="ctl">${ctl}<button class="dots" id="spMore" aria-label="Más opciones" aria-expanded="${!!sp.more}">${ICON.dots}</button></div>` +
+      `<div class="ctl">${ctl}${src === 'spotify' ? `<button class="find" id="spFind" aria-label="Buscar música" title="Buscar música" aria-pressed="${!libEl.hidden}">${ICON.lib}</button>` : ''}<button class="dots" id="spMore" aria-label="Más opciones" aria-expanded="${!!sp.more}">${ICON.dots}</button></div>` +
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
@@ -2332,6 +2361,8 @@ function spRender() {
   moreAct('spGoAr', () => { libOpen(); openArtist(sp.item.artists[0]); }); moreAct('spGoAl', () => { libOpen(); openAlbum(sp.item.album); });
   const lk = document.getElementById('spLike'); if (lk) lk.onclick = e => { e.stopPropagation(); spLike(sp.item); };
   const sl = document.getElementById('spLib'); if (sl) sl.onclick = e => { e.stopPropagation(); libOpen(); };
+  // la lupa en el propio reproductor: abre el buscador con el cursor listo para escribir (y lo cierra si ya está abierto)
+  const sf = document.getElementById('spFind'); if (sf) sf.onclick = e => { e.stopPropagation(); if (!libEl.hidden) { libClose(); spRender(); return; } libOpen(); setTimeout(() => { libQ.focus(); libQ.select(); }, 60); };
   songEl.querySelectorAll('[data-file]').forEach(b => b.onclick = () => {
     if (!audioEl) return;
     const k = b.dataset.file;
@@ -2424,8 +2455,11 @@ function drawBackdrop(dt, boost = 1) {
 }
 
 function setCover(url) {
-  if (url !== coverUrl) cover3dLeaving();
+  const changed = url !== coverUrl;
+  if (changed) cover3dLeaving();
   coverUrl = url; coverColors = null;
+  // mientras carga la portada nueva, los colores pasan a grises y la vieja se desvanece (no se queda el color anterior)
+  if (changed && url && state.palette === 'cover') { refreshColors(); setBackdrop(null); }
   if (!url) { coverAny = null; setBackdrop(null); if (state.palette === 'cover') refreshColors(); buildSwatches(); applyAll(false); return; }
   // Fondo: imagen normal, siempre se puede dibujar
   const tryLoad = (n = 0) => loadImageClean(url).then(({ img, clean }) => {
@@ -2487,6 +2521,8 @@ async function spApi(path, opts = {}, retry = true) {
   if (retry && r.status === 401) { sp.expires = 0; return spApi(path, opts, false); }
   if (retry && r.status === 429) { await new Promise(res => setTimeout(res, Math.min(5, +(r.headers.get('Retry-After') || 2)) * 1000)); return spApi(path, opts, false); }
   if (r.status === 204 || r.status === 202) return null;
+  // Spotify ahora deja pedir menos resultados de una vez en algunas listas: si rechaza el tamaño, se pide de 10 en 10
+  if (r.status === 400 && retry !== 'small' && /[?&]limit=(\d+)/.test(path) && +path.match(/[?&]limit=(\d+)/)[1] > 10) return spApi(path.replace(/([?&]limit=)\d+/, '$110'), opts, 'small');
   const txt = await r.text(), d = (() => { try { return JSON.parse(txt); } catch (e) { return null; } })();
   if (!r.ok) { const e = new Error(d?.error?.message || 'Spotify respondió ' + r.status); e.status = r.status; e.reason = d?.error?.reason; lib.lastError = `${path.split('?')[0]} → ${r.status} ${e.reason || e.message}`; throw e; }
   return d;
@@ -2688,7 +2724,7 @@ function openArtist(ar) {   // sus canciones más escuchadas (o, si Spotify no l
     libMsg('Cargando…');
     const [tt, als, fol] = await Promise.all([
       ar.id ? spApi(`/artists/${ar.id}/top-tracks?market=from_token`).then(d => d.tracks || []).catch(() => null) : null,
-      ar.id ? spApi(`/artists/${ar.id}/albums?include_groups=album,single&limit=50`).then(d => d.items || []).catch(() => []) : [],
+      ar.id ? (async () => { const out = []; await spPages(`/artists/${ar.id}/albums?include_groups=album,single&limit=50`, it => { out.push(...it.filter(Boolean)); }, 60).catch(() => {}); return out; })() : [],
       ar.id && hasScope('user-follow-read') ? spApi(`/me/following/contains?type=artist&ids=${ar.id}`).catch(() => null) : null]);
     let tr = tt;
     if (!tr || !tr.length) { const d = await spApi('/search?type=track&limit=10&q=' + encodeURIComponent(`artist:"${ar.name}"`)).catch(() => null); tr = (d?.tracks?.items || []).filter(Boolean); }
@@ -2804,7 +2840,13 @@ const LIB_TABS = {
     items.length ? libList.append(...items.map(sh => libRow({ title: sh.name, sub: sh.publisher || 'Podcast', img: imgOf(sh), open: () => openShow(sh) }))) : libMsg('Aún no sigues podcasts.');
   }],
   news: ['Novedades', async () => {
-    const d = await spApi('/browse/new-releases?limit=50'), items = (d.albums?.items || []).filter(Boolean);
+    let items = [];
+    try { const d = await spApi('/browse/new-releases?limit=50'); items = (d.albums?.items || []).filter(Boolean); } catch (e) {}
+    // si Spotify ya no da sus novedades a esta app, se buscan los lanzamientos de las últimas dos semanas
+    if (!items.length) for (let off = 0; off < 50 && lib.tab === 'news'; off += 10) {
+      const d = await spApi(`/search?type=album&limit=10&offset=${off}&q=${encodeURIComponent('tag:new')}`).catch(() => null);
+      const got = (d?.albums?.items || []).filter(Boolean); items.push(...got); if (got.length < 10) break;
+    }
     libList.innerHTML = '';
     items.length ? libList.append(...items.map(a => libRow({ title: a.name, sub: artistsOf(a) + ' · ' + (a.album_type === 'single' ? 'Sencillo' : 'Álbum'), img: imgOf(a), open: () => openAlbum(a) }))) : libMsg('Spotify no tiene novedades para mostrar.');
   }],
@@ -2895,9 +2937,11 @@ songEl.addEventListener('wheel', e => {
 function layoutBottom() {
   const dock = document.getElementById('dock'), show = !songEl.hidden && songEl.classList.contains('player');
   const root = document.documentElement.style, dw = dock.offsetWidth, dh = dock.offsetHeight, gap = 10;
-  const pw = Math.min(innerWidth >= dw + 430 + gap + 40 ? 430 : 400, innerWidth - 24);   // con aire para aleatorio y repetir
+  // el reproductor aprovecha el espacio que haya: más ancho, se lee el título y el artista completos
+  const side = innerWidth >= dw + 430 + gap + 40;
+  const pw = side ? Math.min(560, innerWidth - dw - gap - 48) : Math.min(560, innerWidth - 24);
   if (!show) { root.setProperty('--bar-shift', '0px'); root.setProperty('--stack-h', dh + 'px'); return; }
-  if (innerWidth >= dw + pw + gap + 40) {   // al lado: el conjunto queda centrado
+  if (side) {   // al lado: el conjunto queda centrado
     const shift = (pw + gap) / 2, left = innerWidth / 2 + shift - dw / 2 - gap - pw;
     root.setProperty('--bar-shift', shift + 'px'); root.setProperty('--pl-x', left + 'px'); root.setProperty('--pl-w', pw + 'px');
     root.setProperty('--stack-h', dh + 'px');
@@ -3626,7 +3670,9 @@ function startRecording(prep) {
   if (recSound) { const t = recAudioTrack(); if (t) stream.addTrack(t); }
   recMime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
     .find(t => MediaRecorder.isTypeSupported(t)) || '';
-  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 28e6, audioBitsPerSecond: 256e3 }); }
+  // calidad variable: en los golpes de luz y los cambios bruscos (lo más difícil de comprimir) el codificador puede gastar
+  // más en ese instante en vez de pixelar; en lo tranquilo gasta menos
+  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 30e6, audioBitsPerSecond: 256e3, bitrateMode: 'variable', videoKeyFrameIntervalDuration: 2000 }); }
   catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
   recChunks = [];
   recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
@@ -5523,18 +5569,18 @@ function drawLight(dt) {
     const P = Math.max(0, pulse.x), L3 = [Lb, Lm, Lh];
     // el blanco entero se tiñe con la música y respira con cada golpe
     ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = rgba(sat(mix(drift), 84), 0.08 + energy * 0.14 + P * 0.1); ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = rgba(sat(mix(drift), 80), 0.14 + energy * 0.2 + P * 0.12); ctx.fillRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'source-over';
     for (let k = 0; k < 3; k++) {
       const a = time * (0.35 + energy * 0.8) + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
       const gx = W / 2 + Math.cos(a) * off, gy = H / 2 + Math.sin(a) * off;
-      glowSpot(gx, gy, MIN * (0.16 + L3[k] * 0.95 + beat * 0.2), sat(RGB[k], 62), Math.min(0.92, 0.4 + L3[k] * 0.55));
+      glowSpot(gx, gy, MIN * (0.24 + L3[k] * 1.1 + beat * 0.25), sat(RGB[k], 58), Math.min(1, 0.55 + L3[k] * 0.5));   // de día, colores grandes e intensos
     }
     // un velo de tinta encima da profundidad sin ensuciar los cruces
     ctx.globalCompositeOperation = 'multiply';
     for (let k = 0; k < 3; k++) {
       const a = time * (0.35 + energy * 0.8) + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
-      glowSpot(W / 2 + Math.cos(a) * off, H / 2 + Math.sin(a) * off, MIN * (0.08 + L3[k] * 0.5), sat(RGB[k], 56), 0.18 + L3[k] * 0.22);
+      glowSpot(W / 2 + Math.cos(a) * off, H / 2 + Math.sin(a) * off, MIN * (0.1 + L3[k] * 0.55), sat(RGB[k], 52), 0.26 + L3[k] * 0.28);
     }
     ctx.globalCompositeOperation = 'source-over';
     if (lvx.vo > 0.02 || lvx.syl > 0.02) glowSpot(W / 2, H / 2, MIN * (0.12 + lvx.vo * 0.6 + lvx.syl * 0.12), sat(melC, 64), Math.min(0.8, lvx.vo * 0.45 + lvx.syl * 0.2));
@@ -5623,7 +5669,7 @@ function drawRain(dt) {
   if (rs.flash > 0.02) { lctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.6), rs.flash * (night ? 0.12 : 0.08)); lctx.fillRect(0, 0, W, H); }
   // Superficie del agua: un reflejo oscuro que recoge la luz de los focos
   const water = lctx.createLinearGradient(0, surf, 0, H);
-  water.addColorStop(0, rgba(mix(0.5), 0)); water.addColorStop(1, rgba(mix(0.5), night ? 0.06 + energy * 0.06 : 0.05));
+  water.addColorStop(0, rgba(mix(0.5), 0)); water.addColorStop(1, rgba(mix(0.5), night ? 0.06 + energy * 0.06 : 0.14 + energy * 0.1));
   lctx.fillStyle = water; lctx.fillRect(0, surf, W, H - surf);
   for (const l of L) {
     const g = lctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, l.r * 1.6);
@@ -5638,7 +5684,7 @@ function drawRain(dt) {
   const ripple = (x, z, k, big) => { ripples.push({ x, y: surf + (H - surf) * (0.1 + z * 0.85), z, t: 0, life: big ? 1.6 : 0.7 + Math.random() * 0.4, k, big }); };
   if (hits.high) for (let i = 0; i < 3 + Math.round(hits.high * 6); i++) { const l = L[Math.floor(Math.random() * 3)]; ripple(l.x + (Math.random() - 0.5) * l.r * 1.6, Math.random(), 0.6 + hits.high * 0.4, false); }
   if (hits.bass) { const l = L[0]; ripple(l.x, 0.4 + Math.random() * 0.4, 0.8 + hits.bass * 0.4, true); }
-  const wind = rs.wind, base = night ? [200, 210, 230] : mix(0.5).map(v => v * 0.45);   // de día, gotas del color de la canción en tono hondo
+  const wind = rs.wind, base = night ? [200, 210, 230] : mix(0.5).map(v => v * 0.3);   // de día, gotas del color de la canción en tono hondo
   const key = state.theme + RGB.map(c => c.map(v => Math.round(v / 16)).join('.')).join('|');
   if (dropKey !== key) { dropKey = key; dropSprites = [makeDrop(base), ...L.map(l => makeDrop(l.c)), ...L.map(l => makeGlint(l.c))]; }
   for (let di = drops.length - 1; di >= 0; di--) {
@@ -5654,9 +5700,9 @@ function drawRain(dt) {
     for (let j = 0; j < 3; j++) { const l = L[j], dx = d.x - l.x, dy = d.y - l.y, f = l.I * Math.exp(-(dx * dx + dy * dy) / (l.r * l.r)); lit += f; if (f > best) { best = f; bi = j; } }
     const k = Math.min(1, lit + rs.flash * 0.6);
     // Estela: cuanto más rápido cae, más se estira
-    const w = (1.7 + d.z * 2.8) * DPR, h = d.len * (0.75 + Math.min(1.6, rs.speed) * 0.55);
+    const w = (1.7 + d.z * 2.8) * DPR * (night ? 1 : 1.5), h = d.len * (0.75 + Math.min(1.6, rs.speed) * 0.55);
     lctx.setTransform(1, 0, wind, 1, d.x, d.y);   // la estela queda detrás de la gota (del lado de donde viene)
-    lctx.globalAlpha = (night ? 0.3 + d.z * 0.35 : 0.4 + d.z * 0.35) * (1 - k * 0.6);
+    lctx.globalAlpha = (night ? 0.3 + d.z * 0.35 : 0.62 + d.z * 0.38) * (1 - k * (night ? 0.6 : 0.3));   // de día, gotas bien visibles
     lctx.drawImage(dropSprites[0], -w / 2, -h, w, h);
     if (k > 0.02) {
       lctx.globalAlpha = Math.min(1, k * 0.9); lctx.drawImage(dropSprites[1 + bi], -w / 2, -h, w, h);
@@ -5831,7 +5877,7 @@ function drawStrobe(dt) {
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
   ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
   // Texto: ajustado al ancho, hasta 3 líneas, condensado y apenas desenfocado
-  const font = s_ => `700 ${s_}px ${FONT_DISPLAY}`;
+  const font = s_ => `500 ${s_}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;   // la letra de siempre, como la portada de «brat»
   const maxW = W * 0.84 / 0.8;
   let size = MIN * 0.22, lines = [];
   for (let tries = 0; tries < 12; tries++) {
@@ -6137,18 +6183,28 @@ function drawTiles(dt) {
   ambient();
   bloom(layer, (night ? 0.7 : 0.35) + beatSoft * 0.3);
   ctx.drawImage(layer, 0, 0);
+  // los cuadros tapan casi todo el fondo: la portada se ve a través de ellos, como un velo
+  ctx.save(); ctx.globalCompositeOperation = night ? 'screen' : 'multiply'; drawBackdrop(0, 0.5); ctx.restore();
 }
 function drawTile(t, gap, night, pop) {
   // Cada cuadro es una ventana a un mismo degradado de color que fluye despacio por todo el mosaico
   // (los colores pasan de un cuadro al vecino sin cortes). La música decide cuánta luz tiene cada uno:
   // apagado es hondo (de noche) o pastel (de día); encendido, el color se aviva y brilla. Sin biseles
   // ni brillos de plástico: esquinas suaves, una luz interior difusa y, al sobresalir, una sombra suave.
-  const lift = Math.min(1, pop * 0.7), sc = 1 + lift * 0.08, s_ = (t.s - gap) * sc, x = t.x + t.s / 2 - s_ / 2, y = t.y + t.s / 2 - s_ / 2;
+  // al sobresalir se levanta como un bloque: crece, sube hacia la luz y deja ver su canto y su sombra
+  const lift = Math.min(1, pop * 0.85), sc = 1 + lift * 0.16, s_ = (t.s - gap) * sc, up = t.s * 0.07 * lift;
+  const x = t.x + t.s / 2 - s_ / 2 - up * 0.6, y = t.y + t.s / 2 - s_ / 2 - up;
   const I = Math.min(1.2, t.I), rr = Math.min(s_ * 0.22, MIN * 0.03);
   const fx = (t.x + t.y) / (W + H) * 1.1 + time * 0.025 + t.col * 0.25;
   const cA = mix(fx % 1), cB = mix((fx + 0.33) % 1);
   const shade = c => night ? c.map(v => v * (0.16 + 0.84 * Math.min(1, I))) : c.map(v => v + (255 - v) * (0.62 - 0.55 * Math.min(1, I)));
-  if (lift > 0.02) { lctx.save(); lctx.shadowColor = night ? rgba(cA, 0.55 * lift) : `rgba(40,30,60,${0.22 * lift})`; lctx.shadowBlur = t.s * 0.35 * lift; lctx.shadowOffsetY = night ? 0 : t.s * 0.06 * lift; }
+  if (lift > 0.02) {
+    // sombra que cae lejos y el canto del bloque (su grosor), del mismo color pero más hondo
+    lctx.save(); lctx.shadowColor = night ? rgba(cA, 0.6 * lift) : `rgba(40,30,60,${0.35 * lift})`; lctx.shadowBlur = t.s * 0.5 * lift; lctx.shadowOffsetX = up * 0.8; lctx.shadowOffsetY = up * 1.6;
+    lctx.fillStyle = rgba(shade(cB).map(v => v * (night ? 0.55 : 0.72)), 1);
+    for (let k = 3; k >= 1; k--) { const o = up * k / 3; lctx.beginPath(); lctx.roundRect(x + o * 0.6, y + o, s_, s_, rr); lctx.fill(); if (k === 3) { lctx.shadowColor = 'transparent'; } }
+    lctx.restore(); lctx.save();
+  }
   const g = lctx.createLinearGradient(x, y, x + s_, y + s_);
   g.addColorStop(0, rgba(shade(cA), 1)); g.addColorStop(1, rgba(shade(cB), 1));
   lctx.fillStyle = g; lctx.beginPath(); lctx.roundRect(x, y, s_, s_, rr); lctx.fill();
@@ -6158,6 +6214,10 @@ function drawTile(t, gap, night, pop) {
   const rg = lctx.createRadialGradient(x + s_ * 0.3, y + s_ * 0.25, 0, x + s_ * 0.3, y + s_ * 0.25, s_ * 0.95);
   rg.addColorStop(0, `rgba(255,255,255,${k})`); rg.addColorStop(1, 'rgba(255,255,255,0)');
   lctx.fillStyle = rg; lctx.beginPath(); lctx.roundRect(x, y, s_, s_, rr); lctx.fill();
+  if (lift > 0.05) {   // filo de luz arriba: la cara de encima queda más cerca de la luz
+    lctx.strokeStyle = `rgba(255,255,255,${0.45 * lift})`; lctx.lineWidth = Math.max(1, s_ * 0.02);
+    lctx.beginPath(); lctx.roundRect(x + lctx.lineWidth / 2, y + lctx.lineWidth / 2, s_ - lctx.lineWidth, s_ - lctx.lineWidth, rr); lctx.stroke();
+  }
 }
 
 
@@ -6906,14 +6966,15 @@ function catsSetup() {
       vec2 foot = vec2(top.x + sw * .1, .035 + lift * .05);
       float d;
       if (hind < .5) {
-        vec2 elbow = mix(top, foot, .45) + vec2(-.015 - sw * .01, 0.);
-        d = smin(sdCap2(p, top, elbow, thick * 1.05, thick * .78), sdCap2(p, elbow, foot, thick * .72, thick * .6), .015);
+        vec2 elbow = mix(top, foot, .45) + vec2(-.01 - sw * .006, 0.);
+        d = smin(sdCap2(p, top, elbow, thick * 1.15, thick * .85), sdCap2(p, elbow, foot, thick * .8, thick * .68), .04);
       } else {
-        vec2 knee = top + vec2(.07 + sw * .03, -.1), hock = foot + vec2(-.035 - sw * .02, .1 + lift * .02);
-        d = smin(sdCap2(p, top + vec2(-.02, .04), knee, thick * 1.5, thick * .9), sdCap2(p, knee, hock, thick * .8, thick * .6), .02);
-        d = smin(d, sdCap2(p, hock, foot, thick * .58, thick * .55), .012);
+        // la de atrás: muslo ancho que baja en curva suave hasta el pie (sin el zigzag de rodilla y corvejón)
+        vec2 knee = top + vec2(.045 + sw * .02, -.12), hock = foot + vec2(-.02 - sw * .012, .085 + lift * .02);
+        d = smin(sdCap2(p, top + vec2(-.02, .04), knee, thick * 1.65, thick * 1.), sdCap2(p, knee, hock, thick * .9, thick * .72), .05);
+        d = smin(d, sdCap2(p, hock, foot, thick * .72, thick * .66), .04);
       }
-      return smin(d, sdEll(p - foot - vec2(.016, -.004), vec2(.032, .02)), .012);   // el pie
+      return smin(d, sdEll(p - foot - vec2(.016, -.004), vec2(.034, .022)), .025);   // el pie
     }
     // la cola: una curva continua (muchos tramos cortos fundidos) que sale del anca, sube y se enrosca
     float tail(vec2 q, float ph, float sw) {
@@ -6922,7 +6983,7 @@ function catsSetup() {
         float fk = float(k);
         ang += -.15 - (fk > 9. ? .16 : 0.) + .05 * sin(uTime * 1.3 + fk * .4) * (.4 + uMid * .8) + sw * .06;
         vec2 b = a + vec2(cos(ang), sin(ang)) * .042;
-        d = smin(d, sdCap2(q, a, b, .036 - fk * .0011, .035 - fk * .0011), .03);
+        d = min(d, sdCap2(q, a, b, .037 - fk * .0012, .037 - (fk + 1.) * .0012));   // grosor continuo: un solo trazo liso
         a = b;
       }
       return d;
@@ -6940,9 +7001,9 @@ function catsSetup() {
     }
     float cat(vec2 q, float ph, vec4 c3) {
       float d = catBody(headInv(q, c3.x, c3.z));
-      d = smin(d, leg(q, vec2(.3, .36), ph + .25, .058, 0.), .05);
-      d = smin(d, leg(q, vec2(-.29, .38), ph, .064, 1.), .05);
-      return smin(d, tail(q, ph, c3.y), .03);
+      d = smin(d, leg(q, vec2(.3, .36), ph + .25, .058, 0.), .07);
+      d = smin(d, leg(q, vec2(-.29, .38), ph, .064, 1.), .08);
+      return smin(d, tail(q, ph, c3.y), .045);
     }
     void main() {
       float asp = uRes.x / uRes.y;
@@ -6993,7 +7054,9 @@ function catsInit() {
   // en fila, uno detrás de otro y al mismo paso (nunca uno encima de otro); cada uno con su color
   const s0 = asp > 1 ? 0.4 : 0.3, gap = s0 * 1.6, y0 = asp > 1 ? 0.14 : 0.3;
   cats.span = Math.max(asp + s0 * 1.6, gap * 3);
-  cats.list = [0, 1, 2].map(i => ({ x: asp * 0.72 - i * gap, y: y0 - i * 0.012, s: s0 * (1 - i * 0.04), c: [0.2, 2.3, 1.2][i], fog: i * 0.15, ph: i * 0.5, phT: i * 0.5 }));
+  // a dos alturas: uno abajo, el siguiente arriba y más atrás (más pequeño y brumoso), el otro abajo
+  const lift = asp > 1 ? 0.24 : 0.2;
+  cats.list = [0, 1, 2].map(i => ({ x: asp * 0.72 - i * gap, y: y0 + (i === 1 ? lift : i * 0.01), s: s0 * [1, 0.8, 0.94][i], c: [0.2, 2.3, 1.2][i], fog: [0, 0.32, 0.1][i], ph: i * 0.5, phT: i * 0.5 }));
   cats.list.forEach(c => { c.hop = 0; c.hopV = 0; c.bob = 0; c.bobV = 0; c.nod = 0; c.nodV = 0; c.tl = 0; c.tlV = 0; c.ear = 0; c.blink = 0; c.blinkT = 2 + Math.random() * 4; });
 }
 function drawCats(dt) {
@@ -7004,7 +7067,9 @@ function drawCats(dt) {
   if (cats.asp !== asp) { cats.list.forEach(c => c.x *= asp / cats.asp); cats.asp = asp; }
   // caminan de seguido, todos al mismo paso (así nunca se enciman), al ritmo del tempo: una pisada por golpe.
   // Sin música casi se detienen; en lo suave pasean, en lo fuerte trotan
-  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5, moving = Math.min(1.15, 0.03 + energy * 1.3 + bandX(0, BANDS) * 0.5);
+  const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5;
+  cats.go = (cats.go || 0) + ((energy > 0.05 ? 1 : 0) - (cats.go || 0)) * (1 - Math.pow(0.15, dt));   // con música caminan, sin música se paran
+  const moving = 0.02 + cats.go * (per < 0.38 ? 0.5 : 1);   // un paso completo cada 4 golpes (si el tempo es muy rápido, cada 8)
   cats.list.forEach((c, i) => {
     c.ph += dt / (4 * per) * moving;
     if (pulse.on) c.ph += ((Math.round(c.ph * 4) / 4) - c.ph) * 0.35;   // la pisada se acerca al golpe
@@ -7142,8 +7207,12 @@ function drawCurtain(dt) {
       lctx.globalAlpha = b.a;
       lctx.fillStyle = rgba(hot, 1); lctx.beginPath(); lctx.arc(x, y, r, 0, Math.PI * 2); lctx.fill();
       if (b.spark > 0.05) {
-        const L = r * 7 * b.spark; lctx.globalAlpha = b.spark * 0.85; lctx.strokeStyle = '#fff'; lctx.lineWidth = lw;
-        lctx.beginPath(); lctx.moveTo(x - L, y); lctx.lineTo(x + L, y); lctx.moveTo(x, y - L); lctx.lineTo(x, y + L); lctx.stroke();
+        // chispa de los platillos: un brillo suave con rayos que se afinan y se desvanecen (antes era una cruz de líneas)
+        const L = r * (3 + 6 * b.spark), sg = lctx.createRadialGradient(x, y, 0, x, y, L);
+        sg.addColorStop(0, rgba(hot, 0.7 * b.spark)); sg.addColorStop(0.25, rgba(col, 0.25 * b.spark)); sg.addColorStop(1, rgba(col, 0));
+        lctx.globalAlpha = b.a; lctx.fillStyle = sg;
+        lctx.beginPath(); lctx.ellipse(x, y, L, r * 0.35, 0, 0, Math.PI * 2); lctx.fill();
+        lctx.beginPath(); lctx.ellipse(x, y, r * 0.35, L * 0.8, 0, 0, Math.PI * 2); lctx.fill();
       }
     }
   }
@@ -7256,9 +7325,9 @@ function drawOrbs(dt) {
     const row = Math.floor(i / cols), k = (rows - 1 - row) * cols + (i % cols), f = k / Math.max(1, n - 1) * (BANDS - 1) * 0.85;
     const a = Math.min(BANDS - 3, Math.floor(f)), v = Math.pow(bandX(a, a + 3), 1.15);   // lo suyo, con sus altos y bajos
     orbs.lv[i] += (v - orbs.lv[i]) * (1 - Math.pow(v > orbs.lv[i] ? 1e-4 : 0.02, dt));   // sube al instante, baja suave
-    orbs.ph[i] += dt * (0.05 + orbs.lv[i] * 2.4 + voice * 0.7);   // fluye cuanto más suena lo suyo
+    orbs.ph[i] += dt * (0.04 + orbs.lv[i] * 4.2 + voice * 1.2);   // fluye cuanto más suena lo suyo (quieto en silencio)
     // el bombo sacude el líquido: chapotea dentro del cristal y vuelve oscilando
-    if (pulse.on) { orbs.svy[i] -= (1.1 + 1.3 * pulse.k) * (0.45 + orbs.lv[i]); orbs.svx[i] += (Math.random() - 0.5) * 1.3 * (0.4 + orbs.lv[i]); }
+    if (pulse.on) { orbs.svy[i] -= (1.7 + 2 * pulse.k) * (0.45 + orbs.lv[i]); orbs.svx[i] += (Math.random() - 0.5) * 2.2 * (0.4 + orbs.lv[i]); orbs.twv[i] += (i % 2 ? 1 : -1) * pulse.k * 4 * orbs.lv[i]; }   // y lo hace girar
     orbs.svx[i] += (-orbs.sx[i] * 60 - orbs.svx[i] * 3.6) * dt; orbs.svy[i] += (-orbs.sy[i] * 60 - orbs.svy[i] * 3.6) * dt;
     orbs.sx[i] += orbs.svx[i] * dt; orbs.sy[i] += orbs.svy[i] * dt;
     orbs.twv[i] += (-orbs.tw[i] * 22 - orbs.twv[i] * 2.6) * dt; orbs.tw[i] += orbs.twv[i] * dt;
@@ -7269,7 +7338,8 @@ function drawOrbs(dt) {
   }
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const bg = night ? hexToRgb(hsl(hh, 25, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 22, 89)).map(v => v / 255);
-  const X = []; RGB.forEach(c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); X.push(c.map(v => v / 255), hexToRgb(hsl(h_ + 38, Math.max(55, s_), Math.min(72, Math.max(48, l_ + 6)))).map(v => v / 255)); });
+  // los colores de la portada tal cual, y su mismo tono más luminoso para las vetas (sin inventar otros tonos)
+  const X = []; RGB.forEach(c => { const [h_, s_, l_] = hexToHsl(rgbToHex(...c)); X.push(c.map(v => v / 255), hexToRgb(hsl(h_, Math.max(60, s_), night ? Math.min(80, l_ + 16) : Math.max(30, l_ - 12))).map(v => v / 255)); });
   const mel = melodyColor().map(v => v / 255);
   const [cw, ch] = glCanvas(1), gl = GLX.gl;
   const p = orbs.prog; gl.useProgram(p.pr); glCoverBind(p);
@@ -7517,23 +7587,23 @@ function silkSetup() {
   silk.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uSpark; uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
     uniform vec4 uR[3];    // fase, amplitud, giro, nivel
     uniform vec4 uW[4];    // olas: posición, fuerza, cinta, -
-    ${GLSL_NOISE} ${GLSL_PAL}
+    ${GLSL_NOISE} ${GLSL_PAL} ${GLSL_COVER}
     // una tela ancha que avanza a lo largo de la pantalla y se pliega (al girar se ve de canto y se afina)
     void sheet(int k, float x, out float c, out float th, out float w) {
       vec4 r = uR[k]; float fk = float(k);
       c = .5 + (fk - .5) * .22 + r.y * (.13 * sin(x * 1.3 + r.x + fk * 2.4) + .05 * sin(x * 2.7 - r.x * 1.2 + fk));
       for (int i = 0; i < 4; i++) { vec4 wv = uW[i]; if (int(wv.z + .5) == k) c += wv.y * .07 * exp(-pow((x - wv.x) * 1.6, 2.)) * sin((x - wv.x) * 5.); }
       th = r.z + x * (.9 + fk * .25) + .9 * sin(x * .8 + r.x * .6 + fk * 1.7);
-      w = (.36 - fk * .1) * (1. + .1 * r.w);
+      w = (k == 2 ? .1 : .36 - fk * .1) * (1. + .1 * r.w);
     }
     void main() {
       float asp = uRes.x / uRes.y;
       // la tela corre por el lado largo de la pantalla
       vec2 uv = asp >= 1. ? vUv : vUv.yx; float L = max(asp, 1. / asp);
       float x = uv.x * L * 2.4, y = uv.y;
-      vec3 col = mix(uBg1, uBg0, vUv.y);
+      vec3 col = withCover(mix(uBg1, uBg0, vUv.y));   // la portada de fondo, detrás de las telas
       float g1 = h(gl_FragCoord.xy), g2 = h(gl_FragCoord.xy * 1.731 + 17.3);
-      for (int k = 1; k >= 0; k--) {   // primero la de atrás
+      for (int k = 2; k >= 0; k--) {   // primero la de atrás (la fina de arriba baila con los platillos)
         float c, th, w; sheet(k, x, c, th, w);
         float ct = cos(th), hw = w * (.06 + .94 * abs(ct));
         float v = (y - c) / hw;
@@ -7585,7 +7655,7 @@ function drawSilk(dt) {
   const bg0 = night ? hexToRgb(hsl(hh, 30, 4)).map(v => v / 255) : hexToRgb(hsl(hh, 25, 96)).map(v => v / 255);
   const bg1 = night ? hexToRgb(hsl(hh + 30, 20, 1.5)).map(v => v / 255) : hexToRgb(hsl(hh + 30, 20, 90)).map(v => v / 255);
   const [cw, ch] = glCanvas(1), gl = GLX.gl;
-  const p = silk.prog; gl.useProgram(p.pr);
+  const p = silk.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uSpark, silk.spark);
