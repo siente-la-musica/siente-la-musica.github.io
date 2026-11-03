@@ -86,6 +86,9 @@
   #btnColor { width: 26px; height: 26px; margin: 0 2px; }
   .pop.grid { padding: 12px; flex-direction: column; gap: 12px; }
   #popMode { max-height: calc(100dvh - var(--dock-h, 70px) - 60px); overflow-y: auto; overscroll-behavior: contain; }
+  /* Ajustes y Grabar: en pantallas bajas (portátiles de 13") caben enteros y se desplazan; nada queda tapado */
+  #popSettings, #popRec { max-height: calc(100dvh - var(--dock-h, 70px) - 60px); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+  @media (max-height: 820px) { #popSettings .row-set small, #popRec .row-set small { display: none; } #popSettings, #popRec { gap: 6px; } }
   .favs { display: grid; gap: 8px; }
   .favs-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
   .fav-add { font-size: 12px; padding: 5px 10px; }
@@ -343,7 +346,7 @@
   .lib-row.big { background: linear-gradient(135deg, color-mix(in srgb, var(--c1, #888) 28%, transparent), color-mix(in srgb, var(--c2, #888) 18%, transparent)); }
   .lib-sec { letter-spacing: .08em; }
   .lib input[type=search]:focus { border-color: color-mix(in srgb, var(--c1, #888) 60%, transparent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c1, #888) 18%, transparent); }
-  .lib-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; mask-image: linear-gradient(90deg, #000 88%, transparent); }
+  .lib-tabs { flex-wrap: wrap; gap: 6px; }   /* todas las pestañas a la vista (antes había que desplazarse con el teclado) */
   .lib-tabs::-webkit-scrollbar { display: none; }
   .lib-tabs button { font-size: 12px; padding: 6px 12px; flex: none; }
   .lib-recent { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -562,7 +565,7 @@
     <button class="ib" id="libClose" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z"/></svg></button>
   </header>
   <input type="search" id="libQ" placeholder="Busca canciones, artistas, álbumes…" autocomplete="off" spellcheck="false">
-  <div class="seg lib-tabs" role="group" aria-label="Biblioteca"><button data-lib="playlists">Playlists</button><button data-lib="liked">Me gusta</button><button data-lib="artists">Artistas</button><button data-lib="albums">Álbumes</button><button data-lib="podcasts">Podcasts</button><button data-lib="top">Top</button><button data-lib="recent">Reciente</button><button data-lib="news">Novedades</button></div>
+  <div class="seg lib-tabs" role="group" aria-label="Biblioteca"><button data-lib="playlists">Playlists</button><button data-lib="discover">✦ Descubrir</button><button data-lib="liked">Me gusta</button><button data-lib="artists">Artistas</button><button data-lib="albums">Álbumes</button><button data-lib="podcasts">Podcasts</button><button data-lib="top">Top</button><button data-lib="recent">Reciente</button><button data-lib="news">Novedades</button></div>
   <div class="lib-recent" id="libRecent" hidden></div>
   <label class="lib-dev">Suena en <select id="libDev"></select></label>
   <p class="lib-note" id="libNote" hidden></p>
@@ -668,6 +671,8 @@
         <button data-mode="light">Luz</button>
         <button data-mode="aura">Aura</button>
         <button data-mode="infinity">Infinito</button>
+        <button data-mode="loop">Lazo</button>
+        <button data-mode="comet">Cometa</button>
         <button data-mode="strobe">Estrobo</button>
         <button data-mode="tiles">Cuadros</button>
         <button data-mode="tubes">Inflables</button>
@@ -2839,6 +2844,35 @@ const LIB_TABS = {
     libList.innerHTML = '';
     items.length ? libList.append(...items.map(sh => libRow({ title: sh.name, sub: sh.publisher || 'Podcast', img: imgOf(sh), open: () => openShow(sh) }))) : libMsg('Aún no sigues podcasts.');
   }],
+  // Descubrir: música que todavía no escuchas. Spotify ya no da sus recomendaciones a apps como esta, así que se
+  // arman aquí: canciones recientes de los géneros de tus artistas (sin tus artistas), joyas poco conocidas de esos
+  // géneros y los lanzamientos de la semana. Cada vez que entras, sale una mezcla distinta
+  discover: ['Descubrir', async () => {
+    const top = await spApi('/me/top/artists?limit=20&time_range=medium_term').catch(() => null);
+    const mine = new Set((top?.items || []).map(a => a.id));
+    const genres = [...new Set((top?.items || []).flatMap(a => a.genres || []))];
+    const pickG = genres.sort(() => Math.random() - 0.5).slice(0, 4), yr = new Date().getFullYear();
+    const fresh = (list) => { const seen = new Set(); return list.filter(t => t && t.uri && !seen.has(t.uri) && seen.add(t.uri) && !(t.artists || []).some(a => mine.has(a.id))); };
+    const q = (query, type = 'track', off = 0) => spApi(`/search?type=${type}&limit=10&offset=${off}&q=` + encodeURIComponent(query)).catch(() => null);
+    const [byGenre, gems, week] = await Promise.all([
+      Promise.all(pickG.map(g => q(`genre:"${g}" year:${yr - 1}-${yr}`, 'track', Math.floor(Math.random() * 20)).then(d => d?.tracks?.items || []))),
+      Promise.all(pickG.slice(0, 2).map(g => q(`tag:hipster genre:"${g}"`, 'album').then(d => d?.albums?.items || []))),
+      q('tag:new', 'album', Math.floor(Math.random() * 30)).then(d => d?.albums?.items || [])]);
+    if (lib.tab !== 'discover') return;
+    let tracks = fresh(byGenre.flat()).sort(() => Math.random() - 0.5);
+    // sin géneros (Spotify ya no siempre los da): canciones nuevas de este año en general
+    if (!tracks.length) tracks = fresh(((await q(`year:${yr}`, 'track', Math.floor(Math.random() * 40)))?.tracks?.items) || []);
+    libList.innerHTML = '';
+    if (tracks.length) {
+      libList.append(libRow({ title: 'Escuchar todo lo nuevo', sub: tracks.length + ' canciones que aún no escuchas', play: row => libPlay({ uris: tracks.map(t => t.uri) }, row, tracks[0]) }));
+      libList.append(libSec(pickG.length ? 'Nuevo en lo que te gusta · ' + pickG.slice(0, 3).join(', ') : 'Nuevo este año'), ...trackRows(tracks.slice(0, 30)));
+    }
+    const albRow = a => libRow({ title: a.name, sub: artistsOf(a) + ' · ' + (a.album_type === 'single' ? 'Sencillo' : 'Álbum'), img: imgOf(a), open: () => openAlbum(a) });
+    const g2 = gems.flat().filter(a => a && !(a.artists || []).some(x => mine.has(x.id)));
+    if (g2.length) libList.append(libSec('Joyas poco conocidas'), ...g2.slice(0, 12).map(albRow));
+    if (week.length) libList.append(libSec('Salió esta semana'), ...week.filter(Boolean).slice(0, 10).map(albRow));
+    if (!libList.children.length) libMsg('Spotify no devolvió sugerencias ahora mismo. Prueba en un momento.');
+  }],
   news: ['Novedades', async () => {
     let items = [];
     try { const d = await spApi('/browse/new-releases?limit=50'); items = (d.albums?.items || []).filter(Boolean); } catch (e) {}
@@ -4103,8 +4137,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
-  medium: { name: 'media',     modes: ['mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
+  calm:   { name: 'tranquila', modes: ['comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
+  medium: { name: 'media',     modes: ['loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -4351,12 +4385,13 @@ const zoneInfo = z => ({ style: Math.floor(hash(z) * 4), twist: (hash(z + 5) - 0
 const polyR = (a, n) => { const s_ = Math.PI * 2 / n, t = ((a % s_) + s_) % s_ - s_ / 2; return Math.cos(Math.PI / n) / Math.cos(t); };
 function shapeR(type, a, v) {
   switch (type) {
-    case 1: return polyR(a, 3) * 1.12;
-    case 2: return polyR(a, 4) * 1.05;
-    case 3: return polyR(a, 6);
-    case 4: return 1 / (1 + (0.4 + v * 0.2) * Math.abs(Math.sin(a * 2.5)));
+    // esquinas apenas redondeadas: se ven limpias, sin picos
+    case 1: return (polyR(a, 3) * 0.86 + 0.14) * 1.1;
+    case 2: return (polyR(a, 4) * 0.88 + 0.12) * 1.04;
+    case 3: return polyR(a, 6) * 0.9 + 0.1;
+    case 4: return 0.84 + (0.16 + v * 0.12) * Math.cos(a * 5);   // flor de cinco pétalos, lisa
     case 5: return 1 + (0.09 + v * 0.14) * Math.cos(a * 6);
-    case 6: return 1 + (0.05 + v * 0.12) * Math.sin(a * 14 + time * 3);
+    case 6: return 1 + (0.03 + v * 0.14) * Math.sin(a * 12 + infRot * 4);   // onda que gira con la música
     default: return 1;
   }
 }
@@ -4366,14 +4401,15 @@ function drawInfinity(dt) {
   const night = state.theme === 'dark';
   // Velocidad suavizada: acelera con la música sin tirones
   // Avanza solo con la música: en silencio casi se detiene, y cada golpe de graves da un empujón
-  const target = 0.2 + Math.pow(bandX(0, BANDS), 1.3) * 4.2 + Math.pow(energy, 1.2) * 1.5 + bandX(0, 10) * 1.2;   // estrofa: paseo; estribillo: vuelo
-  // cada golpe da una oleada suave (sube en ~0,1 s y se va en ~0,5 s), sin tirones
-  if (hits.bass) drawInfinity.kv = (drawInfinity.kv || 0) + hits.bass * 3.4;
-  drawInfinity.kb = (drawInfinity.kb || 0) + ((drawInfinity.kv || 0) - (drawInfinity.kb || 0)) * (1 - Math.pow(0.0005, dt));
+  // la velocidad la da el volumen REAL de la canción (no el nivelado): en la estrofa pasea, en el estribillo vuela
+  const target = 0.18 + Math.pow(dynL, 1.7) * 2.8 + Math.pow(energy, 1.3) * 0.7;
+  // y cada golpe da un empujón que se ve (sube en ~0,05 s y se va en ~0,4 s): el túnel avanza al compás
+  if (pulse.on) drawInfinity.kv = (drawInfinity.kv || 0) + 1.6 + 2.8 * pulse.k;
+  drawInfinity.kb = (drawInfinity.kb || 0) + ((drawInfinity.kv || 0) - (drawInfinity.kb || 0)) * (1 - Math.pow(0.00002, dt));
   drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.12, dt);
-  camSpeed += (target - camSpeed) * (1 - Math.pow(0.15, dt));
+  camSpeed += (target - camSpeed) * (1 - Math.pow(0.3, dt));   // los cambios de parte de la canción se notan sin saltos
   camZ += dt * (camSpeed + drawInfinity.kb);
-  infRot += dt * (0.06 + bandX(0, BANDS) * 0.5);   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
+  infRot += dt * (0.04 + dynL * 0.5) + (pulse.on ? 0.06 * pulse.k : 0);   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
   const P = Math.max(0, pulse.x);
   if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
@@ -4460,6 +4496,15 @@ function drawInfinity(dt) {
     ring(R); lctx.stroke();
     if (A.style === 3) { ring(R * 0.93); lctx.stroke(); }
     lctx.setLineDash([]);
+    // detalles: cada cuarto anillo lleva tres luces que lo recorren y se encienden con los golpes que pasan
+    if (k % 4 === 0 && alpha > 0.05) {
+      const n3 = 3, lr = Math.max(DPR * 1.2, sc * 0.012 * (1 + glow * 1.5 + v));
+      lctx.fillStyle = rgba(lc.map(c_ => c_ + (255 - c_) * (night ? 0.5 : 0.1)), Math.min(1, alpha * (0.35 + glow * 0.9 + vg * 0.6)));
+      for (let j = 0; j < n3; j++) {
+        const a = rot * 0.6 + j * Math.PI * 2 / n3 + k * 0.4, mm = shapeR(A.shape, a - rot * 0.15, v) * (1 - f) + shapeR(B.shape, a - rot * 0.15, v) * f;
+        lctx.beginPath(); lctx.arc(sx + Math.cos(a) * R * mm, sy + Math.sin(a) * R * mm, lr, 0, Math.PI * 2); lctx.fill();
+      }
+    }
     lctx.globalAlpha = 1;
   }
   // Destellos que pasan junto a las paredes y dan sensación de velocidad
@@ -8258,7 +8303,125 @@ function drawEclipse(dt) {
   ctx.restore();
 }
 
-const scenes = { silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+
+// ================= Escena: Lazo =================
+// Una cinta de luz con forma de ocho (el infinito visto desde fuera) que gira despacio en el espacio.
+// Está hecha de muchos hilos: cada hilo escucha su parte del espectro y se separa de los demás cuando
+// suena (la cinta se abre en lo fuerte y se cierra en lo suave). La cinta se retuerce con la música,
+// cada golpe manda una luz que la recorre entera, la voz tiñe el hilo central del color de la nota y
+// en un drop la cinta se abre de golpe. Todo gira y avanza solo con la canción.
+const lazo = { rot: 0.6, ph: 0, open: 0, heads: [], lv: new Float32Array(16) };
+function drawLoop(dt) {
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), S = 16, M = 200;
+  lazo.rot += dt * (0.04 + dynL * 0.4) + (pulse.on ? 0.04 * pulse.k : 0);
+  lazo.ph += dt * (0.05 + energy * 0.9 + dynL * 0.4);
+  lazo.open = Math.max(lazo.open * Math.pow(0.25, dt), dropHit ? 1 : 0);
+  if (pulse.on) lazo.heads.push({ s: 0, k: 0.5 + 0.5 * pulse.k });
+  lazo.heads.forEach(h => h.s += dt * (0.55 + dynL * 0.5));
+  lazo.heads = lazo.heads.filter(h => h.s < 1.15).slice(-6);
+  // el ocho mira de frente y se mece en el espacio (no da la vuelta entera, que lo ponía de canto)
+  const yaw = 0.55 * Math.sin(lazo.rot), tilt = 0.25 * Math.sin(lazo.rot * 0.7 + 1) + 0.1 * Math.sin(lazo.ph * 0.23);
+  const cr = Math.cos(yaw), sr = Math.sin(yaw), ct = Math.cos(tilt), st = Math.sin(tilt);
+  const A = Math.min(W * 0.36, MIN * 0.62) * (1 + P * 0.025), D = 3.2;
+  // un punto de la cinta: el ocho (lemniscata de Gerono) con la cinta abierta hacia los lados y retorcida
+  const pt = (u, off, w) => {
+    const x = Math.cos(u), y = Math.sin(u) * Math.cos(u) * 0.95, tw = 2 * u + lazo.ph * 0.8;
+    const dy = Math.cos(tw) * off * w * 0.8, dz = Math.sin(tw) * off * w + Math.sin(u) * 0.18;
+    let X = x * cr + dz * sr, Z = -x * sr + dz * cr, Y = (y + dy) * ct - Z * st; Z = (y + dy) * st + Z * ct;
+    const k = D / (D + Z); return [W / 2 + X * A * k, H / 2 + Y * A * k, k];
+  };
+  lctx.clearRect(0, 0, W, H);
+  lctx.lineCap = 'round'; lctx.lineJoin = 'round';
+  lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  const melC = melodyColor(), av = Math.min(1, voice * 1.5);
+  for (let i = 0; i < S; i++) {
+    const k0 = Math.floor(i / S * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 4));
+    lazo.lv[i] += (lv - lazo.lv[i]) * (1 - Math.pow(lv > lazo.lv[i] ? 0.0005 : 0.05, dt));
+    const off = (i / (S - 1) - 0.5) * 2, w = 0.07 + lazo.lv[i] * 0.16 + dynL * 0.05 + lazo.open * 0.25;
+    const centre = 1 - Math.abs(off);
+    let col = mix(i / (S - 1));
+    if (Math.abs(off) < 0.2) col = col.map((c_, j) => c_ + (melC[j] - c_) * av * 0.85);   // el hilo del centro canta con la voz
+    const a = (night ? 0.16 : 0.32) + lazo.lv[i] * (night ? 0.45 : 0.4) + centre * 0.12 + P * 0.15;
+    lctx.strokeStyle = rgba(night ? col : col.map(v => v * 0.72), Math.min(1, a));
+    lctx.lineWidth = Math.max(DPR * 0.8, MIN * (0.0014 + lazo.lv[i] * 0.0018) * (night ? 1 : 1.5));
+    lctx.beginPath();
+    for (let j = 0; j <= M; j++) { const [X, Y] = pt(j / M * Math.PI * 2, off, w); j ? lctx.lineTo(X, Y) : lctx.moveTo(X, Y); }
+    lctx.closePath(); lctx.stroke();
+  }
+  // la luz de cada golpe recorre la cinta por el centro, con una estela que se apaga
+  for (const h of lazo.heads) {
+    const fade = Math.min(1, (1.15 - h.s) * 4);
+    for (let j = 0; j < 26; j++) {
+      const u = (h.s - j * 0.006) * Math.PI * 2; if (u < 0) break;
+      const [X, Y, k] = pt(u, 0, 0), r = MIN * 0.05 * k * (1 - j / 26) * (0.6 + h.k * 0.6);
+      lctx.globalAlpha = fade * (1 - j / 26) * (night ? 0.55 : 0.35) * h.k;
+      lctx.drawImage(SPRITES[j % 3], X - r, Y - r, r * 2, r * 2);
+    }
+  }
+  lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
+  ambient();
+  bloom(layer, (night ? 0.7 : 0.35) + P * 0.3);
+  ctx.drawImage(layer, 0, 0);
+}
+
+// ================= Escena: Cometa =================
+// Tres cometas (graves, voces y agudos) cruzan la pantalla dejando una estela larga de luz que se
+// apaga despacio, como la sombra que deja la luz. Cada una corre más cuanto más suena su parte; el
+// golpe hace que la de los graves se encienda y suelte chispas; la voz pinta la estela de la del medio
+// con el color de la nota; los platillos hacen titilar la de arriba. En silencio flotan casi quietas.
+const comet = { list: null, sparks: [] };
+function drawComet(dt) {
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  if (!comet.list) comet.list = [0, 1, 2].map(i => ({ t: i * 2.1, trail: [], glow: 0, lv: 0, kick: 0, ax: [0.31, 0.43, 0.53][i], ay: [0.47, 0.29, 0.61][i], ph: i * 1.7 }));
+  const bandsC = [bandX(0, 12), bandX(12, 34), bandX(34, BANDS)], melC = melodyColor(), av = Math.min(1, voice * 1.5);
+  lctx.clearRect(0, 0, W, H); lctx.lineCap = 'round';
+  lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  comet.list.forEach((c, i) => {
+    c.lv += (bandsC[i] - c.lv) * (1 - Math.pow(bandsC[i] > c.lv ? 0.0005 : 0.05, dt));
+    if (pulse.on && i === 0) { c.kick += 1 + pulse.k; c.glow = 1; for (let k = 0; k < 6 + Math.round(pulse.k * 8); k++) comet.sparks.push({ x: c.x, y: c.y, vx: (Math.random() - 0.5) * MIN * 0.5, vy: (Math.random() - 0.5) * MIN * 0.5, life: 1, c: i }); }
+    if ((hits.snare || hits.perc > 0.35) && i === 1) { c.kick += 0.8; c.glow = Math.max(c.glow, 0.7); }
+    if (hits.hat && i === 2) c.glow = Math.max(c.glow, 0.6);
+    c.kick *= Math.pow(0.08, dt); c.glow *= Math.pow(0.1, dt);
+    c.t += dt * (0.03 + c.lv * 0.9 + dynL * 0.3 + c.kick * 0.8);   // corre con su parte de la canción
+    // camino: curvas largas y suaves que cruzan toda la pantalla (cada una distinta)
+    c.x = W * (0.5 + 0.42 * Math.sin(c.t * c.ax * 2 + c.ph) * Math.cos(c.t * 0.13 + i));
+    c.y = H * (0.5 + 0.38 * Math.sin(c.t * c.ay * 2 + c.ph * 1.3));
+    c.trail.unshift([c.x, c.y]); if (c.trail.length > 140) c.trail.pop();
+    let col = mix(i / 2); if (i === 1) col = col.map((v, j) => v + (melC[j] - v) * av * 0.85);
+    const dark = night ? col : col.map(v => v * 0.7), T = c.trail, n = T.length, w0 = MIN * (0.016 + c.lv * 0.02 + c.glow * 0.012);
+    // la estela: ancha y viva junto a la cabeza, se afina y se apaga hacia atrás
+    // en tramos continuos (sin «cuentas» donde se unen los trocitos), cada uno más fino y más tenue
+    const CH = 14, per = Math.ceil(n / CH);
+    for (let q = 0; q < CH; q++) {
+      const j0 = q * per, j1 = Math.min(n - 1, j0 + per + 1); if (j1 - j0 < 1) break;
+      const f = (j0 + per / 2) / n, a = Math.pow(1 - f, 1.6) * (night ? 0.55 : 0.6) * (0.5 + c.lv * 0.6 + c.glow * 0.4);
+      if (a < 0.01) break;
+      lctx.strokeStyle = rgba(dark, a); lctx.lineWidth = Math.max(DPR, w0 * (1 - f * 0.92)); lctx.lineJoin = 'round'; lctx.lineCap = q ? 'butt' : 'round';   // sin puntas redondas en las uniones (se veían como cuentas)
+      lctx.beginPath(); lctx.moveTo(T[j0][0], T[j0][1]);
+      for (let j = j0 + 1; j <= j1; j++) { const mx_ = (T[j - 1][0] + T[j][0]) / 2, my_ = (T[j - 1][1] + T[j][1]) / 2; lctx.quadraticCurveTo(T[j - 1][0], T[j - 1][1], mx_, my_); }
+      lctx.stroke();
+    }
+    // la cabeza: un halo grande que late y un núcleo casi blanco
+    const r = MIN * (0.07 + c.lv * 0.06 + c.glow * 0.06 + (i === 0 ? P * 0.03 : 0));
+    lctx.globalAlpha = night ? 0.9 : 0.6; lctx.drawImage(SPRITES[i], c.x - r, c.y - r, r * 2, r * 2); lctx.globalAlpha = 1;
+    lctx.fillStyle = rgba(night ? col.map(v => v + (255 - v) * 0.7) : col.map(v => v * 0.55), 1);
+    lctx.beginPath(); lctx.arc(c.x, c.y, w0 * 0.75, 0, Math.PI * 2); lctx.fill();
+  });
+  // chispas del golpe
+  for (let i = comet.sparks.length - 1; i >= 0; i--) {
+    const sp_ = comet.sparks[i]; sp_.life -= dt * 1.4; if (sp_.life <= 0) { comet.sparks.splice(i, 1); continue; }
+    sp_.vx *= Math.pow(0.2, dt); sp_.vy *= Math.pow(0.2, dt); sp_.x += sp_.vx * dt; sp_.y += sp_.vy * dt;
+    lctx.fillStyle = rgba(night ? mix(sp_.c / 2).map(v => v + (255 - v) * 0.4) : mix(sp_.c / 2).map(v => v * 0.6), sp_.life);
+    lctx.beginPath(); lctx.arc(sp_.x, sp_.y, MIN * 0.004 * (0.5 + sp_.life), 0, Math.PI * 2); lctx.fill();
+  }
+  if (comet.sparks.length > 200) comet.sparks.splice(0, comet.sparks.length - 200);
+  lctx.globalCompositeOperation = 'source-over';
+  ambient();
+  bloom(layer, (night ? 0.8 : 0.35) + P * 0.25);
+  ctx.drawImage(layer, 0, 0);
+}
+
+const scenes = { loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
