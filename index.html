@@ -718,6 +718,7 @@
       <div class="pop-title">Ajustes</div>
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
       <label class="row-set" for="coverBg"><span>Portada de fondo <small>La portada de la canción, suave detrás de la animación</small></span> <input type="checkbox" id="coverBg"></label>
+      <label class="row-set" for="liveBg"><span>Fondo vivo <small>Los colores de la portada se mueven detrás de la animación, al ritmo de la canción</small></span> <input type="checkbox" id="liveBg"></label>
       <label class="row-set" for="coverGray"><span>Portada en blanco y negro <small>El fondo en grises; las animaciones siguen tomando los colores de la portada</small></span> <input type="checkbox" id="coverGray"></label>
       <label class="row-set" for="wakeLock"><span>No bloquear la pantalla <small>Mientras la página está abierta, la pantalla no se apaga ni se bloquea</small></span> <input type="checkbox" id="wakeLock"></label>
       <label class="row-set" for="lyricFx"><span>La letra se ve <small>Si la canción habla de fuego, lluvia, amor, estrellas… aparece en la animación</small></span> <input type="checkbox" id="lyricFx"></label>
@@ -765,7 +766,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), lyricFx: store.get('lyricFx', true), coverBg: store.get('coverBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'palette'), auto: store.get('auto', false),
+  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), lyricFx: store.get('lyricFx', true), coverBg: store.get('coverBg', true), liveBg: store.get('liveBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'palette'), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -1032,6 +1033,7 @@ coverGrayEl.onchange = () => { state.coverGray = coverGrayEl.checked; store.set(
 const coverBgEl = document.getElementById('coverBg');
 coverBgEl.checked = state.coverBg;
 coverBgEl.onchange = () => { state.coverBg = coverBgEl.checked; store.set('coverBg', state.coverBg); };
+{ const lb = document.getElementById('liveBg'); lb.checked = state.liveBg; lb.onchange = () => { state.liveBg = lb.checked; store.set('liveBg', state.liveBg); }; }
 // Pantalla siempre encendida (Wake Lock). El navegador lo suelta al cambiar de pestaña: se vuelve a pedir.
 const wakeEl = document.getElementById('wakeLock');
 let wakeSentinel = null;
@@ -1107,7 +1109,7 @@ function setMode(m) {
   state.mode = m; store.set('mode', m);
   document.body.classList.toggle('mode-lyrics', m === 'lyrics');
   document.body.classList.toggle('mode-strobe', m === 'strobe');
-  document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist' || m === 'cover');
+  document.body.classList.toggle('mode-info', m === 'lyrics' || m === 'artist' || m === 'cover' || m === 'livecover');
   if (m === 'artist' && sp.item) arLoad(sp.item);
   if (m === 'cover' && coverClean) { cover3dImage(coverUrl, coverClean); }
   if (m === 'cover' && sp.item) loadAltArt(sp.item);
@@ -1156,7 +1158,7 @@ addEventListener('keydown', e => {
 
 applyAll();
 if (state.mode === 'strobe') document.body.classList.add('mode-strobe');
-if (state.mode === 'lyrics' || state.mode === 'artist' || state.mode === 'cover') { intro.hidden = true; document.body.classList.add('mode-info'); if (state.mode === 'lyrics') document.body.classList.add('mode-lyrics'); }
+if (state.mode === 'lyrics' || state.mode === 'artist' || state.mode === 'cover' || state.mode === 'livecover') { intro.hidden = true; document.body.classList.add('mode-info'); if (state.mode === 'lyrics') document.body.classList.add('mode-lyrics'); }
 
 // ================= Audio =================
 let kickLP, kickAn, kickBuf, kickPeak = 0.02;
@@ -2446,8 +2448,45 @@ function makeCoverBg(img) {
   }
   return c;
 }
+// Fondo vivo: como el de las mejores apps de música, pero que baila. Manchas grandes de los colores de la portada
+// que se mueven despacio y se funden sin bordes; cada una respira con su parte de la canción y el golpe las
+// empuja. Debajo, la portada en grises le da textura. Se pinta pequeño (es todo suave) y se amplía: no cuesta nada.
+const bgLive = document.createElement('canvas'); bgLive.width = bgLive.height = 160; bgLive.clean = true; bgLive.ver = 0;
+const bgLiveX = bgLive.getContext('2d');
+const bgBlobs = Array.from({ length: 6 }, (_, i) => ({ ph: i * 1.7, sx: 0.07 + i * 0.013, sy: 0.05 + i * 0.011, c: i % 3, lv: 0 }));
+let bgLiveT = 0;
+function liveBgTick(dt) {
+  if (!state.liveBg || !state.coverBg) return;
+  const x = bgLiveX, S = 160, night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  bgLiveT += dt * (0.05 + energy * 0.5 + dynL * 0.25) + (pulse.on ? 0.04 * pulse.k : 0);
+  const avg = [0, 1, 2].map(k => (RGB[0][k] + RGB[1][k] + RGB[2][k]) / 3);
+  x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
+  x.fillStyle = night ? rgba(avg.map(v => v * 0.16), 1) : rgba(avg.map(v => v + (255 - v) * 0.78), 1); x.fillRect(0, 0, S, S);
+  const bands = [bandX(0, 10), bandX(10, 24), bandX(24, 40), bandX(40, BANDS), bandX(6, 18), bandX(18, 34)];
+  bgBlobs.forEach((b, i) => {
+    b.lv += (bands[i] - b.lv) * (1 - Math.pow(bands[i] > b.lv ? 0.001 : 0.06, dt));
+    const cx = S * (0.5 + 0.42 * Math.sin(bgLiveT * b.sx * 6 + b.ph)), cy = S * (0.5 + 0.42 * Math.cos(bgLiveT * b.sy * 6 + b.ph * 1.3));
+    const r = S * (0.42 + b.lv * 0.22 + (i === 0 ? P * 0.08 : 0)), c = RGB[b.c];
+    const [h, sat, l] = hexToHsl(rgbToHex(...c)), cc = hexToRgb(hsl(h + (i > 2 ? 18 : 0), Math.min(100, sat * 1.1), night ? Math.min(46, Math.max(30, l * 0.6)) : Math.min(80, Math.max(62, l + 18))));
+    const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, rgba(cc, 0.95)); g.addColorStop(0.55, rgba(cc, 0.45)); g.addColorStop(1, rgba(cc, 0));
+    x.fillStyle = g; x.fillRect(0, 0, S, S);
+  });
+  // la portada en grises, como una textura suave por encima (se reconoce sin quitarle el color al fondo)
+  x.globalCompositeOperation = 'soft-light';
+  for (const [img, a] of [[bgPrev, 1 - bgFade], [bgCur, bgFade]]) { if (img && a > 0) { x.globalAlpha = a * 0.5; x.drawImage(img, 0, 0, S, S); } }
+  x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
+  bgLive.ver++;
+}
 function setBackdrop(canvasOrNull) { bgPrev = bgCur; bgCur = canvasOrNull; bgFade = 0; }
 function drawBackdrop(dt, boost = 1) {
+  if (state.liveBg && state.coverBg) {
+    bgFade = Math.min(1, bgFade + dt / 1.6); if (bgFade >= 1) bgPrev = null;
+    const night = state.theme === 'dark', S = Math.max(W, H) * 1.05;
+    ctx.save(); ctx.globalAlpha = Math.min(1, (night ? 0.72 : 0.75) * boost); ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bgLive, (W - S) / 2, (H - S) / 2, S, S); ctx.restore();
+    return;
+  }
   if ((!bgCur && !bgPrev) || !state.coverBg) return;
   bgFade = Math.min(1, bgFade + dt / 1.6);
   const night = state.theme === 'dark', base = (night ? 0.36 : 0.2) * boost;
@@ -3433,7 +3472,7 @@ function showLyricNote(text) {
   lyricsEl.hidden = !text;
 }
 function subtitlesTick() {
-  if (!lyricsOn || ['lyrics', 'artist', 'strobe', 'cover'].includes(state.mode) || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
+  if (!lyricsOn || ['lyrics', 'artist', 'strobe', 'cover', 'livecover'].includes(state.mode) || !spConnected() || !sp.item) { lyricsEl.hidden = true; lyricIndex = -2; return; }
   const msg = lyricsMessage() || (lyrics.plain ? 'Esta letra no trae tiempos · ⋯ → Sincronizar letra a mano' : '');
   if (msg) { if (lyCur.textContent !== msg) showLyricNote(msg); lyricIndex = -3; return; }
   const L = lyrics.lines, pos = lyricPos();
@@ -4079,7 +4118,7 @@ function drawRecOverlay() {
   ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)'; ctx.shadowBlur = 24 * u;
   const it = spConnected() && sp.item;
   // Canción arriba a la izquierda (fuera de la zona de botones de TikTok)
-  if (it && state.mode !== 'artist' && state.mode !== 'cover') {
+  if (it && state.mode !== 'artist' && state.mode !== 'cover' && state.mode !== 'livecover') {
     // en vertical, bajo la franja de «Siguiendo / Para ti» y el botón LIVE de TikTok (la zona segura empieza ~14 %)
     const x0 = W * 0.07, y0 = H * (vertical ? 0.165 : 0.1), s_ = 120 * u;
     let tx = x0;
@@ -4119,7 +4158,7 @@ function drawRecOverlay() {
       artistClean.set(a.id, null);
       const url = artistImageOf(it); if (url) loadImageClean(url).then(r => { if (r.clean) artistClean.set(a.id, r.img); });
     }
-  } else if (lyricsOn && ly) {
+  } else if (lyricsOn && ly && state.mode !== 'livecover') {
     // Subtítulos en el tercio inferior, por encima de la zona de texto de TikTok
     // en vertical, algo a la izquierda y más estrecha: la columna de botones de TikTok ocupa el borde derecho
     drawLyricStyled(ly, (vertical ? 64 : 58) * u, vertical ? W * 0.45 : W / 2, H * (vertical ? 0.64 : 0.8), vertical ? W * 0.7 : W * 0.8);
@@ -6531,14 +6570,14 @@ const GLSL_COVER = `uniform sampler2D uCov; uniform float uCovK; uniform vec4 uC
   vec3 withCover(vec3 bg) { if (uCovK <= 0.) return bg; return mix(bg, texture(uCov, (vUv - uCovR.xy) / uCovR.zw).rgb, uCovK); }`;
 const covGL = { tex: null, src: null };
 function glCoverBind(p, unit = 5) {
-  const gl = GLX.gl, img = state.coverBg && bgCur && bgCur.clean !== false ? bgCur : null;
+  const liveOn = state.liveBg && state.coverBg, gl = GLX.gl, img = liveOn ? bgLive : state.coverBg && bgCur && bgCur.clean !== false ? bgCur : null;
   if (!covGL.tex) covGL.tex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0 + unit);
-  if (img && covGL.src !== img) { try { glUpload(covGL.tex, img); covGL.src = img; } catch (e) { covGL.src = null; } }
+  if (img && (covGL.src !== img || (liveOn && covGL.ver !== bgLive.ver))) { try { glUpload(covGL.tex, img); covGL.src = img; covGL.ver = bgLive.ver; } catch (e) { covGL.src = null; } }
   gl.bindTexture(gl.TEXTURE_2D, covGL.tex); gl.activeTexture(gl.TEXTURE0);
   gl.uniform1i(p.u.uCov, unit);
   const night = state.theme === 'dark', S = Math.max(W, H) * 1.18, ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
-  gl.uniform1f(p.u.uCovK, img && covGL.src === img ? (night ? 0.36 : 0.2) * bgFade : 0);
+  gl.uniform1f(p.u.uCovK, img && covGL.src === img ? (liveOn ? (night ? 0.8 : 0.7) : (night ? 0.36 : 0.2) * bgFade) : 0);
   gl.uniform4f(p.u.uCovR, ((W - S) / 2 + ox) / W, ((H - S) / 2 - oy) / H, S / W, S / H);
 }
 // al grabar: si el equipo no llega a 30 cuadros por segundo, las capas de luz suave (que no tienen bordes nítidos)
@@ -8634,81 +8673,95 @@ function lyricFxTick(dt) {
 
 
 // ================= Escena: Portada viva =================
-// La portada de la canción, a todo color en el centro, como si estuviera hecha de agua y luz: respira con
-// los graves (se acerca y se aleja), cada golpe le abre una onda desde el centro, la caja separa sus colores
-// un instante como una lente, la voz la hace ondular suave y los platillos le sacan un brillo que la cruza.
-// Debajo, su reflejo; detrás, su propio color difuminado.
-const livec = { prog: null, tex: null, src: null, rip: 0, ripT: 9, chroma: 0, sheen: -1, sway: 0, swayV: 0 };
-function liveSetup() {
-  livec.prog = glProgram(`uniform vec2 uRes; uniform sampler2D uImg; uniform float uTime, uP, uRip, uRipT, uChroma, uVoice, uSheen, uSize, uNight, uHas, uSway;
-    uniform vec3 uC0, uC1, uC2;
-    vec3 cover(vec2 q) {   // q: dentro del cuadro de la portada, 0..1
-      if (uHas < .5) return mix(uC0, mix(uC1, uC2, q.x), q.y);
-      return texture(uImg, clamp(q, .001, .999)).rgb;
-    }
-    void main() {
-      float asp = uRes.x / uRes.y; vec2 p = vec2((vUv.x - .5) * asp, vUv.y - .5);
-      // el cuadro se inclina apenas con la música
-      float c = cos(uSway), s = sin(uSway); p = mat2(c, s, -s, c) * p;
-      vec2 q = p / uSize + .5;
-      // reflejo: debajo del cuadro, la portada al revés que se apaga
-      bool refl = q.y < 0.;
-      if (refl) q.y = -q.y * 1.0 - .04;
-      // agua: ondas que nacen en el centro con cada golpe, ondulación de la voz y respiración de los graves
-      vec2 d = q - .5; float r = length(d);
-      float wave = uRip * exp(-pow((r - uRipT * .55) * 7., 2.)) * sin(r * 40. - uRipT * 18.);
-      vec2 off = d / max(r, 1e-3) * wave * .025;
-      off += vec2(sin(q.y * 9. + uTime * 1.3), cos(q.x * 8. + uTime * 1.1)) * .006 * uVoice;
-      vec2 qq = q + off;
-      float inside = step(0., qq.x) * step(qq.x, 1.) * step(0., qq.y) * step(qq.y, 1.);
-      // esquinas redondeadas
-      vec2 e = abs(qq - .5) - (.5 - .045); float corner = 1. - smoothstep(-.003, .003, length(max(e, 0.)) - .045);
-      vec3 col;
-      vec2 ch = d * uChroma * .02;
-      col = vec3(cover(qq + ch).r, cover(qq).g, cover(qq - ch).b);
-      // brillo que cruza en diagonal (platillos)
-      float sh = exp(-pow((qq.x + qq.y - uSheen * 2.2) * 9., 2.)) * .35;
-      col += sh;
-      col *= 1. + uP * .12;
-      float a = inside * corner;
-      if (refl) a *= .28 * smoothstep(.55, 0., -q.y + .0) * (uNight > .5 ? 1. : .7);
-      o = vec4(col * a, a);
-    }`);
+// La pantalla de «Reproduciendo», pero viva. Detrás, el fondo vivo con los colores de la portada a toda
+// intensidad. La portada, nítida y grande, flota con una sombra de su propio color que se enciende con cada
+// golpe; respira con los graves, se inclina apenas con la melodía y los platillos le pasan un brillo de vidrio.
+// Al lado (o debajo, en vertical) el título y la letra: la línea que se canta se llena palabra por palabra, la
+// anterior se va y la siguiente espera. Sin música la portada pierde el color y todo se queda quieto.
+const livec = { tilt: 0, tiltV: 0, glow: 0, sheen: -1, lineAt: '', lineK: 0, prev: '' };
+function liveWrap(text, maxW, font) {
+  ctx.font = font; const words = text.split(/\s+/).filter(Boolean), out = []; let cur = '';
+  for (const w of words) { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { out.push(cur); cur = w; } else cur = t; }
+  if (cur) out.push(cur); return out;
 }
 function drawLiveCover(dt) {
-  if (!glInit()) { drawCover(dt); return; }
-  if (!livec.prog) liveSetup();
-  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, img = coverAny && coverClean ? coverClean : null;
-  if (!livec.tex) livec.tex = gl.createTexture();
-  gl.activeTexture(gl.TEXTURE0);
-  if (img && livec.src !== img) { try { glUpload(livec.tex, img); livec.src = img; } catch (e) { livec.src = null; } }
-  if (pulse.on) { livec.rip = Math.min(1.6, livec.rip * 0.4 + 0.6 + pulse.k * 0.7); livec.ripT = 0; }
-  livec.ripT += dt; livec.rip *= Math.pow(0.3, dt);
-  if (hits.snare || hits.perc > 0.4) livec.chroma = Math.max(livec.chroma, 0.6 + (hits.snare || hits.perc) * 0.6);
-  livec.chroma *= Math.pow(0.02, dt);
-  if (hits.hat && livec.sheen > 1.3) livec.sheen = -0.6; livec.sheen = Math.min(2, livec.sheen + dt * 1.8);
-  livec.swayV += ((Math.sin(time * 0.4) * 0.03 * dynL + (vox.note != null && voice > 0.12 ? (vox.note / 11 - 0.5) * 0.05 : 0)) - livec.sway) * 8 * dt - livec.swayV * 3 * dt; livec.sway += livec.swayV * dt;
-  const size = Math.min(0.68, 0.6 * Math.min(1, W / H * 0.85)) * (1 + Math.pow(bandX(0, 10), 1.5) * 0.04 + P * 0.035);
-  // detrás: su propio color, difuminado y vivo (la portada de fondo de siempre, más presente)
-  drawBackdrop(0, 1.6);
-  const [cw, ch] = glCanvas(1), p = livec.prog;
-  gl.useProgram(p.pr);
-  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, livec.tex); gl.uniform1i(p.u.uImg, 0);
-  gl.uniform1f(p.u.uHas, img && livec.src === img ? 1 : 0);
-  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uRip, livec.rip * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uRipT, livec.ripT);
-  gl.uniform1f(p.u.uChroma, livec.chroma * (state.noFlash ? 0.3 : 1)); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uSheen, livec.sheen);
-  gl.uniform1f(p.u.uSize, size); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uSway, livec.sway);
-  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
-  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  // un halo de su color alrededor del cuadro, que late con el golpe
-  const R = MIN * size * 0.9, g = ctx.createRadialGradient(W / 2, H / 2, R * 0.4, W / 2, H / 2, R * 1.4), c = mix(0.5);
-  g.addColorStop(0, rgba(c, (night ? 0.35 : 0.25) * (0.5 + P * 0.6 + dynL * 0.4))); g.addColorStop(1, rgba(c, 0));
-  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); ctx.restore();
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = MIN * 0.05; ctx.shadowOffsetY = MIN * 0.02;
-  ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), vertical = H > W * 1.05, u = MIN / 1000;
+  const it = spConnected() && sp.item, img = coverAny || coverClean;
+  drawBackdrop(0, 1.6);   // el fondo vivo, más presente que en las demás
+  // una luz suave arriba y una sombra abajo: profundidad, como un estudio
+  { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, night ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.25)'); g.addColorStop(1, night ? 'rgba(0,0,0,.35)' : 'rgba(0,0,0,.06)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  // movimiento de la portada
+  if (pulse.on) livec.glow = Math.min(1.4, livec.glow + 0.5 + pulse.k * 0.6);
+  livec.glow *= Math.pow(0.08, dt);
+  const tiltT = voice > 0.12 ? ((vox.note || 0) / 11 - 0.5) * 0.06 * Math.min(1, voice * 2) : 0;
+  livec.tiltV += ((tiltT - livec.tilt) * 30 - livec.tiltV * 7) * dt; livec.tilt += livec.tiltV * dt;
+  if (hits.hat && livec.sheen > 1.2) livec.sheen = -0.4; livec.sheen = Math.min(2, livec.sheen + dt * 1.4);
+  const recV = recording && vertical;   // en el clip vertical: debajo de la firma y lejos de los botones de TikTok
+  const size = recV ? Math.min(W * 0.6, H * 0.3) : vertical ? Math.min(W * 0.72, H * 0.4) : Math.min(H * 0.58, W * 0.34);
+  const breath = 1 + Math.pow(bandX(0, 10), 1.6) * 0.025 + P * 0.018;
+  const cx = vertical ? W / 2 : W * 0.32, cy = recV ? H * 0.44 : vertical ? H * 0.36 : H * 0.48, S = size * breath, R = S * 0.045;
+  const c1 = mix(0.3), c2 = mix(0.7), gray = (colorTick.gray || 0);
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(livec.tilt);
+  // sombra de su color (se enciende con el golpe) y una sombra real debajo
+  ctx.save(); ctx.shadowColor = rgba(c1, (night ? 0.55 : 0.45) * (0.5 + livec.glow * 0.5 + dynL * 0.3)); ctx.shadowBlur = S * (0.18 + livec.glow * 0.12);
+  ctx.fillStyle = rgba(c1, 1); ctx.beginPath(); ctx.roundRect(-S / 2, -S / 2, S, S, R); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = S * 0.08; ctx.shadowOffsetY = S * 0.04;
+  ctx.fillStyle = '#000'; ctx.beginPath(); ctx.roundRect(-S / 2, -S / 2, S, S, R); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.roundRect(-S / 2, -S / 2, S, S, R); ctx.clip();
+  if (img) { if (gray > 0.05 && CAN_BLUR) ctx.filter = `grayscale(${Math.min(1, gray)})`; ctx.drawImage(img, -S / 2, -S / 2, S, S); ctx.filter = 'none'; }
+  else { const g = ctx.createLinearGradient(-S / 2, -S / 2, S / 2, S / 2); g.addColorStop(0, rgba(c1, 1)); g.addColorStop(1, rgba(c2, 1)); ctx.fillStyle = g; ctx.fillRect(-S / 2, -S / 2, S, S);
+    ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = `600 ${S * 0.12}px ${FONT_BRAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('♪', 0, 0); }
+  // brillo de vidrio que cruza (platillos) y un filo de luz arriba
+  if (livec.sheen < 1.3) { const x = (livec.sheen - 0.5) * S * 2, g = ctx.createLinearGradient(x - S * 0.3, -S / 2, x + S * 0.3, S / 2);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.22)'); g.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = g; ctx.fillRect(-S / 2, -S / 2, S, S); }
+  const edge = ctx.createLinearGradient(0, -S / 2, 0, -S / 2 + S * 0.25); edge.addColorStop(0, 'rgba(255,255,255,.14)'); edge.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = edge; ctx.fillRect(-S / 2, -S / 2, S, S * 0.25);
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = Math.max(1, S * 0.003); ctx.beginPath(); ctx.roundRect(-S / 2, -S / 2, S, S, R); ctx.stroke();
+  ctx.restore();
+  // textos: título, artista y la letra
+  const fg = night ? '255,255,255' : '20,16,30';
+  const tx = vertical ? W * 0.1 : W * 0.56, tw = recV ? W * 0.72 : vertical ? W * 0.8 : W * 0.38;
+  let ty = vertical ? cy + size / 2 + H * 0.05 : H * 0.3;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  if (it) {
+    const fit = (t, f, w) => { ctx.font = f; if (ctx.measureText(t).width <= w) return t; while (t.length > 1 && ctx.measureText(t + '…').width > w) t = t.slice(0, -1); return t.trimEnd() + '…'; };
+    const ft = `700 ${Math.round(56 * u)}px ${FONT_DISPLAY}`, fa = `500 ${Math.round(32 * u)}px ${FONT_UI}`;
+    ctx.fillStyle = `rgba(${fg},.96)`; ctx.fillText(fit(it.name || '', ft, tw), tx, ty);
+    ctx.fillStyle = `rgba(${fg},.62)`; ctx.fillText(fit((it.artists || []).map(a => a.name).join(', ') || it.show?.name || '', fa, tw), tx, ty + 48 * u);
+    // la barra de progreso, fina, con el color de la canción
+    const pr = sp.duration ? Math.min(1, spPos() / sp.duration) : 0, by = ty + 86 * u;
+    ctx.fillStyle = `rgba(${fg},.16)`; ctx.beginPath(); ctx.roundRect(tx, by, tw, 5 * u, 3 * u); ctx.fill();
+    const pg = ctx.createLinearGradient(tx, 0, tx + tw, 0); pg.addColorStop(0, rgba(night ? c1.map(v => v + (255 - v) * 0.4) : c1, 1)); pg.addColorStop(1, rgba(night ? c2.map(v => v + (255 - v) * 0.4) : c2, 1));
+    ctx.fillStyle = pg; ctx.beginPath(); ctx.roundRect(tx, by, Math.max(5 * u, tw * pr), 5 * u, 3 * u); ctx.fill();
+    ty = by + 90 * u;
+    // la letra: la línea que suena se llena palabra por palabra; la anterior se aleja y la siguiente espera
+    const ly = currentLyric(), fl = `700 ${Math.round(46 * u)}px ${FONT_LYRIC}`, lh = 58 * u;
+    if (ly) {
+      if (ly.text !== livec.lineAt) { livec.prev = livec.lineAt; livec.lineAt = ly.text; livec.lineK = 0; }
+      livec.lineK = Math.min(1, livec.lineK + dt * 4);
+      const k = 1 - Math.pow(1 - livec.lineK, 3), lines = liveWrap(ly.text, tw, fl);
+      if (livec.prev) { ctx.font = `600 ${Math.round(30 * u)}px ${FONT_LYRIC}`; ctx.fillStyle = `rgba(${fg},${0.3 * (1 - k)})`; ctx.fillText(fit(livec.prev, ctx.font, tw), tx, ty - 50 * u - k * 20 * u); }
+      let wi = 0; const shown = ly.shown;
+      ctx.font = fl;
+      lines.forEach((ln, li) => {
+        let x = tx; const y = ty + li * lh + (1 - k) * 24 * u;
+        for (const w of ln.split(' ')) {
+          const on = wi < shown, ww = ctx.measureText(w + ' ').width;
+          ctx.fillStyle = `rgba(${fg},${(on ? 0.98 : 0.34) * k})`;
+          if (on && night) { ctx.shadowColor = rgba(c1, 0.6); ctx.shadowBlur = 18 * u * (0.4 + P * 0.6); } else ctx.shadowBlur = 0;
+          ctx.fillText(w, x, y); x += ww; wi++;
+        }
+      });
+      ctx.shadowBlur = 0;
+      if (ly.next) { ctx.font = `600 ${Math.round(32 * u)}px ${FONT_LYRIC}`; ctx.fillStyle = `rgba(${fg},${0.42 * k})`; ctx.fillText(fit(ly.next, ctx.font, tw), tx, ty + lines.length * lh + 22 * u); }
+    } else {
+      ctx.font = `500 ${Math.round(28 * u)}px ${FONT_UI}`; ctx.fillStyle = `rgba(${fg},.45)`;
+      ctx.fillText(lyricsMessage() || (it.album?.name ? it.album.name : ''), tx, ty);
+    }
+  } else {
+    ctx.font = `600 ${Math.round(40 * u)}px ${FONT_DISPLAY}`; ctx.fillStyle = `rgba(${fg},.8)`; ctx.fillText('Pon una canción', tx, ty);
+    ctx.font = `500 ${Math.round(26 * u)}px ${FONT_UI}`; ctx.fillStyle = `rgba(${fg},.5)`; ctx.fillText('Conecta tu música y aparece aquí, viva', tx, ty + 44 * u);
+  }
 }
 
 const scenes = { livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawOrbs, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTiles, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
@@ -8760,6 +8813,7 @@ function render(now) {
   ctx.fillStyle = state.theme === 'dark' ? '#000000' : '#ffffff';
   ctx.fillRect(0, 0, W, H);
   colorTick(dt);
+  liveBgTick(dt);
   if (state.mode !== 'strobe') drawBackdrop(dt);
   const tScene = performance.now();
   (scenes[state.mode] || drawBars)(dt);
