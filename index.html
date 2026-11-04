@@ -704,6 +704,8 @@
         <button data-mode="light">Luz</button>
         <button data-mode="aura">Aura</button>
         <button data-mode="infinity">Infinito</button>
+        <button data-mode="sphere">Esfera</button>
+        <button data-mode="capsules">Cápsulas</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="comet">Cometa</button>
         <button data-mode="strobe">Estrobo</button>
@@ -4305,7 +4307,7 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
+  calm:   { name: 'tranquila', modes: ['sphere', 'capsules', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
   medium: { name: 'media',     modes: ['loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
@@ -9063,7 +9065,217 @@ function drawDrops(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
-const scenes = { livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawDots, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+
+// ================= Escena: Esfera =================
+// Como la funda de un disco de diseño: una sola esfera hecha con la portada (sus colores, difuminados y
+// curvados como sobre un globo de vidrio), con un borde iridiscente y un halo de su color, sobre un fondo
+// limpio con grano fino; en las esquinas, la canción en letra pequeña. La esfera respira con los graves,
+// los colores de dentro giran con la melodía, el borde se enciende con el golpe y los platillos le dan brillo.
+const sph = { prog: null, sw: 0, rim: 0, r: 1 };
+function sphereSetup() {
+  sph.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uP, uR, uSw, uRim, uNight, uHi; uniform vec3 uBg, uMel, uAvg;
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 coverAt(vec2 uv) { return uCovK > 0. ? texture(uCov, clamp(uv, .002, .998)).rgb : uAvg; }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2((vUv.x - .5) * asp, vUv.y - .5) / uR;
+      float r = length(p);
+      vec3 col = uBg;
+      // halo de su color alrededor (como luz que se escapa del vidrio)
+      col = mix(col, mix(uAvg, vec3(1.), uNight > .5 ? .0 : .25), exp(-max(0., r - .85) * 3.2) * (uNight > .5 ? .55 : .45) * (.8 + uP * .4));
+      // dentro: la portada curvada sobre la esfera, girando con la melodía (más en el centro que en el borde)
+      float z = sqrt(max(0., 1. - min(1., r * r)));
+      float a = uSw * (1. - r * .7), c = cos(a), s = sin(a);
+      vec2 q = mat2(c, -s, s, c) * p;
+      vec2 uv = .5 + q * .42 / (.55 + .45 * z);
+      // el borde separa un poco los colores, como un prisma
+      float ch = .012 + uP * .008;
+      vec3 inner = vec3(coverAt(uv * (1. - ch) + .5 * ch).r, coverAt(uv).g, coverAt(uv * (1. + ch) - .5 * ch).b);
+      inner = mix(vec3(dot(inner, vec3(.3, .59, .11))), inner, 1.35);   // más color
+      inner *= .78 + .3 * z;                                           // volumen
+      inner += vec3(1.) * exp(-dot(p - vec2(-.35, .38), p - vec2(-.35, .38)) * 6.) * (.18 + uHi * .25);   // luz suave arriba
+      float rim = exp(-pow((r - .97) * 16., 2.));
+      inner += mix(uMel, vec3(1.), .4) * rim * (.25 + uRim * .7);
+      float edge = smoothstep(1.02, .9, r);    // borde suave, como fuera de foco
+      col = mix(col, inner, edge);
+      col += (h(gl_FragCoord.xy + uTime) - .5) * (uNight > .5 ? .05 : .04);   // grano fino de papel
+      o = vec4(col, 1.);
+    }`);
+}
+function posterText(night, it, opts = {}) {
+  if (recording) return;   // en el clip ya va la firma con la canción
+  const u = MIN / 1000, m = Math.max(28 * u, Math.min(W, H) * 0.05), fg = night ? '255,255,255' : '20,18,24';
+  const name = it ? (it.name || '') : 'Siente la música', art = it ? (it.artists || []).map(a => a.name).join(', ') : '';
+  const t = s_ => { const x = Math.floor(s_ / 60000), y = Math.floor(s_ / 1000) % 60; return x + ':' + String(y).padStart(2, '0'); };
+  ctx.save(); ctx.textBaseline = 'top'; ctx.fillStyle = `rgba(${fg},.82)`;
+  ctx.font = `600 ${Math.round(15 * u + 7)}px ${FONT_UI}`; ctx.textAlign = 'left';
+  const fit = (s_, w) => { if (ctx.measureText(s_).width <= w) return s_; while (s_.length > 1 && ctx.measureText(s_ + '…').width > w) s_ = s_.slice(0, -1); return s_ + '…'; };
+  ctx.fillText(fit(name.toUpperCase(), W * 0.4), m, m);
+  ctx.fillStyle = `rgba(${fg},.55)`; ctx.font = `500 ${Math.round(13 * u + 6)}px ${FONT_UI}`;
+  if (art) ctx.fillText(fit('— ' + art.toUpperCase(), W * 0.4), m, m + 22 * u + 8);
+  ctx.textAlign = 'right'; ctx.fillText(opts.code || 'SLM — ' + String((it && it.name ? it.name.length * 7 : 0) % 1000).padStart(3, '0'), W - m, m);
+  ctx.textBaseline = 'bottom'; ctx.textAlign = 'left';
+  if (it && sp.duration) ctx.fillText(t(spPos()) + ' — ' + t(sp.duration), m, H - m);
+  ctx.textAlign = 'right'; ctx.font = `500 ${Math.round(14 * u + 6)}px ${FONT_BRAND}`; ctx.fillText('siente la música', W - m, H - m);
+  ctx.restore();
+}
+function drawSphere(dt) {
+  if (!glInit()) { drawBokeh(dt); return; }
+  if (!sph.prog) sphereSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  sph.sw += dt * (0.05 + energy * 0.5 + voice * 0.6) + (pulse.on ? 0.06 * pulse.k : 0);
+  if (pulse.on) sph.rim = Math.min(1.3, sph.rim + 0.5 + pulse.k * 0.5);
+  sph.rim *= Math.pow(0.06, dt);
+  const target = 1 + Math.pow(bandX(0, 10), 1.5) * 0.07 + P * 0.035;
+  sph.r += (target - sph.r) * (1 - Math.pow(0.0005, dt));
+  const avg = [0, 1, 2].map(k => (RGB[0][k] + RGB[1][k] + RGB[2][k]) / 3 / 255);
+  const bg = night ? avg.map(v => v * 0.12 + 0.02) : [0.93, 0.925, 0.92];
+  const [cw, ch] = glCanvas(1), p = sph.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uR, Math.min(0.36, 0.36 * W / H) * sph.r);
+  gl.uniform1f(p.u.uSw, sph.sw); gl.uniform1f(p.u.uRim, sph.rim * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uHi, hits.hat ? 1 : Math.max(0, high - 0.3));
+  gl.uniform3fv(p.u.uBg, bg); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uAvg, avg);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  posterText(night, spConnected() && sp.item);
+}
+
+// ================= Escena: Cápsulas =================
+// Cápsulas altas de vidrio esmerilado, una junto a otra, con degradados de la canción que fluyen por dentro
+// (con su franja honda, como en los carteles de diseño). Cada cápsula es una parte del sonido: lo suyo hace
+// fluir su color y la ilumina; el golpe las hace crecer apenas; la del centro canta con la voz.
+const caps = { prog: null, ph: new Float32Array(9), lv: new Float32Array(9), C: new Float32Array(36), G: new Float32Array(36) };
+function capsSetup() {
+  caps.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uP, uNight; uniform int uN; uniform vec3 uC0, uC1, uC2, uDeep, uBg, uMel; uniform float uVoice;
+    uniform vec4 uCap[9]; uniform vec4 uG[9];   // x, y, medio ancho, medio alto · fase, nivel, -, -
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 ramp(float t) {   // los colores de la canción en ciclo, con una franja honda entre ellos
+      t = fract(t) * 4.; float f = smoothstep(0., 1., fract(t)); int i = int(t);
+      vec3 a = i == 0 ? uC0 : i == 1 ? uC1 : i == 2 ? uDeep : uC2, b = i == 0 ? uC1 : i == 1 ? uDeep : i == 2 ? uC2 : uC0;
+      return mix(a, b, f);
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = mix(uBg, withCover(uBg), .4);   // fondo limpio, con la portada apenas presente
+      for (int i = 0; i < 9; i++) {
+        if (i >= uN) break;
+        vec4 c = uCap[i], g = uG[i];
+        vec2 d = p - c.xy; vec2 qd = vec2(abs(d.x), max(abs(d.y) - (c.w - c.z), 0.));
+        float sd = length(qd) - c.z;                         // distancia a una cápsula (rectángulo de puntas redondas)
+        float a = smoothstep(.012, -.006, sd);                // borde suave, como vidrio esmerilado
+        float sh = exp(-max(sd, 0.) * 40.) * (1. - a) * .12;  // sombra suave alrededor
+        col *= 1. - sh * (uNight > .5 ? 1.6 : 1.);
+        if (a <= 0.) continue;
+        float ty = d.y / c.w;                                 // de -1 a 1 a lo largo
+        vec3 k = ramp(ty * .35 + g.x + float(i) * .19);
+        if (i == uN / 2) k = mix(k, uMel, uVoice * .45);
+        float cx = d.x / c.z;                                 // de -1 a 1 a lo ancho: volumen de cilindro
+        k *= .82 + .22 * sqrt(max(0., 1. - cx * cx)) + g.y * .25 + uP * .06;
+        k += vec3(1.) * exp(-pow((cx + .45) * 3.2, 2.)) * .12;               // brillo vertical de vidrio
+        k = mix(k, vec3(1.), smoothstep(-.02, 0., sd) * .35);                // filo claro
+        col = mix(col, k, a * (.88 + g.y * .12));
+      }
+      col += (h(gl_FragCoord.xy + uTime) - .5) * .04;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawCapsules(dt) {
+  if (!glInit()) { drawBars(dt); return; }
+  if (!caps.prog) capsSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H, gl = GLX.gl;
+  const n = asp > 1.2 ? 7 : 5, wid = [0.7, 1, 0.8, 1.6, 0.8, 1, 0.7], hei = [0.86, 0.72, 0.8, 0.9, 0.8, 0.72, 0.86];
+  const order = n === 7 ? [0, 1, 2, 3, 4, 5, 6] : [1, 2, 3, 4, 5];
+  const unit = Math.min(asp * 0.84, 0.84 * 1.6) / order.reduce((s_, i) => s_ + wid[i] * 2 + 0.25, 0);
+  let x = asp / 2 - order.reduce((s_, i) => s_ + wid[i] * 2 + 0.25, -0.25) * unit / 2;
+  order.forEach((ix, j) => {
+    const k0 = Math.floor(j / n * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + Math.max(3, Math.floor(BANDS / n))));
+    caps.lv[j] += (lv - caps.lv[j]) * (1 - Math.pow(lv > caps.lv[j] ? 0.002 : 0.05, dt));
+    caps.ph[j] += dt * (0.02 + caps.lv[j] * 0.35 + energy * 0.08) * (j % 2 ? -1 : 1) + (pulse.on ? 0.02 * pulse.k : 0);
+    const w = wid[ix] * unit, hh = Math.min(0.46, hei[ix] * 0.5) * (1 + caps.lv[j] * 0.04 + P * 0.015);
+    caps.C.set([x + w, 0.5, w, hh], j * 4); caps.G.set([caps.ph[j], caps.lv[j], 0, 0], j * 4);
+    x += w * 2 + 0.25 * unit;
+  });
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(70, s_), l)).map(v => v / 255); };
+  const [hh0] = hexToHsl(rgbToHex(...mix(0.5)));
+  const bg = night ? hexToRgb(hsl(hh0, 20, 8)).map(v => v / 255) : [0.9, 0.895, 0.89];
+  const [cw, ch] = glCanvas(1), p = caps.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, n); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4));
+  gl.uniform3fv(p.u.uC0, sat(RGB[0], night ? 58 : 56)); gl.uniform3fv(p.u.uC1, sat(RGB[1], night ? 62 : 60)); gl.uniform3fv(p.u.uC2, sat(RGB[2], night ? 60 : 58));
+  gl.uniform3fv(p.u.uDeep, sat(mix(0.5), 14)); gl.uniform3fv(p.u.uBg, bg); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.uniform4fv(p.u['uCap[0]'], caps.C); gl.uniform4fv(p.u['uG[0]'], caps.G);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+// ================= Escena: Puntos (estilo Sakura) =================
+// Una retícula de círculos en relieve suave; a través de ellos se ve un degradado que nace del centro (hondo en
+// el corazón, pleno alrededor y claro hacia los bordes), como un cartel de diseño. El corazón late y se abre con
+// los graves, cada golpe manda una onda de luz hacia fuera, y la melodía hace girar despacio los colores.
+const sak = { prog: null, R: 0.5, wave: 9, waveK: 0, rot: 0 };
+function sakuraSetup() {
+  sak.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uWave, uWaveK, uRot, uNight, uCell, uP; uniform vec3 uC0, uC1, uC2, uDeep, uOut;
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 field(vec2 p) {   // el degradado que nace del centro
+      vec2 d = p - vec2(.5 * uRes.x / uRes.y, .5); float r = length(d) / uR;
+      float an = atan(d.y, d.x) + uRot, wob = .06 * sin(an * 3. + uTime * .4);
+      r += wob * smoothstep(.2, 1., r);
+      vec3 col = mix(uDeep, uC0, smoothstep(.0, .45, r));
+      col = mix(col, uC1, smoothstep(.35, .8, r));
+      col = mix(col, uC2, smoothstep(.7, 1.15, r) * .8);
+      col = mix(col, uOut, smoothstep(.95, 1.7, r));
+      col += exp(-pow((r - uWave) * 6., 2.)) * uWaveK * .35;   // la onda del golpe
+      return col;
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec2 cell = floor(p / uCell), lc = (p - (cell + .5) * uCell) / uCell;   // posición dentro de la casilla (-.5..5)
+      float rr = length(lc), a = smoothstep(.465, .445, rr);
+      vec3 fu = field(p) * (uNight > .5 ? .7 : 1.) + (uNight > .5 ? 0. : .06);
+      vec3 under = mix(fu, withCover(fu), .3);   // entre círculos: el mismo degradado, apenas más hondo
+      vec3 dotC = field((cell + .5) * uCell + lc * uCell * .55);                                 // dentro: el degradado, algo más vivo
+      // relieve: luz arriba a la izquierda, sombra abajo a la derecha, y un filo fino
+      float lit = dot(normalize(lc + 1e-4), normalize(vec2(-.6, .65))) * smoothstep(.2, .46, rr);
+      dotC *= 1. + lit * .12;
+      dotC = mix(dotC, vec3(1.), smoothstep(.42, .46, rr) * (lit > 0. ? .25 : 0.));
+      vec3 col = mix(under, dotC, a);
+      col *= 1. - smoothstep(.45, .5, rr) * (1. - a) * .12;   // la sombrita del borde
+      col += (h(gl_FragCoord.xy + uTime) - .5) * .035;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawSakura(dt) {
+  if (!glInit()) { drawDots(dt); return; }
+  if (!sak.prog) sakuraSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  const tR = 0.32 + Math.pow(bandX(0, 10), 1.3) * 0.16 + dynL * 0.06 + P * 0.04;
+  sak.R += (tR - sak.R) * (1 - Math.pow(tR > sak.R ? 0.001 : 0.08, dt));
+  if (pulse.on) { sak.wave = 0; sak.waveK = 0.5 + pulse.k * 0.6; }
+  sak.wave += dt * 1.6; sak.waveK *= Math.pow(0.2, dt);
+  sak.rot += dt * (0.02 + voice * 0.4 + energy * 0.1);
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(75, s_), l)).map(v => v / 255); };
+  const [cw, ch] = glCanvas(1), p = sak.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, sak.R); gl.uniform1f(p.u.uWave, sak.wave); gl.uniform1f(p.u.uWaveK, sak.waveK * (state.noFlash ? 0.4 : 1));
+  gl.uniform1f(p.u.uRot, sak.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uCell, 1 / (H > W ? 22 : 15)); gl.uniform1f(p.u.uP, P);
+  gl.uniform3fv(p.u.uDeep, sat(RGB[0], night ? 18 : 22)); gl.uniform3fv(p.u.uC0, sat(RGB[0], night ? 42 : 46)); gl.uniform3fv(p.u.uC1, sat(RGB[1], night ? 55 : 64)); gl.uniform3fv(p.u.uC2, sat(RGB[2], night ? 52 : 78));
+  gl.uniform3fv(p.u.uOut, night ? sat(mix(0.5), 13) : [0.97, 0.95, 0.97]);   // de noche el borde es hondo de su color, no negro
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+const scenes = { sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
