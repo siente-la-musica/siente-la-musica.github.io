@@ -334,6 +334,39 @@
     animation: libIn .35s cubic-bezier(.2,.8,.2,1);
   }
   @keyframes libIn { from { opacity: 0; transform: translateX(24px); } }
+  /* ===== Inicio de la música: banner, filas de carátulas y cuadrícula (más ancho en pantallas grandes) ===== */
+  @media (min-width: 900px) { .lib.wide { width: min(720px, calc(100% - 24px)); } }
+  .home-hero { position: relative; display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; padding: 16px; border-radius: 18px; overflow: hidden; isolation: isolate; margin-bottom: 6px; cursor: default; }
+  .home-hero::before { content: ''; position: absolute; inset: -30%; z-index: -2; background: var(--hero-img, none) center / cover; filter: blur(34px) saturate(1.6); opacity: .9; transform: scale(1.1); }
+  .home-hero::after { content: ''; position: absolute; inset: 0; z-index: -1; background: linear-gradient(120deg, color-mix(in srgb, var(--c1, #6a5cff) 55%, transparent), color-mix(in srgb, var(--c2, #ff5ca8) 35%, transparent)), linear-gradient(90deg, rgba(0,0,0,.18), rgba(0,0,0,.42)), linear-gradient(0deg, rgba(0,0,0,.35), rgba(0,0,0,.05)); }
+  .home-hero img, .home-hero .ph { width: 116px; height: 116px; border-radius: 14px; object-fit: cover; box-shadow: 0 14px 34px rgba(0,0,0,.35); background: rgba(255,255,255,.15); }
+  .home-hero .k { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.75); }
+  .home-hero .t { font-family: var(--font-display); font-size: 26px; text-shadow: 0 2px 12px rgba(0,0,0,.25); font-weight: 700; color: #fff; line-height: 1.1; margin: 4px 0 2px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .home-hero .s { font-size: 14px; color: rgba(255,255,255,.8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .home-hero .acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .home-hero .acts button { padding: 8px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; background: rgba(255,255,255,.92); color: #111; }
+  .home-hero .acts button.ghost { background: rgba(255,255,255,.18); color: #fff; }
+  .home-sec { display: flex; align-items: center; justify-content: space-between; margin: 14px 2px 8px; }
+  .home-sec h3 { margin: 0; font-family: var(--font-display); font-size: 17px; font-weight: 700; letter-spacing: -.01em; }
+  .home-sec .nav { display: flex; gap: 4px; }
+  .home-sec .nav button { width: 28px; height: 28px; border-radius: 50%; padding: 0; display: grid; place-items: center; background: var(--chip); color: var(--fg); font-size: 15px; line-height: 1; }
+  .home-row { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; padding: 2px 2px 8px; scrollbar-width: none; }
+  .home-row::-webkit-scrollbar { display: none; }
+  .hcard { flex: none; width: 138px; scroll-snap-align: start; cursor: pointer; text-align: left; background: none; padding: 0; color: var(--fg); }
+  .hcard .art { position: relative; width: 138px; height: 138px; border-radius: 12px; overflow: hidden; background: var(--chip); box-shadow: 0 8px 22px rgba(0,0,0,.22); transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+  .hcard.round .art { border-radius: 50%; }
+  .hcard .art img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .hcard:hover .art { transform: translateY(-3px) scale(1.02); box-shadow: 0 14px 30px rgba(0,0,0,.3); }
+  .hcard .play { position: absolute; right: 8px; bottom: 8px; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: rgba(255,255,255,.95); color: #111; box-shadow: 0 6px 16px rgba(0,0,0,.3); opacity: 0; transform: translateY(6px); transition: opacity .2s, transform .2s; }
+  .hcard .play svg { width: 16px; height: 16px; fill: currentColor; margin-left: 2px; }
+  .hcard:hover .play, .hcard:focus-visible .play { opacity: 1; transform: none; }
+  @media (hover: none) { .hcard .play { opacity: .9; transform: none; } }
+  .hcard .t { margin-top: 8px; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hcard .s { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hcard.round { text-align: center; }
+  .home { display: block; min-width: 0; }
+  .home-hero, .home-row, .home-sec, .home-grid { flex: none; }   /* la lista no las aplasta: cada fila conserva su alto */
+  .home-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 2px 10px; }
   .lib[hidden] { display: none; }
   .lib-head { display: flex; align-items: center; gap: 6px; }
   .lib-title { flex: 1; font-weight: 700; font-size: 17px; letter-spacing: -.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -565,7 +598,7 @@
     <button class="ib" id="libClose" aria-label="Cerrar"><svg viewBox="0 0 24 24"><path d="M6.4 5 5 6.4 10.6 12 5 17.6 6.4 19l5.6-5.6 5.6 5.6 1.4-1.4-5.6-5.6L19 6.4 17.6 5 12 10.6z"/></svg></button>
   </header>
   <input type="search" id="libQ" placeholder="Busca canciones, artistas, álbumes…" autocomplete="off" spellcheck="false">
-  <div class="seg lib-tabs" role="group" aria-label="Biblioteca"><button data-lib="playlists">Playlists</button><button data-lib="discover">✦ Descubrir</button><button data-lib="liked">Me gusta</button><button data-lib="artists">Artistas</button><button data-lib="albums">Álbumes</button><button data-lib="podcasts">Podcasts</button><button data-lib="top">Top</button><button data-lib="recent">Reciente</button><button data-lib="news">Novedades</button></div>
+  <div class="seg lib-tabs" role="group" aria-label="Biblioteca"><button data-lib="home">Inicio</button><button data-lib="playlists">Playlists</button><button data-lib="discover">✦ Descubrir</button><button data-lib="liked">Me gusta</button><button data-lib="artists">Artistas</button><button data-lib="albums">Álbumes</button><button data-lib="podcasts">Podcasts</button><button data-lib="top">Top</button><button data-lib="recent">Reciente</button><button data-lib="news">Novedades</button></div>
   <div class="lib-recent" id="libRecent" hidden></div>
   <label class="lib-dev">Suena en <select id="libDev"></select></label>
   <p class="lib-note" id="libNote" hidden></p>
@@ -2550,7 +2583,7 @@ function setCover(url) {
 // limitada a 10 resultados y no tienen recomendaciones ni playlists editoriales de Spotify.
 const libEl = document.getElementById('lib'), libList = document.getElementById('libList'), libQ = document.getElementById('libQ');
 const libTitle = document.getElementById('libTitle'), libBack = document.getElementById('libBack'), libNote = document.getElementById('libNote'), libDev = document.getElementById('libDev');
-const lib = { tab: 'playlists', stack: [], web: null, webId: null, sdk: false, q: '', qTimer: 0 };
+const lib = { tab: 'home', stack: [], web: null, webId: null, sdk: false, q: '', qTimer: 0 };
 const hasScope = sc => (store.get('sp.scope', '') || '').split(' ').includes(sc);
 const LIB_ICON = {
   play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
@@ -2891,6 +2924,7 @@ const LIB_TABS = {
   // Descubrir: música que todavía no escuchas. Spotify ya no da sus recomendaciones a apps como esta, así que se
   // arman aquí: canciones recientes de los géneros de tus artistas (sin tus artistas), joyas poco conocidas de esos
   // géneros y los lanzamientos de la semana. Cada vez que entras, sale una mezcla distinta
+  home: ['Inicio', async () => { await libHome(); }],
   discover: ['Descubrir', async () => {
     const top = await spApi('/me/top/artists?limit=20&time_range=medium_term').catch(() => null);
     const mine = new Set((top?.items || []).map(a => a.id));
@@ -2938,8 +2972,82 @@ const LIB_TABS = {
     libList.innerHTML = ''; tr.length ? libList.append(...trackRows(tr)) : libMsg('Nada reciente todavía.');
   }],
 };
+// ===== Inicio: lo que suena en grande, filas de carátulas que se deslizan y tus canciones en cuadrícula =====
+const PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>';
+function homeCard(o) {
+  const b = document.createElement('div'); b.className = 'hcard' + (o.round ? ' round' : ''); b.tabIndex = 0; b.role = 'button';
+  b.innerHTML = `<div class="art">${o.img ? `<img src="${esc(o.img)}" alt="" loading="lazy">` : ''}${o.play ? `<span class="play" aria-label="Reproducir">${PLAY_SVG}</span>` : ''}</div><div class="t"></div><div class="s"></div>`;
+  b.querySelector('.t').textContent = o.title; b.querySelector('.s').textContent = o.sub || '';
+  b.onclick = e => { if (o.play && (e.target.closest('.play') || !o.open)) { o.play(b); return; } o.open ? o.open() : o.play && o.play(b); };
+  b.onkeydown = e => { if (e.key === 'Enter') b.click(); };
+  return b;
+}
+function homeRow(title, cards) {
+  if (!cards.length) return [];
+  const head = document.createElement('div'); head.className = 'home-sec';
+  head.innerHTML = `<h3></h3><div class="nav"><button aria-label="Anterior">‹</button><button aria-label="Siguiente">›</button></div>`;
+  head.querySelector('h3').textContent = title;
+  const row = document.createElement('div'); row.className = 'home-row'; row.append(...cards);
+  const [pv, nx] = head.querySelectorAll('button');
+  pv.onclick = () => row.scrollBy({ left: -row.clientWidth * 0.85 }); nx.onclick = () => row.scrollBy({ left: row.clientWidth * 0.85 });
+  // la rueda del ratón también la mueve de lado (sin tener que usar el teclado)
+  row.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX) && row.scrollWidth > row.clientWidth) { e.preventDefault(); row.scrollBy({ left: e.deltaY, behavior: 'auto' }); } }, { passive: false });
+  return [head, row];
+}
+let homeCache = null;
+async function libHome() {
+  const q = (query, type, off = 0) => spApi(`/search?type=${type}&limit=10&offset=${off}&q=` + encodeURIComponent(query)).catch(() => null);
+  if (!homeCache || performance.now() - homeCache.at > 5 * 60000) {
+    const yr = new Date().getFullYear();
+    const [pls, recent, topT, topA, week] = await Promise.all([
+      spApi('/me/playlists?limit=20').then(d => (d.items || []).filter(Boolean)).catch(() => []),
+      spApi('/me/player/recently-played?limit=30').then(d => { const seen = new Set(); return (d.items || []).map(x => x.track).filter(t => t && !seen.has(t.uri) && seen.add(t.uri)); }).catch(() => []),
+      spApi('/me/top/tracks?limit=20&time_range=short_term').then(d => (d.items || []).filter(Boolean)).catch(() => []),
+      spApi('/me/top/artists?limit=20&time_range=medium_term').then(d => (d.items || []).filter(Boolean)).catch(() => []),
+      q('tag:new', 'album', Math.floor(Math.random() * 20)).then(d => (d?.albums?.items || []).filter(Boolean))]);
+    const mine = new Set(topA.map(a => a.id)), genres = [...new Set(topA.flatMap(a => a.genres || []))].sort(() => Math.random() - 0.5).slice(0, 3);
+    const disc = (await Promise.all(genres.map(g => q(`genre:"${g}" year:${yr - 1}-${yr}`, 'track', Math.floor(Math.random() * 20)).then(d => d?.tracks?.items || []))))
+      .flat().filter(t => t && !(t.artists || []).some(a => mine.has(a.id)));
+    homeCache = { at: performance.now(), pls, recent, topT, topA, week, disc: [...new Map(disc.map(t => [t.uri, t])).values()].sort(() => Math.random() - 0.5) };
+  }
+  if (lib.tab !== 'home') return;
+  const H_ = homeCache; libList.innerHTML = '';
+  // todo el Inicio va en un solo bloque (la lista es una cuadrícula que, si no, aplastaba las filas)
+  const home = document.createElement('div'); home.className = 'home'; libList.append(home);
+  const put = (...els) => home.append(...els);
+  // el banner: lo que suena (o, si no suena nada, algo nuevo para descubrir)
+  const it = sp.item, hi = it || H_.disc[0] || H_.topT[0];
+  if (hi) {
+    const hero = document.createElement('div'); hero.className = 'home-hero';
+    const img = (hi.album?.images?.[0] || hi.images?.[0] || {}).url || '';
+    if (img) hero.style.setProperty('--hero-img', `url("${img.replace(/"/g, '')}")`);
+    hero.innerHTML = `${img ? `<img src="${esc(img)}" alt="">` : '<span class="ph"></span>'}<div><div class="k">${it ? 'Suena ahora' : 'Para ti'}</div><div class="t"></div><div class="s"></div><div class="acts"></div></div>`;
+    hero.querySelector('.t').textContent = hi.name || ''; hero.querySelector('.s').textContent = artistsOf(hi) || hi.show?.name || '';
+    const acts = hero.querySelector('.acts');
+    const btn = (label, fn, ghost) => { const b = document.createElement('button'); b.textContent = label; if (ghost) b.className = 'ghost'; b.onclick = e => { e.stopPropagation(); fn(); }; acts.append(b); };
+    if (!it) btn('▶ Escuchar', () => libPlay({ uris: [hi.uri] }, null, hi));
+    btn('Radio', () => spRadio(hi), !!it === false);
+    if (hi.artists?.[0]?.id) btn('Ir al artista', () => openArtist(hi.artists[0]), true);
+    if (hi.album?.id) btn('Ver el álbum', () => openAlbum(hi.album), true);
+    put(hero);
+  }
+  const trackCard = t => homeCard({ title: t.name, sub: artistsOf(t), img: imgOf(t), play: row => libPlay({ uris: [t.uri] }, null, t) });
+  put(
+    ...homeRow('Tus playlists', H_.pls.map(pl => homeCard({ title: pl.name, sub: (pl.tracks?.total ?? '') + ' canciones', img: imgOf(pl), open: () => openPlaylist(pl), play: () => libPlay({ context_uri: pl.uri }, null) }))),
+    ...homeRow('Para descubrir', H_.disc.slice(0, 16).map(trackCard)),
+    ...homeRow('Tus artistas', H_.topA.map(a => homeCard({ title: a.name, sub: 'Artista', img: imgOf(a), round: true, open: () => openArtist(a) }))),
+    ...homeRow('Salió esta semana', H_.week.map(a => homeCard({ title: a.name, sub: artistsOf(a), img: imgOf(a), open: () => openAlbum(a), play: () => libPlay({ context_uri: a.uri }, null) }))),
+    ...homeRow('Escuchado hace poco', H_.recent.slice(0, 16).map(trackCard)));
+  if (H_.topT.length) {
+    const head = document.createElement('div'); head.className = 'home-sec'; head.innerHTML = '<h3>Lo que más escuchas</h3>';
+    const grid = document.createElement('div'); grid.className = 'home-grid'; grid.append(...trackRows(H_.topT.slice(0, 12)));
+    put(head, grid);
+  }
+  if (!home.children.length) libMsg('Pon algo en Spotify y aquí aparecerá tu música.');
+}
 function libShowTab(t) {
   lib.tab = t; lib.stack = []; libQ.value = '';
+  libEl.classList.toggle('wide', t === 'home');
   document.querySelectorAll('[data-lib]').forEach(b => b.setAttribute('aria-pressed', b.dataset.lib === t));
   libView(LIB_TABS[t][0], false, async () => { libMsg('Cargando…'); await LIB_TABS[t][1](); });
 }
