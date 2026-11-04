@@ -2494,20 +2494,21 @@ function liveBgTick(dt) {
   bgLiveT += dt * (0.05 + energy * 0.5 + dynL * 0.25) + (pulse.on ? 0.04 * pulse.k : 0);
   const avg = [0, 1, 2].map(k => (RGB[0][k] + RGB[1][k] + RGB[2][k]) / 3);
   x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
-  x.fillStyle = night ? rgba(avg.map(v => v * 0.16), 1) : rgba(avg.map(v => v + (255 - v) * 0.78), 1); x.fillRect(0, 0, S, S);
+  x.fillStyle = night ? rgba(avg.map(v => v * 0.16), 1) : rgba(avg.map(v => v + (255 - v) * 0.62), 1); x.fillRect(0, 0, S, S);
   const bands = [bandX(0, 10), bandX(10, 24), bandX(24, 40), bandX(40, BANDS), bandX(6, 18), bandX(18, 34)];
   bgBlobs.forEach((b, i) => {
     b.lv += (bands[i] - b.lv) * (1 - Math.pow(bands[i] > b.lv ? 0.001 : 0.06, dt));
     const cx = S * (0.5 + 0.42 * Math.sin(bgLiveT * b.sx * 6 + b.ph)), cy = S * (0.5 + 0.42 * Math.cos(bgLiveT * b.sy * 6 + b.ph * 1.3));
     const r = S * (0.42 + b.lv * 0.22 + (i === 0 ? P * 0.08 : 0)), c = RGB[b.c];
-    const [h, sat, l] = hexToHsl(rgbToHex(...c)), cc = hexToRgb(hsl(h + (i > 2 ? 18 : 0), Math.min(100, sat * 1.1), night ? Math.min(46, Math.max(30, l * 0.6)) : Math.min(80, Math.max(62, l + 18))));
+    const [h, sat, l] = hexToHsl(rgbToHex(...c)), cc = hexToRgb(hsl(h + (i > 2 ? 18 : 0), Math.min(100, sat * 1.1), night ? Math.min(46, Math.max(30, l * 0.6)) : Math.min(74, Math.max(56, l + 12))));
     const g = x.createRadialGradient(cx, cy, 0, cx, cy, r);
     g.addColorStop(0, rgba(cc, 0.95)); g.addColorStop(0.55, rgba(cc, 0.45)); g.addColorStop(1, rgba(cc, 0));
     x.fillStyle = g; x.fillRect(0, 0, S, S);
   });
   // la portada en grises, como una textura suave por encima (se reconoce sin quitarle el color al fondo)
-  x.globalCompositeOperation = 'soft-light';
-  for (const [img, a] of [[bgPrev, 1 - bgFade], [bgCur, bgFade]]) { if (img && a > 0) { x.globalAlpha = a * 0.5; x.drawImage(img, 0, 0, S, S); } }
+  // de día la luz suave casi no se ve sobre colores claros: ahí se «multiplica» (como tinta sobre papel), así la portada se reconoce
+  x.globalCompositeOperation = night ? 'soft-light' : 'multiply';
+  for (const [img, a] of [[bgPrev, 1 - bgFade], [bgCur, bgFade]]) { if (img && a > 0) { x.globalAlpha = a * (night ? 0.5 : 0.42); x.drawImage(img, 0, 0, S, S); } }
   x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1;
   bgLive.ver++;
 }
