@@ -705,6 +705,9 @@
         <button data-mode="aura">Aura</button>
         <button data-mode="infinity">Infinito</button>
         <button data-mode="sphere">Esfera</button>
+        <button data-mode="vitral">Vitral</button>
+        <button data-mode="lenses">Lentes</button>
+        <button data-mode="globes">Globos</button>
         <button data-mode="capsules">Cápsulas</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="comet">Cometa</button>
@@ -4307,7 +4310,7 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['sphere', 'capsules', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
+  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'capsules', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
   medium: { name: 'media',     modes: ['loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
   high:   { name: 'enérgica',  modes: ['bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
 };
@@ -7030,7 +7033,7 @@ function puffsSetup() {
       vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., vUv.y));
       // mientras se canta, una luz del color de la nota sale detrás de las nubes (como un sol)
       vec2 sd = p - uSun; sky += mix(uMel, vec3(1.), .35) * exp(-dot(sd, sd) / .09) * uVoice * (uNight > .5 ? .45 : .3);
-      sky = withCover(sky);
+      sky = mix(sky, withCover(sky), uNight > .5 ? .3 : .7);   // de noche el cielo azul hondo manda; la portada, sutil
       vec3 col = sky;
       vec3 L = normalize(vec3(-.42, .7, .58));
       // cada bulto es una esfera grande y lisa con borde suave; se pintan de atrás hacia delante,
@@ -7051,6 +7054,8 @@ function puffsSetup() {
         lit += mix(uMel, vec3(1.), .45) * pow(rho, 3.) * uVoice * (.25 + .35 * back) * (1. - uZ[i].x * .5);
         lit = mix(lit, mix(mix(c, vec3(1.), .55), mix(uMel, vec3(1.), .4), uVoice * .6), uZ[i].y * .5);   // la nube que «canta» se enciende
         lit += c * uP * .06;
+        // de noche las nubes tienen luz propia (neón iridiscente): el centro brilla y el color corre de un tono al vecino
+        if (uNight > .5) { vec3 c2 = pal(mod(b.w + 1., 3.)); lit = mix(lit, mix(c, c2, smoothstep(-.6, .6, d.x + d.y * .4)) * 1.15, .55); lit += mix(c, vec3(1., .9, .55), .18) * pow(1. - rho, 1.6) * (.45 + uP * .3); lit = mix(vec3(dot(lit, vec3(.3, .59, .11))), lit, 1.35); }   // neón saturado, no lavado
         lit = mix(lit, sky, uZ[i].x * .22);                                 // bruma: las del fondo, más lejanas
         col = mix(col, lit, a);
       }
@@ -7110,10 +7115,10 @@ function drawPuffs(dt) {
   const n = Math.min(48, list.length);
   for (let i = 0; i < n; i++) { const e = list[i]; puffs.A.set([e[0], e[1], e[2], e[3]], i * 4); puffs.ZA[i * 2] = e[5]; puffs.ZA[i * 2 + 1] = e[6]; }
   // colores pastel de la portada; cielo con el más azulado (de día claro, de noche hondo)
-  const pastel = c => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(78, Math.min(95, s_)), night ? 64 : 72)).map(v => v / 255); };   // más color: pastel vivo, no lavado
+  const pastel = c => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(78, Math.min(95, s_)), night ? 56 : 72)).map(v => v / 255); };   // más color: pastel vivo, no lavado
   const blue = RGB.slice().sort((a, b) => (b[2] - (b[0] + b[1]) / 2) - (a[2] - (a[0] + a[1]) / 2))[0];
   const [hs] = hexToHsl(rgbToHex(...blue));
-  const sky0 = hexToRgb(hsl(hs, 62, night ? 14 : 63)).map(v => v / 255), sky1 = hexToRgb(hsl(hs + 20, 55, night ? 22 : 80)).map(v => v / 255);
+  const sky0 = hexToRgb(hsl(night ? 245 : hs, night ? 55 : 62, night ? 9 : 63)).map(v => v / 255), sky1 = hexToRgb(hsl(night ? 255 : hs + 20, night ? 50 : 55, night ? 16 : 80)).map(v => v / 255);   // de noche, el azul hondo de la referencia
   const [cw, ch] = glCanvas(0.75), gl = GLX.gl;
   const p = puffs.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
@@ -9275,7 +9280,231 @@ function drawSakura(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
-const scenes = { sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+
+// ================= Escena: Vitral =================
+// Un sol de la canción detrás de un panel de vidrio en cuadrícula, como en un cartel de diseño: a la izquierda
+// se ve nítido; detrás del vidrio cada cuadro lo deforma y lo difumina a su manera. El sol respira con los
+// graves y se alza con la energía; cada golpe hace vibrar el vidrio; cada columna del panel brilla en su
+// canto con su parte del sonido. Detrás de todo, la portada en el cielo del atardecer.
+const vit = { prog: null, R: 0.3, y: 0.5, wob: 0, lv: new Float32Array(12) };
+function vitSetup() {
+  vit.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uY, uWob, uNight, uP, uCell, uX0; uniform vec3 uSun, uSun2, uTop, uBot; uniform float uLv[12];
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 scene(vec2 p, vec2 uv) {
+      vec3 sky = mix(uBot, uTop, smoothstep(0., 1., uv.y));
+      sky = mix(sky, withCover(sky), .45);
+      vec2 c = vec2(.42 * uRes.x / uRes.y, uY); float d = length(p - c) / uR;
+      vec3 sun = mix(uSun, uSun2, smoothstep(.2, 1., (c.y - p.y) / uR * .5 + .5));   // más hondo abajo
+      sun *= .85 + .2 * sqrt(max(0., 1. - d * d));
+      float a = smoothstep(1., .985, d);
+      sky += uSun * exp(-max(0., d - 1.) * 2.5) * .35 * (.7 + uP * .5);            // su halo
+      return mix(sky, sun, a);
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col;
+      if (p.x < uX0) col = scene(p, vUv);
+      else {
+        // el vidrio: cada cuadro es una lente que deforma y difumina lo de atrás
+        vec2 cell = floor((p - vec2(uX0, 0.)) / uCell), lc = (p - vec2(uX0, 0.)) / uCell - cell - .5;
+        int ci = int(clamp(cell.x, 0., 11.)); float lv = uLv[ci];
+        // cada cuadro amplía e invierte lo de atrás (como una gota de vidrio) y lo difumina
+        vec2 off = -lc * uCell * (1.6 + uWob * .4) + vec2(0., sin(cell.x * 1.7 + uTime * 2.) * uWob * .012);
+        vec3 acc = vec3(0.);
+        for (int k = 0; k < 9; k++) { float an = float(k) * 2.399, rr = sqrt(float(k) / 9.) * .028; vec2 o2 = vec2(cos(an), sin(an)) * rr; acc += scene(p + off + o2, vUv + vec2(o2.x / asp, o2.y)); }
+        col = acc / 9.;
+        col = mix(col, col * 1.08 + .03, .5);
+        // canto del cuadro: filo de luz arriba-izquierda y sombra abajo-derecha (relieve del vidrio)
+        float e = max(abs(lc.x), abs(lc.y));
+        float bev = smoothstep(.44, .5, e);
+        float lit = (lc.y > 0. || lc.x < 0.) ? 1. : -1.;
+        col += bev * lit * (.025 + lv * .1 + uP * .03);            // relieve del vidrio, sutil
+        col += smoothstep(.49, .5, e) * (.02 + lv * .06);
+      }
+      col += (h(gl_FragCoord.xy + uTime) - .5) * .035;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawVitral(dt) {
+  if (!glInit()) { drawLight(dt); return; }
+  if (!vit.prog) vitSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  const tR = 0.3 + Math.pow(bandX(0, 10), 1.4) * 0.05 + P * 0.02;
+  vit.R += (tR - vit.R) * (1 - Math.pow(tR > vit.R ? 0.002 : 0.1, dt));
+  vit.y += ((0.46 + dynL * 0.08) - vit.y) * (1 - Math.pow(0.2, dt));
+  if (pulse.on) vit.wob = Math.min(1.2, vit.wob + 0.5 * pulse.k + 0.2);
+  vit.wob *= Math.pow(0.08, dt);
+  for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 4)); vit.lv[i] += (lv - vit.lv[i]) * (1 - Math.pow(lv > vit.lv[i] ? 0.002 : 0.05, dt)); }
+  const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];   // el tono más cálido de la portada es el sol
+  const sat = (c, s_, l) => { const [h_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, s_, l)).map(v => v / 255); };
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = vit.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, vit.R); gl.uniform1f(p.u.uY, vit.y); gl.uniform1f(p.u.uWob, vit.wob * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); gl.uniform1f(p.u.uX0, asp * (asp > 1 ? 0.38 : 0.3));
+  gl.uniform3fv(p.u.uSun, sat(warm, 92, night ? 55 : 56)); gl.uniform3fv(p.u.uSun2, sat(warm, 88, night ? 34 : 40));
+  gl.uniform3fv(p.u.uTop, night ? hexToRgb(hsl(hh + 20, 35, 14)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 30, 42)).map(v => v / 255));
+  gl.uniform3fv(p.u.uBot, night ? hexToRgb(hsl(hh - 20, 40, 36)).map(v => v / 255) : hexToRgb(hsl(hh - 20, 45, 72)).map(v => v / 255));
+  gl.uniform1fv(p.u['uLv[0]'], vit.lv);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+// ================= Escena: Lentes =================
+// Una cuadrícula de círculos que se cruzan: donde dos se tocan nace una lente de neón con su filo encendido,
+// y el resto de cada círculo es vidrio oscuro tintado. Detrás, un resplandor del color de la canción sobre la
+// portada. Cada lente escucha una parte del sonido y se enciende con ella; cada golpe cruza el panel con una
+// ola de luz desde el centro; los colores giran despacio con la melodía.
+const lens = { prog: null, wave: 9, waveK: 0, rot: 0, lv: new Float32Array(16) };
+function lensSetup() {
+  lens.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uD, uWave, uWaveK, uRot, uNight, uP; uniform vec3 uC0, uC1, uC2, uGlow, uBg; uniform float uLv[16]; uniform vec2 uN;
+    ${GLSL_COVER}
+    float h1(float n) { return fract(sin(n * 91.3) * 43758.5453); }
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 pal(float t) { t = fract(t) * 3.; return t < 1. ? mix(uC0, uC1, t) : t < 2. ? mix(uC1, uC2, t - 1.) : mix(uC2, uC0, t - 2.); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), c0 = vec2(asp, 1.) * .5 - (uN - 1.) * uD * .5;
+      vec2 g = (p - c0) / uD;
+      // los dos círculos más cercanos que cubren el punto
+      float d1 = 9., d2 = 9.; vec2 i1 = vec2(-9.), i2 = vec2(-9.);
+      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+        vec2 id = floor(g + .5) + vec2(x, y);
+        if (id.x < 0. || id.y < 0. || id.x > uN.x - 1. || id.y > uN.y - 1.) continue;
+        float d = length(p - (c0 + id * uD));
+        if (d < d1) { d2 = d1; i2 = i1; d1 = d; i1 = id; } else if (d < d2) { d2 = d; i2 = id; }
+      }
+      vec2 cc = vec2(asp, 1.) * .5; float rc = length(p - cc);
+      vec3 col = mix(uBg, withCover(uBg), .5);
+      col += uGlow * exp(-rc * rc * 5.) * (.55 + uP * .4);                 // el resplandor del centro
+      float in1 = smoothstep(uR, uR - .003, d1), in2 = smoothstep(uR, uR - .003, d2);
+      if (in1 > 0.) {
+        // vidrio oscuro tintado del círculo
+        vec3 tint = pal(h1(i1.x * 7. + i1.y * 13.) + uRot);
+        col = mix(col, col * .55 + tint * .18, in1 * .85);
+        col += tint * smoothstep(uR - .004, uR, d1) * .25 * in1;            // su borde fino
+      }
+      if (in2 > 0.) {
+        // la lente: donde se cruzan dos círculos, encendida con su parte del sonido
+        float id = min(i1.x + i1.y * uN.x, i2.x + i2.y * uN.x) * 2. + max(i1.x + i1.y * uN.x, i2.x + i2.y * uN.x);
+        float lv = uLv[int(mod(id, 16.))];
+        vec3 k = pal(h1(id) + uRot);
+        vec2 mid = (c0 + i1 * uD + c0 + i2 * uD) * .5; float rr = length(p - mid) / (uR * .5);
+        float wv = uWaveK * exp(-pow((length(mid - cc) - uWave) * 6., 2.));
+        float edge = min(uR - d1, uR - d2) / uR;                            // cerca del filo de la lente
+        // neón: hondo y saturado por dentro, encendido hacia el filo, con un punto de luz en el centro
+        vec3 lensC = k * (.28 + .5 * smoothstep(.0, 1., rr) + lv * .55 + wv * .5);
+        lensC += mix(k, vec3(1.), .55) * exp(-edge * 55.) * (.75 + lv * .9 + wv);        // filo de neón
+        lensC += mix(k, vec3(1.), .6) * exp(-rr * rr * 3.) * .18 * (1. + lv);
+        col = mix(col, lensC, in2);
+      }
+      col += (h(gl_FragCoord.xy + uTime) - .5) * .03;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawLenses(dt) {
+  if (!glInit()) { drawBokeh(dt); return; }
+  if (!lens.prog) lensSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  for (let i = 0; i < 16; i++) { const k0 = Math.floor(((i * 5) % 16) / 16 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 4)); lens.lv[i] += (lv - lens.lv[i]) * (1 - Math.pow(lv > lens.lv[i] ? 0.001 : 0.05, dt)); }
+  if (pulse.on) { lens.wave = 0; lens.waveK = 0.4 + pulse.k * 0.6; }
+  lens.wave += dt * 1.1; lens.waveK *= Math.pow(0.2, dt);
+  lens.rot += dt * (0.01 + voice * 0.15 + energy * 0.03);
+  const nx = asp > 1 ? 5 : 4, ny = asp > 1 ? 4 : 6, D = Math.min(asp * 0.8 / nx, 0.86 / ny), R = D * 0.72;
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(80, s_), l)).map(v => v / 255); };
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = lens.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, R); gl.uniform1f(p.u.uD, D); gl.uniform2f(p.u.uN, nx, ny);
+  gl.uniform1f(p.u.uWave, lens.wave); gl.uniform1f(p.u.uWaveK, lens.waveK * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uRot, lens.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
+  gl.uniform3fv(p.u.uC0, sat(RGB[0], 60)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 62)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 60)); gl.uniform3fv(p.u.uGlow, sat(mix(0.5), night ? 45 : 70));
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 25, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 18, 84)).map(v => v / 255));
+  gl.uniform1fv(p.u['uLv[0]'], lens.lv);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+
+// ================= Escena: Globos =================
+// Esferas grandes de un mismo color hondo que se amontonan y se tapan unas a otras; entre ellas, una esfera de
+// luz cálida (los graves) que las ilumina: su luz se refleja en el borde de las vecinas. La de luz crece y brilla
+// con el bombo, las demás respiran con su parte del sonido y se mecen despacio; la voz tiñe la luz de la nota.
+const glb = { prog: null, list: null, S: new Float32Array(64), glow: 0, asp: 0 };
+function glbSetup() {
+  glb.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uGlow, uNight; uniform vec3 uCool, uCool2, uHot, uBg; uniform vec4 uS[16]; uniform int uN;
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = mix(uBg, withCover(uBg), .2);
+      vec2 L = uS[0].xy; float LR = uS[0].z;   // la esfera de luz
+      col += uHot * exp(-max(0., length(p - L) - LR) * 5.) * .45 * uGlow;   // su resplandor en el aire
+      float best = -1.; int bi = -1; vec3 n = vec3(0.);
+      for (int i = 0; i < 16; i++) {
+        if (i >= uN) break;
+        vec4 s = uS[i]; vec2 d = p - s.xy; float q = dot(d, d) / (s.z * s.z);
+        if (q > 1.) continue;
+        float z = s.w + sqrt(1. - q) * s.z;     // la que está más adelante es la que se ve
+        if (z > best) { best = z; bi = i; n = vec3(d / s.z, sqrt(1. - q)); }
+      }
+      if (bi == 0) {
+        // la de luz: cálida, más clara en el centro
+        col = mix(uHot, vec3(1., .96, .9), pow(n.z, 3.) * .35) * (.8 + .3 * uGlow);
+      } else if (bi > 0) {
+        vec4 s = uS[bi];
+        vec3 base = mix(uCool2, uCool, .5 + .5 * n.y);
+        float lam = .35 + .65 * max(0., dot(n, normalize(vec3(-.4, .5, .8))));
+        // la luz cálida de la esfera de luz, en el lado que la mira
+        vec2 toL = L - s.xy; float dl = length(toL);
+        float facing = max(0., dot(n.xy, toL / max(dl, 1e-4)));
+        float warm = facing * exp(-max(0., dl - s.z - LR) * 4.) * uGlow;
+        col = base * lam + uHot * pow(facing, 2.) * warm * 1.1;
+        col += mix(uCool, vec3(1.), .4) * pow(1. - n.z, 4.) * .15;   // borde suave
+      }
+      col += (h(gl_FragCoord.xy + uTime) - .5) * .03;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawGlobes(dt) {
+  if (!glInit()) { drawBokeh(dt); return; }
+  if (!glb.prog) glbSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  if (!glb.list || glb.asp !== asp) {
+    glb.asp = asp; const rnd = (i, k) => (Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1;
+    glb.list = Array.from({ length: 15 }, (_, i) => ({ x: i === 0 ? asp * 0.5 : asp * Math.abs(rnd(i, 1)), y: i === 0 ? 0.5 : Math.abs(rnd(i, 2)), r: i === 0 ? 0.13 : 0.12 + Math.abs(rnd(i, 3)) * 0.12, z: i === 0 ? 0.72 : Math.abs(rnd(i, 4)) * 0.9, ph: i * 1.3, lv: 0 }));   // la de luz, casi delante: asoma entre las demás
+  }
+  if (pulse.on) glb.glow = Math.min(1.6, glb.glow + 0.35 + pulse.k * 0.4);
+  glb.glow += ((0.55 + bandX(0, 10) * 0.6) - glb.glow) * (1 - Math.pow(0.15, dt));
+  glb.list.forEach((b, i) => {
+    const k0 = Math.floor(i / 15 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 5));
+    b.lv += (lv - b.lv) * (1 - Math.pow(lv > b.lv ? 0.002 : 0.05, dt));
+    b.ph += dt * (0.1 + energy * 0.6);
+    const x = b.x + Math.sin(b.ph * 0.5) * 0.015, y = b.y + Math.cos(b.ph * 0.4) * 0.015;
+    const r = b.r * (i === 0 ? 1 + bandX(0, 10) * 0.25 + P * 0.08 : 1 + b.lv * 0.08);
+    glb.S.set([x, y, r, b.z], i * 4);
+  });
+  const sorted = RGB.slice().sort((a, b) => (a[0] - a[2]) - (b[0] - b[2])), cool = sorted[0], hot = sorted[2];
+  const sat = (c, s_, l) => { const [h_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, s_, l)).map(v => v / 255); };
+  const hotC = sat(hot, 85, 66).map((v, j) => v + ((melodyColor()[j] / 255) - v) * Math.min(1, voice * 1.2) * 0.4);
+  const [cw, ch] = glCanvas(1), p = glb.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uGlow, glb.glow); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, 15);
+  gl.uniform3fv(p.u.uCool, sat(cool, 75, night ? 50 : 60)); gl.uniform3fv(p.u.uCool2, sat(cool, 70, night ? 26 : 40)); gl.uniform3fv(p.u.uHot, hotC);
+  gl.uniform3fv(p.u.uBg, sat(cool, 80, night ? 18 : 34)); gl.uniform4fv(p.u['uS[0]'], glb.S);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+const scenes = { globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
