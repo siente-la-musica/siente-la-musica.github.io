@@ -9095,13 +9095,17 @@ function sphereSetup() {
       vec2 uv = .5 + q * .42 / (.55 + .45 * z);
       // el borde separa un poco los colores, como un prisma
       float ch = .008 + uP * .045 + uRim * .02;   // el golpe separa los colores como un prisma
-      vec3 inner = vec3(coverAt(uv * (1. - ch) + .5 * ch).r, coverAt(uv).g, coverAt(uv * (1. + ch) - .5 * ch).b);
+      // la portada se difumina hasta volverse un degradado de sus colores (como las esferas de las referencias)
+      vec3 inner = vec3(0.);
+      for (int k = 0; k < 12; k++) { float an = float(k) * 2.399, rb = sqrt(float(k) / 12.) * .09; vec2 o2 = vec2(cos(an), sin(an)) * rb;
+        inner += vec3(coverAt(uv * (1. - ch) + .5 * ch + o2).r, coverAt(uv + o2).g, coverAt(uv * (1. + ch) - .5 * ch + o2).b); }
+      inner /= 12.;
       inner = mix(vec3(dot(inner, vec3(.3, .59, .11))), inner, 1.35);   // más color
       inner *= (.62 + .3 * z) * (.75 + uRim * .25 + uP * .2);   // volumen; se enciende con el golpe
       inner += vec3(1.) * exp(-dot(p - vec2(-.35, .38), p - vec2(-.35, .38)) * 6.) * (.18 + uHi * .25);   // luz suave arriba
       float rim = exp(-pow((r - .97) * 16., 2.));
       inner += mix(uMel, vec3(1.), .4) * rim * (.25 + uRim * .7);
-      float edge = smoothstep(1.02, .9, r);    // borde suave, como fuera de foco
+      float edge = smoothstep(1.06, .84, r);   // borde muy suave, como fuera de foco
       col = mix(col, inner, edge);
       col += (h(gl_FragCoord.xy + uTime) - .5) * (uNight > .5 ? .05 : .04);   // grano fino de papel
       o = vec4(col, 1.);
@@ -9160,18 +9164,19 @@ function capsSetup() {
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 ramp(float t) {   // los colores de la canción en ciclo, con una franja honda entre ellos
       t = fract(t) * 4.; float f = smoothstep(0., 1., fract(t)); int i = int(t);
-      vec3 a = i == 0 ? uC0 : i == 1 ? uC1 : i == 2 ? uDeep : uC2, b = i == 0 ? uC1 : i == 1 ? uDeep : i == 2 ? uC2 : uC0;
+      vec3 dp = mix(uDeep, uC1, .35);   // la franja honda, menos dura
+      vec3 a = i == 0 ? uC0 : i == 1 ? uC1 : i == 2 ? dp : uC2, b = i == 0 ? uC1 : i == 1 ? dp : i == 2 ? uC2 : uC0;
       return mix(a, b, f);
     }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = mix(uBg, withCover(uBg), .4);   // fondo limpio, con la portada apenas presente
+      vec3 col = mix(uBg, withCover(uBg), .18);   // fondo liso, con la portada apenas presente
       for (int i = 0; i < 9; i++) {
         if (i >= uN) break;
         vec4 c = uCap[i], g = uG[i];
         vec2 d = p - c.xy; vec2 qd = vec2(abs(d.x), max(abs(d.y) - (c.w - c.z), 0.));
         float sd = length(qd) - c.z;                         // distancia a una cápsula (rectángulo de puntas redondas)
-        float a = smoothstep(.012, -.006, sd);                // borde suave, como vidrio esmerilado
+        float a = smoothstep(.018, -.012, sd);                // borde suave, como fuera de foco
         float sh = exp(-max(sd, 0.) * 40.) * (1. - a) * .12;  // sombra suave alrededor
         col *= 1. - sh * (uNight > .5 ? 1.6 : 1.);
         if (a <= 0.) continue;
@@ -9181,7 +9186,7 @@ function capsSetup() {
         float cx = d.x / c.z;                                 // de -1 a 1 a lo ancho: volumen de cilindro
         k *= .62 + .22 * sqrt(max(0., 1. - cx * cx)) + g.y * .6 + uP * .25;
         k += vec3(1.) * exp(-pow((cx + .45) * 3.2, 2.)) * .12;               // brillo vertical de vidrio
-        k = mix(k, vec3(1.), smoothstep(-.02, 0., sd) * .35);                // filo claro
+        k = mix(k, vec3(1.), smoothstep(-.03, 0., sd) * .22);                // filo claro, sutil
         col = mix(col, k, a * (.88 + g.y * .12));
       }
       col += (h(gl_FragCoord.xy + uTime) - .5) * .04;
@@ -9297,7 +9302,7 @@ function vitSetup() {
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 scene(vec2 p, vec2 uv) {
       vec3 sky = mix(uBot, uTop, smoothstep(0., 1., uv.y));
-      sky = mix(sky, withCover(sky), .45);
+      sky = mix(sky, withCover(sky), .14);   // la portada, apenas
       vec2 c = vec2(.42 * uRes.x / uRes.y, uY); float d = length(p - c) / uR;
       vec3 sun = mix(uSun, uSun2, smoothstep(.2, 1., (c.y - p.y) / uR * .5 + .5));   // más hondo abajo
       sun *= .85 + .2 * sqrt(max(0., 1. - d * d));
@@ -9314,18 +9319,23 @@ function vitSetup() {
         vec2 cell = floor((p - vec2(uX0, 0.)) / uCell), lc = (p - vec2(uX0, 0.)) / uCell - cell - .5;
         int ci = int(clamp(cell.x, 0., 11.)); float lv = uLv[ci];
         // cada cuadro amplía e invierte lo de atrás (como una gota de vidrio) y lo difumina
-        vec2 off = -lc * uCell * (1.6 + uWob * .4) + vec2(0., sin(cell.x * 1.7 + uTime * 2.) * uWob * .012);
+        // cada cuadro muestra lo de atrás ampliado y muy difuminado (una mancha de luz suave, como vidrio esmerilado)
+        vec2 off = -lc * uCell * (1.1 + uWob * .35) + vec2(0., sin(cell.x * 1.7 + uTime * 2.) * uWob * .01);
         vec3 acc = vec3(0.);
-        for (int k = 0; k < 9; k++) { float an = float(k) * 2.399, rr = sqrt(float(k) / 9.) * .028; vec2 o2 = vec2(cos(an), sin(an)) * rr; acc += scene(p + off + o2, vUv + vec2(o2.x / asp, o2.y)); }
-        col = acc / 9.;
-        col = mix(col, col * 1.08 + .03, .5);
+        for (int k = 0; k < 16; k++) { float an = float(k) * 2.399, rr = sqrt(float(k) / 16.) * .05; vec2 o2 = vec2(cos(an), sin(an)) * rr; acc += scene(p + off + o2, vUv + vec2(o2.x / asp, o2.y)); }
+        col = acc / 16.;
+        col = mix(col, vec3(1.), .04) * 1.04;   // esmerilado
+        // cada bloque de vidrio tiene volumen: más claro arriba, más hondo abajo, y un brillo suave arriba a la izquierda
+        col *= .82 + .32 * (.5 - lc.y * .9);
+        col += exp(-dot(lc - vec2(-.25, .3), lc - vec2(-.25, .3)) * 9.) * .06;
         // canto del cuadro: filo de luz arriba-izquierda y sombra abajo-derecha (relieve del vidrio)
-        float e = max(abs(lc.x), abs(lc.y));
-        float bev = smoothstep(.44, .5, e);
-        float lit = (lc.y > 0. || lc.x < 0.) ? 1. : -1.;
-        col += bev * lit * (.02 + lv * .3 + uP * .06);             // el canto se enciende con su parte del sonido
-        col += smoothstep(.49, .5, e) * (.015 + lv * .2);
-        col *= .9 + lv * .25;
+        // líneas finas y limpias entre cuadros: claras arriba-izquierda, hondas abajo-derecha
+        float px = 1.5 / uRes.y / uCell;
+        float top = smoothstep(.5 - px * 1.5, .5, lc.y), left = smoothstep(.5 - px * 1.5, .5, -lc.x);
+        float bot = smoothstep(.5 - px * 1.5, .5, -lc.y), right = smoothstep(.5 - px * 1.5, .5, lc.x);
+        col += max(top, left) * (.08 + lv * .25 + uP * .05);
+        col -= max(bot, right) * .06;
+        col *= .94 + lv * .2;   // cada columna se ilumina con su parte del sonido
       }
       col += (h(gl_FragCoord.xy + uTime) - .5) * .035;
       o = vec4(col, 1.);
@@ -9383,14 +9393,16 @@ function lensSetup() {
         if (d < d1) { d2 = d1; i2 = i1; d1 = d; i1 = id; } else if (d < d2) { d2 = d; i2 = id; }
       }
       vec2 cc = vec2(asp, 1.) * .5; float rc = length(p - cc);
-      vec3 col = mix(uBg, withCover(uBg), .5);
-      col += uGlow * exp(-rc * rc * 5.) * (.55 + uP * .4);                 // el resplandor del centro
+      vec3 col = mix(uBg, withCover(uBg), .12);
+      // detrás, una gran luz de colores (como en la referencia): tres focos de la canción que se mezclan
+      for (int k = 0; k < 3; k++) { float an = uRot * 2. + float(k) * 2.094; vec2 fp = cc + vec2(cos(an), sin(an)) * .16; float fd = length(p - fp);
+        col += pal(float(k) / 3.) * exp(-fd * fd * 7.) * (.45 + uP * .35); }
       float in1 = smoothstep(uR, uR - .003, d1), in2 = smoothstep(uR, uR - .003, d2);
       if (in1 > 0.) {
         // vidrio oscuro tintado del círculo
         vec3 tint = pal(h1(i1.x * 7. + i1.y * 13.) + uRot);
-        col = mix(col, col * .55 + tint * .18, in1 * .85);
-        col += tint * smoothstep(uR - .004, uR, d1) * .25 * in1;            // su borde fino
+        col = mix(col, col * .5 + tint * .05, in1 * .9);                    // vidrio oscuro
+        col += mix(tint, vec3(1.), .3) * exp(-(uR - d1) / uR * 60.) * .22 * in1;   // su canto fino
       }
       if (in2 > 0.) {
         // la lente: donde se cruzan dos círculos, encendida con su parte del sonido
@@ -9400,10 +9412,12 @@ function lensSetup() {
         vec2 mid = (c0 + i1 * uD + c0 + i2 * uD) * .5; float rr = length(p - mid) / (uR * .5);
         float wv = uWaveK * exp(-pow((length(mid - cc) - uWave) * 6., 2.));
         float edge = min(uR - d1, uR - d2) / uR;                            // cerca del filo de la lente
-        // neón: hondo y saturado por dentro, encendido hacia el filo, con un punto de luz en el centro
-        vec3 lensC = k * (.1 + .35 * smoothstep(.0, 1., rr) + lv * 1.2 + wv * 1. + uP * .3);
-        lensC += mix(k, vec3(1.), .55) * exp(-edge * 55.) * (.3 + lv * 1.5 + wv * 1.4 + uP * .4);   // filo de neón
-        lensC += mix(k, vec3(1.), .6) * exp(-rr * rr * 3.) * .18 * (1. + lv);
+        // como en la referencia: un filo casi blanco, una franja de color saturado y el centro más tenue
+        float I = .3 + lv * 1.1 + wv * .9 + uP * .25;
+        vec3 lensC = col * .35 + k * .18 * I;
+        lensC += mix(k, vec3(1.), .45) * exp(-edge * 80.) * .8 * min(I, 1.3);            // filo claro encendido (sin quemarse)
+        lensC += k * exp(-pow((edge - .07) * 22., 2.)) * 1.2 * I;                        // franja de color
+        lensC += k * smoothstep(.3, .0, edge) * .55 * I;   // el color llena la lente
         col = mix(col, lensC, in2);
       }
       col += (h(gl_FragCoord.xy + uTime) - .5) * .03;
@@ -9463,14 +9477,16 @@ function glbSetup() {
         col = mix(uHot, vec3(1., .96, .9), pow(n.z, 3.) * .35) * (.8 + .3 * uGlow);
       } else if (bi > 0) {
         vec4 s = uS[bi];
-        vec3 base = mix(uCool2, uCool, .5 + .5 * n.y);
-        float lam = .35 + .65 * max(0., dot(n, normalize(vec3(-.4, .5, .8))));
-        // la luz cálida de la esfera de luz, en el lado que la mira
-        vec2 toL = L - s.xy; float dl = length(toL);
-        float facing = max(0., dot(n.xy, toL / max(dl, 1e-4)));
-        float warm = facing * exp(-max(0., dl - s.z - LR) * 4.) * uGlow;
-        col = base * lam + uHot * pow(facing, 2.) * warm * 1.1;
-        col += mix(uCool, vec3(1.), .4) * pow(1. - n.z, 4.) * .15;   // borde suave
+        // degradado suave de azul (más claro hacia arriba) y, en el lado que mira a la luz, un tinte cálido que se
+        // funde en rosa: la luz de la esfera se refleja en las vecinas, como en la referencia
+        vec2 toL = L - s.xy; float dl = length(toL); vec2 dir = toL / max(dl, 1e-4);
+        float facing = max(0., dot(n.xy, dir));
+        float warm = smoothstep(0., 1., facing) * exp(-max(0., dl - s.z - LR) * 2.4) * uGlow;
+        vec3 base = mix(uCool2, uCool, smoothstep(-.8, .9, n.y * .7 + n.z * .4));
+        col = base * (.75 + .25 * n.z);
+        vec3 warmC = mix(uHot, mix(uHot, uCool, .5), .35 + .35 * (1. - facing));
+        col = mix(col, warmC, clamp(warm * 1.25, 0., .92));
+        col += mix(uCool, vec3(1.), .5) * pow(1. - n.z, 5.) * .1;
       }
       col += (h(gl_FragCoord.xy + uTime) - .5) * .03;
       o = vec4(col, 1.);
