@@ -712,6 +712,8 @@
         <button data-mode="iris">Iris</button>
         <button data-mode="nudo">Nudo</button>
         <button data-mode="corales">Corales</button>
+        <button data-mode="pixels">Píxeles</button>
+        <button data-mode="gallery">Galería</button>
         <button data-mode="globes">Globos</button>
         <button data-mode="icons">Íconos</button>
         <button data-mode="columns">Columnas</button>
@@ -7977,7 +7979,7 @@ function silkSetup() {
         float fold = 1. - abs(ct);
         base = mix(base, mix(uC2, vec3(1., .85, .75), .35), fold * fold * .55);
         base = mix(base, base * mix(vec3(1.), uMel * 1.7, .6), uVoice * .4);
-        float lam = .35 + .65 * pow(abs(ct), .5) + .15 * uR[k].w + .12 * uP;
+        float lam = .35 + .65 * pow(abs(ct), .5) + .15 * uR[k].w + (k == 0 ? .45 : .2) * uP;   // el golpe enciende la cinta de los graves
         // vidrio: deja ver lo de atrás teñido de su color, brilla en el centro de la curva, se enciende en los
         // cantos (donde se ve de lado) con un filo iridiscente, y un reflejo largo la recorre
         float tt = clamp(.5 + .5 * v, 0., 1.);
@@ -8576,8 +8578,8 @@ function drawLoop(dt) {
     let col = mix(i / (S - 1));
     if (Math.abs(off) < 0.2) col = col.map((c_, j) => c_ + (melC[j] - c_) * av * 0.85);   // el hilo del centro canta con la voz
     const a = (night ? 0.06 : 0.16) + Math.pow(lazo.lv[i], 1.3) * (night ? 0.8 : 0.65) + centre * 0.08 + P * 0.18;   // apagado en silencio, encendido con lo suyo
-    lctx.strokeStyle = rgba(night ? col : col.map(v => v * 0.72), Math.min(1, a));
-    lctx.lineWidth = Math.max(DPR * 0.8, MIN * (0.0014 + lazo.lv[i] * 0.0018) * (night ? 1 : 1.5));
+    lctx.strokeStyle = rgba(night ? col : (() => { const [h_, s_] = hexToHsl(rgbToHex(...col)); return hexToRgb(hsl(h_, Math.max(80, s_), 50)); })(), Math.min(1, a * (night ? 1 : 1.25)));   // de día, color pleno (no apagado)
+    lctx.lineWidth = Math.max(DPR * 0.8, MIN * (0.0014 + lazo.lv[i] * 0.0018) * (night ? 1 : 2.2));
     lctx.beginPath();
     for (let j = 0; j <= M; j++) { const [X, Y] = pt(j / M * Math.PI * 2, off, w); j ? lctx.lineTo(X, Y) : lctx.moveTo(X, Y); }
     lctx.closePath(); lctx.stroke();
@@ -8629,21 +8631,21 @@ function drawComet(dt) {
     const ox = Math.cos(c.a) * ex, oy = Math.sin(c.a) * ey, cr = Math.cos(c.rot), sr = Math.sin(c.rot);
     c.px = c.x; c.py = c.y; c.x = W / 2 + ox * cr - oy * sr; c.y = H / 2 + ox * sr + oy * cr;
     let col = mix(i / 2); if (i === 1) col = col.map((v, j) => v + (melC[j] - v) * av * 0.85);
-    const w0 = MIN * (0.008 + c.lv * 0.016 + c.glow * 0.008);
+    const w0 = MIN * (0.012 + c.lv * 0.03 + c.glow * 0.014);   // estela ancha: se lee desde lejos
     if (c.px != null) {   // el tramo nuevo de la estela: opaco sobre su capa (no se suman brillos donde se solapan)
-      bx.strokeStyle = rgba(night ? col : col.map(v => v * 0.75), 1); bx.lineWidth = w0; bx.lineCap = 'round';
+      bx.strokeStyle = rgba(night ? col : (() => { const [h_, s_] = hexToHsl(rgbToHex(...col)); return hexToRgb(hsl(h_, Math.max(75, s_), 52)); })(), 1); bx.lineWidth = w0; bx.lineCap = 'round';
       bx.beginPath(); bx.moveTo(c.px, c.py); bx.lineTo(c.x, c.y); bx.stroke();
     }
     c.col = col;
   });
   // la estela, suave y con brillo; luego las cabezas
   lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  lctx.globalAlpha = night ? 0.85 : 0.7; lctx.drawImage(comet.buf, 0, 0); lctx.globalAlpha = 1;
+  lctx.globalAlpha = night ? 0.9 : 0.85; lctx.drawImage(comet.buf, 0, 0); lctx.globalAlpha = 1;
   comet.list.forEach((c, i) => {
-    const r = MIN * (0.05 + c.lv * 0.07 + c.glow * 0.06);
+    const r = MIN * (0.08 + c.lv * 0.11 + c.glow * 0.09);
     lctx.globalAlpha = (night ? 0.9 : 0.6) * (0.35 + c.lv * 0.65 + c.glow * 0.3); lctx.drawImage(SPRITES[i], c.x - r, c.y - r, r * 2, r * 2); lctx.globalAlpha = 1;
     lctx.fillStyle = rgba(night ? c.col.map(v => v + (255 - v) * 0.75) : c.col.map(v => v * 0.55), 1);
-    lctx.beginPath(); lctx.arc(c.x, c.y, MIN * (0.006 + c.lv * 0.006 + c.glow * 0.004), 0, Math.PI * 2); lctx.fill();
+    lctx.beginPath(); lctx.arc(c.x, c.y, MIN * (0.009 + c.lv * 0.01 + c.glow * 0.006), 0, Math.PI * 2); lctx.fill();
   });
   for (let i = comet.sparks.length - 1; i >= 0; i--) {
     const sp_ = comet.sparks[i]; sp_.life -= dt * 1.5; if (sp_.life <= 0) { comet.sparks.splice(i, 1); continue; }
@@ -8951,57 +8953,67 @@ function drawLiveCover(dt) {
 }
 
 
-// ================= Escena: Cuadros (mosaico) =================
-// Como los mosaicos de color de las listas de las grandes apps: una cuadrícula pareja y nítida donde el color
-// pasa de un tono de la canción al otro. Cada columna es una parte del sonido (graves a la izquierda, agudos a la
-// derecha) y se enciende desde abajo según cuánto suena: un ecualizador hecho mosaico. Lo apagado queda pálido
-// y deja ver el fondo; lo encendido toma el color pleno. Cada golpe cruza el mosaico con una ola de luz y la
-// casilla más alta de cada columna se levanta un instante.
-const mosaic = { lv: null, I: null, key: '', waves: [], ph: 0 };
+// ================= Escena: Cuadros (mosaico de la portada) =================
+// La portada hecha mosaico: losetas de vidrio de esquinas suaves, cada una con el color de su trozo de portada,
+// un bisel de luz arriba y su sombra abajo. Es un ecualizador: cada columna escucha su parte del sonido (graves a
+// la izquierda, agudos a la derecha) y se enciende desde abajo hasta donde llega; lo que queda arriba se apaga a
+// la penumbra. Cada golpe sale del centro como una ola que levanta las losetas; la voz les da brillo.
+const mosaic = { prog: null, lv: new Float32Array(32), waves: [], W: new Float32Array(8) };
+function mosaicSetup() {
+  mosaic.prog = glProgram(`uniform vec2 uRes, uGrid; uniform float uNight, uVoice, uP; uniform vec3 uBg, uC0, uC1; uniform float uLv[32]; uniform vec4 uW[2];
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float sbox(vec2 q, float b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 g = vUv * uGrid, id = floor(g), f = fract(g) - .5;
+      vec2 cc = (id + .5) / uGrid;                                    // centro de la loseta
+      int ci = int(clamp(id.x / uGrid.x * 32., 0., 31.)); float lv = uLv[ci];
+      // la ola del golpe: un anillo que sale del centro
+      float d0 = length((cc - .5) * vec2(asp, 1.)), wv = 0.;
+      for (int k = 0; k < 2; k++) wv += uW[k].y * exp(-pow((d0 - uW[k].x) * 7., 2.));
+      // hasta dónde se enciende la columna (ecualizador desde abajo, con borde suave)
+      float on = smoothstep(lv * 1.05 + .02, lv * 1.05 - .1, cc.y);
+      vec3 cov = uCovK > 0. ? texture(uCov, (cc - uCovR.xy) / uCovR.zw).rgb : mix(uC0, uC1, cc.x);
+      vec3 base = uNight > .5 ? uBg : mix(uBg, cov, .25);
+      // la loseta: se levanta (crece y se aclara) con la ola y con lo suyo
+      float s = .4 - .045 + wv * .02 + uP * .025 + on * .012, r = .14;
+      float sd = sbox(f, s, r), px = uGrid.y / uRes.y;
+      float a = smoothstep(px, -px, sd);
+      vec3 tile = cov * mix(uNight > .5 ? .22 : .55, 1.08, on) * (1. + wv * .25 + uP * .45 * (.35 + on) + uVoice * .12 * on);   // el golpe las enciende al instante
+      float bev = smoothstep(-.08, 0., sd);                                     // canto
+      tile += vec3(1.) * bev * smoothstep(0., .4, f.y) * (.1 + .25 * on);       // luz arriba
+      tile *= 1. - bev * smoothstep(0., -.4, f.y) * .3;                         // sombra abajo
+      tile += vec3(1.) * exp(-pow((f.x + f.y + .5) * 4., 2.)) * .05 * on;      // reflejo en diagonal
+      float shadow = smoothstep(.12, -.02, sbox(f - vec2(.03, -.05), s, r)) * (1. - a);
+      vec3 col = base * (1. - shadow * (uNight > .5 ? .5 : .25));
+      col = mix(col, tile, a);
+      col += (h(gl_FragCoord.xy) - .5) * .015;
+      o = vec4(col, 1.);
+    }`);
+}
 function drawTilesMosaic(dt) {
-  // Un solo degradado de la canción, continuo, cortado en una cuadrícula fina (como los mosaicos de las listas):
-  // el color corre de un tono al otro a lo ancho y se aclara hacia arriba. La música no lo agita: cada casilla
-  // respira apenas con su parte del sonido, el degradado se desliza despacio con la energía y cada golpe cruza
-  // el mosaico con una ola de luz suave. Las líneas de la cuadrícula son finas como un hilo.
-  const night = state.theme === 'dark', P = Math.max(0, pulse.x);
-  const cols = Math.max(5, Math.round(W / (MIN / 4.2))), rows = Math.max(4, Math.round(H / (MIN / 4.2)));
-  const cw = W / cols, ch = H / rows;
-  if (mosaic.key !== cols + 'x' + rows) { mosaic.key = cols + 'x' + rows; mosaic.lv = new Float32Array(cols * rows); }
-  mosaic.ph += dt * (0.01 + energy * 0.05);
-  if (pulse.on) mosaic.waves.push({ r: 0, k: 0.35 + pulse.k * 0.4 });
-  mosaic.waves.forEach(w => { w.r += dt * 1.1; w.k *= Math.pow(0.3, dt); });
-  mosaic.waves = mosaic.waves.filter(w => w.k > 0.02 && w.r < 1.8);
-  // los tonos se mezclan por el círculo de color (de un tono al vecino, siempre limpio; en RGB pasaban por marrones)
-  // y solo entre los dos tonos más cercanos de la canción: una familia de color, no un arcoíris
-  const H3 = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k])));
-  const hd = (a, b) => Math.abs(((b[0] - a[0] + 540) % 360) - 180);
-  const pairs = [[0, 1], [1, 2], [0, 2]].sort((p, q) => hd(H3[p[0]], H3[p[1]]) - hd(H3[q[0]], H3[q[1]]))[0];
-  const hueAt = t => { const a = H3[pairs[0]], b = H3[pairs[1]]; let dh = ((b[0] - a[0] + 540) % 360) - 180; dh = Math.max(-80, Math.min(80, dh)); return [a[0] + dh * t, a[1] + (b[1] - a[1]) * t]; };
-  for (let c = 0; c < cols; c++) for (let r = 0; r < rows; r++) {
-    const fx = (c + 0.5) / cols, fy = (r + 0.5) / rows, i = c * rows + r;
-    // cada casilla escucha una parte del sonido (según su lugar), con calma
-    const k0 = Math.floor(((c * 0.7 + (rows - 1 - r) * 0.3) / (cols * 0.7 + rows * 0.3)) * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 4));
-    mosaic.lv[i] += (lv - mosaic.lv[i]) * (1 - Math.pow(lv > mosaic.lv[i] ? 0.01 : 0.08, dt));
-    let wv = 0; for (const w of mosaic.waves) { const d = Math.hypot(fx - 0.5, (fy - 0.5) * H / W); wv += w.k * Math.exp(-Math.pow((d - w.r * 0.8) / 0.12, 2)); }
-    // el degradado: de un tono a otro a lo ancho (y se desliza despacio), más claro hacia arriba
-    const t = (fx * 0.85 + (1 - fy) * 0.15 + 0.15 * Math.sin(mosaic.ph + fy)) % 1.0001;
-    const [hh, ss] = hueAt(t), up = 1 - fy, lift = mosaic.lv[i] * 12 + wv * 16;
-    // claro hacia arriba (como en las referencias), color pleno abajo; la música lo ilumina un poco
-    const L = night ? 24 + up * 24 + lift : 52 + up * 36 + lift * 0.6, Sx = Math.max(55, Math.min(85, ss)) * (night ? 0.8 : 1 - up * 0.35);
-    const col = hexToRgb(hsl(hh, Sx, Math.min(night ? 70 : 96, L)));
-    ctx.fillStyle = rgba(col.map(v => Math.max(0, Math.min(255, v))), night ? 0.74 : 0.76);   // como vidrio de color: la portada se ve detrás
-    ctx.fillRect(c * cw, r * ch, Math.ceil(cw), Math.ceil(ch));
-  }
-  // la cuadrícula: líneas finas como un hilo de luz
-  ctx.strokeStyle = night ? 'rgba(255,255,255,.07)' : 'rgba(255,255,255,.45)'; ctx.lineWidth = Math.max(1, DPR * 0.8);
-  ctx.beginPath();
-  for (let c = 1; c < cols; c++) { const x = Math.round(c * cw) + 0.5; ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-  for (let r = 1; r < rows; r++) { const y = Math.round(r * ch) + 0.5; ctx.moveTo(0, y); ctx.lineTo(W, y); }
-  ctx.stroke();
-  // una luz suave de arriba que respira con el golpe: da profundidad al conjunto
-  const g = ctx.createRadialGradient(W * 0.3, -H * 0.1, 0, W * 0.3, -H * 0.1, Math.max(W, H) * 0.9);
-  g.addColorStop(0, `rgba(255,255,255,${(night ? 0.06 : 0.12) + P * 0.05})`); g.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if (!glInit()) { drawBars(dt); return; }
+  if (!mosaic.prog) mosaicSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  const rows = asp >= 1 ? 9 : 14, cols = Math.round(rows * asp);
+  for (let i = 0; i < 32; i++) { const k0 = Math.floor(i / 32 * BANDS * 0.92), lv = Math.pow(bandX(k0, Math.min(BANDS, k0 + 3)), 1.1) * (0.4 + 0.6 * dynL); mosaic.lv[i] += (lv - mosaic.lv[i]) * (1 - Math.pow(lv > mosaic.lv[i] ? 0.0005 : 0.06, dt)); }
+  if (pulse.on) mosaic.waves.push({ r: 0, k: 0.6 + pulse.k * 0.6 });
+  const per = Math.max(0.3, tempo.period || 0.5);
+  mosaic.waves.forEach(w => { w.r += dt * 1.1 / per; w.k *= Math.pow(0.15, dt); });
+  mosaic.waves = mosaic.waves.filter(w => w.r < 1.4 && w.k > 0.02).slice(-2);
+  mosaic.W.fill(0); mosaic.waves.forEach((w, i) => mosaic.W.set([w.r, w.k, 0, 0], i * 4));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = mosaic.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uGrid, cols, rows);
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uP, P);
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 25, 5)).map(v => v / 255) : hexToRgb(hsl(hh, 15, 90)).map(v => v / 255));
+  gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[2].map(v => v / 255));
+  gl.uniform1fv(p.u['uLv[0]'], mosaic.lv); gl.uniform4fv(p.u['uW[0]'], mosaic.W);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
 
@@ -9110,7 +9122,7 @@ function sphereSetup() {
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2((vUv.x - .5) * asp, vUv.y - .5) / uR;
       float r = length(p);
-      vec3 col = uBg;
+      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .4 : .5);   // la portada, detrás del póster
       // halo de su color alrededor (como luz que se escapa del vidrio)
       col = mix(col, mix(uAvg, vec3(1.), uNight > .5 ? .0 : .25), exp(-max(0., r - .85) * 3.2) * (uNight > .5 ? .55 : .45) * (.8 + uP * .4));
       // dentro: la portada curvada sobre la esfera, girando con la melodía (más en el centro que en el borde)
@@ -9642,10 +9654,12 @@ function columnsSetup() {
         vec2 f = (p - a) / (b - a); float ci = floor(f.x * uN); int i = int(ci);
         float lv = uLv[i], y = abs(f.y - .5) * 2.;                     // 0 en el medio, 1 en los extremos
         float reach = .18 + lv * .95 + uKick * .25;                  // hasta dónde llega la luz desde los extremos
-        float t = smoothstep(1. - reach, 1. - reach + .45, y);
+        float t = smoothstep(1. - reach - .1, 1. - reach + .6, y);
         float sway = .5 + .5 * sin(uPh + ci * 1.7);
         vec3 c = mix(uC[i], uC2[i], smoothstep(.65, 1., y) * .6 + sway * .2);
-        vec3 k = mix(vec3(.01), c, t);
+        // el medio no es negro: es la misma columna en penumbra, con la portada asomando a través
+        vec3 deep = mix(withCover(c * .05), c * .16, .55) * (uNight > .5 ? 1. : 1.6);
+        vec3 k = mix(deep, c, t);
         k = mix(k, mix(c, vec3(1.), .35), smoothstep(.9, 1., y) * t * .4);   // el borde de arriba y abajo, más claro
         k *= .97 + .06 * h(vec2(ci, 1.));                             // cada columna con su propio tono
         col = k;
@@ -9756,7 +9770,7 @@ function fanSetup() {
         float v = q.y / (th * .5);                                 // a lo ancho: volumen
         k *= .7 + .4 * sqrt(max(0., 1. - v * v));
         k = mix(k, vec3(1.), smoothstep(.2, 1., -v) * .18);        // brillo arriba
-        k *= .8 + uLv[i % 8] * .4 + uKick * .12;
+        k *= .8 + uLv[i % 8] * .4 + uKick * .3;
         float shadow = smoothstep(.0, .02, -sd);                   // la de delante proyecta una sombrita sobre la de atrás
         col = mix(col * (1. - .25 * (1. - shadow)), k, a);
       }
@@ -10152,6 +10166,7 @@ function nudoSetup() {
           c += mix(base, vec3(1.), .4) * fr * .35;                               // luz rebotada en el canto
           c += vec3(1.) * spec * (.75 + uSpark * .6) + vec3(1.) * pow(max(dot(n, Hh), 0.), 8.) * .08;
           c += mix(base, vec3(1.), .3) * bump * (.35 + dif * .5);                // el golpe que viaja: el tubo se enciende
+          c *= 1. + uP * .28; c += vec3(1.) * spec * uP * .6;                    // y el golpe, en el instante, lo ilumina entero
           float cov = smoothstep(br + px.y, br - px.y, bd);
           col = mix(col * (1. - .25 * smoothstep(br + .03, br, bd)), c, cov);   // y una sombra de contacto alrededor
         }
@@ -10250,7 +10265,8 @@ function coralSetup() {
         vec3 c = mix(thru, body, .45 + .25 * inner) * (uNight > .5 ? .85 : 1.05);
         c *= mix(vec3(1.), body * 1.6, .35 * inner);                                              // gelatina: tiñe lo que deja ver
         c += mix(body, vec3(1.), .45) * (1. - inner) * (.18 + uGlow * .5);                        // la luz de dentro se ve en lo delgado
-        c += mix(body, vec3(1.), .6) * fr * .75;                                                  // canto
+        c += mix(body, vec3(1.), .6) * fr * (.75 + uP * .6);                                      // canto (se enciende con el golpe)
+        c *= 1. + uP * .3;
         vec3 L = normalize(vec3(-.4, .7, .6)); c += pow(max(dot(n, normalize(L + vec3(0., 0., 1.))), 0.), 30.) * .55;
         c *= 1. - .25 * smoothstep(.1, 0., p.y);                                                  // la base, en sombra
         col = mix(col, c, smoothstep(px.y, -px.y, d) * .94);
@@ -10303,7 +10319,153 @@ function drawCorales(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
-const scenes = { corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+// ================= Escena: Píxeles =================
+// Cuatro criaturas de píxeles redondeados y brillantes (como dulces) paradas sobre la portada. Saltan al compás:
+// en cada golpe salta la mitad (alternando, como un coro que baila), más alto cuanto más fuerte es la parte;
+// al caer se aplastan y rebotan. Abren la boca cuando suena la voz, parpadean con los platillos y cada una toma
+// un color de la portada. En silencio se quedan quietas, con los ojos abiertos.
+const PIX_ART = [
+  ['.##...##.', '#########', '##o###o##', '#########', '###mmm###', '#########', '.#######.', '..#...#..'],
+  ['....#....', '...###...', '..#####..', '.#o###o#.', '#########', '##mmmmm##', '.#######.', '..##.##..'],
+  ['...###...', '.#######.', '##o###o##', '#########', '##mmmmm##', '.#######.', '..#...#..', '.##...##.'],
+  ['.#.....#.', '.#.....#.', '.##...##.', '..#####..', '.#o###o#.', '.#######.', '.##mmm##.', '..#...#..'],
+];
+const pix = { list: null, beat: 0, spr: {}, sprKey: '' };
+function pixSprite(rgb, key) {
+  if (pix.spr[key]) return pix.spr[key];
+  const S = 48, c = document.createElement('canvas'); c.width = c.height = S; const x = c.getContext('2d');
+  const [h_, s_] = hexToHsl(rgbToHex(...rgb)), sat = Math.max(70, s_);
+  const g = x.createLinearGradient(0, 0, S * 0.4, S);
+  g.addColorStop(0, hsl(h_, sat, 76)); g.addColorStop(0.5, hsl(h_, sat, 58)); g.addColorStop(1, hsl(h_ + 12, sat, 42));
+  x.fillStyle = g; x.beginPath(); x.roundRect(2, 2, S - 4, S - 4, S * 0.26); x.fill();
+  const hl = x.createRadialGradient(S * 0.32, S * 0.28, 0, S * 0.32, S * 0.28, S * 0.3); hl.addColorStop(0, 'rgba(255,255,255,.55)'); hl.addColorStop(1, 'rgba(255,255,255,0)');
+  x.fillStyle = hl; x.beginPath(); x.roundRect(2, 2, S - 4, S - 4, S * 0.26); x.fill();
+  pix.spr[key] = c; return c;
+}
+function drawPixels(dt) {
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), n = 4;
+  ctx.fillStyle = night ? '#08070c' : '#ece8ee'; ctx.fillRect(0, 0, W, H);
+  drawBackdrop(dt, 0.9);
+  ctx.fillStyle = night ? 'rgba(6,5,10,.38)' : 'rgba(255,255,255,.2)'; ctx.fillRect(0, 0, W, H);
+  const key = RGB.map(c => c.join()).join('|'); if (pix.sprKey !== key) { pix.spr = {}; pix.sprKey = key; }
+  if (!pix.list) pix.list = Array.from({ length: n }, (_, i) => ({ y: 0, vy: 0, sq: 0, sqV: 0, blink: 0, mouth: 0, lv: 0 }));
+  const per = Math.max(0.3, tempo.period || 0.5), T = per * 0.85, ps = Math.min(W / (n * 13), H / 16);
+  if (pulse.on) pix.beat++;
+  const bands = [bandX(0, 10), bandX(10, 26), bandX(26, 44), bandX(44, BANDS)];
+  pix.list.forEach((c, i) => {
+    c.lv += (bands[i] - c.lv) * (1 - Math.pow(bands[i] > c.lv ? 0.002 : 0.08, dt));
+    const onGround = c.y <= 0 && c.vy <= 0;
+    // salta en su golpe (la mitad del coro en cada uno) si está en el suelo; más alto en lo fuerte
+    if (pulse.on && onGround && (i + pix.beat) % 2 === 0) { const vh = 0; const hgt = ps * Math.min(3.2, (0.8 + (c.lv + pulse.k) * 1.4) * (0.5 + dynL * 0.5)); c.vy = Math.sqrt(2 * (8 * ps * 2.2 / (T * T)) * hgt); c.sqV -= 4; }
+    else if (pulse.on && onGround) c.sqV += 3 + pulse.k * 2;   // las que no saltan, se agachan en el golpe
+    const g = 8 * ps * 2.2 / (T * T);
+    c.vy -= g * dt; c.y += c.vy * dt;
+    if (c.y < 0) { if (c.vy < -ps) c.sqV += Math.min(10, -c.vy / (ps * 6)); c.y = 0; c.vy = 0; }
+    c.sqV += (-c.sq * 160 - c.sqV * 12) * dt; c.sq += c.sqV * dt; c.sq = Math.max(-0.3, Math.min(0.3, c.sq));
+    c.blink = Math.max(c.blink - dt * 7, hits.hat && Math.random() < 0.35 ? 1 : 0);
+    const tm = Math.min(1, voice * 1.6) * (i % 2 ? 1 : 0.7); c.mouth += (tm - c.mouth) * (1 - Math.pow(0.001, dt));
+  });
+  const ground = H * 0.7, gap = ps * 3.2, total = n * 9 * ps + (n - 1) * gap, x0 = (W - total) / 2;
+  pix.list.forEach((c, i) => {
+    const art = PIX_ART[i], col = RGB[i % 3].map((v, j) => i === 3 ? (RGB[0][j] + RGB[2][j]) / 2 : v), spr = pixSprite(col, 'c' + i);
+    const sx = 1 + c.sq * 0.8, sy = 1 - c.sq, bx = x0 + i * (9 * ps + gap) + 4.5 * ps, by = ground - c.y;
+    // sombra en el suelo (se encoge cuando salta)
+    const sh = 1 / (1 + c.y / (ps * 6));
+    ctx.fillStyle = `rgba(0,0,0,${(night ? 0.4 : 0.18) * sh})`; ctx.beginPath(); ctx.ellipse(bx, ground + ps * 0.4, ps * 4.4 * sh, ps * 0.7 * sh, 0, 0, 7); ctx.fill();
+    // brillo de su color detrás (más con lo suyo)
+    const gl_ = ctx.createRadialGradient(bx, by - ps * 4, 0, bx, by - ps * 4, ps * 9);
+    gl_.addColorStop(0, rgba(col, Math.min(0.7, (night ? 0.3 : 0.18) * (0.3 + c.lv + P * 1.2)))); gl_.addColorStop(1, rgba(col, 0)); ctx.fillStyle = gl_; ctx.fillRect(bx - ps * 9, by - ps * 13, ps * 18, ps * 18);
+    for (let r = 0; r < 8; r++) for (let q = 0; q < 9; q++) {
+      const ch = art[r][q]; if (ch === '.') continue;
+      const px = bx + (q - 4.5) * ps * sx, py = by - (8 - r) * ps * sy, w = ps * 0.9 * sx, hh = ps * 0.9 * sy;
+      if (ch === 'o') {
+        if (c.blink > 0.3) { ctx.drawImage(spr, px, py, w, hh); ctx.fillStyle = 'rgba(20,10,30,.85)'; ctx.fillRect(px + w * 0.15, py + hh * 0.45, w * 0.7, hh * 0.14); }
+        else { ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(px, py, w, hh, w * 0.3); ctx.fill(); ctx.fillStyle = '#140a1e'; ctx.beginPath(); ctx.roundRect(px + w * 0.28, py + hh * 0.22, w * 0.5, hh * 0.6, w * 0.2); ctx.fill(); }
+      } else if (ch === 'm' && c.mouth > 0.25) { ctx.fillStyle = `rgba(30,8,24,${0.6 + c.mouth * 0.35})`; ctx.beginPath(); ctx.roundRect(px + w * 0.05, py + hh * (0.5 - c.mouth * 0.45), w * 0.9, hh * (0.2 + c.mouth * 0.75), w * 0.25); ctx.fill(); }
+      else {
+        // los pies se turnan al caminar en el sitio (solo cuando suena)
+        let oy = 0; if (r === 7 && energy > 0.1) oy = Math.sin(groove * Math.PI + q) * ps * 0.12;
+        ctx.drawImage(spr, px, py - oy, w, hh);
+      }
+    }
+  });
+}
+
+// ================= Escena: Galería =================
+// La portada colgada como una obra en una sala de museo: marco fino, paspartú y su ficha debajo. A los lados,
+// dos cuadros de campos de color hechos con su paleta. Tres focos del techo las iluminan: el del centro late con
+// el bombo, los de los lados con la voz y con los agudos; en silencio la sala queda en penumbra. El piso brillante
+// refleja todo, y cada golpe hace que los campos de color respiren.
+const gal = { lv: [0, 0, 0], kick: 0 };
+function drawGallery(dt) {
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x);
+  const avg = [0, 1, 2].map(k => (RGB[0][k] + RGB[1][k] + RGB[2][k]) / 3), [hh] = hexToHsl(rgbToHex(...avg));
+  const tg = [bandX(12, 34) * 0.7 + voice * 0.5, bandX(0, 10), bandX(34, BANDS)];
+  for (let k = 0; k < 3; k++) gal.lv[k] += (tg[k] - gal.lv[k]) * (1 - Math.pow(tg[k] > gal.lv[k] ? 0.003 : 0.12, dt));
+  if (pulse.on) gal.kick = Math.min(1.3, gal.kick + 0.5 + pulse.k * 0.5);
+  gal.kick *= Math.pow(0.04, dt);
+  const floorY = H * 0.8, wallL = night ? 9 : 80, room = 0.25 + energy * 0.5;
+  // la pared: el color de la portada, en penumbra; el piso, más hondo
+  ctx.fillStyle = hsl(hh, 18, wallL * (0.7 + room * 0.3)); ctx.fillRect(0, 0, W, floorY);
+  ctx.save(); ctx.globalAlpha = night ? 0.35 : 0.25; drawBackdrop(0, 1); ctx.restore();
+  { const fg_ = ctx.createLinearGradient(0, floorY, 0, H); fg_.addColorStop(0, hsl(hh, 16, night ? 12 : 74)); fg_.addColorStop(1, hsl(hh, 14, night ? 4 : 60)); ctx.fillStyle = fg_; ctx.fillRect(0, floorY, W, H - floorY); }
+  ctx.fillStyle = `rgba(255,255,255,${night ? 0.08 : 0.35})`; ctx.fillRect(0, floorY, W, Math.max(1, DPR));   // el filo del zócalo
+  const S = Math.min(MIN * 0.46, W * 0.3), cx = W / 2, cy = floorY * 0.48, side = S * 0.62, gapX = S * 0.5 + side * 0.5 + S * 0.32;
+  const frames = [[cx - gapX, cy + S * 0.06, side, 0], [cx, cy, S, 1], [cx + gapX, cy + S * 0.06, side, 2]];
+  const lights = [gal.lv[0], Math.min(1.4, gal.lv[1] * 0.8 + gal.kick * 0.5), gal.lv[2]];
+  // los focos: un cono suave desde el techo y su charco de luz en la pared
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light';
+  frames.forEach(([x, y, s], i) => {
+    const L = 0.12 + lights[i] * 0.85, warm = [255, 236, 210];
+    // el haz: una luz difusa que baja del techo (sin bordes), estirada a lo alto
+    ctx.save(); ctx.translate(x, y * 0.45); ctx.scale(0.55, 1.5);
+    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 0.9); g.addColorStop(0, rgba(warm, 0.16 * L)); g.addColorStop(1, rgba(warm, 0));
+    ctx.fillStyle = g; ctx.fillRect(-s, -s, s * 2, s * 2); ctx.restore();
+    const pool = ctx.createRadialGradient(x, y, 0, x, y, s * 1.05);
+    pool.addColorStop(0, rgba(warm, 0.55 * L)); pool.addColorStop(0.6, rgba(warm, 0.18 * L)); pool.addColorStop(1, rgba(warm, 0));
+    ctx.fillStyle = pool; ctx.fillRect(x - s * 1.1, y - s * 1.1, s * 2.2, s * 2.2);
+  });
+  ctx.restore();
+  // las obras (y su reflejo en el piso)
+  const drawArt = (x, y, s, i, refl) => {
+    const m = s * 0.09, f = Math.max(2, s * 0.018), L = 0.55 + (0.12 + lights[i] * 0.85) * 0.5;
+    ctx.save();
+    if (refl) { ctx.translate(0, floorY * 2); ctx.scale(1, -1); ctx.globalAlpha = night ? 0.22 : 0.2; }
+    else { ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = s * 0.08; ctx.shadowOffsetY = s * 0.04; }
+    ctx.fillStyle = night ? '#121014' : '#1c1a1e'; ctx.fillRect(x - s / 2 - m - f, y - s / 2 - m - f, s + 2 * (m + f), s + 2 * (m + f));   // marco
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = `hsl(40, 20%, ${Math.round(88 * L)}%)`; ctx.fillRect(x - s / 2 - m, y - s / 2 - m, s + 2 * m, s + 2 * m);              // paspartú
+    if (i === 1) { const img = coverClean || coverAny; if (img) ctx.drawImage(img, x - s / 2, y - s / 2, s, s); else { ctx.fillStyle = rgba(avg, 1); ctx.fillRect(x - s / 2, y - s / 2, s, s); } }
+    else {
+      // campos de color con la paleta: dos bloques de bordes suaves que respiran con el golpe
+      const a = RGB[i === 0 ? 0 : 2], b = RGB[1], br = 1 + gal.kick * 0.04 + lights[i] * 0.03;
+      ctx.fillStyle = rgba(a.map(v => v * 0.55), 1); ctx.fillRect(x - s / 2, y - s / 2, s, s);
+      ctx.filter = CAN_BLUR ? `blur(${s * 0.03}px)` : 'none';
+      ctx.fillStyle = rgba(a, 1); ctx.fillRect(x - s * 0.4 * br, y - s * 0.42 * br, s * 0.8 * br, s * 0.42 * br);
+      ctx.fillStyle = rgba(b, 1); ctx.fillRect(x - s * 0.4 * br, y + s * 0.06, s * 0.8 * br, s * 0.34 * br);
+      ctx.filter = 'none';
+    }
+    // la luz del foco sobre el cuadro (arriba más clara)
+    const sh = ctx.createLinearGradient(0, y - s / 2, 0, y + s / 2); sh.addColorStop(0, `rgba(255,240,220,${0.1 * L})`); sh.addColorStop(1, `rgba(0,0,0,${0.25 * (1 - L)})`);
+    ctx.fillStyle = sh; ctx.fillRect(x - s / 2, y - s / 2, s, s);
+    ctx.restore();
+  };
+  frames.forEach(([x, y, s], i) => drawArt(x, y, s, i, true));
+  const fl = ctx.createLinearGradient(0, floorY, 0, H); fl.addColorStop(0, `rgba(0,0,0,0)`); fl.addColorStop(1, `rgba(0,0,0,${night ? 0.5 : 0.2})`); ctx.fillStyle = fl; ctx.fillRect(0, floorY, W, H - floorY);
+  frames.forEach(([x, y, s], i) => drawArt(x, y, s, i, false));
+  // la ficha del museo
+  const it = spConnected() && sp.item;
+  if (it && !(recording && H > W)) {
+    const lx = cx + S / 2 + S * 0.1 - S * 0.02, ly = cy + S / 2 + S * 0.16, u = S / 400, fg = night ? '235,230,225' : '30,26,30';
+    ctx.textAlign = 'left'; ctx.fillStyle = `rgba(${fg},.9)`; ctx.font = `700 ${Math.round(15 * u)}px ${FONT_UI}`;
+    const nm = (it.name || '').slice(0, 40); ctx.fillText(nm, cx - S / 2, ly);
+    ctx.fillStyle = `rgba(${fg},.6)`; ctx.font = `500 ${Math.round(13 * u)}px ${FONT_UI}`;
+    ctx.fillText(((it.artists || []).map(a => a.name).join(', ') + (it.album?.release_date ? ', ' + it.album.release_date.slice(0, 4) : '')).slice(0, 50), cx - S / 2, ly + 19 * u);
+    void lx;
+  }
+}
+
+const scenes = { gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
