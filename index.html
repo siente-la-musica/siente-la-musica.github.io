@@ -1436,9 +1436,12 @@ function analyse(dt) {
     fill = tempo.conf > 0.5 && locked && nowP - lastBassHit < per * 1.6 && nowP - pulse.at > per * 0.75;
     pulse.due = 0;
   }
-  if (real || fill) {
-    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : 0.5;
-    pulse.k = Math.min(1, pulse.k * (0.5 + bandX(0, 12) * 0.65));   // el mismo bombo pega menos en la estrofa que en el estribillo
+  // Partes sin bombo (piano y voz, subidas, baladas): si hace rato que no suena un bombo, las notas fuertes del
+  // piano, cada sílaba cantada y la caja marcan el pulso, más suave. Así nada se congela cuando la batería calla.
+  const melo = !real && !fill && analyser && nowP - lastBassHit > 1500 && nowP - pulse.at > 230 && (hits.mid > 0.22 || hits.voice > 0.2 || hits.snare > 0);
+  if (real || fill || melo) {
+    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : melo ? 0.3 + Math.max(hits.mid, hits.voice, hits.snare ? 0.5 : 0) * 0.4 : 0.5;
+    pulse.k = Math.min(1, pulse.k * (0.5 + (melo ? bandX(10, 40) : bandX(0, 12)) * 0.65));   // (una nota de piano se mide en su registro, no en los graves)   // el mismo bombo pega menos en la estrofa que en el estribillo
     // ataque al instante (en el mismo fotograma del golpe), sin esperar a que un muelle se estire
     const amp = pulse.k * (state.noFlash ? 0.3 : 0.6);
     if (amp > pulse.x) { pulse.x = amp; pulse.v = 0; }
@@ -10527,7 +10530,7 @@ function render(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   // El reloj de las animaciones solo corre mientras suena música: las derivas lentas, los brillos que pasean y
   // los vaivenes se detienen en silencio (y arrancan suave cuando vuelve el sonido). Nada se mueve sin música.
-  musicGate += (Math.min(1, energy * 6) - musicGate) * (1 - Math.pow(0.05, dt));
+  musicGate += (Math.min(1, energy * 14) - musicGate) * (1 - Math.pow(0.05, dt));
   time += dt * musicGate;
   if (!document.hidden && !recording) adapt(dt);
   keepAudioAlive(dt);
