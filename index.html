@@ -9540,10 +9540,18 @@ function drawGlobes(dt) {
   glb.list.forEach((b, i) => {
     const k0 = Math.floor(i / 15 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 5));
     b.lv += (lv - b.lv) * (1 - Math.pow(lv > b.lv ? 0.002 : 0.05, dt));
-    b.ph += dt * (0.02 + energy * 0.9);
-    // en lo fuerte flotan más lejos y el golpe las aparta más de la luz; en lo suave apenas se mecen
-    const amp = 0.008 + 0.04 * energy, L0 = glb.list[0], dx = b.x - L0.x, dy = b.y - L0.y, dd = Math.hypot(dx, dy) || 1, push = i ? glb.kick * (0.012 + 0.04 * dynL) / (0.3 + dd) : 0;
-    const x = b.x + Math.sin(b.ph * 0.5) * amp + dx / dd * push, y = b.y + Math.cos(b.ph * 0.4) * amp + dy / dd * push;
+    // Flotan como globos de verdad: cada uno tiene inercia y vuelve despacio a su sitio (un resorte blando con
+    // roce del aire). El golpe no los teletransporta: les da un empujón que los aleja de la luz y luego regresan
+    // meciéndose. La corriente de aire que los mece crece con la energía, y en silencio se quedan quietos.
+    b.ph += dt * (0.05 + energy * 0.5);
+    if (b.vx === undefined) { b.ox = 0; b.oy = 0; b.vx = 0; b.vy = 0; }
+    const L0 = glb.list[0], dx = b.x - L0.x, dy = b.y - L0.y, dd = Math.hypot(dx, dy) || 1;
+    if (pulse.on && i) { const imp = (0.05 + 0.12 * dynL) * (0.6 + pulse.k * 0.6) / (0.4 + dd) / (b.r * 6); b.vx += dx / dd * imp; b.vy += dy / dd * imp; }
+    const air = energy * 0.06;   // corriente de aire suave (fuerza, no posición)
+    const fx = Math.sin(b.ph * 0.7 + i) * air, fy = Math.cos(b.ph * 0.55 + i * 1.7) * air + (i ? 0.004 * energy : 0);
+    b.vx += (-b.ox * 3.2 - b.vx * 1.6 + fx) * dt; b.vy += (-b.oy * 3.2 - b.vy * 1.6 + fy) * dt;
+    b.ox += b.vx * dt; b.oy += b.vy * dt;
+    const x = b.x + b.ox, y = b.y + b.oy;
     const r = b.r * (i === 0 ? 0.75 + bandX(0, 10) * 0.6 + P * 0.15 : 0.9 + b.lv * 0.22);
     glb.S.set([x, y, r, b.z], i * 4);
   });
