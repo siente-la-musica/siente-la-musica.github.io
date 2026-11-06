@@ -9450,7 +9450,7 @@ function drawVitral(dt) {
 // ola de luz desde el centro; los colores giran despacio con la melodía.
 const lens = { prog: null, wave: 9, waveK: 0, rot: 0, lv: new Float32Array(16) };
 function lensSetup() {
-  lens.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uD, uWave, uWaveK, uRot, uNight, uP; uniform vec3 uC0, uC1, uC2, uGlow, uBg; uniform float uLv[16]; uniform vec2 uN;
+  lens.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uD, uWave, uWaveK, uRot, uNight, uP, uDyn; uniform vec3 uC0, uC1, uC2, uGlow, uBg; uniform float uLv[16]; uniform vec2 uN;
     ${GLSL_COVER}
     float h1(float n) { return fract(sin(n * 91.3) * 43758.5453); }
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
@@ -9470,7 +9470,7 @@ function lensSetup() {
       vec3 col = mix(uBg, withCover(uBg), .45);
       // detrás, una gran luz de colores (como en la referencia): tres focos de la canción que se mezclan
       for (int k = 0; k < 3; k++) { float an = uRot * 2. + float(k) * 2.094; vec2 fp = cc + vec2(cos(an), sin(an)) * .16; float fd = length(p - fp);
-        col += pal(float(k) / 3.) * exp(-fd * fd * 7.) * (.45 + uP * .35); }
+        col += pal(float(k) / 3.) * exp(-fd * fd * 7.) * (.18 + uDyn * .35 + uP * .35); }   // la luz de atrás crece con la parte de la canción
       float in1 = smoothstep(uR, uR - .003, d1), in2 = smoothstep(uR, uR - .003, d2);
       if (in1 > 0.) {
         // vidrio oscuro tintado del círculo
@@ -9487,7 +9487,7 @@ function lensSetup() {
         float wv = uWaveK * exp(-pow((length(mid - cc) - uWave) * 6., 2.));
         float edge = min(uR - d1, uR - d2) / uR;                            // cerca del filo de la lente
         // como en la referencia: un filo casi blanco, una franja de color saturado y el centro más tenue
-        float I = .3 + lv * 1.1 + wv * .9 + uP * .25;
+        float I = .1 + lv * 1.4 + wv * .6 + uP * .3;   // callada, casi apagada; con lo suyo, plena
         vec3 lensC = col * .35 + k * .18 * I;
         lensC += mix(k, vec3(1.), .45) * exp(-edge * 80.) * .8 * min(I, 1.3);            // filo claro encendido (sin quemarse)
         lensC += k * exp(-pow((edge - .07) * 22., 2.)) * 1.2 * I;                        // franja de color
@@ -9502,15 +9502,19 @@ function drawLenses(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!lens.prog) lensSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  for (let i = 0; i < 16; i++) { const k0 = Math.floor(((i * 5) % 16) / 16 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 4)); lens.lv[i] += (lv - lens.lv[i]) * (1 - Math.pow(lv > lens.lv[i] ? 0.001 : 0.05, dt)); }
+  // cada lente sigue su banda con un resorte rápido, y la parte de la canción marca cuánto se encienden
+  // (en el piano, suaves; en el coro, plenas), como Montañas
+  if (!lens.v) { lens.v = new Float32Array(16); lens.tg = new Float32Array(16); }
+  for (let i = 0; i < 16; i++) { const k0 = Math.floor(((i * 5) % 16) / 16 * BANDS * 0.9); lens.tg[i] = bandX(k0, Math.min(BANDS, k0 + 4)) * (0.3 + 0.7 * dynL); }
+  springTo(lens.lv, lens.v, lens.tg, dt, 240, 0.55);
   if (pulse.on) { lens.wave = 0; lens.waveK = 0.7 + pulse.k * 0.8; }
   lens.wave += dt * 1.1; lens.waveK *= Math.pow(0.2, dt);
-  lens.rot += dt * (0.01 + voice * 0.15 + energy * 0.03);
+  lens.rot += dt * (voice * 0.1 + dynL * 0.08) * musicGate;
   const nx = asp > 1 ? 5 : 4, ny = asp > 1 ? 4 : 6, D = Math.min(asp * 0.8 / nx, 0.86 / ny), R = D * 0.72;
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(80, s_), l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const [cw, ch] = glCanvas(1), p = lens.prog;
-  gl.useProgram(p.pr); glCoverBind(p);
+  gl.useProgram(p.pr); glCoverBind(p); gl.uniform1f(p.u.uDyn, dynL * musicGate);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, R); gl.uniform1f(p.u.uD, D); gl.uniform2f(p.u.uN, nx, ny);
   gl.uniform1f(p.u.uWave, lens.wave); gl.uniform1f(p.u.uWaveK, lens.waveK * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uRot, lens.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
