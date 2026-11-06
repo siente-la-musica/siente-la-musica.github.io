@@ -955,7 +955,7 @@ function colorTick(dt) {
   }
   // sin música (en pausa, o en silencio un par de segundos) todo pasa a blanco y negro; vuelve el color al sonar
   const paused = typeof sp !== 'undefined' && sp.item && !sp.playing && (typeof spConnected !== 'function' || spConnected());
-  colorTick.quiet = energy > 0.04 ? 0 : (colorTick.quiet || 0) + dt;
+  colorTick.quiet = audible ? 0 : (colorTick.quiet || 0) + dt;
   const still = paused || colorTick.quiet > 2.5 ? 1 : 0;
   colorTick.gray = (colorTick.gray || 0) + (still - (colorTick.gray || 0)) * (1 - Math.pow(still ? 0.25 : 0.02, dt));   // se apaga en ~1 s, se enciende rápido
   fade = Math.max(fade * 0.85, colorTick.gray * 0.92);
@@ -1302,7 +1302,7 @@ function keepAudioAlive(dt) {
 addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); });
 
 // ================= Análisis =================
-let bass = 0, mid = 0, high = 0, energy = 0, time = 0, groove = 0, musicGate = 0;
+let bass = 0, mid = 0, high = 0, energy = 0, time = 0, groove = 0, musicGate = 0, audible = false;
 const lowPrev = new Float32Array(12), fullPrev = new Float32Array(BANDS), kickHist = new Float32Array(32), kickE2 = new Float32Array(32);
 const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, cd: 0 }, high: { prev: 0, avg: 0.02, cd: 0 }, snare: { prev: 0, avg: 0.02, cd: 0 }, hat: { prev: 0, avg: 0.02, cd: 0 }, voice: { prev: 0, avg: 0.02, cd: 0 }, perc: { prev: 0, avg: 0.02, cd: 0 } };
 
@@ -1357,6 +1357,9 @@ function analyse(dt) {
     dynLs += (le - dynLs) * (1 - Math.pow(0.04, dt));
     dynPeak = Math.max(dynPeak * Math.pow(0.996, dt), dynLs, 1e-4);
     const t_ = Math.sqrt(dynLs / dynPeak); dynL += (t_ - dynL) * (1 - Math.pow(t_ > dynL ? 0.001 : 0.1, dt)); }
+  // ¿Suena algo? Se mide el volumen real de la señal (no la energía, que se escala con lo fuerte de la canción):
+  // un piano suave después de un drop sigue siendo música, y solo un silencio de verdad apaga y pasa a gris
+  audible = analyser && analyser.getFloatTimeDomainData ? dynLs > 3e-6 : energy > 0.015;
   bass = avg(raw, 0, 10); mid = avg(raw, 10, 38); high = avg(raw, 38, BANDS);
   energy = (bass * 0.5 + mid * 0.3 + high * 0.2) * (0.3 + 0.7 * dynL);   // la energía también sabe si la parte es suave o fuerte
   // reloj de la música, en tiempos: corre al tempo de la canción solo mientras suena (en silencio se detiene)
@@ -5707,11 +5710,17 @@ function drawStars(dt) {
   if (!starSky.list || starSky.key !== W + 'x' + H) starsInit();
   if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
   ambient();
-  const speed = 0.003 + Math.pow(energy, 1.3) * 0.035;   // con energía, el viaje acelera
+  // como Infinito: la parte de la canción marca la velocidad del viaje (pasea en la estrofa, vuela en el coro)
+  // y cada golpe da un empujón que se ve (sube al instante y se va en ~0,4 s)
+  if (pulse.on) starSky.kv = (starSky.kv || 0) + 0.004 + 0.01 * pulse.k;
+  starSky.kb = (starSky.kb || 0) + ((starSky.kv || 0) - (starSky.kb || 0)) * (1 - Math.pow(0.00002, dt));
+  starSky.kv = (starSky.kv || 0) * Math.pow(0.12, dt);
+  starSky.sp = (starSky.sp || 0) + ((0.002 + Math.pow(dynL, 1.6) * 0.016 * Math.min(1, energy * 5)) - (starSky.sp || 0)) * (1 - Math.pow(0.3, dt));
+  const speed = starSky.sp + starSky.kb;
   // Onda que recorre el cielo desde el centro en cada golpe, encendiendo las estrellas a su paso
   // Solo con golpes reales de la canción (nada de latido propio) y muy tenue
-  if (hits.bass > 0.25 && energy > 0.08) starSky.waves.push({ r: 0, k: 0.18 + hits.bass * 0.22 });
-  starSky.waves.forEach(w => { w.r += dt * 1.5; w.k *= Math.pow(0.3, dt); });
+  if (pulse.on) starSky.waves.push({ r: 0, k: 0.2 + pulse.k * 0.35 });
+  starSky.waves.forEach(w => { w.r += dt * 1.8; w.k *= Math.pow(0.25, dt); });
   starSky.waves = starSky.waves.filter(w => w.r < 1.3 && w.k > 0.03);
   // Constelaciones reales: de vez en cuando aparece una (con un golpe de medios o en un drop), sus
   // líneas se trazan una a una con cada golpe, se queda un rato y se desvanece
@@ -5735,13 +5744,13 @@ function drawStars(dt) {
     let wave = 0; const dc = Math.hypot(s_.x - 0.5, (s_.y - 0.5) * H / W);
     for (const w of starSky.waves) wave += w.k * Math.exp(-Math.pow((dc - w.r) * 14, 2));
     // Cada estrella brilla con su propia frecuencia: unas titilan con la voz, otras con los platillos
-    const b = Math.min(1.3, s_.base * tw * (0.55 + energy * 0.6) + lv * (0.7 + s_.z * 1.1) + near * 0.8 + wave);
+    const b = Math.min(1.3, musicGate * (0.5 + s_.z * 0.45) * tw + s_.base * tw * (0.5 + musicGate * 0.5 + energy * 0.5) + lv * (0.9 + s_.z * 1.2) * (0.6 + 0.4 * musicGate) + near * 0.8 + wave);   // con cualquier sonido el cielo está presente
     const col = s_.c < 0 ? [235, 238, 255] : RGB[s_.c];
     const r = DPR * (0.35 + s_.z * 0.95) * (1 + lv * 0.45 + near * 0.5);
     ctx.globalAlpha = Math.min(1, b);
     ctx.fillStyle = rgba(col, 1);
     const streak = speed * (0.2 + s_.z) * W * 0.06;   // a mucha velocidad, las estrellas se estiran
-    if (streak > r * 2) { ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = r * 1.4; ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + streak, y); ctx.stroke(); }
+    if (streak > r * 5) { ctx.strokeStyle = rgba(col, 1); ctx.lineWidth = Math.max(r * 1.7, DPR); ctx.lineCap = 'round'; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + streak, y); ctx.stroke(); }
     else { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
     if (b > 0.7) {   // las que brillan fuerte: halo pequeño y un destello fino en cruz
       const hr = r * (3 + b * 3);
@@ -6203,7 +6212,7 @@ function drawVinyl(dt) {
   // ¿Suena? Con canción conectada se sabe; si no, se mira el audio
   // Con Spotify se sabe si suena; con solo audio, se da por parado tras 3 s seguidos de silencio
   // (así las partes suaves de una canción no levantan el brazo)
-  vinyl.quiet = energy > 0.03 ? 0 : (vinyl.quiet || 0) + dt;
+  vinyl.quiet = audible ? 0 : (vinyl.quiet || 0) + dt;
   const playing = spConnected() && sp.item ? sp.playing : (!!analyser && vinyl.quiet < 1);   // si no suena nada, el disco se detiene
   const rps = tempo.conf > 0.3 && tempo.bpm ? Math.max(0.3, Math.min(0.9, tempo.bpm / 240)) : 0.555;
   const goal = playing ? rps : 0;
@@ -7417,7 +7426,7 @@ function drawCats(dt) {
   // caminan de seguido, todos al mismo paso (así nunca se enciman), al ritmo del tempo: una pisada por golpe.
   // Sin música casi se detienen; en lo suave pasean, en lo fuerte trotan
   const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5;
-  cats.go = (cats.go || 0) + ((energy > 0.05 ? 1 : 0) - (cats.go || 0)) * (1 - Math.pow(0.15, dt));   // con música caminan, sin música se paran
+  cats.go = (cats.go || 0) + ((audible ? 1 : 0) - (cats.go || 0)) * (1 - Math.pow(0.15, dt));   // con música caminan, sin música se paran
   const moving = 0.02 + cats.go * (per < 0.38 ? 0.5 : 1);   // un paso completo cada 4 golpes (si el tempo es muy rápido, cada 8)
   cats.list.forEach((c, i) => {
     c.ph += dt / (4 * per) * moving;
@@ -10549,7 +10558,7 @@ function render(now) {
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   // El reloj de las animaciones solo corre mientras suena música: las derivas lentas, los brillos que pasean y
   // los vaivenes se detienen en silencio (y arrancan suave cuando vuelve el sonido). Nada se mueve sin música.
-  musicGate += (Math.min(1, energy * 14) - musicGate) * (1 - Math.pow(0.05, dt));
+  musicGate += ((audible ? Math.min(1, 0.55 + energy * 10) : 0) - musicGate) * (1 - Math.pow(0.05, dt));
   time += dt * musicGate;
   if (!document.hidden && !recording) adapt(dt);
   keepAudioAlive(dt);
