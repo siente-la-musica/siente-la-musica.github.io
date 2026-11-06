@@ -689,7 +689,6 @@
         <button data-mode="paint">Pintura</button>
         <button data-mode="fire">Fuego</button>
         <button data-mode="crystal">Cristal</button>
-        <button data-mode="silk">Seda</button>
         <button data-mode="mountains">Montañas</button>
         <button data-mode="ink">Tinta</button>
         <button data-mode="fluid">Fluido</button>
@@ -1303,7 +1302,7 @@ function keepAudioAlive(dt) {
 addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); });
 
 // ================= Análisis =================
-let bass = 0, mid = 0, high = 0, energy = 0, time = 0, groove = 0;
+let bass = 0, mid = 0, high = 0, energy = 0, time = 0, groove = 0, musicGate = 0;
 const lowPrev = new Float32Array(12), fullPrev = new Float32Array(BANDS), kickHist = new Float32Array(32), kickE2 = new Float32Array(32);
 const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, cd: 0 }, high: { prev: 0, avg: 0.02, cd: 0 }, snare: { prev: 0, avg: 0.02, cd: 0 }, hat: { prev: 0, avg: 0.02, cd: 0 }, voice: { prev: 0, avg: 0.02, cd: 0 }, perc: { prev: 0, avg: 0.02, cd: 0 } };
 
@@ -4323,8 +4322,8 @@ const artistClean = new Map();
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'capsules', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
-  medium: { name: 'media',     modes: ['icons', 'columns', 'traces', 'loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
+  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'capsules', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  medium: { name: 'media',     modes: ['icons', 'columns', 'traces', 'loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
@@ -8003,6 +8002,10 @@ function drawSilk(dt) {
   // un video de seda en cámara lenta), y las tres cintas se separan un instante y vuelven a juntarse. Así el
   // movimiento nace en el golpe y se ve que va con la música; sin golpes la tela queda en calma.
   if (pulse.on) { silk.tgt += Math.PI / 9 * (0.6 + 0.5 * pulse.k) * (0.5 + 0.5 * dynL); silk.br = Math.min(1.4, silk.br + 0.7 + pulse.k * 0.5); }
+  // sin bombo (piano y voz, subidas, medio tiempo) la tela no se cuelga: la caja, la voz y la percusión también
+  // la empujan, más suave, y lo que suena sostenido la hace fluir despacio
+  else if (hits.snare || hits.voice || hits.perc > 0.3) silk.tgt += Math.PI / 22 * (0.5 + 0.5 * dynL);
+  silk.tgt += dt * (mid * 0.5 + voice * 0.4) * Math.min(1, energy * 4);
   silk.base += (silk.tgt - silk.base) * (1 - Math.pow(0.0015, dt));
   silk.br *= Math.pow(0.05, dt);
   if (hits.snare) silk.twV[1] += 1.2;
@@ -8541,6 +8544,7 @@ function drawLoop(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), S = 16, M = 200;
   // el vaivén va al compás: cada golpe lo lleva un octavo de vuelta (un vaivén completo cada 8 golpes) y se
   // desliza suave hasta allí; la cinta se retuerce un poco en cada golpe y fluye con la energía
+  if (!pulse.on && (hits.snare || hits.voice)) lazo.beatT = (lazo.beatT || 0) + Math.PI / 12;   // sin bombo, la caja y la voz también lo mecen
   if (pulse.on) { lazo.beatT = (lazo.beatT || 0) + Math.PI / 4; lazo.twK = (lazo.twK || 0) + 0.35 * pulse.k; lazo.breath = 1; }
   lazo.rot += ((lazo.beatT || 0) - lazo.rot) * (1 - Math.pow(0.004, dt)) + dt * 0.02 * energy;
   lazo.twK = (lazo.twK || 0) * Math.pow(0.05, dt); lazo.breath = (lazo.breath || 0) * Math.pow(0.02, dt);
@@ -9593,15 +9597,15 @@ function iconsSetup() {
         vec2 q = f * 2. - 1.;
         float sq = squircle(q), a = smoothstep(1., .985, sq);
         // la luz de dentro: cada tarjeta con su forma
-        int typ = int(mod(k * 7., 5.));
-        float L, grow = .35 + lv * 1.1 + uKick * .35;
+        int typ = int(mod(id.y * 2. + id.x, 5.));
+        float L, grow = .15 + lv * 1.5 + uKick * .1;
         if (typ == 0) L = exp(-pow((q.y + 1.15) / (.45 + grow * .7), 2.)) * exp(-q.x * q.x * 1.5);          // aurora desde abajo
         else if (typ == 1) L = exp(-dot(q, q) * (3.2 - grow * 1.6));                                        // foco
         else if (typ == 2) L = exp(-q.y * q.y * (9. - grow * 5.)) * (.7 + .3 * cos(q.x * 1.6));             // franja
         else if (typ == 3) L = exp(-pow(q.x + q.y * .8, 2.) * (6. - grow * 3.));                            // haz
         else L = exp(-pow(length(q) - .55, 2.) * (26. - grow * 12.));                                       // anillo
-        L = clamp(L * (.55 + lv * .9 + uKick * .3), 0., 1.4);
-        vec3 c1 = pal(k * .23 + uTime * .01), c2 = pal(k * .23 + .33);
+        L = clamp(L * (.12 + lv * 1.5 + uKick * .1), 0., 1.5);   // callada, casi apagada; sonando, plena
+        vec3 c1 = pal(id.x / uGrid.x * .9 + id.y * .08), c2 = pal(id.x / uGrid.x * .9 + .33);   // el color también ordenado: de un tono a otro a lo ancho
         vec3 inside = mix(uBg * .6, c2 * .35, .5);                          // vidrio hondo de la tarjeta
         inside = mix(inside, c1, smoothstep(.0, .7, L));
         inside = mix(inside, mix(c1, vec3(1.), .65), smoothstep(.8, 1.4, L) * .85);   // el corazón claro, sin quemarse
@@ -9619,10 +9623,22 @@ function drawIcons(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!icn.prog) iconsSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  for (let i = 0; i < 12; i++) { const k0 = Math.floor(((i * 7) % 12) / 12 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 5)); icn.lv[i] += (lv - icn.lv[i]) * (1 - Math.pow(lv > icn.lv[i] ? 0.0008 : 0.05, dt)); }
+  const gx = asp > 1 ? 4 : 3, gy = asp > 1 ? 3 : 4;
+  // Como Montañas: cada tarjeta sigue su banda con un resorte rápido (sube al instante, baja con un rebote
+  // corto), ordenadas como un ecualizador: graves a la izquierda, agudos a la derecha (y la fila de abajo un
+  // poco más grave que la de arriba). El bombo empuja de golpe la columna de los graves.
+  if (!icn.v) icn.v = new Float32Array(12);
+  const tg = new Float32Array(12);
+  for (let i = 0; i < gx * gy && i < 12; i++) {
+    const cx_ = i % gx, cy_ = Math.floor(i / gx), f = (cx_ + cy_ * 0.33 / gy) / gx, k0 = Math.floor(f * BANDS * 0.9);
+    tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / gx / 2))), 1.15);
+    if (pulse.on && cx_ === 0) icn.v[i] += 5 + pulse.k * 6;   // el bombo, en la columna de los graves
+    if (hits.snare && cx_ === Math.min(gx - 1, 2)) icn.v[i] += 3;
+  }
+  springTo(icn.lv, icn.v, tg, dt, 260, 0.55);
   if (pulse.on) icn.kick = Math.min(1.5, icn.kick + 0.6 + pulse.k * 0.5);
-  icn.kick *= Math.pow(0.04, dt);
-  const gx = asp > 1 ? 4 : 3, gy = asp > 1 ? 3 : 4, size = Math.min(asp * 0.8 / (gx + (gx - 1) * 0.16), 0.84 / (gy + (gy - 1) * 0.16));
+  icn.kick *= Math.pow(0.02, dt);
+  const size = Math.min(asp * 0.8 / (gx + (gx - 1) * 0.16), 0.84 / (gy + (gy - 1) * 0.16));
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const [cw, ch] = glCanvas(1), p = icn.prog;
@@ -10508,7 +10524,11 @@ function frame(now) {
   }
 }
 function render(now) {
-  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; time += dt;
+  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+  // El reloj de las animaciones solo corre mientras suena música: las derivas lentas, los brillos que pasean y
+  // los vaivenes se detienen en silencio (y arrancan suave cuando vuelve el sonido). Nada se mueve sin música.
+  musicGate += (Math.min(1, energy * 6) - musicGate) * (1 - Math.pow(0.05, dt));
+  time += dt * musicGate;
   if (!document.hidden && !recording) adapt(dt);
   keepAudioAlive(dt);
   analyse(dt);
