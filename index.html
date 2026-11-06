@@ -7427,7 +7427,9 @@ function drawCats(dt) {
   // Sin música casi se detienen; en lo suave pasean, en lo fuerte trotan
   const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5;
   cats.go = (cats.go || 0) + ((audible ? 1 : 0) - (cats.go || 0)) * (1 - Math.pow(0.15, dt));   // con música caminan, sin música se paran
-  const moving = 0.02 + cats.go * (per < 0.38 ? 0.5 : 1);   // un paso completo cada 4 golpes (si el tempo es muy rápido, cada 8)
+  // la parte de la canción marca el paso (como Infinito): en lo suave pasean, en el coro trotan (hasta el doble)
+  cats.pace = (cats.pace || 0.6) + ((0.55 + Math.pow(dynL, 1.5) * 1.1) - (cats.pace || 0.6)) * (1 - Math.pow(0.3, dt));
+  const moving = 0.02 + cats.go * (per < 0.38 ? 0.5 : 1) * cats.pace;
   cats.list.forEach((c, i) => {
     c.ph += dt / (4 * per) * moving;
     if (pulse.on) c.ph += ((Math.round(c.ph * 4) / 4) - c.ph) * 0.35;   // la pisada se acerca al golpe
