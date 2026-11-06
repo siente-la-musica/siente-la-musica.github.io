@@ -5626,7 +5626,7 @@ function drawMagnet(dt) {
   // En lo tranquilo flotan despacio; con la música fuerte se aceleran (así se siente la diferencia)
   // sin música casi se quedan quietas; en lo tranquilo flotan; con la música fuerte se aceleran
   mag.act = (mag.act || 0) + (Math.min(1, energy * 2.5) - (mag.act || 0)) * (1 - Math.pow(0.15, dt));
-  const drive = 0.06 + 0.94 * mag.act * (0.65 + 0.35 * Math.min(1, energy * 1.8)), P = Math.max(0, pulse.x);
+  const drive = 0.06 + 0.94 * mag.act * (0.4 + 0.6 * dynL), P = Math.max(0, pulse.x);   // la parte de la canción marca la velocidad
   mag.ph = (mag.ph || 0) + dt * (0.03 + energy * 1.6);
   // Imanes: tres puntos que orbitan; con más energía, órbitas más amplias y rápidas
   const att = [0, 1, 2].map(k => {
@@ -5638,7 +5638,7 @@ function drawMagnet(dt) {
   const px = usePtr ? mag.pointer.x * W : 0, py = usePtr ? mag.pointer.y * H : 0;
   const kick = pulse.on ? pulse.k : 0, burst = mag.release;
   mag.release = 0;
-  const s = MIN, maxV = s * (0.35 + energy * 1.5);
+  const s = MIN, maxV = s * (0.35 + energy * 1.2 + dynL * 0.6);
   // la voz: las partículas del imán del medio toman el color de la nota, giran más y respiran con cada sílaba
   const vo = Math.min(1, voice * 1.5), melC = melodyColor(), syl = hits.voice ? 0.25 + hits.voice * 0.2 : 0;
   const cols = RGB.map((c, k) => (k === 1 ? c.map((v, j) => v + (melC[j] - v) * vo * 0.7) : c)).map(c => night ? c : c.map(v => v * 0.8));
@@ -5654,7 +5654,7 @@ function drawMagnet(dt) {
     let ax = dx / d * f - dy / d * f * swirl, ay = dy / d * f + dx / d * f * swirl;
     // Cada golpe (o soltar el ratón): estallido hacia fuera de las que ya llegaron a su imán (las lejanas
     // siguen volviendo; así nunca se quedan dando vueltas por fuera)
-    if (burst || (kick && b === 0 && d < s * 0.22)) { const k = (burst ? 0.55 : kick * 0.6) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
+    if (burst || (kick && d < s * 0.26)) { const k = (burst ? 0.55 : kick * (b === 0 ? 0.75 : 0.45)) * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }   // cada golpe: estallan todas las que llegaron (las de los graves, más)
     else if (syl && b === 1 && d < s * 0.18) { const k = syl * s * 18 / (d / s + 0.35); ax -= dx / d * k; ay -= dy / d * k; }
     mag.vx[i] = (mag.vx[i] + ax * dt) * Math.pow(0.35 * (0.3 + 0.7 * mag.act), dt);
     mag.vy[i] = (mag.vy[i] + ay * dt) * Math.pow(0.35 * (0.3 + 0.7 * mag.act), dt);
