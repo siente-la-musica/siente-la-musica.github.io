@@ -9373,7 +9373,10 @@ function vitSetup() {
         float bot = smoothstep(.5 - px * 1.5, .5, -lc.y), right = smoothstep(.5 - px * 1.5, .5, lc.x);
         col += max(top, left) * (.08 + lv * .25 + uP * .05);
         col -= max(bot, right) * .06;
-        col *= .94 + lv * .2;   // cada columna se ilumina con su parte del sonido
+        // detrás del vidrio, la luz de cada columna sube hasta donde llega su sonido (un ecualizador esmerilado)
+        float fill = smoothstep(lv * .95 + .03, lv * .95 - .14, vUv.y);
+        col += mix(uSun, vec3(1.), .25) * fill * (.1 + .32 * clamp(lv, 0., 1.2));
+        col *= .86 + clamp(lv, 0., 1.2) * .22;
       }
       col += (h(gl_FragCoord.xy) - .5) * .035;
       o = vec4(col, 1.);
@@ -9383,12 +9386,17 @@ function drawVitral(dt) {
   if (!glInit()) { drawLight(dt); return; }
   if (!vit.prog) vitSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  const tR = 0.24 + Math.pow(bandX(0, 10), 1.3) * 0.14 + P * 0.06 + dynL * 0.04;
-  vit.R += (tR - vit.R) * (1 - Math.pow(tR > vit.R ? 0.002 : 0.1, dt));
+  // el sol: su tamaño lo dan los graves y la parte de la canción; cada golpe lo hincha con un empujón (resorte)
+  const tR = 0.22 + Math.pow(bandX(0, 10), 1.3) * 0.1 + dynL * 0.06;
+  if (pulse.on) vit.rv = (vit.rv || 0) + 0.5 + pulse.k * 0.9;
+  vit.rv = (vit.rv || 0) + ((tR - vit.R) * 180 - (vit.rv || 0) * 14) * dt; vit.R += vit.rv * dt;
   vit.y += ((0.46 + dynL * 0.08) - vit.y) * (1 - Math.pow(0.2, dt));
   if (pulse.on) vit.wob = Math.min(2, vit.wob + 0.8 * pulse.k + 0.4);
   vit.wob *= Math.pow(0.08, dt);
-  for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.9), lv = bandX(k0, Math.min(BANDS, k0 + 4)); vit.lv[i] += (lv - vit.lv[i]) * (1 - Math.pow(lv > vit.lv[i] ? 0.002 : 0.05, dt)); }
+  // cada columna de vidrio es una banda (graves a la izquierda): su luz sube hasta donde llega, con resortes
+  if (!vit.v) { vit.v = new Float32Array(12); vit.tg = new Float32Array(12); }
+  for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.92); vit.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 4)), 1.1); }
+  springTo(vit.lv, vit.v, vit.tg, dt, 240, 0.6);
   const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];   // el tono más cálido de la portada es el sol
   const sat = (c, s_, l) => { const [h_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, s_, l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
