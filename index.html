@@ -684,7 +684,6 @@
         <button data-mode="bust">Silueta</button>
         <button data-mode="cats">Gatos</button>
         <button data-mode="curtain">Cortina</button>
-        <button data-mode="orbs">Gotas</button>
         <button data-mode="eclipse">Eclipse</button>
         <button data-mode="harp">Arpa</button>
         <button data-mode="paint">Pintura</button>
@@ -708,22 +707,14 @@
         <button data-mode="vitral">Vitral</button>
         <button data-mode="lenses">Lentes</button>
         <button data-mode="disco">Disco</button>
-        <button data-mode="vidrios">Vidrios</button>
-        <button data-mode="iris">Iris</button>
-        <button data-mode="nudo">Nudo</button>
-        <button data-mode="corales">Corales</button>
-        <button data-mode="pixels">Píxeles</button>
-        <button data-mode="gallery">Galería</button>
         <button data-mode="globes">Globos</button>
         <button data-mode="icons">Íconos</button>
         <button data-mode="columns">Columnas</button>
         <button data-mode="traces">Trazos</button>
-        <button data-mode="fan">Abanico</button>
         <button data-mode="capsules">Cápsulas</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="comet">Cometa</button>
         <button data-mode="strobe">Estrobo</button>
-        <button data-mode="tiles">Cuadros</button>
         <button data-mode="tubes">Inflables</button>
         <button data-mode="vinyl">Vinilo</button>
         <button data-mode="cover">Portada</button>
@@ -4333,8 +4324,8 @@ const artistClean = new Map();
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
   calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'capsules', 'comet', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal', 'silk'] },
-  medium: { name: 'media',     modes: ['icons', 'columns', 'traces', 'fan', 'loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tiles', 'tubes', 'lava', 'dots', 'orbs', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
-  high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tiles', 'tubes', 'paint', 'fire'] },
+  medium: { name: 'media',     modes: ['icons', 'columns', 'traces', 'loop', 'comet', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal', 'silk'] },
+  high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
 const mood = { punch: 0.1, lvl: 0.3, hitRate: 1, bright: 0.3, score: 0.8, cur: 'medium', cand: null, candT: 0 };
 function moodTick(dt) {
@@ -7938,9 +7929,9 @@ function drawHarp(dt) {
 // Tres cintas anchas cruzan la pantalla y se doblan como seda en el aire: cada una escucha su parte
 // (graves, voces, agudos) y se ondula con ella; el bombo manda una ola que recorre la cinta, la caja la
 // retuerce, los platillos le sacan brillo y la voz la tiñe del color de la nota. En silencio, quietas.
-const silk = { prog: null, ph: [0, 0, 0], tw: [0, 0, 0], lv: new Float32Array(3), amp: new Float32Array(3), waves: [], U: new Float32Array(12), Wv: new Float32Array(16), spark: 0, twV: [0, 0, 0] };
+const silk = { tgt: 0, base: 0, br: 0, prog: null, ph: [0, 0, 0], tw: [0, 0, 0], lv: new Float32Array(3), amp: new Float32Array(3), waves: [], U: new Float32Array(12), Wv: new Float32Array(16), spark: 0, twV: [0, 0, 0] };
 function silkSetup() {
-  silk.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uSpark; uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1;
+  silk.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uVoice, uSpark; uniform vec3 uC0, uC1, uC2, uMel, uBg0, uBg1; uniform float uBr;
     uniform vec4 uR[3];    // fase, amplitud, giro, nivel
     uniform vec4 uW[4];    // olas: posición, fuerza, cinta, -
     ${GLSL_NOISE} ${GLSL_PAL} ${GLSL_COVER}
@@ -7949,7 +7940,7 @@ function silkSetup() {
       vec4 r = uR[k]; float fk = float(k);
       // tela al viento: olas largas que viajan a lo largo de la cinta, una cresta cada cuatro tiempos (r.x es el
       // reloj de la canción), todas en la misma dirección, como seda que alguien agita desde un lado
-      c = .5 + (fk - 1.) * .085 + r.y * (.14 * sin(x * .85 - r.x + fk * 1.1) + .045 * sin(x * 1.7 - r.x * 1.5 + fk * 2.3));
+      c = .5 + (fk - 1.) * .085 * (1. + uBr * .9) + r.y * (1. + uBr * .2) * (.14 * sin(x * .85 - r.x + fk * 1.1) + .045 * sin(x * 1.7 - r.x * 1.5 + fk * 2.3));
       // el bombo: un oleaje ancho que entra por un lado y recorre la cinta (sin quiebres)
       for (int i = 0; i < 4; i++) { vec4 wv = uW[i]; if (int(wv.z + .5) == k) c += wv.y * .075 * exp(-pow((x - wv.x) * 1.1, 2.)); }
       // el giro viaja con la ola: el pliegue se desliza por la tela en vez de temblar en su sitio
@@ -8004,14 +7995,17 @@ function drawSilk(dt) {
   for (let k = 0; k < 3; k++) {
     silk.lv[k] += (lv[k] - silk.lv[k]) * (1 - Math.pow(lv[k] > silk.lv[k] ? 0.0005 : 0.03, dt));
     silk.amp[k] += ((0.25 + silk.lv[k] * 1.5) * (0.15 + 0.85 * Math.min(1, energy * 2.5)) - silk.amp[k]) * (1 - Math.pow(0.05, dt));
-    silk.ph[k] = groove * Math.PI / 4 * (1 + k * 0.08);   // al tempo de la canción (una cresta cada ocho tiempos); en silencio, quietas
+    silk.ph[k] = silk.base * (1 + k * 0.12);   // la tela avanza a empujones, uno por golpe; en silencio, quieta
     silk.twV[k] += (-silk.tw[k] * 6 - silk.twV[k] * 2.2) * dt; silk.tw[k] += silk.twV[k] * dt;   // el giro de la caja vuelve con un vaivén
   }
   // el bombo: una ola que corre por la cinta de los graves; la caja retuerce la del medio; la percusión, la de arriba
-  if (pulse.on) silk.waves.push({ x: -0.6, k: 0, f: 0.5 + pulse.k, t: 0 });
-  if (hits.snare) silk.twV[1] += 1.6;
-  if (hits.perc > 0.3) silk.waves.push({ x: -0.6, k: 2, f: 0.4 + hits.perc * 0.5, t: 0 });
-  if (hits.voice) silk.waves.push({ x: -0.6, k: 1, f: 0.35 + hits.voice * 0.4, t: 0 });
+  // Cada golpe empuja la tela como una ráfaga de aire: avanza de un tirón y se desliza hasta quedarse (como en
+  // un video de seda en cámara lenta), y las tres cintas se separan un instante y vuelven a juntarse. Así el
+  // movimiento nace en el golpe y se ve que va con la música; sin golpes la tela queda en calma.
+  if (pulse.on) { silk.tgt += Math.PI / 9 * (0.6 + 0.5 * pulse.k) * (0.5 + 0.5 * dynL); silk.br = Math.min(1.4, silk.br + 0.7 + pulse.k * 0.5); }
+  silk.base += (silk.tgt - silk.base) * (1 - Math.pow(0.0015, dt));
+  silk.br *= Math.pow(0.05, dt);
+  if (hits.snare) silk.twV[1] += 1.2;
   silk.spark = Math.max(silk.spark * Math.pow(0.03, dt), hits.hat ? 1 : 0);
   const wsp = 2.6 / Math.max(0.3, tempo.period || 0.5);   // el oleaje cruza la pantalla en un par de tiempos
   silk.waves = silk.waves.filter(w => { w.t += dt; w.x += dt * wsp; return w.t < 2.2; }).slice(-4);
@@ -8025,7 +8019,7 @@ function drawSilk(dt) {
   const p = silk.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uSpark, silk.spark);
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uSpark, silk.spark); gl.uniform1f(p.u.uBr, silk.br);
   gl.uniform4fv(p.u['uR[0]'], silk.U); gl.uniform4fv(p.u['uW[0]'], silk.Wv);
   const sat = c => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.min(72, Math.max(55, s_)), night ? 68 : 60)).map(v => v / 255); };   // tonos suaves, no chillones
   gl.uniform3fv(p.u.uC0, sat(RGB[0])); gl.uniform3fv(p.u.uC1, sat(RGB[1])); gl.uniform3fv(p.u.uC2, sat(RGB[2]));
