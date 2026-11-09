@@ -8182,7 +8182,7 @@ function fireSetup() {
       vec3 bg = withCover(mix(uBg0, uBg1, uv.y));
       // la altura de la llama en esta x (lo que suena ahí), más alta con el bombo, la voz y el drop
       float vc = exp(-pow((uv.x - .5) / .14, 2.)) * uVoice * .35;
-      float hx = uHgt * (.5 + .5 * lvAt(uv.x) + vc) * (1. + .3 * uP + uFlare);
+      float hx = uHgt * (.34 + .95 * lvAt(uv.x) + vc) * (1. + .3 * uP + uFlare);
       // el fuego sube en lenguas: una turbulencia ancha decide qué tan alto llega cada tramo, otra más
       // estrecha separa las lenguas (que se afilan arriba: solo su centro llega a la punta) y una fina titila
       float y = uv.y / max(hx, .012), X = uv.x * asp;
@@ -8193,17 +8193,19 @@ function fireSetup() {
       float top = (.55 + .85 * smoothstep(.3, .72, big)) * (.42 + .95 * smoothstep(.38, .7, tong));
       float I = 1. - y / top;
       I += (n2 - .5) * .32 * smoothstep(.25, 1., y / top);             // bordes vivos que titilan
-      I = max(I, (.26 - y) * 3.2);                                      // la base de la fogata siempre llena (sin huecos), sin franja plana
+      I = max(I, min(.72, (.26 - y) * 3.2));                            // la base de la fogata siempre llena (sin huecos), sin franja blanca
       I = clamp(I, 0., 1.);
       I *= .84 + .16 * n2;                                              // zonas más y menos calientes
       float a = smoothstep(0., .16, I);
       vec3 col;
       if (uNight > .5) {
-        vec3 f = ramp(pow(I, 1.15) * (.95 + .2 * uP));   // el cuerpo de la llama en tonos medios; solo el corazón llega al blanco
+        vec3 f = ramp(pow(I, 1.2) * (.95 + .2 * uP));   // el cuerpo de la llama en tonos medios; solo el corazón llega al blanco
         f = mix(f, mix(uMel, vec3(1.), .25), smoothstep(.55, .95, I) * uVoice * .55);   // el corazón toma el color de la nota
         // la llama tapa lo que tiene detrás (no se suma encima): así conserva su color y no se quema a blanco
         f = f * (1.02 + uP * .22); f = f / (1. + max(max(f.r, max(f.g, f.b)) - .92, 0.) * 1.4);
-        col = bg * (1. - a * .88) + f * a;
+        float body = a * (.25 + .75 * smoothstep(.08, .55, I));   // las puntas son humo de color, translúcidas; el cuerpo, denso
+        bg *= mix(1., .3, smoothstep(hx * 1.9 + .12, 0., uv.y));   // la noche se cierra alrededor de la fogata: así las llamas resaltan sobre cualquier portada
+        col = bg * (1. - body * .9) + f * body * 1.08;
         // la luz del fuego en el aire, por encima de las llamas
         col += uK2 * exp(-max(uv.y - hx * .6, 0.) / (.18 + uHgt * .2)) * (.1 + uP * .1 + uFlare * .2) * (1. - a);
       } else {
@@ -8239,7 +8241,7 @@ function drawFire(dt) {
   const order = RGB.map((c, i) => RGB[(i + Math.round(fire.shift)) % n]);
   const [c1, c2, c3] = [order[0], order[1 % n], order[2 % n]].sort((a, b) => lum(a) - lum(b)).map(c => c.map(v => v / 255));
   const sat = (c, l) => { const [h, s_] = hexToHsl(rgbToHex(...c.map(v => v * 255))); return hexToRgb(hsl(h, Math.max(80, s_), l)).map(v => v / 255); };
-  const K = night ? [c1.map(v => v * 0.25), sat(c1, 42), sat(c2, 56), sat(c3, 78).map(v => v + (1 - v) * 0.35)] : [sat(c1, 80), sat(c1, 62), sat(c2, 56), sat(c3, 52)];
+  const K = night ? [c1.map(v => v * 0.4), sat(c1, 52), sat(c2, 60), sat(c3, 72).map(v => v + (1 - v) * 0.12)] : [sat(c1, 80), sat(c1, 62), sat(c2, 56), sat(c3, 52)];
   const [hh] = hexToHsl(rgbToHex(...c2.map(v => v * 255)));
   const bg0 = night ? hexToRgb(hsl(hh, 40, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 30, 90)).map(v => v / 255);
   const bg1 = night ? hexToRgb(hsl(hh + 20, 30, 3)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 20, 97)).map(v => v / 255);
@@ -8256,6 +8258,7 @@ function drawFire(dt) {
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.22 + P * 0.15);   // el resplandor del fuego
   // chispas: salen de donde la llama es más alta; el golpe suelta un puñado, la caja otro, los platillos brillitos
   const hFrac = H > W ? 0.38 : 0.5, E = fire.embers;
   const spawn = (n_, x0, spread, k) => { for (let i = 0; i < n_ && E.length < 260; i++) {
@@ -9244,17 +9247,20 @@ function capsSetup() {
         vec4 c = uCap[i], g = uG[i];
         vec2 d = p - c.xy; vec2 qd = vec2(abs(d.x), max(abs(d.y) - (c.w - c.z), 0.));
         float sd = length(qd) - c.z;                         // distancia a una cápsula (rectángulo de puntas redondas)
-        float a = smoothstep(.018, -.012, sd);                // borde suave, como fuera de foco
-        float sh = exp(-max(sd, 0.) * 40.) * (1. - a) * .12;  // sombra suave alrededor
+        float a = smoothstep(1.5 / uRes.y, -1.5 / uRes.y, sd);   // borde nítido y limpio
+        vec2 ds = d - vec2(.012, -.02); float sds = length(vec2(abs(ds.x), max(abs(ds.y) - (c.w - c.z), 0.))) - c.z;
+        float sh = exp(-max(sds, 0.) * 22.) * (1. - a) * .3;   // sombra que cae hacia abajo: la cápsula flota sobre la portada
         col *= 1. - sh * (uNight > .5 ? 1.6 : 1.);
         if (a <= 0.) continue;
         float ty = d.y / c.w;                                 // de -1 a 1 a lo largo
         vec3 k = ramp(ty * .35 + g.x + float(i) * .19);
         if (i == uN / 2) k = mix(k, uMel, uVoice * .45);
         float cx = d.x / c.z;                                 // de -1 a 1 a lo ancho: volumen de cilindro
-        k *= .62 + .22 * sqrt(max(0., 1. - cx * cx)) + g.y * .6 + uP * .25;
-        k += vec3(1.) * exp(-pow((cx + .45) * 3.2, 2.)) * .12;               // brillo vertical de vidrio
-        k = mix(k, vec3(1.), smoothstep(-.03, 0., sd) * .22);                // filo claro, sutil
+        float nzc = sqrt(max(0., 1. - cx * cx));
+        k *= .5 + .4 * nzc + g.y * .5 + uP * .2;                             // volumen de cilindro: canto hondo, centro lleno
+        k += vec3(1.) * exp(-pow((cx + .5) * 6.5, 2.)) * (.14 + g.y * .14);   // reflejo fino y largo del vidrio
+        k += vec3(1.) * exp(-pow((cx - .62) * 9., 2.)) * .05;
+        k = mix(k, mix(k, vec3(1.), .55), exp(sd * uRes.y / 2.5));           // filo de luz de un par de píxeles
         col = mix(col, k, a * (.88 + g.y * .12));
       }
       col += (h(gl_FragCoord.xy) - .5) * .04;
