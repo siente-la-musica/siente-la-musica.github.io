@@ -6829,7 +6829,7 @@ function lavaSetup() {
       vec3 col; float glow, ga;
       if (uNight > .5) {
         // de noche: luz propia; bordes hondos y saturados, centro caliente y luminoso
-        col = mix(cool * .75, mix(hot, vec3(1.), .28), t);
+        col = mix(cool * .7, mix(hot, vec3(1.), .1) * 1.08, t);   // centro caliente pero con color (antes se lavaba a blanco)
         col += mix(cool, iri, .4) * line * .35;
         col *= 1. + uP * .35;
         col = col / (1. + max(col.r, max(col.g, col.b)) * .22);
@@ -6841,7 +6841,7 @@ function lavaSetup() {
         glow = (pow(clamp(F / .5, 0., 1.), 1.6) * .6 + (1. - exp(-Fw * Fw * 1.2)) * .55) * (1. - a) * uGlow; ga = .62;
       }
       // grano de película, distinto en cada fotograma
-      col += (h(gl_FragCoord.xy) - .5) * .075;
+      col += (h(gl_FragCoord.xy) - .5) * .035;
       vec3 gc = mix(wide, cool, .5);
       o = vec4(col * a + gc * glow * ga, clamp(a + glow * ga, 0., 1.));
     }`);
@@ -6972,7 +6972,7 @@ function dotsSetup() {
         col = mix(col, iri, line * .12);
         glow = pow(clamp(F / .5, 0., 1.), 1.5) * (1. - a) * uGlow; ga = .6;
       }
-      col += (h(gl_FragCoord.xy) - .5) * .075;
+      col += (h(gl_FragCoord.xy) - .5) * .035;
       o = vec4(col * a + cool * glow * ga, clamp(a + glow * ga, 0., 1.));
     }`);
 }
