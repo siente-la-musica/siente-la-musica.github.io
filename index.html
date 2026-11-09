@@ -9740,59 +9740,72 @@ function drawIcons(dt) {
 }
 
 // ================= Escena: Columnas =================
-// Columnas pegadas dentro de un marco, como una fotografía analógica: cada una tiene su color arriba y abajo y
-// oscuridad en el medio; la luz entra desde los dos extremos según cuánto suena su parte, y con lo fuerte la
-// columna se llena entera. Grano de película, colores de la portada, el golpe enciende todo un instante.
-const colm = { prog: null, lv: new Float32Array(6), kick: 0, ph: 0 };
+// Tubos de vidrio con luz dentro, de pie sobre la portada, como una instalación de luz: cada tubo es una banda
+// del sonido (graves a la izquierda, agudos a la derecha) y su luz entra desde los dos extremos hasta donde
+// llega su volumen; con lo fuerte se llena entero. Siguen la música con resortes (como Montañas), el bombo
+// empuja los de los graves, y donde no hay luz el vidrio deja ver la portada, doblada como en un cilindro.
+const colm = { prog: null, lv: new Float32Array(10), v: new Float32Array(10), tg: new Float32Array(10), kick: 0 };
 function columnsSetup() {
-  colm.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uKick, uNight, uN; uniform vec3 uC[6]; uniform vec3 uC2[6]; uniform float uLv[6]; uniform vec4 uFrame; uniform float uPh;
+  colm.prog = glProgram(`uniform vec2 uRes; uniform float uKick, uNight, uN, uPitch, uHH; uniform vec3 uC[10]; uniform float uLv[10]; uniform vec3 uBg;
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 cov(vec2 uv) { return uCovK > 0. ? mix(uBg, texture(uCov, (uv - uCovR.xy) / uCovR.zw).rgb, uCovK) : uBg; }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = mix(vec3(.012), withCover(vec3(.012)), .38);
-      vec2 a = uFrame.xy, b = uFrame.zw;
-      if (p.x > a.x && p.x < b.x && p.y > a.y && p.y < b.y) {
-        vec2 f = (p - a) / (b - a); float ci = floor(f.x * uN); int i = int(ci);
-        float lv = uLv[i], y = abs(f.y - .5) * 2.;                     // 0 en el medio, 1 en los extremos
-        float reach = .18 + lv * .95 + uKick * .25;                  // hasta dónde llega la luz desde los extremos
-        float t = smoothstep(1. - reach - .1, 1. - reach + .6, y);
-        float sway = .5 + .5 * sin(uPh + ci * 1.7);
-        vec3 c = mix(uC[i], uC2[i], smoothstep(.65, 1., y) * .6 + sway * .2);
-        // el medio no es negro: es la misma columna en penumbra, con la portada asomando a través
-        vec3 deep = mix(withCover(c * .05), c * .16, .55) * (uNight > .5 ? 1. : 1.6);
-        vec3 k = mix(deep, c, t);
-        k = mix(k, mix(c, vec3(1.), .35), smoothstep(.9, 1., y) * t * .4);   // el borde de arriba y abajo, más claro
-        k *= .97 + .06 * h(vec2(ci, 1.));                             // cada columna con su propio tono
-        col = k;
+      vec3 bg = mix(uBg, cov(vUv), .6) * (1. - .45 * smoothstep(.25, 1., length(vUv - .5) * 1.3));
+      float x0 = asp * .5 - uN * uPitch * .5, r = uPitch * .37, ci = floor((p.x - x0) / uPitch);
+      vec3 col = bg, glow = vec3(0.); float aaIn = 0.; vec3 body = vec3(0.);
+      for (int k = -1; k <= 1; k++) {
+        float j = ci + float(k); if (j < 0. || j > uN - 1.) continue; int ji = int(j);
+        vec2 q = vec2(p.x - (x0 + (j + .5) * uPitch), p.y - .5);
+        vec2 e = vec2(q.x, sign(q.y) * max(abs(q.y) - (uHH - r), 0.));           // cápsula: tubo de puntas redondas
+        float d = length(e) - r, lv = clamp(uLv[ji], 0., 1.3), yy = abs(q.y) / uHH;
+        float reach = .05 + lv * 1.02 + uKick * .1;
+        float t = smoothstep(1. - reach - .1, 1. - reach + .32, yy) * smoothstep(0., .12, lv + .04);   // cuánta luz hay a esta altura
+        vec3 c = uC[ji];
+        glow += c * exp(-max(d, 0.) * 26.) * t * .3 * step(0., d);                // la luz que se escapa al aire
+        if (k == 0) {
+          aaIn = smoothstep(1.5 / uRes.y, -1.5 / uRes.y, d);
+          vec2 n2 = e / r; float nz = sqrt(max(0., 1. - dot(n2, n2)));
+          // vidrio apagado: la portada vista a través del cilindro (doblada), en penumbra y con un tinte suyo
+          vec3 glass = cov(vUv - vec2(n2.x * uPitch * .55 / asp, n2.y * .02)) * (uNight > .5 ? .34 : .6) + c * .045;
+          vec3 lit = mix(c, vec3(1.), .22 * t * nz * nz * nz) * (.46 + .58 * nz);  // encendido: corazón claro, canto hondo
+          body = mix(glass, lit, clamp(t * 1.15, 0., 1.) * .94);
+          body += vec3(1.) * exp(-pow((n2.x + .52) * 7., 2.)) * (.07 + .16 * t) * (.4 + nz);   // reflejo largo del vidrio
+          body += mix(c, vec3(1.), .4) * pow(1. - nz, 3.) * (.1 + .22 * t);       // filo
+          body *= .8 + .2 * nz;
+        }
       }
-      // grano de película, más notorio, y una viñeta suave
-      col += (h(gl_FragCoord.xy * .7) - .5) * .07;
-      col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
+      col = mix(col + glow, body, aaIn);
+      col += (h(gl_FragCoord.xy) - .5) * .03;
       o = vec4(col, 1.);
     }`);
 }
 function drawColumns(dt) {
   if (!glInit()) { drawBars(dt); return; }
   if (!colm.prog) columnsSetup();
-  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, n = asp > 1.2 ? 6 : 4;
-  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.9), lv = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.floor(BANDS / n))), 1.15); colm.lv[i] += (lv - colm.lv[i]) * (1 - Math.pow(lv > colm.lv[i] ? 0.0005 : 0.04, dt)); }
-  if (pulse.on) colm.kick = Math.min(1.2, colm.kick + 0.5 + pulse.k * 0.4);
-  colm.kick *= Math.pow(0.05, dt); colm.ph += dt * (0.1 + energy * 0.8);
-  // colores: los de la portada repartidos y con variaciones (como en la foto: magenta, cobre, verde, azul)
-  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), C = new Float32Array(18), C2 = new Float32Array(18);
-  for (let i = 0; i < 6; i++) { const [h_, s_] = hs[i % 3], dh = (i >= 3 ? 28 : 0); C.set(hexToRgb(hsl(h_ + dh, Math.max(60, s_), 46)).map(v => v / 255), i * 3); C2.set(hexToRgb(hsl(h_ + dh + 12, Math.max(55, s_), 64)).map(v => v / 255), i * 3); }
-  const fw = Math.min(asp * 0.86, (H > W ? 0.62 : 0.9) * 0.9 * asp), fh = H > W ? 0.6 : 0.78;
+  const night = state.theme === 'dark', gl = GLX.gl, asp = W / H, n = asp > 1.2 ? 9 : 5;
+  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.92); colm.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / n))), 0.85) * (0.55 + 0.6 * dynL); }
+  if (pulse.on) { colm.kick = Math.min(1.2, colm.kick + 0.5 + pulse.k * 0.4); colm.v[0] += 4 + pulse.k * 5; colm.v[1] += 2 + pulse.k * 3; }
+  if (hits.snare) colm.v[Math.floor(n * 0.6)] += 3;
+  colm.kick *= Math.pow(0.03, dt);
+  springTo(colm.lv, colm.v, colm.tg, dt, 240, 0.55);
+  // colores: el degradado de la portada repartido a lo ancho, de un tono al siguiente (sin saltos)
+  const C = new Float32Array(30);
+  for (let i = 0; i < n; i++) { const [h_, s_] = hexToHsl(rgbToHex(...mix(n > 1 ? i / (n - 1) : 0).map(Math.round))); C.set(hexToRgb(hsl(h_, Math.min(88, Math.max(68, s_)), night ? 58 : 54)).map(v => v / 255), i * 3); }
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
   const [cw, ch] = glCanvas(1), p = colm.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uKick, colm.kick * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uN, n); gl.uniform1f(p.u.uPh, colm.ph);
-  gl.uniform4f(p.u.uFrame, asp / 2 - fw / 2, 0.5 - fh / 2, asp / 2 + fw / 2, 0.5 + fh / 2);
-  gl.uniform3fv(p.u['uC[0]'], C); gl.uniform3fv(p.u['uC2[0]'], C2); gl.uniform1fv(p.u['uLv[0]'], colm.lv);
+  gl.uniform1f(p.u.uKick, colm.kick * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uN, n);
+  gl.uniform1f(p.u.uPitch, Math.min(asp * 0.88 / n, 0.17)); gl.uniform1f(p.u.uHH, asp > 1.2 ? 0.36 : 0.3);
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 28, 5)).map(v => v / 255) : hexToRgb(hsl(hh, 20, 86)).map(v => v / 255));
+  gl.uniform3fv(p.u['uC[0]'], C); gl.uniform1fv(p.u['uLv[0]'], colm.lv);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  bloom(GLX.c, night ? 0.16 : 0.06);
 }
 
 // ================= Escena: Trazos =================
