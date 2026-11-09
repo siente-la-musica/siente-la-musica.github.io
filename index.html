@@ -7209,7 +7209,10 @@ function bustSetup() {
       float low = smoothstep(.34, -.04, q.y), sg = uSig * (1. + 1.7 * low);
       float f = (.0012 + uFr * .0045) * (1. + low);
       vec3 a = cov(vec3(d - f, d, d + f), sg) * (1. - .55 * smoothstep(.16, -.06, q.y));
-      float core = cov(vec3(d + .028), sg * 1.8 + .015).x;   // hondura: más color hacia dentro (sin adelgazar el cuello)
+      // calor por dentro, como una cámara térmica: tres capas de color que fluyen despacio hacia arriba con la música
+      float flow = fbm(q * 3.2 + vec2(0., -uTime * .12)) - .5;
+      float core = cov(vec3(d + .028 + flow * .018), sg * 1.8 + .015).x;   // hondura: más color hacia dentro (sin adelgazar el cuello)
+      float core2 = cov(vec3(d + .085 + flow * .035), sg * 2.4 + .02).x;   // y el corazón, lo más caliente
       vec3 bg = withCover(mix(uBg1, uBg0, vUv.y));
       bg *= 1. - .1 * smoothstep(.45, 1.1, length(vUv - .5) * 1.6);   // viñeta suave
       // la luz de la voz: sube del pecho a la cabeza mientras se canta; cada sílaba la aviva
@@ -7218,10 +7221,13 @@ function bustSetup() {
       vec2 hp = (q - vec2(.0, .3)) / vec2(.16, .12); L += exp(-dot(hp, hp)) * uP * .55;   // con cada golpe, una luz que late en el pecho
       vec3 fig;
       if (uNight > .5) {
-        fig = mix(uCol * .72, mix(uCol2, vec3(1.), .12), core * .85) * (1. + uP * .25);   // dos tonos: borde de un color, dentro de otro
+        fig = mix(uCol * .6, uCol2 * .92, core * .9);                      // borde de un color, dentro de otro
+        fig = mix(fig, mix(uCol2, vec3(1., .94, .84), .5), core2 * (.55 + uP * .3));   // y el corazón caliente, que late con el golpe
+        fig *= 1. + uP * .18;
         fig += mix(uMel, vec3(1.), .15) * L * .7;
       } else {
         fig = mix(mix(uCol, vec3(1.), .12), uDeep, core * .9);
+        fig = mix(fig, uCol2, core2 * (.45 + uP * .25));
         fig = mix(fig, mix(uMel, vec3(1.), .55), clamp(L * .8, 0., .85));
         fig *= 1. + uP * .06;
       }
@@ -7273,7 +7279,9 @@ function drawBust(dt) {
   gl.uniform1f(p.u.uS, Math.min(1, asp / 0.75));
   gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.5 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3 + vx_ * 0.35));
   gl.uniform1f(p.u.uRise, bust.rise); gl.uniform1f(p.u.uSyl, bust.syl); gl.uniform1f(p.u.uFr, bust.fr); gl.uniform1f(p.u.uGr, bust.gr);
-  gl.uniform3fv(p.u.uCol, bust.col); gl.uniform3fv(p.u.uCol2, deep2); gl.uniform3fv(p.u.uDeep, deep); gl.uniform3fv(p.u.uMel, mel);
+  // de noche los tonos se llevan a un color pleno (borde hondo, interior vivo): con paletas pastel la figura se lavaba
+  const tone = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(v => Math.round(v * 255)))); return hexToRgb(hsl(h_, Math.max(78, s_), l)).map(v => v / 255); };
+  gl.uniform3fv(p.u.uCol, night ? tone(bust.col, 46) : bust.col); gl.uniform3fv(p.u.uCol2, night ? tone(deep2, 62) : deep2); gl.uniform3fv(p.u.uDeep, deep); gl.uniform3fv(p.u.uMel, mel);
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.uniform2fv(p.u['uPts[0]'], BUST_PTS); gl.uniform1i(p.u.uNP, BUST_PTS.length / 2);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
@@ -8212,8 +8220,8 @@ function fireSetup() {
         // de día, como la Luz: color luminoso y saturado encima del papel (sin blanquear el corazón)
         vec3 f = mix(uK1, uK2, smoothstep(.1, .55, I)); f = mix(f, uK3, smoothstep(.55, .95, I));
         f = mix(f, uMel, smoothstep(.55, .95, I) * uVoice * .5);
-        col = mix(bg, f, a * .95);
-        col *= 1. - .18 * smoothstep(.3, .9, I) * a;                    // velo de tinta: profundidad
+        col = mix(bg, f, a * (.22 + .73 * smoothstep(.06, .55, I)));   // puntas translúcidas, cuerpo denso (como de noche)
+        col *= 1. - .08 * smoothstep(.3, .9, I) * a;                    // velo de tinta: profundidad
         col = mix(col, mix(bg, uK2, .35), exp(-max(uv.y - hx * .6, 0.) / (.16 + uHgt * .2)) * (.12 + uP * .1) * (1. - a));
       }
       col += (h(gl_FragCoord.xy) - .5) * .03;
@@ -8241,7 +8249,7 @@ function drawFire(dt) {
   const order = RGB.map((c, i) => RGB[(i + Math.round(fire.shift)) % n]);
   const [c1, c2, c3] = [order[0], order[1 % n], order[2 % n]].sort((a, b) => lum(a) - lum(b)).map(c => c.map(v => v / 255));
   const sat = (c, l) => { const [h, s_] = hexToHsl(rgbToHex(...c.map(v => v * 255))); return hexToRgb(hsl(h, Math.max(80, s_), l)).map(v => v / 255); };
-  const K = night ? [c1.map(v => v * 0.4), sat(c1, 52), sat(c2, 60), sat(c3, 72).map(v => v + (1 - v) * 0.12)] : [sat(c1, 80), sat(c1, 62), sat(c2, 56), sat(c3, 52)];
+  const K = night ? [c1.map(v => v * 0.4), sat(c1, 52), sat(c2, 60), sat(c3, 72).map(v => v + (1 - v) * 0.12)] : [sat(c1, 80), sat(c1, 64), sat(c2, 60), sat(c3, 68)];
   const [hh] = hexToHsl(rgbToHex(...c2.map(v => v * 255)));
   const bg0 = night ? hexToRgb(hsl(hh, 40, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 30, 90)).map(v => v / 255);
   const bg1 = night ? hexToRgb(hsl(hh + 20, 30, 3)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 20, 97)).map(v => v / 255);
