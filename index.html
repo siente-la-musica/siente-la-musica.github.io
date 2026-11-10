@@ -10710,21 +10710,23 @@ function circSetup() {
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .5 : .35);
+      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .5 : .35); float covd = 0.;
       for (int i = 0; i < 20; i++) {
         if (i >= uN) break;
         vec4 c = uC[i]; vec2 d = (p - c.xy) / c.z; float r = length(d);
         float a = smoothstep(1. + 1.5 / (uRes.y * c.z), 1. - 1.5 / (uRes.y * c.z), r);
         if (a <= 0.) continue;
         // color plano con un degradado suave: más claro arriba, pleno abajo (como pintado con aerógrafo)
-        float top = smoothstep(-.9, 1., d.y);
-        vec3 k = mix(uK[i], mix(uK[i], vec3(1.), .5), top * top * (.55 + c.w * .4));
-        k *= .9 + .12 * c.w;
-        // donde se cruza con lo de abajo nace otro color: de día como tintas (se multiplican), de noche como luces (se suman)
-        vec3 over = uNight > .5 ? k * .82 + col * .55 : k * mix(vec3(1.), col, .62) * 1.12;
-        col = mix(col, over, a * (.9 + .1 * c.w));
+        // como pintado con aerógrafo: una luz suave que nace en lo alto del círculo y se funde hacia abajo, donde el color es pleno
+        vec2 ap = d - vec2(0., .78); float glowT = exp(-dot(ap, ap) * 1.15);
+        vec3 k = mix(uK[i] * (.86 + .14 * smoothstep(-1., .4, d.y)), mix(uK[i], vec3(1.), .5), glowT * (.5 + c.w * .35));
+        // donde se cruza con otro nace un tercer color, vivo (mezcla de tintas que no oscurece), con su propio degradado
+        vec3 mixd = sqrt(max(k * col, 0.)); mixd = mix(vec3(dot(mixd, vec3(.3, .59, .11))), mixd, 1.3) * 1.04;
+        mixd = mix(mixd, mix(mixd, vec3(1.), .4), glowT * .5);
+        vec3 over = covd > .5 ? mixd : k;
+        col = mix(col, over, a); covd = max(covd, a);
       }
-      col += (h(gl_FragCoord.xy) - .5) * .045;   // grano de papel
+      col += (h(gl_FragCoord.xy) - .5) * .06;   // grano de papel
       o = vec4(col, 1.);
     }`);
 }
@@ -10732,8 +10734,10 @@ function drawCircles(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!circ.prog) circSetup();
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
-  const cols = asp > 1.5 ? 4 : asp > 0.9 ? 3 : 2, rows = 5, n = cols * rows;
-  const R = Math.min(asp * 0.9 / cols / 2.06, 0.9 / (rows + 1)), stepY = R, x0 = asp / 2 - (cols - 1) * R * 1.03;
+  // círculos grandes que llenan el cuadro, encimados justo a la mitad (como el póster): dos columnas en vertical
+  const cols = asp > 1.5 ? 4 : asp > 0.9 ? 3 : 2;
+  const R = Math.min(asp * 0.95 / cols / 2.04, 0.96 / 6), rows = Math.max(4, Math.min(Math.floor(20 / cols), Math.round(0.96 / R) - 1)), n = cols * rows;
+  const stepY = R, x0 = asp / 2 - (cols - 1) * R * 1.02;
   for (let i = 0; i < n; i++) {
     const cx = i % cols, ry = Math.floor(i / cols);   // ry = 0 abajo
     const k0 = Math.floor(((ry + cx * 0.35) / (rows + 0.4)) * BANDS * 0.92);
@@ -10749,10 +10753,10 @@ function drawCircles(dt) {
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k].map(Math.round))));
   for (let i = 0; i < n; i++) {
     const cx = i % cols, ry = Math.floor(i / cols), lv = Math.max(0, Math.min(1.2, circ.lv[i]));
-    const [h_, s_] = hs[(ry + cx * 2) % 3], dh = ((ry * 37 + cx * 61) % 3 - 1) * 22;
-    circ.K.set(hexToRgb(hsl(h_ + dh, Math.min(96, Math.max(82, s_)), night ? 52 : 50)).map(v => v / 255), i * 3);
+    const [h_] = hs[(ry + cx * 2) % 3], dh = ((ry * 3 + cx * 7 + i) % 5 - 2) * 16;   // los tonos de la portada, abiertos en abanico: variedad viva como en el póster
+    circ.K.set(hexToRgb(hsl(h_ + dh, 88, night ? 50 : 47)).map(v => v / 255), i * 3);
     const y = 0.5 + (ry - (rows - 1) / 2) * stepY + circ.bump[i] * R * 0.8;
-    circ.C.set([x0 + cx * R * 2.06, y, R * (0.6 + lv * 0.6), lv], i * 4);
+    circ.C.set([x0 + cx * R * 2.04, y, R * (0.74 + Math.min(1, lv) * 0.26), lv], i * 4);   // nunca más grande que el paso: solo se cruzan de a dos, como en el póster
   }
   const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
   const [cw, ch] = glCanvas(1), p = circ.prog;
