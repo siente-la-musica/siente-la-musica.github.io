@@ -731,6 +731,7 @@
       <div class="seg" role="group" aria-label="Formato"><button data-fmt="v" aria-pressed="true">Vertical · TikTok</button><button data-fmt="h">Horizontal</button></div>
       <div class="seg" role="group" aria-label="Sonido"><button data-snd="1" aria-pressed="true">Con el sonido del PC</button><button data-snd="0">Sin sonido</button></div>
       <div class="seg" role="group" aria-label="Duración"><button data-dur="10">10 s</button><button data-dur="15" aria-pressed="true">15 s</button><button data-dur="30">30 s</button><button data-dur="60">60 s</button><button data-dur="0">Libre</button></div>
+      <div class="seg" role="group" aria-label="Fluidez"><button data-fps="30" aria-pressed="true">30 cuadros/s</button><button data-fps="60">60 cuadros/s · más fluido</button></div>
       <div class="rec-when" id="recWhen" hidden>
         <div class="row-set"><span>Empieza en</span><span class="rec-exact"><button type="button" id="recBack" aria-label="Medio segundo antes">−½</button><input id="recExact" inputmode="decimal" spellcheck="false" aria-label="Minuto exacto (m:ss.s)" placeholder="0:00.0"><button type="button" id="recFwd" aria-label="Medio segundo después">+½</button></span><span class="time" id="recWhenLbl" hidden>0:00</span></div>
         <input type="range" id="recStart" min="0" max="200" step="0.5" value="0" aria-label="Momento en que empieza el clip">
@@ -3749,6 +3750,7 @@ new ResizeObserver(() => document.documentElement.style.setProperty('--dock-h', 
 // ================= Grabar clips =================
 // Se graba el propio lienzo a 1080×1920 (o 1920×1080) con el sonido que entra a la página.
 // Como la letra y los datos normales son HTML, mientras se graba se dibujan en el lienzo.
+let recFps = 30, recTrack = null;
 let recSound = true, recFmt = 'v', recDur = 15, recorder = null, recChunks = [], recT0 = 0, recTimer = null, recMime = '';
 const recNote = document.getElementById('recNote'), btnRec = document.getElementById('btnRec');
 function recNotes() {
@@ -3812,6 +3814,7 @@ document.querySelectorAll('[data-snd]').forEach(b => b.onclick = () => { recSoun
 const markStyle = () => document.querySelectorAll('[data-lstyle]').forEach(x => x.setAttribute('aria-pressed', x.dataset.lstyle === state.lyricStyle));
 document.querySelectorAll('[data-lstyle]').forEach(b => b.onclick = () => { state.lyricStyle = b.dataset.lstyle; store.set('lyricStyle', state.lyricStyle); markStyle(); });
 markStyle();
+document.querySelectorAll('[data-fps]').forEach(b => b.onclick = () => { recFps = +b.dataset.fps; document.querySelectorAll('[data-fps]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 document.querySelectorAll('[data-dur]').forEach(b => b.onclick = () => { recDur = +b.dataset.dur; document.querySelectorAll('[data-dur]').forEach(x => x.setAttribute('aria-pressed', x === b)); });
 function freshCanvas() {   // un lienzo nuevo, sin imágenes de otros sitios, para poder grabarlo
   const c = document.createElement('canvas'); c.id = 'c';
@@ -3837,7 +3840,7 @@ function recAudioTrack() {
 async function pickVideoConfig(w, h) {
   for (const codec of ['avc1.640033', 'avc1.640032', 'avc1.4d0033', 'avc1.42e033'])
     for (const hardwareAcceleration of ['prefer-hardware', 'no-preference']) {
-      const c = { codec, width: w, height: h, framerate: 30, bitrate: 18e6, bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration, avc: { format: 'avc' } };
+      const c = { codec, width: w, height: h, framerate: recFps, bitrate: recFps > 30 ? 28e6 : 18e6, bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration, avc: { format: 'avc' } };
       try { if ((await VideoEncoder.isConfigSupported(c)).supported) return c; } catch (e) {}
     }
   return null;
@@ -3890,14 +3893,19 @@ function startRecording(prep) {
   recUiStart();
   if (prep) return startWebCodecs(prep);
   // --- Grabadora integrada del navegador ---
-  const stream = canvas.captureStream(30);
+  // Cada cuadro dibujado se entrega a la grabadora justo al terminar de dibujarlo (requestFrame), una sola vez.
+  // Antes la grabadora tomaba sus fotos por su cuenta, 30 veces por segundo sin coordinarse con el dibujo: unas
+  // salían repetidas y otras se perdían, y el clip se veía a tirones aunque el equipo fuera sobrado.
+  let stream = canvas.captureStream(0);
+  recTrack = stream.getVideoTracks()[0];
+  if (!recTrack || typeof recTrack.requestFrame !== 'function') { stream = canvas.captureStream(recFps); recTrack = null; }
   stream.getVideoTracks().forEach(t => { try { t.contentHint = 'detail'; } catch (e) {} });
   if (recSound) { const t = recAudioTrack(); if (t) stream.addTrack(t); }
   recMime = ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
     .find(t => MediaRecorder.isTypeSupported(t)) || '';
   // calidad variable: en los golpes de luz y los cambios bruscos (lo más difícil de comprimir) el codificador puede gastar
   // más en ese instante en vez de pixelar; en lo tranquilo gasta menos
-  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: 30e6, audioBitsPerSecond: 256e3, bitrateMode: 'variable', videoKeyFrameIntervalDuration: 2000 }); }
+  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: recFps > 30 ? 45e6 : 30e6, audioBitsPerSecond: 256e3, bitrateMode: 'variable', videoKeyFrameIntervalDuration: 2000 }); }
   catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
   recChunks = [];
   recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
@@ -3912,7 +3920,7 @@ function startRecording(prep) {
 function startWebCodecs({ vcfg, track, acfg }) {
   const muxer = new Mp4Muxer.Muxer({
     target: new Mp4Muxer.ArrayBufferTarget(), fastStart: 'in-memory', firstTimestampBehavior: 'cross-track-offset',
-    video: { codec: 'avc', width: recSize.w, height: recSize.h, frameRate: 30 },
+    video: { codec: 'avc', width: recSize.w, height: recSize.h, frameRate: recFps },
     audio: acfg ? { codec: acfg.mux, sampleRate: acfg.cfg.sampleRate, numberOfChannels: acfg.cfg.numberOfChannels } : undefined,
   });
   const fail = e => { console.error(e); if (rec) rec.error = e; };
@@ -3943,10 +3951,10 @@ function recFrame(now) {
   if (!rec || rec.stopping || rec.venc.state !== 'configured') return;
   const t = now - recT0;
   if (t < rec.next) return;
-  rec.next = Math.max(rec.next + 1000 / 30, t - 1000 / 30);
+  rec.next = Math.max(rec.next + 1000 / recFps, t - 1000 / recFps);
   if (rec.venc.encodeQueueSize > 8) { rec.dropped++; return; }   // si el equipo no da abasto, salta uno
-  const f = new VideoFrame(canvas, { timestamp: Math.round(t * 1000), duration: 33333 });
-  rec.venc.encode(f, { keyFrame: rec.n++ % 60 === 0 }); f.close();
+  const f = new VideoFrame(canvas, { timestamp: Math.round(t * 1000), duration: Math.round(1e6 / recFps) });
+  rec.venc.encode(f, { keyFrame: rec.n++ % (recFps * 2) === 0 }); f.close();
 }
 async function stopRecording() {
   clearInterval(recTimer);
@@ -3998,7 +4006,7 @@ function mp4WithDuration(b, ms) {
   return out;
 }
 function finishRecording(blob, ext, err) {
-  recording = false; recSize = null; document.body.classList.remove('recording');
+  recording = false; recSize = null; recTrack = null; document.body.classList.remove('recording');
   btnRec.innerHTML = '<span class="rec-dot"></span>Grabar';
   resize(); blobs.length = 0; lights.length = 0;
   if (!blob) { showSong(`<div class="meta"><div class="title">No se pudo guardar el clip</div><div class="note">${esc(err && err.message || 'Error al codificar')}. Prueba otra vez o cambia de navegador.</div></div>`); return; }
@@ -6768,8 +6776,9 @@ function glCoverBind(p, unit = 5) {
 let recGL = 1, recSlow = 0, recFast = 0;
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; return; }
-  if (ms > 26) { recSlow += dt; recFast = 0; } else if (ms < 14) { recFast += dt; recSlow = 0; }
-  if (recSlow > 1.2 && recGL > 0.7) { recGL = Math.max(0.7, recGL - 0.1); recSlow = 0; }
+  const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
+  if (ms > budget * 0.8) { recSlow += dt; recFast = 0; } else if (ms < budget * 0.42) { recFast += dt; recSlow = 0; }
+  if (recSlow > 0.7 && recGL > 0.55) { recGL = Math.max(0.55, recGL - 0.1); recSlow = 0; }
   else if (recFast > 4 && recGL < 1) { recGL = Math.min(1, recGL + 0.1); recFast = 0; }
 }
 function glCanvas(q) {
@@ -10625,10 +10634,17 @@ function frame(now) {
   requestAnimationFrame(frame);   // se programa primero: un fallo no puede parar la animación
   // tope de cuadros: en pantallas de 120-144 Hz se dibujaba hasta 144 veces por segundo (calienta el equipo sin
   // verse mejor). Ahora 60 como máximo, y al grabar 30, que es justo lo que lleva el clip
-  const cap = recording ? 30 : 60;
-  if (now - (frame.last || 0) < 1000 / cap - 3) return;
+  if (recording) {
+    // al grabar, un calendario fijo: cada cuadro cae en su instante (1/30 o 1/60 de segundo) sin acumular retraso
+    const step = 1000 / recFps;
+    if (now < (frame.next || 0) - 2) return;
+    frame.next = Math.max((frame.next || now) + step, now - step);
+  } else {
+    frame.next = 0;
+    if (now - (frame.last || 0) < 1000 / 60 - 3) return;
+  }
   frame.last = now;
-  try { render(now); frameErrors = 0; }
+  try { render(now); frameErrors = 0; if (recording && recTrack) recTrack.requestFrame(); }
   catch (e) {
     console.error(e);
     // Si una escena falla, se limpia su estado para que el siguiente fotograma arranque limpio
@@ -10654,7 +10670,6 @@ function render(now) {
   const tScene = performance.now();
   (scenes[state.mode] || drawBars)(dt);
   lyricFxTick(dt);
-  recPerf(performance.now() - tScene, dt);
   logoTick(dt);
   liquidTick(dt); lvFrame(); arFrame();
   if (transA > 0 && transC.width === W) {
@@ -10668,6 +10683,7 @@ function render(now) {
   if (!recording) { ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); }
   ctx.globalAlpha = 1;
   drawRecOverlay();
+  recPerf(performance.now() - tScene, dt);   // el tiempo de todo el cuadro (escena, letra, firma)
   recFrame(now);
   liveUI();
 }
