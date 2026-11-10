@@ -711,6 +711,7 @@
         <button data-mode="columns">Columnas</button>
         <button data-mode="tubos">Tubos</button>
         <button data-mode="circles">Círculos</button>
+        <button data-mode="fan">Abanico</button>
         <button data-mode="traces">Trazos</button>
         <button data-mode="capsules">Cápsulas</button>
         <button data-mode="loop">Lazo</button>
@@ -9961,65 +9962,81 @@ function drawTraces(dt) {
 }
 
 // ================= Escena: Abanico =================
-// Una pila de láminas largas y redondeadas con degradados iridiscentes; las del medio se abren en abanico hacia
-// un punto, como en el cartel. El abanico se abre con la energía y respira con los graves; cada golpe baja por la
-// pila como una ola; los colores corren a lo largo de cada lámina con la melodía.
-const fan = { prog: null, open: 0.3, wave: 9, waveK: 0, flow: 0 };
+// Como el póster de la referencia: una pila de láminas redondeadas, tornasoladas, que se retuerce. Unas se abren
+// en abanico desde la derecha (se juntan en un punto hondo y se separan al otro lado), las siguientes desde la
+// izquierda, y así la torsión recorre la pila. La música es esa torsión: en lo suave la pila queda casi recta y
+// en lo fuerte se abre en abanicos hondos; la torsión viaja por la pila al tempo y cada golpe la empuja; cada
+// lámina engorda y brilla con su banda, y el color fluye a lo largo con la voz. En silencio, quieta y recta.
+const fan = { prog: null, amp: 0, ph: 0, phV: 0, flow: 0, lv: new Float32Array(24), v: new Float32Array(24), tg: new Float32Array(24), Y: new Float32Array(48) };
 function fanSetup() {
-  fan.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uOpen, uWave, uWaveK, uFlow, uNight, uKick; uniform vec3 uC0, uC1, uC2, uBg; uniform float uLv[8];
+  fan.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uX0, uX1, uTh, uFlow, uP; uniform vec3 uC0, uC1, uC2, uBg; uniform vec2 uY[24]; uniform float uLv[24];
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    vec3 pal(float t) { t = fract(t) * 4.; return t < 1. ? mix(uC0, uC1, t) : t < 2. ? mix(uC1, uC2, t - 1.) : t < 3. ? mix(uC2, mix(uC0, vec3(1.), .5), t - 2.) : mix(mix(uC0, vec3(1.), .5), uC0, t - 3.); }
+    // tornasol: los colores de la portada con pasos claros entre ellos (como tinta de aerógrafo)
+    vec3 pal(float t) { t = fract(t) * 5.; float f = smoothstep(0., 1., fract(t)); int i = int(t);
+      vec3 w0 = mix(uC0, vec3(1.), .42), w1 = mix(uC1, uC2, .5) * .8;   // un paso claro y uno hondo entre los colores
+      vec3 a = i == 0 ? uC0 : i == 1 ? uC1 : i == 2 ? w0 : i == 3 ? uC2 : w1, b = i == 0 ? uC1 : i == 1 ? w0 : i == 2 ? uC2 : i == 3 ? w1 : uC0;
+      return mix(a, b, f); }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = mix(uBg, withCover(uBg), .5);
-      const int N = 26; float H = .76, x0 = asp * .5 - .32 * min(asp, 1.4), x1 = asp * .5 + .32 * min(asp, 1.4);
-      vec2 piv = vec2(x1 - .02, .5);
-      for (int i = 0; i < N; i++) {
-        float fi = float(i) / float(N - 1), yb = .5 + (fi - .5) * H;
-        // las del medio se abren hacia el punto de la derecha; las de los extremos casi no
-        float mid = sin(fi * 3.14159), an = (fi - .5) * (uOpen + uKick * .3) * mid * 1.1 + uWaveK * exp(-pow((fi - uWave) * 7., 2.)) * .04;   // el golpe lo abre de un tirón
-        vec2 d = p - vec2(piv.x, yb); float c = cos(an), s = sin(an); d = mat2(c, s, -s, c) * d;
-        float len = (x1 - x0), th = H / float(N) * 1.25 * (1. + uLv[i % 8] * .25);
-        vec2 q = vec2(d.x + len * .5, d.y);                       // centro de la lámina
-        vec2 qq = vec2(max(abs(q.x) - len * .5 + th * .5, 0.), q.y);
-        float sd = length(qq) - th * .5;
-        float a = smoothstep(.003, -.002, sd);
+      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .45 : .3);
+      float len = uX1 - uX0, px = 1.5 / uRes.y;
+      for (int i = 0; i < 24; i++) {
+        vec2 A = vec2(uX0, uY[i].x), B = vec2(uX1, uY[i].y), ab = B - A, ap = p - A;
+        float u = clamp(dot(ap, ab) / dot(ab, ab), 0., 1.), lv = clamp(uLv[i], 0., 1.2), th = uTh * (1. + lv * .22);
+        vec2 dv = ap - ab * u; float sd = length(dv) - th;
+        // la lámina de encima deja una sombra suave sobre las de atrás
+        col *= 1. - .3 * exp(-max(sd, 0.) / (th * .55)) * step(0., sd) * step(dv.y, 0.) * step(.001, u) * step(u, .999);
+        float a = smoothstep(px, -px, sd);
         if (a <= 0.) continue;
-        float u = (q.x / len + .5);                                // a lo largo de la lámina
-        vec3 k = pal(u * .9 + fi * .55 + uFlow);
-        float v = q.y / (th * .5);                                 // a lo ancho: volumen
-        k *= .7 + .4 * sqrt(max(0., 1. - v * v));
-        k = mix(k, vec3(1.), smoothstep(.2, 1., -v) * .18);        // brillo arriba
-        k *= .8 + uLv[i % 8] * .4 + uKick * .3;
-        float shadow = smoothstep(.0, .02, -sd);                   // la de delante proyecta una sombrita sobre la de atrás
-        col = mix(col * (1. - .25 * (1. - shadow)), k, a);
+        // qué tan apretadas van las láminas aquí: donde se juntan, el color se hunde hasta casi negro (el nudo del abanico)
+        float ya = mix(uY[i].x, uY[i].y, u), yb = i < 23 ? mix(uY[i + 1].x, uY[i + 1].y, u) : ya - uTh * 1.6, yc = i > 0 ? mix(uY[i - 1].x, uY[i - 1].y, u) : ya + uTh * 1.6;
+        float gap = min(abs(ya - yb), abs(yc - ya)) / (uTh * 1.6), tight = smoothstep(.55, .08, gap);
+        // color: bandas tornasol a lo largo, que se corren con la inclinación de cada lámina (así las bandas se curvan por la pila)
+        float slope = (uY[i].y - uY[i].x) / len;
+        vec3 k = pal(u * .95 + slope * 1.7 + float(i) * .012 + uFlow);
+        float v = dv.y / th;                                                    // a lo ancho: -1 abajo, 1 arriba
+        k *= .8 + .26 * smoothstep(-1., .8, v);                                 // volumen: arriba claro, abajo más hondo
+        k = mix(k, mix(k, vec3(1.), .5), exp(-pow((v - .72) * 4.5, 2.)) * (.3 + lv * .4));   // filo de luz arriba
+        k *= 1. + lv * .22 + uP * .1;
+        k = mix(k, k * vec3(.06, .04, .1), tight * .92);
+        k = mix(k, k * .82, smoothstep(.0, .08, u) * 0. + smoothstep(.93, 1., u) * .15 + smoothstep(.07, 0., u) * .15);   // las puntas redondas, un poco más hondas
+        col = mix(col, k, a);
       }
-      col += (h(gl_FragCoord.xy) - .5) * .03;
+      col += (h(gl_FragCoord.xy) - .5) * .05;   // grano de papel
       o = vec4(col, 1.);
     }`);
 }
 function drawFan(dt) {
-  if (!glInit()) { drawSilk(dt); return; }
+  if (!glInit()) { drawBars(dt); return; }
   if (!fan.prog) fanSetup();
-  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  // lo abierto sigue a la parte de la canción (suave en la estrofa, ancho en el coro); el golpe lo abre de un tirón
-  fan.lvS = (fan.lvS || 0) + ((energy * 0.9 + Math.pow(bandX(0, 10), 1.3) * 0.4) - (fan.lvS || 0)) * (1 - Math.pow(0.6, dt));
-  const tOpen = 0.08 + fan.lvS * (0.4 + 0.6 * dynL);
-  fan.open += (tOpen - fan.open) * (1 - Math.pow(0.3, dt));
-  if (pulse.on) { fan.wave = 0; fan.waveK = 0.6 + pulse.k * 0.7; fan.kick = Math.min(1.3, (fan.kick || 0) + 0.6 + pulse.k * 0.5); }
-  fan.kick = (fan.kick || 0) * Math.pow(0.006, dt);
-  fan.wave += dt * 2.6; fan.waveK *= Math.pow(0.15, dt); fan.flow += dt * (voice * 0.12 + energy * 0.04);
-  const lv8 = new Float32Array(8); for (let i = 0; i < 8; i++) { const k0 = Math.floor(i / 8 * BANDS * 0.9); lv8[i] = bandX(k0, Math.min(BANDS, k0 + 6)); }
-  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), l)).map(v => v / 255); };
-  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, N = 24;
+  // cuánto se retuerce: la parte de la canción (suave = casi recta, fuerte = abanicos hondos); el golpe la abre un instante
+  const tA = (0.014 + Math.pow(dynL, 1.1) * 0.082 * Math.min(1, energy * 5)) * (asp < 1 ? 0.8 : 1);
+  fan.amp += (tA - fan.amp) * (1 - Math.pow(0.25, dt));
+  // la torsión viaja por la pila al tempo, y cada golpe la empuja (sube rápido, se desliza hasta quedarse)
+  if (pulse.on) fan.phV += 1.6 + pulse.k * 2.2;
+  fan.phV *= Math.pow(0.03, dt);
+  fan.ph += dt * ((0.15 + dynL * 0.9) * musicGate + fan.phV);
+  fan.flow += dt * (voice * 0.1 + energy * 0.03) * musicGate;
+  const top = 0.92, bot = 0.08, sp = (top - bot) / (N - 1), amp = fan.amp + P * 0.012;
+  for (let i = 0; i < N; i++) {
+    const k0 = Math.floor(i / N * BANDS * 0.92); fan.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 4)), 0.9) * (0.4 + 0.7 * dynL);
+    const y = top - i * sp, d = amp * Math.sin(i / N * Math.PI * 2 * 1.35 + fan.ph) * (0.6 + 0.4 * Math.sin(i / N * Math.PI));   // los extremos de la pila, casi rectos
+    fan.Y.set([y + d, y - d], i * 2);
+  }
+  springTo(fan.lv, fan.v, fan.tg, dt, 220, 0.55);
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(88, s_), l)).map(v => v / 255); };
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
+  const wd = Math.min(asp * 0.8, 1.2);
   const [cw, ch] = glCanvas(1), p = fan.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uOpen, fan.open); gl.uniform1f(p.u.uKick, fan.kick); gl.uniform1f(p.u.uWave, fan.wave); gl.uniform1f(p.u.uWaveK, fan.waveK); gl.uniform1f(p.u.uFlow, fan.flow); gl.uniform1f(p.u.uNight, night ? 1 : 0);
-  gl.uniform3fv(p.u.uC0, sat(RGB[0], 56)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 58)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 56));
-  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 10, 9)).map(v => v / 255) : [0.8, 0.82, 0.83]);
-  gl.uniform1fv(p.u['uLv[0]'], lv8);
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uX0, asp / 2 - wd / 2); gl.uniform1f(p.u.uX1, asp / 2 + wd / 2); gl.uniform1f(p.u.uTh, sp * 0.62);
+  gl.uniform1f(p.u.uFlow, fan.flow); gl.uniform1f(p.u.uP, P);
+  gl.uniform3fv(p.u.uC0, sat(RGB[0], 54)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 52)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 56));
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 18, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 8, 82)).map(v => v / 255));
+  gl.uniform2fv(p.u['uY[0]'], fan.Y); gl.uniform1fv(p.u['uLv[0]'], fan.lv);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
