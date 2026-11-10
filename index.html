@@ -9292,7 +9292,8 @@ function capsSetup() {
         if (i == uN / 2) k = mix(k, uMel, uVoice * .45);
         float cx = d.x / c.z;                                 // de -1 a 1 a lo ancho: volumen de cilindro
         float nzc = sqrt(max(0., 1. - cx * cx));
-        k *= .5 + .4 * nzc + g.y * .5 + uP * .2;                             // volumen de cilindro: canto hondo, centro lleno
+        k = mix(vec3(dot(k, vec3(.3, .59, .11))), k, 1.28);                  // color más vivo, como en la referencia
+        k *= .55 + .42 * nzc + g.y * .5 + uP * .2;                           // volumen de cilindro: canto hondo, centro lleno
         k += vec3(1.) * exp(-pow((cx + .5) * 6.5, 2.)) * (.14 + g.y * .14);   // reflejo fino y largo del vidrio
         k += vec3(1.) * exp(-pow((cx - .62) * 9., 2.)) * .05;
         k = mix(k, mix(k, vec3(1.), .55), exp(sd * uRes.y / 2.5));           // filo de luz de un par de píxeles
@@ -9731,7 +9732,10 @@ function iconsSetup() {
         L = clamp(L * (.12 + lv * 1.5 + uKick * .1), 0., 1.5);   // callada, casi apagada; sonando, plena
         vec3 c1 = pal(id.x / uGrid.x * .9 + id.y * .08), c2 = pal(id.x / uGrid.x * .9 + .33);   // el color también ordenado: de un tono a otro a lo ancho
         vec3 inside = mix(uBg * .6, c2 * .35, .5);                          // vidrio hondo de la tarjeta
-        inside = mix(inside, c1, smoothstep(.0, .7, L));
+        // un segundo color entra desde la esquina contraria y llena la tarjeta al sonar (como los degradados de la referencia)
+        float L2 = exp(-dot(q - vec2(.9, -.9), q - vec2(.9, -.9)) * (1.1 - min(lv, 1.) * .6)) * clamp(lv * 1.3, 0., 1.);
+        inside = mix(inside, c2 * 1.05, L2 * .8);
+        inside = mix(inside, c1 * 1.08, smoothstep(.0, .6, L));
         inside = mix(inside, mix(c1, vec3(1.), .65), smoothstep(.8, 1.4, L) * .85);   // el corazón claro, sin quemarse
         vec2 dg = fract(gl_FragCoord.xy / 4.) - .5; inside *= 1. - .05 * smoothstep(.12, .2, length(dg));   // retícula de puntitos muy fina (pantalla)
         float rim = exp(-(1. - sq) * 70.) * a;                                  // canto fino de luz
