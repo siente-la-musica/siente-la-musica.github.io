@@ -8678,7 +8678,17 @@ function drawComet(dt) {
       bx.beginPath(); bx.moveTo(c.px, c.py); bx.lineTo(c.x, c.y); bx.stroke();
     }
     c.col = col;
+    // polvo de cometa: cada una va soltando chispas que se quedan atrás y se apagan (más cuanto más suena lo suyo)
+    if (c.px != null && comet.sparks.length < 320 && Math.random() < dt * (4 + c.lv * 70 + c.glow * 40)) {
+      const vx = (c.x - c.px) / Math.max(dt, 1e-3), vy = (c.y - c.py) / Math.max(dt, 1e-3), an = Math.random() * 6.28, sp0 = MIN * (0.01 + Math.random() * 0.035);
+      comet.sparks.push({ x: c.x, y: c.y, vx: vx * 0.25 + Math.cos(an) * sp0, vy: vy * 0.25 + Math.sin(an) * sp0, life: 0.6 + Math.random() * 0.5, c: i, dust: 1 });
+    }
   });
+  // un cielo hondo detrás: estrellas pequeñas que titilan con los agudos, y las órbitas apenas dibujadas
+  if (!comet.stars) comet.stars = Array.from({ length: 90 }, (_, i) => ({ x: Math.random(), y: Math.random(), r: 0.4 + Math.random() * 1.1, ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 2 }));
+  { const hi = bandX(40, BANDS); lctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; lctx.fillStyle = night ? '#dfe6ff' : '#3a3550';
+    for (const st of comet.stars) { lctx.globalAlpha = Math.min(0.9, (0.1 + hi * 0.7) * (0.45 + 0.55 * Math.sin(time * st.sp + st.ph)) * musicGate + 0.05); lctx.beginPath(); lctx.arc(st.x * W, st.y * H, st.r * DPR, 0, 6.283); lctx.fill(); }
+    lctx.globalAlpha = 1; }
   // la estela, suave y con brillo; luego las cabezas
   lctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   lctx.globalAlpha = night ? 0.9 : 0.85; lctx.drawImage(comet.buf, 0, 0); lctx.globalAlpha = 1;
@@ -8687,6 +8697,13 @@ function drawComet(dt) {
     lctx.globalAlpha = (night ? 0.9 : 0.6) * (0.35 + c.lv * 0.65 + c.glow * 0.3); lctx.drawImage(SPRITES[i], c.x - r, c.y - r, r * 2, r * 2); lctx.globalAlpha = 1;
     lctx.fillStyle = rgba(night ? c.col.map(v => v + (255 - v) * 0.75) : c.col.map(v => v * 0.55), 1);
     lctx.beginPath(); lctx.arc(c.x, c.y, MIN * (0.009 + c.lv * 0.01 + c.glow * 0.006), 0, Math.PI * 2); lctx.fill();
+    // destello fino en cruz sobre la cabeza: crece con su golpe
+    const fl = MIN * (0.03 + c.lv * 0.07 + c.glow * 0.12);
+    lctx.save(); lctx.globalAlpha = (night ? 0.75 : 0.5) * Math.min(1, 0.25 + c.lv * 0.6 + c.glow * 0.7); lctx.strokeStyle = rgba(night ? c.col.map(v => v + (255 - v) * 0.8) : c.col.map(v => v * 0.6), 1); lctx.lineCap = 'round';
+    for (const [ax, ay, k] of [[1, 0, 1], [0, 1, 0.7]]) { const g = lctx.createLinearGradient(c.x - ax * fl * k, c.y - ay * fl * k, c.x + ax * fl * k, c.y + ay * fl * k);
+      const cc = night ? c.col.map(v => v + (255 - v) * 0.8) : c.col.map(v => v * 0.6); g.addColorStop(0, rgba(cc, 0)); g.addColorStop(0.5, rgba(cc, 1)); g.addColorStop(1, rgba(cc, 0));
+      lctx.strokeStyle = g; lctx.lineWidth = Math.max(1, DPR * 0.9); lctx.beginPath(); lctx.moveTo(c.x - ax * fl * k, c.y - ay * fl * k); lctx.lineTo(c.x + ax * fl * k, c.y + ay * fl * k); lctx.stroke(); }
+    lctx.restore();
   });
   for (let i = comet.sparks.length - 1; i >= 0; i--) {
     const sp_ = comet.sparks[i]; sp_.life -= dt * 1.5; if (sp_.life <= 0) { comet.sparks.splice(i, 1); continue; }
@@ -8694,7 +8711,7 @@ function drawComet(dt) {
     lctx.fillStyle = rgba(night ? mix(sp_.c / 2).map(v => v + (255 - v) * 0.4) : mix(sp_.c / 2).map(v => v * 0.6), sp_.life);
     lctx.beginPath(); lctx.arc(sp_.x, sp_.y, MIN * 0.0035 * (0.5 + sp_.life), 0, Math.PI * 2); lctx.fill();
   }
-  if (comet.sparks.length > 200) comet.sparks.splice(0, comet.sparks.length - 200);
+  if (comet.sparks.length > 340) comet.sparks.splice(0, comet.sparks.length - 340);
   lctx.globalCompositeOperation = 'source-over';
   ambient();
   bloom(layer, (night ? 0.85 : 0.35) + P * 0.25);
@@ -10024,8 +10041,17 @@ function discoSetup() {
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), C = vec2(uC.x * asp, uC.y);
       // la sala: oscura, con la portada como un resplandor lejano y humo suave
-      vec3 col = mix(uBg, withCover(uBg), .45);                       // la portada, lejana en la penumbra
-      col *= .35 + .65 * smoothstep(1.1, .15, length(p - C) / max(asp, 1.));   // viñeta honda: la luz manda
+      vec3 col = mix(uBg, withCover(uBg), .34);                       // la portada, lejana en la penumbra
+      col *= .22 + .6 * smoothstep(1.1, .1, length(p - C) / max(asp, 1.));   // sala oscura: la luz manda
+      // rayos de luz que salen de la bola y barren la sala al girar (lo que hace que una bola de espejos sea una bola de espejos)
+      { vec2 dC = p - C; float rC = length(dC), ang = atan(dC.y, dC.x); vec3 rayC = vec3(0.);
+        for (int k = 0; k < 3; k++) { float fk = float(k), dirk = k == 1 ? -1. : 1.;
+          float a1 = ang * (9. + fk * 4.) + uRot * (2.2 + fk * .9) * dirk + fk * 1.3;
+          float sray = pow(max(0., sin(a1)), 22.) * (.35 + .65 * pow(.5 + .5 * sin(ang * (3. + fk) - uRot * 1.4 * dirk + fk * 2.1), 2.));
+          rayC += lc(k) * sray * (.035 + uB[k] * .42); }
+        col += rayC * exp(-max(rC - uR, 0.) * 1.9 / max(asp, 1.)) * smoothstep(uR * .95, uR * 1.5, rC) * (.75 + uSpark * .5); }
+      // su reflejo en el suelo
+      { vec2 fl = (p - vec2(C.x, .04)) / vec2(uR * 2.6, .07); col += (uL0 * uB[0] + uL1 * uB[1] + uL2 * uB[2]) * exp(-dot(fl, fl)) * .12; }
       // los haces de los focos: conos de luz suave en el humo, de cada foco hacia la bola
       for (int k = 0; k < 3; k++) {
         vec2 S = lpos(k, asp), d = C - S; float L = length(d); vec2 u = d / L;
@@ -10066,17 +10092,20 @@ function discoSetup() {
         vec3 R = reflect(vec3(0., 0., -1.), tn);
         // lo que refleja: la portada (los colores de la sala) y los focos
         vec3 env = uCovK > 0. ? texture(uCov, clamp(R.xy * .5 + .5, .01, .99)).rgb : uBg * 2.;
-        vec3 m = env * .55 + vec3(.06);
+        float tb = h(vec2(colI, row) * 1.7 + 9.);                         // cada espejito refleja un trozo distinto de la sala: unos oscuros, otros claros
+        vec3 m = env * (.16 + .62 * tb * tb) + vec3(.025);
+        m *= .82 + .36 * (cell.y - .5) + .2 * (.5 - cell.x);               // un degradado dentro de cada espejo: se ven planos y facetados
         float glint = 0.;
         for (int k = 0; k < 3; k++) { float sp = pow(max(0., dot(R, ldir(k))), 90.); m += mix(lc(k), vec3(1.), .35) * sp * (.4 + uB[k] * 4.); glint += sp * (.2 + uB[k]); }
         float tw = step(.93 - uSpark * .1, h(vec2(row, colI) + floor(uTime * 8.)));   // con los platillos, chispas sueltas
         m += vec3(1.) * tw * uSpark * .8;
-        m *= .55 + .45 * n.z;                                          // la esfera se oscurece hacia el borde
+        m *= .5 + .5 * n.z;                                            // la esfera se oscurece hacia el borde
+        for (int k = 0; k < 3; k++) m += lc(k) * pow(max(0., dot(n, ldir(k))), 2.5) * (.05 + uB[k] * .3) * (.4 + .6 * tb);   // cada foco baña su lado de la bola
         // las juntas entre espejitos
         float g = min(min(cell.x, 1. - cell.x) * nLon * cos(latC) / NL, min(cell.y, 1. - cell.y));
         m *= mix(.25, 1., smoothstep(.02, .08, g));
         m += vec3(1.) * pow(1. - n.z, 3.) * .06;                      // borde de luz
-        m = mix(m, m * .7, .3);   // espejo oscuro: los destellos resaltan
+
         float a = smoothstep(1., .985, sqrt(r2));
         col = mix(col, m, a);
         col += vec3(1.) * glint * .08 * a;
