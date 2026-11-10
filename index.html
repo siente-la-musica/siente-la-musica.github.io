@@ -10737,8 +10737,8 @@ function drawCircles(dt) {
   for (let i = 0; i < n; i++) {
     const cx = i % cols, ry = Math.floor(i / cols);   // ry = 0 abajo
     const k0 = Math.floor(((ry + cx * 0.35) / (rows + 0.4)) * BANDS * 0.92);
-    circ.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 5)), 0.9) * (0.45 + 0.6 * dynL);
-    if (pulse.on && ry === 0) { circ.v[i] += 3 + pulse.k * 4; circ.bv[i] += 0.25 + pulse.k * 0.3; }
+    circ.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 5)), 0.8) * (0.5 + 0.6 * dynL);
+    if (pulse.on && ry === 0) { circ.v[i] += 4 + pulse.k * 5; circ.bv[i] += 0.9 + pulse.k * 1.1; }
     // el rebote sube por la columna: cada círculo es empujado por el de abajo
     const below = ry > 0 ? circ.bump[i - cols] : 0;
     circ.bv[i] += ((below * 0.85 - circ.bump[i]) * 60 - circ.bv[i] * 7) * dt; circ.bump[i] += circ.bv[i] * dt;
@@ -10751,8 +10751,8 @@ function drawCircles(dt) {
     const cx = i % cols, ry = Math.floor(i / cols), lv = Math.max(0, Math.min(1.2, circ.lv[i]));
     const [h_, s_] = hs[(ry + cx * 2) % 3], dh = ((ry * 37 + cx * 61) % 3 - 1) * 22;
     circ.K.set(hexToRgb(hsl(h_ + dh, Math.min(96, Math.max(82, s_)), night ? 52 : 50)).map(v => v / 255), i * 3);
-    const y = 0.5 + (ry - (rows - 1) / 2) * stepY + circ.bump[i] * R * 0.35;
-    circ.C.set([x0 + cx * R * 2.06, y, R * (0.78 + lv * 0.3), lv], i * 4);
+    const y = 0.5 + (ry - (rows - 1) / 2) * stepY + circ.bump[i] * R * 0.8;
+    circ.C.set([x0 + cx * R * 2.06, y, R * (0.6 + lv * 0.6), lv], i * 4);
   }
   const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
   const [cw, ch] = glCanvas(1), p = circ.prog;
