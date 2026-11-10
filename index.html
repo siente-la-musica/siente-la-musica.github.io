@@ -709,6 +709,7 @@
         <button data-mode="globes">Globos</button>
         <button data-mode="icons">Íconos</button>
         <button data-mode="columns">Columnas</button>
+        <button data-mode="tubos">Tubos</button>
         <button data-mode="traces">Trazos</button>
         <button data-mode="capsules">Cápsulas</button>
         <button data-mode="loop">Lazo</button>
@@ -9594,14 +9595,11 @@ function glbSetup() {
       vec3 c = alb * ((uNight > .5 ? .07 : .2) + (uNight > .5 ? .3 : .5) * key * key);          // luz de estudio, tenue
       c += mix(alb, vec3(1.), .22) * uHot * 3. * wrap * att * sh;                                               // la lámpara
       c += mix(alb, uHot, .6) * .5 * att * pow(clamp(-ndl, 0., 1.), 1.5);                     // el látex deja pasar la luz
-      vec3 V = vec3(0., 0., 1.);
-      c += mix(uHot, vec3(1.), .55) * pow(max(dot(n, normalize(l + V)), 0.), 70.) * att * sh * 1.6;   // brillo de la lámpara
-      c += vec3(1.) * pow(max(dot(n, normalize(K + V)), 0.), 110.) * (uNight > .5 ? .16 : .3);       // brillo de ventana
       c *= ao;
       float fr = pow(1. - n.z, 3.2);                                                         // el canto refleja la portada
       vec3 refl = uCovK > 0. ? texture(uCov, (uv + n.xy * .22 - uCovR.xy) / uCovR.zw).rgb : uBg * 2.;
-      c = mix(c, refl * (uNight > .5 ? .8 : 1.05) + .02, fr * .5);
-      return mix(c, bg, smoothstep(.75, -.25, s.w) * .32);                                    // las del fondo se hunden en el aire
+      c = mix(c, refl * (uNight > .5 ? .8 : 1.05) + .02, fr * .22);   // mate: apenas un eco de la portada en el canto
+      return mix(c, bg, smoothstep(1.2, -.3, s.w) * .3);                                    // las del fondo se hunden en el aire
     }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
@@ -9628,8 +9626,8 @@ function glbSetup() {
 function glbLayout(asp) {
   const rnd = (i, k) => Math.abs((Math.sin(i * 12.9898 + k * 78.233) * 43758.5453) % 1), k = Math.min(1, asp * 1.1), n = 15;
   const L = Array.from({ length: n }, (_, i) => i === 0
-    ? { x: asp * 0.5, y: 0.52, z: 0.55, r: 0.115 * k, fix: true }
-    : { x: asp * (0.04 + 0.92 * rnd(i, 1)), y: 0.04 + 0.92 * rnd(i, 2), z: rnd(i, 4) * 1.0, r: (0.085 + rnd(i, 3) * 0.125) * k });
+    ? { x: asp * 0.5, y: 0.5, z: 1.0, r: 0.125 * k, fix: true }
+    : { x: asp * (0.04 + 0.92 * rnd(i, 1)), y: 0.04 + 0.92 * rnd(i, 2), z: rnd(i, 4) * 1.9, r: (0.12 + rnd(i, 3) * 0.15) * k });   // grandes y repartidas en profundidad: en pantalla se enciman, como en la referencia
   for (let it = 0; it < 80; it++) for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
     const a = L[i], b = L[j], dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z, d = Math.hypot(dx, dy, dz) || 1e-3, need = (a.r + b.r) * 1.12;
     if (d >= need) continue;
@@ -9765,13 +9763,74 @@ function drawIcons(dt) {
 }
 
 // ================= Escena: Columnas =================
+// Columnas pegadas dentro de un marco, como una fotografía analógica: cada una tiene su color arriba y abajo y
+// oscuridad en el medio; la luz entra desde los dos extremos según cuánto suena su parte, y con lo fuerte la
+// columna se llena entera. Grano de película, colores de la portada, el golpe enciende todo un instante.
+const colm = { prog: null, lv: new Float32Array(6), kick: 0, ph: 0 };
+function columnsSetup() {
+  colm.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uKick, uNight, uN; uniform vec3 uC[6]; uniform vec3 uC2[6]; uniform float uLv[6]; uniform vec4 uFrame; uniform float uPh;
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = mix(vec3(.012), withCover(vec3(.012)), .38);
+      vec2 a = uFrame.xy, b = uFrame.zw;
+      if (p.x > a.x && p.x < b.x && p.y > a.y && p.y < b.y) {
+        vec2 f = (p - a) / (b - a); float ci = floor(f.x * uN); int i = int(ci);
+        float lv = uLv[i], y = abs(f.y - .5) * 2.;                     // 0 en el medio, 1 en los extremos
+        float reach = .18 + lv * .95 + uKick * .25;                  // hasta dónde llega la luz desde los extremos
+        float t = smoothstep(1. - reach - .25, 1. - reach + .75, y);   // la luz se funde con la penumbra en un degradado largo, como en la foto
+        float sway = .5 + .5 * sin(uPh + ci * 1.7);
+        vec3 c = mix(uC[i], uC2[i], smoothstep(.35, 1., y) * .75 + sway * .15);
+        // el medio no es negro: es la misma columna en penumbra, con la portada asomando a través
+        vec3 deep = mix(withCover(c * .05), c * .16, .55) * (uNight > .5 ? 1. : 1.6);
+        vec3 k = mix(deep, c, t);
+        k = mix(k, mix(c, vec3(1.), .35), smoothstep(.9, 1., y) * t * .4);   // el borde de arriba y abajo, más claro
+        k *= .97 + .06 * h(vec2(ci, 1.));                             // cada columna con su propio tono
+        float fx = fract(f.x * uN); k *= 1. - .22 * (smoothstep(.06, 0., fx) + smoothstep(.94, 1., fx));   // una sombra fina separa las franjas
+        col = k;
+      }
+      // grano de película, más notorio, y una viñeta suave
+      col += (h(gl_FragCoord.xy * .7) - .5) * .07;
+      col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawColumns(dt) {
+  if (!glInit()) { drawBars(dt); return; }
+  if (!colm.prog) columnsSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, n = asp > 1.2 ? 6 : 4;
+  // cada franja sigue su banda con un resorte (como Montañas) y la parte de la canción marca cuánto se llena
+  if (!colm.v) { colm.v = new Float32Array(6); colm.tg = new Float32Array(6); }
+  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.9); colm.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.floor(BANDS / n))), 0.95) * (0.5 + 0.6 * dynL); }
+  if (pulse.on) colm.v[0] += 3 + pulse.k * 4;
+  springTo(colm.lv, colm.v, colm.tg, dt, 220, 0.6);
+  if (pulse.on) colm.kick = Math.min(1.2, colm.kick + 0.5 + pulse.k * 0.4);
+  colm.kick *= Math.pow(0.05, dt); colm.ph += dt * (0.1 + energy * 0.8);
+  // colores: los de la portada repartidos y con variaciones (como en la foto: magenta, cobre, verde, azul)
+  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), C = new Float32Array(18), C2 = new Float32Array(18);
+  for (let i = 0; i < 6; i++) { const [h_, s_] = hs[i % 3], dh = (i >= 3 ? 28 : 0); C.set(hexToRgb(hsl(h_ + dh, Math.min(62, Math.max(42, s_ * 0.75)), 42)).map(v => v / 255), i * 3); C2.set(hexToRgb(hsl(h_ + dh + 10, Math.min(60, Math.max(40, s_ * 0.75)), 60)).map(v => v / 255), i * 3); }
+  const fw = Math.min(asp * 0.86, (H > W ? 0.62 : 0.9) * 0.9 * asp), fh = H > W ? 0.6 : 0.78;
+  const [cw, ch] = glCanvas(1), p = colm.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uKick, colm.kick * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uN, n); gl.uniform1f(p.u.uPh, colm.ph);
+  gl.uniform4f(p.u.uFrame, asp / 2 - fw / 2, 0.5 - fh / 2, asp / 2 + fw / 2, 0.5 + fh / 2);
+  gl.uniform3fv(p.u['uC[0]'], C); gl.uniform3fv(p.u['uC2[0]'], C2); gl.uniform1fv(p.u['uLv[0]'], colm.lv);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+// ================= Escena: Tubos =================
 // Tubos de vidrio con luz dentro, de pie sobre la portada, como una instalación de luz: cada tubo es una banda
 // del sonido (graves a la izquierda, agudos a la derecha) y su luz entra desde los dos extremos hasta donde
 // llega su volumen; con lo fuerte se llena entero. Siguen la música con resortes (como Montañas), el bombo
 // empuja los de los graves, y donde no hay luz el vidrio deja ver la portada, doblada como en un cilindro.
-const colm = { prog: null, lv: new Float32Array(10), v: new Float32Array(10), tg: new Float32Array(10), kick: 0 };
-function columnsSetup() {
-  colm.prog = glProgram(`uniform vec2 uRes; uniform float uKick, uNight, uN, uPitch, uHH; uniform vec3 uC[10]; uniform float uLv[10]; uniform vec3 uBg;
+const tubo = { prog: null, lv: new Float32Array(10), v: new Float32Array(10), tg: new Float32Array(10), kick: 0 };
+function tubosSetup() {
+  tubo.prog = glProgram(`uniform vec2 uRes; uniform float uKick, uNight, uN, uPitch, uHH; uniform vec3 uC[10]; uniform float uLv[10]; uniform vec3 uBg;
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 cov(vec2 uv) { return uCovK > 0. ? mix(uBg, texture(uCov, (uv - uCovR.xy) / uCovR.zw).rgb, uCovK) : uBg; }
@@ -9806,26 +9865,26 @@ function columnsSetup() {
       o = vec4(col, 1.);
     }`);
 }
-function drawColumns(dt) {
+function drawTubos(dt) {
   if (!glInit()) { drawBars(dt); return; }
-  if (!colm.prog) columnsSetup();
+  if (!tubo.prog) tubosSetup();
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H, n = asp > 1.2 ? 9 : 5;
-  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.92); colm.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / n))), 0.85) * (0.55 + 0.6 * dynL); }
-  if (pulse.on) { colm.kick = Math.min(1.2, colm.kick + 0.5 + pulse.k * 0.4); colm.v[0] += 4 + pulse.k * 5; colm.v[1] += 2 + pulse.k * 3; }
-  if (hits.snare) colm.v[Math.floor(n * 0.6)] += 3;
-  colm.kick *= Math.pow(0.03, dt);
-  springTo(colm.lv, colm.v, colm.tg, dt, 240, 0.55);
+  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.92); tubo.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / n))), 0.85) * (0.55 + 0.6 * dynL); }
+  if (pulse.on) { tubo.kick = Math.min(1.2, tubo.kick + 0.5 + pulse.k * 0.4); tubo.v[0] += 4 + pulse.k * 5; tubo.v[1] += 2 + pulse.k * 3; }
+  if (hits.snare) tubo.v[Math.floor(n * 0.6)] += 3;
+  tubo.kick *= Math.pow(0.03, dt);
+  springTo(tubo.lv, tubo.v, tubo.tg, dt, 240, 0.55);
   // colores: el degradado de la portada repartido a lo ancho, de un tono al siguiente (sin saltos)
   const C = new Float32Array(30);
   for (let i = 0; i < n; i++) { const [h_, s_] = hexToHsl(rgbToHex(...mix(n > 1 ? i / (n - 1) : 0).map(Math.round))); C.set(hexToRgb(hsl(h_, Math.min(88, Math.max(68, s_)), night ? 58 : 54)).map(v => v / 255), i * 3); }
   const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
-  const [cw, ch] = glCanvas(1), p = colm.prog;
+  const [cw, ch] = glCanvas(1), p = tubo.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uKick, colm.kick * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uN, n);
+  gl.uniform1f(p.u.uKick, tubo.kick * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uN, n);
   gl.uniform1f(p.u.uPitch, Math.min(asp * 0.88 / n, 0.17)); gl.uniform1f(p.u.uHH, asp > 1.2 ? 0.36 : 0.3);
   gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 28, 5)).map(v => v / 255) : hexToRgb(hsl(hh, 20, 86)).map(v => v / 255));
-  gl.uniform3fv(p.u['uC[0]'], C); gl.uniform1fv(p.u['uLv[0]'], colm.lv);
+  gl.uniform3fv(p.u['uC[0]'], C); gl.uniform1fv(p.u['uLv[0]'], tubo.lv);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -10605,7 +10664,7 @@ function drawGallery(dt) {
   }
 }
 
-const scenes = { gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
