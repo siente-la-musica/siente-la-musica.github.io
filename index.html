@@ -10699,32 +10699,46 @@ function drawGallery(dt) {
 }
 
 // ================= Escena: Círculos =================
-// Como el póster de la referencia: columnas de círculos grandes de color plano, encimados a medias, sobre papel;
-// donde dos se cruzan nace un tercer color. Cada círculo es una banda del sonido (graves abajo, agudos arriba) y
-// crece con ella siguiendo un resorte, así las formas de los cruces cambian con la música; el bombo empuja los de
-// abajo y manda un rebote que sube por la columna; la voz aclara los del medio. En silencio, pequeños y quietos.
-const circ = { prog: null, lv: new Float32Array(20), v: new Float32Array(20), tg: new Float32Array(20), C: new Float32Array(80), K: new Float32Array(60), bump: new Float32Array(20), bv: new Float32Array(20) };
+// Como el póster de la referencia: dos hileras de círculos enormes, encimados a la mitad, que llenan el cuadro y
+// se salen por los bordes. Cada círculo está pintado con aerógrafo (una luz suave en lo alto) y cada cruce entre
+// dos círculos es una forma propia, de otro color, con un cono de luz que nace en su punta y se abre.
+// La música vive en esos cruces: cada uno es una banda del sonido y su cono se enciende y se ensancha con ella
+// (con resortes); el bombo aprieta la hilera un instante (los cruces crecen) y el rebote la recorre. En silencio
+// los conos se apagan y queda el póster quieto.
+const circ = { prog: null, lv: new Float32Array(20), v: new Float32Array(20), tg: new Float32Array(20), O: new Float32Array(20), K: new Float32Array(60), K2: new Float32Array(60), K3: new Float32Array(60), bump: new Float32Array(20), bv: new Float32Array(20), sq: 0, sqV: 0 };
 function circSetup() {
-  circ.prog = glProgram(`uniform vec2 uRes; uniform float uNight; uniform int uN; uniform vec3 uBg; uniform vec4 uC[20]; uniform vec3 uK[20];
+  circ.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uR, uLand, uMid; uniform int uN; uniform vec3 uBg; uniform float uO[20], uLv[20]; uniform vec3 uK[20], uK2[20], uK3[20];
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .5 : .35); float covd = 0.;
-      for (int i = 0; i < 20; i++) {
-        if (i >= uN) break;
-        vec4 c = uC[i]; vec2 d = (p - c.xy) / c.z; float r = length(d);
-        float a = smoothstep(1. + 1.5 / (uRes.y * c.z), 1. - 1.5 / (uRes.y * c.z), r);
+      // s: a lo largo de la hilera (de arriba abajo en vertical, de izquierda a derecha en horizontal); b: a lo ancho
+      float s = uLand > .5 ? p.x : 1. - p.y, bb = uLand > .5 ? p.y : p.x;
+      int lane = bb > uMid ? 1 : 0; float lc = uMid + (lane == 1 ? 1. : -1.) * uR * 1.02, b = bb - lc;
+      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .45 : .3);
+      float px = 1.5 / uRes.y; int j0 = -1, j1 = -1; float a0 = 0., a1 = 0.;
+      for (int j = 0; j < 10; j++) {
+        if (j >= uN) break; int id = lane * 10 + j;
+        float d = length(vec2(s - uO[id], b)) - uR, a = smoothstep(px, -px, d);
         if (a <= 0.) continue;
-        // color plano con un degradado suave: más claro arriba, pleno abajo (como pintado con aerógrafo)
-        // como pintado con aerógrafo: una luz suave que nace en lo alto del círculo y se funde hacia abajo, donde el color es pleno
-        vec2 ap = d - vec2(0., .78); float glowT = exp(-dot(ap, ap) * 1.15);
-        vec3 k = mix(uK[i] * (.86 + .14 * smoothstep(-1., .4, d.y)), mix(uK[i], vec3(1.), .5), glowT * (.5 + c.w * .35));
-        // donde se cruza con otro nace un tercer color, vivo (mezcla de tintas que no oscurece), con su propio degradado
-        vec3 mixd = sqrt(max(k * col, 0.)); mixd = mix(vec3(dot(mixd, vec3(.3, .59, .11))), mixd, 1.3) * 1.04;
-        mixd = mix(mixd, mix(mixd, vec3(1.), .4), glowT * .5);
-        vec3 over = covd > .5 ? mixd : k;
-        col = mix(col, over, a); covd = max(covd, a);
+        if (j0 < 0) { j0 = id; a0 = a; } else if (j1 < 0) { j1 = id; a1 = a; }
+      }
+      if (j0 >= 0) {
+        // el círculo: color pleno con una luz de aerógrafo en lo alto y el canto de abajo un poco más hondo
+        float c0 = uO[j0]; vec2 q = vec2(b, s - c0) / uR;
+        float gl = exp(-dot(q - vec2(0., -.7), q - vec2(0., -.7)) * 1.5);
+        vec3 k = mix(uK[j0] * (.88 + .12 * smoothstep(1., -.6, q.y)), mix(uK[j0], vec3(1.), .55), gl * .7);
+        col = mix(col, k, a0);
+        if (j1 >= 0) {
+          // el cruce con el siguiente: una forma de otro color con su cono de luz
+          float c1 = uO[j1], sA = c1 - uR, sB = c0 + uR, u = clamp((s - sA) / max(sB - sA, 1e-4), 0., 1.), lv = clamp(uLv[j0], 0., 1.3);
+          float wdt = uR * (.1 + .5 * u) * (.7 + .45 * lv);
+          float cone = exp(-b * b / (wdt * wdt)) * pow(1. - u, .85) * (.22 + .68 * lv);   // el cono se enciende y se abre con su banda
+          vec3 L = uK2[j0] * (1. - .2 * u * smoothstep(.25, 1., abs(b) / uR));          // las esquinas de abajo, en sombra suave
+          L = mix(L, uK3[j0], clamp(cone, 0., .9));
+          L = mix(L, mix(uK3[j0], vec3(1.), .45), clamp(cone - .6, 0., 1.) * .5);       // la punta, casi luz
+          col = mix(col, L, a1);
+        }
       }
       col += (h(gl_FragCoord.xy) - .5) * .06;   // grano de papel
       o = vec4(col, 1.);
@@ -10733,38 +10747,40 @@ function circSetup() {
 function drawCircles(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!circ.prog) circSetup();
-  const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
-  // círculos grandes que llenan el cuadro, encimados justo a la mitad (como el póster): dos columnas en vertical
-  const cols = asp > 1.5 ? 4 : asp > 0.9 ? 3 : 2;
-  const R = Math.min(asp * 0.95 / cols / 2.04, 0.96 / 6), rows = Math.max(4, Math.min(Math.floor(20 / cols), Math.round(0.96 / R) - 1)), n = cols * rows;
-  const stepY = R, x0 = asp / 2 - (cols - 1) * R * 1.02;
-  for (let i = 0; i < n; i++) {
-    const cx = i % cols, ry = Math.floor(i / cols);   // ry = 0 abajo
-    const k0 = Math.floor(((ry + cx * 0.35) / (rows + 0.4)) * BANDS * 0.92);
-    circ.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 5)), 0.8) * (0.5 + 0.6 * dynL);
-    if (pulse.on && ry === 0) { circ.v[i] += 4 + pulse.k * 5; circ.bv[i] += 0.9 + pulse.k * 1.1; }
-    // el rebote sube por la columna: cada círculo es empujado por el de abajo
-    const below = ry > 0 ? circ.bump[i - cols] : 0;
-    circ.bv[i] += ((below * 0.85 - circ.bump[i]) * 60 - circ.bv[i] * 7) * dt; circ.bump[i] += circ.bv[i] * dt;
-    if (ry >= 2 && ry <= 3) circ.tg[i] = Math.min(1.2, circ.tg[i] + voice * 0.25);
+  const night = state.theme === 'dark', gl = GLX.gl, asp = W / H, land = asp >= 1;
+  const across = land ? 1 : asp, along = land ? asp : 1, R = across * 0.238, n = Math.min(10, Math.ceil(along / R) + 2);
+  // el bombo aprieta la hilera (los cruces crecen) y vuelve con un rebote
+  if (pulse.on) circ.sqV += 2.2 + pulse.k * 2.6;
+  circ.sqV += (-circ.sq * 70 - circ.sqV * 9) * dt; circ.sq += circ.sqV * dt;
+  const step = R * (1 - Math.max(-0.12, Math.min(0.22, circ.sq * 0.12)) - 0.04 * dynL), s0 = along / 2 - (n - 1) * step / 2;
+  // las hileras avanzan despacio con la canción (una hacia cada lado) y cada golpe les da un empujón que se desliza
+  if (pulse.on) circ.scV = (circ.scV || 0) + 0.5 + pulse.k * 0.7;
+  circ.scV = (circ.scV || 0) * Math.pow(0.04, dt);
+  circ.scroll = (circ.scroll || 0) + dt * ((0.02 + dynL * 0.16) * musicGate + circ.scV);
+  const sk = Math.floor(circ.scroll), sf = circ.scroll - sk;
+  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k].map(Math.round)))[0]);
+  for (let lane = 0; lane < 2; lane++) for (let j = 0; j < n; j++) {
+    const id = lane * 10 + j, k0 = Math.floor(((j + lane * 0.5) / n) * BANDS * 0.92);
+    circ.tg[id] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 5)), 0.85) * (0.45 + 0.65 * dynL) + (j === (lane ? 2 : 3) ? voice * 0.3 : 0);
+    if (pulse.on && j < 2) circ.v[id] += 3 + pulse.k * 4;
+    circ.O[id] = s0 + (lane ? j - 1 + sf : j - sf) * step;
+    const ci = lane ? j - sk : j + sk;   // el color viaja con su círculo
+    // colores: los tonos de la portada abiertos en abanico; el cruce lleva otro tono (lejos del de sus círculos) y su cono, uno vecino más claro
+    // solo los colores de la portada: el círculo lleva uno, su cruce el siguiente y el cono de luz el tercero
+    const m3 = v => ((v % 3) + 3) % 3, m4 = v => ((v % 4) + 4) % 4, a0 = m3(ci + lane), sh = (m4(ci * 3 + lane) - 1.5) * 9;
+    circ.K.set(hexToRgb(hsl(hs[a0] + sh, 88, night ? 52 : 50)).map(v => v / 255), id * 3);
+    circ.K2.set(hexToRgb(hsl(hs[(a0 + 1) % 3] - sh, 90, night ? 51 : 49)).map(v => v / 255), id * 3);
+    circ.K3.set(hexToRgb(hsl(hs[(a0 + 2) % 3] + sh, 92, 60)).map(v => v / 255), id * 3);
   }
-  springTo(circ.lv.subarray(0, n), circ.v.subarray(0, n), circ.tg.subarray(0, n), dt, 200, 0.55);
-  // colores: los de la portada, girando de tono de un círculo al siguiente (familias vivas, como el póster)
-  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k].map(Math.round))));
-  for (let i = 0; i < n; i++) {
-    const cx = i % cols, ry = Math.floor(i / cols), lv = Math.max(0, Math.min(1.2, circ.lv[i]));
-    const [h_] = hs[(ry + cx * 2) % 3], dh = ((ry * 3 + cx * 7 + i) % 5 - 2) * 16;   // los tonos de la portada, abiertos en abanico: variedad viva como en el póster
-    circ.K.set(hexToRgb(hsl(h_ + dh, 88, night ? 50 : 47)).map(v => v / 255), i * 3);
-    const y = 0.5 + (ry - (rows - 1) / 2) * stepY + circ.bump[i] * R * 0.8;
-    circ.C.set([x0 + cx * R * 2.04, y, R * (0.74 + Math.min(1, lv) * 0.26), lv], i * 4);   // nunca más grande que el paso: solo se cruzan de a dos, como en el póster
-  }
+  springTo(circ.lv, circ.v, circ.tg, dt, 210, 0.55);
   const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
   const [cw, ch] = glCanvas(1), p = circ.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, n);
-  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 20, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 10, 86)).map(v => v / 255));
-  gl.uniform4fv(p.u['uC[0]'], circ.C); gl.uniform3fv(p.u['uK[0]'], circ.K);
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, n); gl.uniform1f(p.u.uR, R); gl.uniform1f(p.u.uLand, land ? 1 : 0); gl.uniform1f(p.u.uMid, across / 2);
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 18, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 8, 84)).map(v => v / 255));
+  gl.uniform1fv(p.u['uO[0]'], circ.O); gl.uniform1fv(p.u['uLv[0]'], circ.lv);
+  gl.uniform3fv(p.u['uK[0]'], circ.K); gl.uniform3fv(p.u['uK2[0]'], circ.K2); gl.uniform3fv(p.u['uK3[0]'], circ.K3);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
