@@ -710,6 +710,7 @@
         <button data-mode="icons">Íconos</button>
         <button data-mode="columns">Columnas</button>
         <button data-mode="tubos">Tubos</button>
+        <button data-mode="circles">Círculos</button>
         <button data-mode="traces">Trazos</button>
         <button data-mode="capsules">Cápsulas</button>
         <button data-mode="loop">Lazo</button>
@@ -10697,7 +10698,76 @@ function drawGallery(dt) {
   }
 }
 
-const scenes = { tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+// ================= Escena: Círculos =================
+// Como el póster de la referencia: columnas de círculos grandes de color plano, encimados a medias, sobre papel;
+// donde dos se cruzan nace un tercer color. Cada círculo es una banda del sonido (graves abajo, agudos arriba) y
+// crece con ella siguiendo un resorte, así las formas de los cruces cambian con la música; el bombo empuja los de
+// abajo y manda un rebote que sube por la columna; la voz aclara los del medio. En silencio, pequeños y quietos.
+const circ = { prog: null, lv: new Float32Array(20), v: new Float32Array(20), tg: new Float32Array(20), C: new Float32Array(80), K: new Float32Array(60), bump: new Float32Array(20), bv: new Float32Array(20) };
+function circSetup() {
+  circ.prog = glProgram(`uniform vec2 uRes; uniform float uNight; uniform int uN; uniform vec3 uBg; uniform vec4 uC[20]; uniform vec3 uK[20];
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .5 : .35);
+      for (int i = 0; i < 20; i++) {
+        if (i >= uN) break;
+        vec4 c = uC[i]; vec2 d = (p - c.xy) / c.z; float r = length(d);
+        float a = smoothstep(1. + 1.5 / (uRes.y * c.z), 1. - 1.5 / (uRes.y * c.z), r);
+        if (a <= 0.) continue;
+        // color plano con un degradado suave: más claro arriba, pleno abajo (como pintado con aerógrafo)
+        float top = smoothstep(-.9, 1., d.y);
+        vec3 k = mix(uK[i], mix(uK[i], vec3(1.), .5), top * top * (.55 + c.w * .4));
+        k *= .9 + .12 * c.w;
+        // donde se cruza con lo de abajo nace otro color: de día como tintas (se multiplican), de noche como luces (se suman)
+        vec3 over = uNight > .5 ? k * .82 + col * .55 : k * mix(vec3(1.), col, .62) * 1.12;
+        col = mix(col, over, a * (.9 + .1 * c.w));
+      }
+      col += (h(gl_FragCoord.xy) - .5) * .045;   // grano de papel
+      o = vec4(col, 1.);
+    }`);
+}
+function drawCircles(dt) {
+  if (!glInit()) { drawBokeh(dt); return; }
+  if (!circ.prog) circSetup();
+  const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
+  const cols = asp > 1.5 ? 4 : asp > 0.9 ? 3 : 2, rows = 5, n = cols * rows;
+  const R = Math.min(asp * 0.9 / cols / 2.06, 0.9 / (rows + 1)), stepY = R, x0 = asp / 2 - (cols - 1) * R * 1.03;
+  for (let i = 0; i < n; i++) {
+    const cx = i % cols, ry = Math.floor(i / cols);   // ry = 0 abajo
+    const k0 = Math.floor(((ry + cx * 0.35) / (rows + 0.4)) * BANDS * 0.92);
+    circ.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 5)), 0.9) * (0.45 + 0.6 * dynL);
+    if (pulse.on && ry === 0) { circ.v[i] += 3 + pulse.k * 4; circ.bv[i] += 0.25 + pulse.k * 0.3; }
+    // el rebote sube por la columna: cada círculo es empujado por el de abajo
+    const below = ry > 0 ? circ.bump[i - cols] : 0;
+    circ.bv[i] += ((below * 0.85 - circ.bump[i]) * 60 - circ.bv[i] * 7) * dt; circ.bump[i] += circ.bv[i] * dt;
+    if (ry >= 2 && ry <= 3) circ.tg[i] = Math.min(1.2, circ.tg[i] + voice * 0.25);
+  }
+  springTo(circ.lv.subarray(0, n), circ.v.subarray(0, n), circ.tg.subarray(0, n), dt, 200, 0.55);
+  // colores: los de la portada, girando de tono de un círculo al siguiente (familias vivas, como el póster)
+  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k].map(Math.round))));
+  for (let i = 0; i < n; i++) {
+    const cx = i % cols, ry = Math.floor(i / cols), lv = Math.max(0, Math.min(1.2, circ.lv[i]));
+    const [h_, s_] = hs[(ry + cx * 2) % 3], dh = ((ry * 37 + cx * 61) % 3 - 1) * 22;
+    circ.K.set(hexToRgb(hsl(h_ + dh, Math.min(96, Math.max(82, s_)), night ? 52 : 50)).map(v => v / 255), i * 3);
+    const y = 0.5 + (ry - (rows - 1) / 2) * stepY + circ.bump[i] * R * 0.35;
+    circ.C.set([x0 + cx * R * 2.06, y, R * (0.78 + lv * 0.3), lv], i * 4);
+  }
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
+  const [cw, ch] = glCanvas(1), p = circ.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, n);
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 20, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 10, 86)).map(v => v / 255));
+  gl.uniform4fv(p.u['uC[0]'], circ.C); gl.uniform3fv(p.u['uK[0]'], circ.K);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
+const scenes = { circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
