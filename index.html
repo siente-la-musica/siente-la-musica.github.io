@@ -10871,7 +10871,7 @@ function rutaSetup() {
         col = ty < .32 ? mix(hazeC, mid, smoothstep(0., .32, ty)) : mix(mid, uTop, smoothstep(.32, 1., ty));
         vec2 sp = vec2((uv.x - .42) * asp, dy0 - .05); float sdn = length(sp);
         col += uSun * mix(uC0, vec3(1., .8, .5), .65) * (exp(-sdn * sdn * 26.) * .6 + exp(-sdn * sdn * 4.) * .3);
-        col += uSun * vec3(1., .82, .5) * pow(n(vec2(atan(sp.y, sp.x) * 5., 3.)), 3.) * exp(-sdn * 2.2) * .55 * smoothstep(.07, .13, sdn);   // rayos de sol
+        col += uSun * vec3(1., .82, .5) * pow(n(vec2(atan(sp.y, sp.x) * 2.6, 3.)), 2.) * exp(-sdn * 3.) * .24 * smoothstep(.07, .16, sdn);   // rayos de sol
         col = mix(col, mix(vec3(1., .72, .42), vec3(1., .98, .82), smoothstep(-.07, .07, sp.y)), uSun * smoothstep(.084, .08, sdn));
         // la estela de un avión y, de noche, una estrella fugaz de vez en cuando
         { vec2 pq = vec2(uv.x * asp, dy0), a = vec2(.12 * asp, .2), b = vec2(.8 * asp, .37); float tt = clamp(dot(pq - a, b - a) / dot(b - a, b - a), 0., 1.);
@@ -10879,15 +10879,14 @@ function rutaSetup() {
           if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2), hd = uStar.xy + dir * uStar.z, tl = hd - dir * .3 * sin(3.1416 * uStar.z);
             col += vec3(.9, .95, 1.) * smoothstep(.0035, 0., sdSeg(pq, tl, hd)) * sin(3.1416 * uStar.z) * uNight * (1. - uSun) * (1. - uRain); } }
         float mn = uNight * (1. - uSun) * (1. - uRain * .85);
-        vec2 mp = vec2((uv.x - .27) * asp, dy0 - .27); float md = length(mp);
+        vec2 mp = vec2((uv.x - .4) * asp, dy0 - .31); float md = length(mp);
         col += vec3(.75, .82, 1.) * mn * (exp(-md * md * 220.) * .3 + exp(-md * md * 25.) * .1);
-        col = mix(col, vec3(.93, .95, .92) * (.88 + .12 * n(mp * 60.)) - .07 * smoothstep(.014, .008, length(mp - vec2(.012, .01))) - .05 * smoothstep(.01, .005, length(mp + vec2(.016, .006))), mn * smoothstep(.046, .0445, md));
         vec2 sgp = uv * vec2(asp, 1.) * 150., sg = floor(sgp); float st = h(sg), sdot = smoothstep(.32, .05, length(fract(sgp) - .5 - (vec2(h(sg + 5.), h(sg + 9.)) - .5) * .5));
-        col += vec3(.8, .85, 1.) * step(.972, st) * sdot * (.4 + .6 * uHi) * mn * smoothstep(.05, .3, ty) * (.5 + .5 * sin(uT * 3. + st * 40.));
+        col += vec3(.8, .85, 1.) * step(.972, st) * sdot * (.4 + .6 * uHi) * mn * (1. - smoothstep(.06, .046, md)) * smoothstep(.05, .3, ty) * (.5 + .5 * sin(uT * 3. + st * 40.));
+        float moonM = mn * smoothstep(.046, .0445, md);
         vec2 cp = vec2(mx * 1.25 + uT * .012, ty * 2.4 + 2.);
         vec2 ld = vec2((.42 - uv.x) * asp * uSun * 2., mix(1., -1., max(uNight, uSun)));
-        float cd = cloudD(cp), cd2 = cloudD(cp + normalize(ld) * .09);
-        float cm = smoothstep(uCov, uCov + .03, cd) * smoothstep(0., .1, ty);
+        float cd = cloudD(cp), cm = smoothstep(uCov, uCov + .03, cd) * smoothstep(0., .1, ty), cd2 = cm > 0. ? cloudD(cp + normalize(ld) * .09) : cd;
         vec3 cc = mix(uCl1, uCl0, smoothstep(-.02, .08, cd - cd2));
         cc = mix(cc, uCl1 * .8, smoothstep(uCov + .16, uCov + .19, cd) * .5);
         col = mix(col, mix(cc, hazeC, exp(-ty * 7.) * .7), cm * .94);
@@ -10895,10 +10894,12 @@ function rutaSetup() {
         { vec2 q = vec2(mx * 1.1 + uT * .004, dy0);
           float env = (.16 + .3 * n(vec2(q.x * 1.5 + 7., 2.))) * smoothstep(.22, .5, n(vec2(q.x * 1.1 + 3., 9.)));
           env *= 1. - uSun * exp(-pow((uv.x - .42) * asp / .2, 2.)) * .92;                    // el sol queda despejado
+          if (dy0 < .02 + env * 1.8 && uCum > 0.) {
           float bil = fbm(vec2(q.x * 4.2, q.y * 5.5) + 11.), bil2 = n(vec2(q.x * 15., q.y * 17.) + 4.);
           float dC = dy0 - .012 - env * (.35 + 1.25 * bil + .14 * bil2), t = -dC / max(env, .02) + (bil - .5) * 1.2 + (bil2 - .5) * .3;
           vec3 cc2 = mix(uCl0, mix(uCl0, uCl1, .6), smoothstep(.22, .3, t)); cc2 = mix(cc2, uCl1, smoothstep(.62, .72, t)); cc2 = mix(cc2, hazeC, smoothstep(.1, 0., dy0) * .6);
-          col = mix(col, cc2, smoothstep(px * 2., -px * 2., dC) * uCum); }
+          col = mix(col, cc2, smoothstep(px * 2., -px * 2., dC) * uCum); } }
+        col = mix(col, vec3(.97, .98, .93) * (.93 + .07 * n(mp * 60.)) - .08 * smoothstep(.014, .008, length(mp - vec2(.012, .01))) - .06 * smoothstep(.01, .005, length(mp + vec2(.016, .006))) - .05 * smoothstep(.008, .004, length(mp - vec2(-.004, -.02))), moonM);
         // cerros en dos planos y, de noche, la ciudad con ventanas que titilan con los agudos
         float m1 = .05 + .075 * n(vec2(mx * 1.1 + 3., 1.)) + .02 * n(vec2(mx * 4.3, 7.));
         vec3 m1c = mix(uTop, hazeC, mix(.62, .3, uNight)) * mix(1., .7, uNight);
@@ -10962,8 +10963,9 @@ function rutaSetup() {
           col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9) * step(z, 300.)); }
       }
       // arbolitos redondos a los dos lados (cada uno mira a la cámara): copa de bolas en tres tonos y su tronco; algunos, rosados
-      for (int sd = 0; sd < 2; sd++) for (int i = 11; i >= 0; i--) {
+      for (int sd = 0; sd < 2; sd++) for (int i = 8; i >= 0; i--) {
         float z = (float(i) + 1. - fract(uDist / 7.)) * 7., id = float(i) + floor(uDist / 7.) + float(sd) * 57.; if (z < 1.2) continue;
+        if ((uv.x - .5) * (sd == 0 ? -1. : 1.) < -.03) continue;
         float r1 = h1(id), r2 = h1(id + 13.7); if (r1 < .1) continue;
         float X = sd == 0 ? -6.9 - r2 * 2.6 : 4.9 + r2 * 2.6, R = 1.5 + r1 * .9, th = 1.5 + r2 * 1.1, sc = K / z;
         vec2 c = proj(vec3(X, th + R * .75, z), asp), d = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
@@ -10996,7 +10998,7 @@ function rutaSetup() {
           float sagY = 6.9 - (.9 + .25 * float(k)) * 4. * f * (1. - f), th = max(.02, z / K * px * .6);
           col = mix(col, mix(poleC, hazeC, 1. - exp(-z * fogK)), smoothstep(th, th * .4, abs(Y - sagY)) * step(z, 170.) * .85);
         }
-        for (int i = 0; i < 7; i++) { float zl = (float(i) + .5 - fract(uDist / SP)) * SP; if (zl < .7) continue;
+        for (int i = 0; i < 5; i++) { float zl = (float(i) + .5 - fract(uDist / SP)) * SP; if (zl < .7) continue;
           vec2 g = proj(vec3(3.8, 0., zl), asp), s = proj(vec3(3.8, 7.3, zl), asp), b = proj(vec3(3.8, 6.9, zl), asp); float r = .1 * K / zl;
           float pole = smoothstep(r + px * .7, r - px * .7, abs((uv.x - g.x) * asp)) * step(g.y, uv.y) * step(uv.y, s.y);
           float bar = smoothstep(r * .8 + px * .7, r * .8 - px * .7, abs(uv.y - b.y)) * step(abs((uv.x - b.x) * asp), .85 * K / zl);
@@ -11007,7 +11009,7 @@ function rutaSetup() {
       float below = step(uv.y, uHz), wob = (n(vec2(uv.x * 40., uv.y * 180.)) - .5) * .012 * below;
       vec2 pa = vec2(uv.x * asp, uv.y);
       // farolas a la izquierda, con su brazo sobre la vía: pasa una por cada tiempo de la canción
-      for (int i = 0; i < 7; i++) {
+      for (int i = 0; i < 5; i++) {
         float zl = (float(i) + 1. - fract(uDist / SP)) * SP; if (zl < .8) continue;
         vec2 g = proj(vec3(-5., 0., zl), asp), t = proj(vec3(-5., 5.3, zl), asp), hd = proj(vec3(-3.3, 5.75, zl), asp); float r = .08 * K / zl, fg = 1. - exp(-zl * fogK);
         float pole = smoothstep(r + px * .7, r - px * .7, abs((uv.x - g.x) * asp)) * step(g.y, uv.y) * step(uv.y, t.y);
@@ -11266,7 +11268,7 @@ function drawRuta(dt) {
   const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];
   const hor = A.hor || sat(warm, 62).map((v, i) => v * 0.9 + [0.1, 0.03, 0][i]);
   const hz = 0.58, wphi = groove * Math.PI / 2, wa0 = -1.42, wa1 = 0.14, wr1 = Lo.wl / H, wr0 = wr1 * 0.42;
-  const [cw, ch] = glCanvas(1), p = ruta.prog;
+  const [cw, ch] = glCanvas(0.8)   /* la escena es pesada: se dibuja algo más pequeña (la cabina va aparte, nítida) */, p = ruta.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uPiv, Lo.pivX / H, 1 - Lo.pivY / H); gl.uniform4f(p.u.uWp, wa0, wa1, wr0, wr1);
   gl.uniform1f(p.u.uDist, ruta.dist % 14000); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
@@ -11418,7 +11420,10 @@ function autoSetup() {
         col = mix(col, col * sunC * 1.15 + vec3(.03, 0., 0.), (1. - uNight) * .45) * (.86 + .28 * n(wp * vec2(3., 4.5) + uT * .05));
         float sunSide = mix(smoothstep(asp, 0., p.x), .5, uNight);
         vec3 foam = mix(mix(vec3(1.), sunC, .35), vec3(.6, .74, 1.), uNight);
-        col += foam * (e1 * (.5 + .5 * uHi) + e2 * .32) * mix(.8, .34, uNight) * (.45 + .55 * sunSide);
+        col *= .88 + .24 * smoothstep(.3, .7, n(vec2(p.x * 3. + uT * .05, s * 8. + uT * .22)));                 // el oleaje: bandas suaves que pasan
+        float nearB = exp(-max(ed, 0.) * 22.);
+        col += foam * (e1 * (.5 + .5 * uHi) + e2 * .32) * mix(.8, .34, uNight) * (.45 + .55 * sunSide) * (1. + 1.3 * nearB);
+        col += foam * smoothstep(.55, .75, n(vec2(s * 26. - uT * .5, p.x * 40.))) * smoothstep(.03, .0, ed - uLW * .2) * mix(.45, .2, uNight);   // espuma que rompe contra el puente
         col += vec3(1., .96, .86) * step(.996 - .02 * uHi, h(floor(wp * 430.) + floor(uT * 7.))) * mix(.5, .35, uNight); }
       // el puente: su sombra sobre el agua, las pilas cada dos tiempos, el andén angosto y la baranda con sus postes
       float sw = uLW * .2, pier = smoothstep(.026, .023, abs(fract(s) - .5)) * .018;
