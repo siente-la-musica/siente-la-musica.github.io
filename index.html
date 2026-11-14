@@ -10848,12 +10848,18 @@ const RUTA_AMB = {
   nochell: { top: [0.014, 0.017, 0.045], hor: [0.055, 0.05, 0.12], gnd: [0.008, 0.009, 0.018], tree: [0.006, 0.007, 0.014], cl0: [0.065, 0.065, 0.13], cl1: [0.022, 0.024, 0.055], cov: 0.4, night: 1, lamp: 1, sun: 0, rain: 1, city: 1, pink: [0.024, 0.011, 0.024], cum: 0, cab: 1 },
 };
 function rutaSetup() {
-  ruta.prog = glProgram(`uniform vec2 uRes, uPiv; uniform float uDist, uT, uNight, uLamp, uSun, uRain, uCity, uTail, uSway, uP, uHi, uWip, uGlow, uHz, uBob, uCov, uCut, uCum;
+  ruta.prog = glProgram(`uniform vec2 uRes, uPiv; uniform float uDist, uT, uNight, uLamp, uSun, uRain, uCity, uTail, uSway, uP, uHi, uWip, uGlow, uHz, uBob, uCov, uCut, uCum, uCurve;
     uniform vec3 uTop, uHor, uGnd, uTree, uPink, uCl0, uCl1, uC0, uC1, uC2, uMel, uCarC; uniform vec4 uOn[3], uWp; uniform vec3 uStar;
     ${GLSL_NOISE}
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
     const float HC = 1.25, K = .55, SP = 14.;
-    vec2 proj(vec3 w, float asp) { return vec2(.5 + w.x * K / (w.z * asp), uHz - (HC - w.y) * K / w.z); }
+    // la vía hace curvas suaves: todo se corre de lado con el cuadrado de la distancia
+    vec2 proj(vec3 w, float asp) { return vec2(.5 + (w.x + uCurve * w.z * w.z) * K / (w.z * asp), uHz - (HC - w.y) * K / w.z); }
+    // a qué distancia corta la mirada un plano vertical paralelo a la vía (con su curva)
+    float planeZ(float a, float xs) { if (abs(uCurve) < 1e-6) { float z = xs / a; return z > 0. ? z : -1.; }
+      float D = a * a - 4. * uCurve * xs; if (D < 0.) return -1.; float sq = sqrt(D), z1 = (a - sq) / (2. * uCurve), z2 = (a + sq) / (2. * uCurve), z = min(z1 > 0. ? z1 : 1e9, z2 > 0. ? z2 : 1e9); return z < 1e8 ? z : -1.; }
+    // el paisaje cambia por tramos de 32 tiempos: bosque, pradera abierta y costa (el mar a la derecha)
+    float secT(float zz) { return mod(floor(zz / 448.), 3.); }
     float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
     float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
     // un punto de luz desenfocado (como se ve una luz a través de un vidrio): disco suave + halo
@@ -10914,7 +10920,7 @@ function rutaSetup() {
         float m2 = (.014 + .045 * n(vec2(mx * 2.1 + 11., 4.)) + .012 * n(vec2(mx * 7., 2.))) * (1. - uCity * .75);
         col = mix(col, mix(uTree * 1.2, hazeC, .5), smoothstep(m2 + px, m2 - px, dy0));
       } else {
-        float t = max(uHz - uv.y, 1e-4), z = HC * K / t, X = (uv.x - .5) * asp * z / K, zz = z + uDist, aa = z / K * px; gX = X; gz = z;
+        float t = max(uHz - uv.y, 1e-4), z = HC * K / t, X = (uv.x - .5) * asp * z / K - uCurve * z * z, zz = z + uDist, aa = z / K * px; gX = X; gz = z;
         float fog = 1. - exp(-z * fogK);
         // la carretera: dos carriles (vamos por el derecho), raya del centro a trazos, bordes continuos
         float lw = .06 + z * .003;
@@ -10934,43 +10940,52 @@ function rutaSetup() {
         { vec2 fc = vec2(X, zz) * 1.5, fi = floor(fc); float fr = h(fi);
           float dot_ = smoothstep(.3, .14, length(fract(fc) - .5 - (vec2(h(fi + 3.), h(fi + 7.)) - .5) * .55)) * step(.58, fr) * smoothstep(45., 5., z) * smoothstep(3., 3.4, abs(X + .9));
           gnd = mix(gnd, (fr > .87 ? vec3(1., .62, .78) : fr > .73 ? vec3(1., .88, .35) : vec3(1., .99, .94)) * mix(1., .07, uNight), dot_ * .92); }
+        if (secT(zz) > 1.5 && X > 2.75) {                                                  // la costa: el mar hasta el horizonte, con sus brillos
+          gnd = mix(hazeC, uTop, .42) * mix(1., .8, uNight) * (.92 + .16 * n(vec2(X * .08, zz * .5 + uT * .3)));
+          gnd += (hazeC * .5 + .2) * smoothstep(.6, .78, n(vec2(X * .22 + uT * .25, zz * 1.7))) * mix(.55, .2, uNight); }
         // la sombra de los árboles cae a manchas sobre la orilla de la vía
-        rd *= 1. - .3 * (1. - uNight) * (1. - uRain) * smoothstep(.47, .6, n(vec2(X * .7 + 3., zz * .22))) * smoothstep(.9, 2.7, abs(X + .9));
+        rd *= 1. - .3 * (1. - uNight) * (1. - uRain) * smoothstep(.47, .6, n(vec2(X * .7 + 3., zz * .22))) * smoothstep(.9, 2.7, abs(X + .9)) * step(secT(zz), .5);
         col = mix(gnd, rd, road);
         col = mix(col, hazeC, fog);
       }
       // ---- al borde de la vía: árboles en dos planos y la baranda (cada uno en su plano vertical) ----
+      float pa_ = (uv.x - .5) * asp / K;
       for (int sd = 0; sd < 2; sd++) {
-        float dxs = (uv.x - .5) * asp * (sd == 0 ? -1. : 1.); if (dxs < 1e-4) continue;
-        float edge = sd == 0 ? 3.8 : 2.;
-        { float xw = edge + 11., z = xw * K / dxs;
-          if (z < 500.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
-            float th = 5. + 5.5 * n(vec2(zz * .05 + float(sd) * 37., 1.)) + 1.2 * n(vec2(zz * .22, 5.));          // el bosque de atrás: lomas suaves
-            th += (n(vec2(zz * .9, Y * .5)) - .5) * 1.6;
+        float sg = sd == 0 ? -1. : 1., edge = sd == 0 ? 3.8 : 2.;
+        { float z = planeZ(pa_, sg * (edge + 11.));
+          if (z > 0. && z < 500.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px, st = secT(zz);
+            float th = (5. + 5.5 * n(vec2(zz * .05 + float(sd) * 37., 1.)) + 1.2 * n(vec2(zz * .22, 5.))) * (st < .5 ? 1. : st < 1.5 ? .4 : sd == 1 ? 0. : .55);   // el bosque de atrás
+            th += (n(vec2(zz * .9, Y * .5)) - .5) * 1.6 * step(.5, th);
             float fv = (Y - th + 2.2) * .35 + (n(vec2(zz * .35, Y * .6 + 3.)) - .5) * 1.5;
             vec3 tc = uTree * 1.2 * mix(vec3(.6, .72, .85), vec3(1.3, 1.28, .95), smoothstep(-.1, .1, fv)) * (1. + .25 * smoothstep(.5, .7, fv));
             col = mix(col, mix(tc, hazeC, 1. - exp(-z * fogK * 1.2)), smoothstep(th + aa, th - aa, Y) * step(-.02, Y)); } }
-        { float xw = edge + 2.3, z = xw * K / dxs, Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
-          float bh = (.55 + .75 * n(vec2(zz * .45 + float(sd) * 9., 2.)) + .2 * n(vec2(zz * 2.1, 6.))) * smoothstep(.3, .45, n(vec2(zz * .12 + float(sd) * 5., 8.)));
+        { float z = planeZ(pa_, sg * (edge + 2.3));
+          if (z > 0. && z < 260.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px, st = secT(zz);
+          float bh = (.55 + .75 * n(vec2(zz * .45 + float(sd) * 9., 2.)) + .2 * n(vec2(zz * 2.1, 6.))) * smoothstep(.3, .45, n(vec2(zz * .12 + float(sd) * 5., 8.))) * (st > 1.5 && sd == 1 ? 0. : st > .5 ? .6 : 1.);
           float bv = (Y - bh + .45) * 1.6 + (n(vec2(zz * 1.4, Y * 2.5)) - .5) * 1.3;
           vec3 bc = uTree * 1.45 * mix(vec3(.55, .68, .8), vec3(1.35, 1.3, .9), smoothstep(-.1, .1, bv));
-          bc = mix(bc, uPink * 1.1, step(.8, h(floor(vec2(zz * 3., Y * 4.)))) * step(.1, bv) * .9);
-          col = mix(col, mix(bc, hazeC, 1. - exp(-z * fogK)), smoothstep(bh + aa, bh - aa, Y) * step(-.02, Y) * step(z, 260.)); }
-        { float xw = edge + .55, z = xw * K / dxs, Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
+          { vec2 fq = vec2(zz * 3.2, Y * 5.); bc = mix(bc, uPink * 1.15, step(.78, h(floor(fq))) * smoothstep(.36, .2, length(fract(fq) - .5)) * step(.05, bv) * .95); }
+          col = mix(col, mix(bc, hazeC, 1. - exp(-z * fogK)), smoothstep(bh + aa, bh - aa, Y) * step(-.02, Y)); } }
+        // pasto alto a la orilla, que se mece
+        { float z = planeZ(pa_, sg * (edge + .95));
+          if (z > 0. && z < 70.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
+          float sw_ = zz + sin(uT * 2.2 + zz * .7) * .2 * Y, bl = (.2 + .34 * h1(floor(sw_ * 7.))) * (1. - abs(fract(sw_ * 7.) - .5) * 2.) * (secT(zz) > 1.5 && sd == 1 ? 0. : 1.);
+          col = mix(col, mix(uGnd * mix(1.4, 2.5, clamp(Y / .5, 0., 1.)), hazeC, 1. - exp(-z * fogK)), smoothstep(bl + aa, bl - aa, Y) * step(-.01, Y)); } }
+        { float z = planeZ(pa_, sg * (edge + .55));
+          if (z > 0. && z < 300.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
           float rail = smoothstep(.1 + aa, .1 - aa, abs(Y - .6));
           float post = smoothstep(.07 + aa, .07 - aa, abs(fract(zz / 3.5) - .5) * 3.5) * step(0., Y) * step(Y, .62);
           vec3 rc = mix(vec3(.6, .62, .66), vec3(.035, .037, .05), uNight) + vec3(.14, .13, .115) * exp(-z * .08) * uNight;
-          col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9) * step(z, 300.)); }
+          col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9)); } }
       }
       // arbolitos redondos a los dos lados (cada uno mira a la cámara): copa de bolas en tres tonos y su tronco; algunos, rosados
       for (int sd = 0; sd < 2; sd++) for (int i = 8; i >= 0; i--) {
         float z = (float(i) + 1. - fract(uDist / 7.)) * 7., id = float(i) + floor(uDist / 7.) + float(sd) * 57.; if (z < 1.2) continue;
-        if ((uv.x - .5) * (sd == 0 ? -1. : 1.) < -.03) continue;
-        float r1 = h1(id), r2 = h1(id + 13.7); if (r1 < .1) continue;
+        float st = secT(z + uDist), r1 = h1(id), r2 = h1(id + 13.7); if (r1 < (st < .5 ? .1 : .6) || (st > 1.5 && sd == 1)) continue;
         float X = sd == 0 ? -6.9 - r2 * 2.6 : 4.9 + r2 * 2.6, R = 1.5 + r1 * .9, th = 1.5 + r2 * 1.1, sc = K / z;
         vec2 c = proj(vec3(X, th + R * .75, z), asp), d = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
         if (uv.y < uHz) { vec2 gs = vec2(gX - X, (gz - z) * .55); col *= 1. - .34 * exp(-dot(gs, gs) / (R * R * 1.3)) * (1. - uNight); }   // su sombra en el pasto
-        if (abs(d.x) > R * 2.1 || d.y > R * 1.7 || d.y < -(th + R)) continue;
+        if (abs(d.x) > R * 2.1 || d.y > R * 2.6 || d.y < -(th + R)) continue;
         float aa = px / sc, fg = 1. - exp(-z * fogK * 1.2);
         vec3 bark = mix(vec3(.34, .22, .15), vec3(.02, .016, .02), uNight) * (.8 + .4 * step(d.x, 0.));
         float tr = max(smoothstep(aa, -aa, abs(d.x) - .15 - .1 * smoothstep(-th, -(th + R * .75), d.y)) * step(d.y, -R * .3) * step(-(th + R * .75), d.y),
@@ -10978,6 +10993,7 @@ function rutaSetup() {
         col = mix(col, mix(bark, hazeC, fg), tr);
         // la copa, pintada: silueta de follaje irregular (no círculos) y manchas de hojas en cuatro tonos, del verde azulado
         // de la sombra al verde amarillo donde le da la luz
+        float tall = r2 > .66 ? 1. : 0.; d = vec2(d.x * (1. + .7 * tall), (d.y - tall * R * .55) / (1. + .55 * tall));   // unos son altos y delgados (álamos)
         vec2 dn = d + id * 7.3;
         float sdc = min(min(length(d * vec2(1., 1.12)) - R * .95, length(d - vec2(-.7, -.4) * R) - R * .66), min(length(d - vec2(.72, -.36) * R) - R * .68, length(d - vec2(.2, .5) * R) - R * .58));
         sdc += (n(dn * 1.1) - .5) * R * .7 + (n(dn * 3.1) - .5) * R * .3 + (n(dn * 7.) - .5) * R * .12;
@@ -10992,9 +11008,8 @@ function rutaSetup() {
         float hole = smoothstep(.7, .74, n(dn * 1.9 + 20.)) * smoothstep(-.12 * R, -.4 * R, sdc) * step(d.y, R * .15);     // claros por donde se ve el cielo
         col = mix(col, mix(tc, hazeC, fg), smoothstep(aa, -aa, sdc) * (1. - hole)); }
       // postes de luz a la derecha, con sus tres cables que cuelgan de poste a poste: pasan a contratiempo
-      { float dxs = (uv.x - .5) * asp;
-        if (dxs > 1e-4) for (int k = 0; k < 3; k++) {
-          float xw = 3.8 + float(k - 1) * .55, z = xw * K / dxs, Y = HC - (uHz - uv.y) * z / K, f = fract((z + uDist) / SP - .5);
+      { for (int k = 0; k < 3; k++) {
+          float xw = 3.8 + float(k - 1) * .55, z = planeZ(pa_, xw); if (z < 0.) continue; float Y = HC - (uHz - uv.y) * z / K, f = fract((z + uDist) / SP - .5);
           float sagY = 6.9 - (.9 + .25 * float(k)) * 4. * f * (1. - f), th = max(.02, z / K * px * .6);
           col = mix(col, mix(poleC, hazeC, 1. - exp(-z * fogK)), smoothstep(th, th * .4, abs(Y - sagY)) * step(z, 170.) * .85);
         }
@@ -11240,7 +11255,8 @@ function drawRuta(dt) {
   const amb = rutaAmb(), A = RUTA_AMB[amb], P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, Lo = rutaLayout(), { vertical, dy, dh, u, R, wx, wy, rw, rh, rx, ry } = Lo;
   // avanza al tempo: 14 m (una farola) por tiempo; en lo suave, algo menos. Sin música, el carro se detiene
   // el carro va a su paso, al tempo de la canción (una farola por tiempo), sin frenar en las partes suaves: solo se detiene en silencio
-  const per = Math.max(0.3, Math.min(1, tempo.period || 0.5)), go = Math.min(1, musicGate * 1.8), groove = (ruta.b = (ruta.b || 0) + dt / per * go);
+  const per = Math.max(0.3, Math.min(1, tempo.period || 0.5)), go = (ruta.go = (ruta.go || 0) + (((ruta.act = audible ? 2.5 : Math.max(0, (ruta.act || 0) - dt)) > 0 ? 1 : 0) - (ruta.go || 0)) * (1 - Math.pow(0.02, dt))), groove = (ruta.b = (ruta.b || 0) + dt / per * go);
+  const curve = 0.0015 * Math.sin(ruta.b * Math.PI / 20) * Math.sin(ruta.b * Math.PI / 53);
   ruta.dist += dt / per * go * 14;
   // el de adelante frena con el bombo (resorte: se enciende de golpe y suelta) y se mece con la melodía
   if (pulse.on) { ruta.tailV += 9 + pulse.k * 10; ruta.beats++; ruta.rpmV += 2.2 + pulse.k * 2; ruta.pendV += ruta.pendDir * (0.7 + pulse.k * 0.8); ruta.pendDir = -ruta.pendDir; }
@@ -11271,7 +11287,7 @@ function drawRuta(dt) {
   const [cw, ch] = glCanvas(0.8)   /* la escena es pesada: se dibuja algo más pequeña (la cabina va aparte, nítida) */, p = ruta.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uPiv, Lo.pivX / H, 1 - Lo.pivY / H); gl.uniform4f(p.u.uWp, wa0, wa1, wr0, wr1);
-  gl.uniform1f(p.u.uDist, ruta.dist % 14000); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
+  gl.uniform1f(p.u.uDist, ruta.dist % 13440); gl.uniform1f(p.u.uCurve, curve); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
   gl.uniform1f(p.u.uSun, A.sun); gl.uniform1f(p.u.uRain, A.rain); gl.uniform1f(p.u.uCity, A.city); gl.uniform1f(p.u.uCov, A.cov);
   const tail = Math.min(1.6, ruta.tail * 0.6 + bandX(0, 10) * 0.35) * (state.noFlash ? 0.5 : 1);
   gl.uniform1f(p.u.uTail, tail); gl.uniform1f(p.u.uSway, ruta.sway); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uHi, ruta.hi); gl.uniform1f(p.u.uWip, wphi % (Math.PI * 2)); gl.uniform1f(p.u.uGlow, ruta.glow);
@@ -11318,7 +11334,7 @@ function drawRuta(dt) {
     ctx.fillStyle = '#16171c'; ctx.beginPath(); ctx.arc(gx, Lo.gy, Lo.gr * 0.13, 0, 7); ctx.fill(); };
   needle(Lo.g0x, ruta.kmh); needle(Lo.g1x, ruta.rpm);
   // el volante gira un poco siguiendo al de adelante
-  ctx.save(); ctx.translate(wx, wy); ctx.scale(1, 0.94); ctx.rotate(ruta.sway * 0.13); ctx.drawImage(ruta.wheel, -ruta.wheel.width / 2, -ruta.wheel.height / 2); ctx.restore();
+  ctx.save(); ctx.translate(wx, wy); ctx.scale(1, 0.94); ctx.rotate(ruta.sway * 0.1 + curve * 150); ctx.drawImage(ruta.wheel, -ruta.wheel.width / 2, -ruta.wheel.height / 2); ctx.restore();
   // ---- la luz que entra: cada farola barre el tablero al pasar; los stops y los faros de frente lo tiñen ----
   { const fy0 = Math.max(0, Math.floor(dy - R * 0.25 - Lo.hb)), fh = H - fy0, f = ruta.fx || (ruta.fx = document.createElement('canvas'));
     if (f.width !== W || f.height !== fh) { f.width = W; f.height = fh; }
@@ -11395,12 +11411,12 @@ const auto = { prog: null, rows: [], cars: [], lane: 1, plan: 1, x: 0, xv: 0, di
 // ancho y largo de cada vehículo, en carriles: sedán, cupé (el tuyo), taxi, furgoneta, camioneta y camión
 const AUTO_KIND = [{ w: 0.56, l: 1.26 }, { w: 0.56, l: 1.22 }, { w: 0.56, l: 1.26 }, { w: 0.6, l: 1.42 }, { w: 0.59, l: 1.32 }, { w: 0.66, l: 2.15 }];
 function autoSetup() {
-  auto.prog = glProgram(`uniform vec2 uRes, uRoad; uniform float uDist, uLW, uNight, uP, uTrail, uGlow, uLamp, uSpd, uT, uHi, uTilt; uniform vec3 uBg, uMel, uC0, uC2; uniform vec4 uCar[7], uDim[7];
+  auto.prog = glProgram(`uniform vec2 uRes, uRoad; uniform float uDist, uLW, uNight, uP, uTrail, uGlow, uLamp, uSpd, uT, uHi, uTilt, uDistW; uniform vec3 uBg, uMel, uC0, uC2; uniform vec4 uCar[7], uDim[7];
     ${GLSL_COVER} ${GLSL_NOISE}
     float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
     float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
     // pinceladas de espuma: en cada celda, un trazo corto y curvo que aparece y se va (el brillo del mar en los dibujos)
-    float strokes(vec2 x, float t) { vec2 i = floor(x), f = fract(x); float r = h(i), life = fract(r * 5.7 + t * (.16 + r * .16));
+    float strokes(vec2 x, float t, float per) { vec2 i = floor(x), f = fract(x); i.y = mod(i.y, per); float r = h(i), life = fract(r * 5.7 + t * (.16 + r * .16));
       vec2 c = vec2(.5) + (vec2(h(i + 3.1), h(i + 8.7)) - .5) * .5, d = f - c; float len = .16 + .26 * h(i + 1.7);
       d.y += (d.x * d.x / (len * len) - .5) * .09 * (r > .5 ? 1. : -1.);
       return smoothstep(len, len * .55, abs(d.x)) * smoothstep(.075, .02, abs(d.y)) * smoothstep(0., .25, life) * smoothstep(1., .55, life) * step(.3, r); }
@@ -11410,33 +11426,33 @@ function autoSetup() {
       vec3 cov = withCover(uBg), sunC = vec3(1., .74, .52);
       float rx = p.x - uRoad.x, ed = abs(rx) - uRoad.y, s = p.y + uDist, inR = smoothstep(px, -px, ed);
       // a los lados, el mar: lleva los colores de la portada, se riza y sus destellos titilan con los agudos
-      vec2 wp = vec2(p.x, s);
+      vec2 wp = vec2(p.x, mod(p.y + uDistW, 32.));   // el agua usa una distancia que da la vuelta (los números grandes dañaban el dibujo)
       float rip = 0.; vec3 col = vec3(0.);
       if (ed > -.01) {
         vec2 wv = (vec2(n(wp * 6. + uT * .1), n(wp * 6. + 9. - uT * .1)) - .5) * .05;
-        float e1 = strokes((wp + wv) * vec2(11., 34.), uT), e2 = strokes((wp + wv) * vec2(19., 58.) + 31., uT * 1.3); rip = e1;
+        float e1 = strokes((wp + wv) * vec2(11., 34.), uT, 1088.), e2 = strokes((wp + wv) * vec2(19., 58.) + 31., uT * 1.3, 1856.); rip = e1;
         // el agua: los colores de la portada en manchas suaves, más hondos lejos del sol
         col = mix(mix(vec3(.06, .2, .28), vec3(.008, .018, .04), uNight), cov * mix(1.08, .72, uNight), mix(.8, .62, uNight));
         col = mix(col, col * sunC * 1.15 + vec3(.03, 0., 0.), (1. - uNight) * .45) * (.86 + .28 * n(wp * vec2(3., 4.5) + uT * .05));
         float sunSide = mix(smoothstep(asp, 0., p.x), .5, uNight);
         vec3 foam = mix(mix(vec3(1.), sunC, .35), vec3(.6, .74, 1.), uNight);
-        col *= .88 + .24 * smoothstep(.3, .7, n(vec2(p.x * 3. + uT * .05, s * 8. + uT * .22)));                 // el oleaje: bandas suaves que pasan
+        col *= .88 + .24 * smoothstep(.3, .7, n(vec2(p.x * 3. + uT * .05, wp.y * 8. + uT * .22)));                 // el oleaje: bandas suaves que pasan
         float nearB = exp(-max(ed, 0.) * 22.);
         col += foam * (e1 * (.5 + .5 * uHi) + e2 * .32) * mix(.8, .34, uNight) * (.45 + .55 * sunSide) * (1. + 1.3 * nearB);
-        col += foam * smoothstep(.55, .75, n(vec2(s * 26. - uT * .5, p.x * 40.))) * smoothstep(.03, .0, ed - uLW * .2) * mix(.45, .2, uNight);   // espuma que rompe contra el puente
+        col += foam * smoothstep(.55, .75, n(vec2(wp.y * 26. - uT * .5, p.x * 40.))) * smoothstep(.03, .0, ed - uLW * .2) * mix(.45, .2, uNight);   // espuma que rompe contra el puente
         col += vec3(1., .96, .86) * step(.996 - .02 * uHi, h(floor(wp * 430.) + floor(uT * 7.))) * mix(.5, .35, uNight); }
       // el puente: su sombra sobre el agua, las pilas cada dos tiempos, el andén angosto y la baranda con sus postes
       float sw = uLW * .2, pier = smoothstep(.026, .023, abs(fract(s) - .5)) * .018;
       float inS = smoothstep(px, -px, ed - sw - pier) * (1. - inR);
       col *= 1. - mix(.5, .35, uNight) * smoothstep(.085, .0, ed - sw - (rx > 0. ? 0. : .06) * (1. - uNight)) * (1. - inS) * (1. - inR) * (rx > 0. ? 1. : uNight);
-      vec3 pav = mix(vec3(.7, .6, .57), vec3(.085, .09, .118), uNight) * (.93 + .1 * n(vec2(rx * 70., s * 70.)));
+      vec3 pav = mix(vec3(.7, .6, .57), vec3(.085, .09, .118), uNight) * (.93 + .1 * n(vec2(rx * 70., mod(s, 8.) * 70.)));
       pav *= 1. - .2 * smoothstep(.0022, .0008, abs(fract(s / (uLW * .5)) - .5) * uLW * .5);
       pav *= 1. - .3 * step(sw, ed);                                                // las pilas, más hondas
       pav = mix(pav, pav * 1.4 + .05, smoothstep(.0028 + px, .0028 - px, abs(ed - sw + .0045)) * (.55 + .45 * step(.5, fract(s / .035))));
       col = mix(col, pav, inS * .97);
       // el asfalto: con un eco del color de la portada, grano fino y las huellas de rodadura de cada carril
       vec3 asf = mix(vec3(.33, .27, .3), vec3(.034, .036, .047), uNight);
-      asf = mix(asf, cov * .55, .14) * (.9 + .2 * n(vec2(rx * 110., s * 110.)));
+      asf = mix(asf, cov * .55, .14) * (.9 + .2 * n(vec2(rx * 110., mod(s, 8.) * 110.)));
       asf *= 1. + .1 * (1. - uNight) * (-rx / uRoad.y);                           // al atardecer la luz viene de un lado
       float lx = rx / uLW + .5, lr = floor(lx + .5), bd = abs(lx - lr) * uLW;       // tres carriles
       asf *= 1. - .075 * smoothstep(.1, 0., abs(abs(fract(lx) - .5) - .2));
@@ -11565,7 +11581,7 @@ function drawAuto(dt) {
   // el reloj de la escena cuenta tiempos de la canción y se va cuadrando con cada bombo, para que las filas pasen
   // a tu lado justo entre dos golpes y el cambio de carril caiga en el golpe
   // va a su propia velocidad (al tempo de la canción, sin frenar en las partes suaves; se ajusta en Ajustes) y solo se detiene en silencio
-  const db = Math.min(0.2, dt / Math.max(0.3, Math.min(1, tempo.period || 0.5)) * Math.min(1, musicGate * 1.8) * (state.via || 1)), TILT = 0.36;
+  const db = Math.min(0.2, dt / Math.max(0.3, Math.min(1, tempo.period || 0.5)) * (auto.go = (auto.go || 0) + (((auto.act = audible ? 2.5 : Math.max(0, (auto.act || 0) - dt)) > 0 ? 1 : 0) - (auto.go || 0)) * (1 - Math.pow(0.02, dt))) * (state.via || 1)), TILT = 0.5;
   if (pulse.on) { auto.err = 0; const e = Math.round(auto.b) - auto.b; if (Math.abs(e) < 0.3) auto.err = e; }
   const corr = db > 0 ? auto.err * (1 - Math.pow(0.01, dt)) : 0; auto.err -= corr;
   const step = Math.max(0, db + corr); auto.b += step;
@@ -11573,7 +11589,7 @@ function drawAuto(dt) {
   // el tráfico llega en filas, una cada dos tiempos, de uno o dos carros (dos en lo fuerte); cada fila deja libre
   // un carril al que se llega moviéndose como mucho uno desde donde vas a estar
   const loud = Math.min(1, dynL * 1.2);
-  while (2 * auto.nextRow + 1 - tb <= 3.4) {
+  while (2 * auto.nextRow + 1 - tb <= 3.75) {
     const arr = 2 * auto.nextRow++ + 1; if (arr - tb < 1.6) continue;
     const n = loud > 0.5 && Math.random() < 0.65 ? 2 : 1; let lanes = null;
     for (let t = 0; t < 12 && !lanes; t++) { let l = [0, 1, 2].sort(() => Math.random() - 0.5).slice(0, n);
@@ -11602,13 +11618,13 @@ function drawAuto(dt) {
   // el cambio de carril: un resorte ágil (más rápido cuanto más rápida la canción) y el carro se inclina hacia donde va
   const per = Math.max(0.3, tempo.period || 0.5), om = Math.max(9, Math.min(18, 5.6 / per)), tx = laneX(auto.lane);
   auto.xv += ((tx - auto.x) * om * om - auto.xv * 1.7 * om) * dt * (db > 0 ? 1 : 0); auto.x += auto.xv * dt * (db > 0 ? 1 : 0);
-  auto.dist += step * 0.5 * (blocked ? 0.5 : 1);
+  auto.dist += db * 0.5;   // la vía corre siempre pareja (aunque tu carro espere a que haya paso)
   auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
   auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
   auto.brake = Math.max(auto.brake * Math.pow(0.03, dt), hits.snare ? 1 : 0); auto.hi += (bandX(40, BANDS) - auto.hi) * (1 - Math.pow(0.02, dt));
   auto.myBrake += ((blocked ? 1 : 0) - auto.myBrake) * (1 - Math.pow(0.001, dt));
   const rot = Math.max(-0.17, Math.min(0.17, auto.xv * 0.9)), heroY = myY + P * 0.006, flash = state.noFlash ? 0.5 : 1;
-  const shown = auto.cars.filter(c => c.y < 1.5).sort((a, b) => a.y - b.y).slice(0, 6);
+  const shown = auto.cars.filter(c => c.y < 1.65).sort((a, b) => a.y - b.y).slice(0, 6);
   auto.U.fill(-9); auto.D.fill(0);
   auto.U.set([cx + auto.x, heroY, rot, 0], 0); auto.D.set([myHW, myHL, Math.max(auto.myBrake, 0.35 + 0.5 * P * flash), 1], 0);
   shown.forEach((c, i) => { c.px = cx + laneX(c.lane) + Math.sin(tb * 0.4 + c.sw) * LW * 0.03; auto.U.set([c.px, c.y, 0, c.k], (i + 1) * 4); auto.D.set([c.hw, c.hl, 0.3 + auto.brake * 0.7 * flash, 0], (i + 1) * 4); });
@@ -11617,8 +11633,8 @@ function drawAuto(dt) {
   const [cw, ch] = glCanvas(1), p = auto.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uRoad, cx, halfW);
-  gl.uniform1f(p.u.uDist, auto.dist % 4000); gl.uniform1f(p.u.uLW, LW); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P * flash);
-  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.3) * (0.35 + 0.65 * musicGate)); gl.uniform1f(p.u.uSpd, Math.max(0, loud - 0.35) * 1.5 * musicGate); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHi, auto.hi); gl.uniform1f(p.u.uTilt, TILT);
+  gl.uniform1f(p.u.uDist, auto.dist % 480); gl.uniform1f(p.u.uLW, LW); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P * flash);
+  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.3) * (0.35 + 0.65 * musicGate)); gl.uniform1f(p.u.uSpd, Math.max(0, loud - 0.35) * 1.5 * musicGate); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHi, auto.hi); gl.uniform1f(p.u.uTilt, TILT); gl.uniform1f(p.u.uDistW, auto.dist % 32);
   gl.uniform3fv(p.u.uBg, (night ? hexToRgb(hsl(hh, 22, 7)) : hexToRgb(hsl(hh, 20, 62))).map(v => v / 255));
   gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uC0, tone(RGB[0], 58, 75).map(v => v / 255)); gl.uniform3fv(p.u.uC2, tone(RGB[2], 60, 75).map(v => v / 255));
   gl.uniform4fv(p.u['uCar[0]'], auto.U); gl.uniform4fv(p.u['uDim[0]'], auto.D);
@@ -11651,6 +11667,19 @@ function drawAuto(dt) {
     ctx.restore(); };
   shown.slice().reverse().forEach(c => drawCar(c.px, c.y, 0, sprite(c.k, c.tone), c.hw, c.hl, 0.25 + auto.brake * 0.75 * flash, false));
   drawCar(cx + auto.x, heroY, rot, sprite(1, 0, true), myHW, myHL, Math.max(auto.myBrake, 0.3 + 0.6 * P * flash), true);
+  // cada 16 tiempos pasa un pórtico de señales por encima (marca las vueltas de la canción); sus luces laten con el bombo
+  for (let k = Math.floor((auto.dist - 4) / 8); k <= Math.floor((auto.dist - 4) / 8) + 1; k++) { const Y = k * 8 + 4 - auto.dist; if (Y < -0.3 || Y > 1.7) continue;
+    const tk = 1 + TILT * (Y - myY), sy = (1 - (myY + (Y - myY) / tk)) * H, hwp = (halfW + LW * 0.42) / tk * H * 1.06, cxp = cx * H, th = 0.022 * H / tk * 1.1, sdx = (night ? 0.02 : 0.07) * H / tk, sdy = (night ? 0.03 : 0.045) * H / tk;
+    ctx.fillStyle = `rgba(0,0,0,${night ? 0.32 : 0.26})`; ctx.fillRect(cxp - hwp + sdx, sy - th / 2 + sdy, hwp * 2, th);
+    const gb = ctx.createLinearGradient(0, sy - th / 2, 0, sy + th / 2); gb.addColorStop(0, night ? '#3a3f4e' : '#8a8690'); gb.addColorStop(0.35, night ? '#1d2029' : '#56525e'); gb.addColorStop(1, night ? '#0e1016' : '#3a3742');
+    ctx.fillStyle = gb; ctx.fillRect(cxp - hwp, sy - th / 2, hwp * 2, th);
+    ctx.strokeStyle = night ? 'rgba(120,130,160,.5)' : 'rgba(255,240,225,.55)'; ctx.lineWidth = Math.max(1, th * 0.07); ctx.beginPath(); for (let i = 0; i < 14; i++) { const x0 = cxp - hwp + hwp * 2 * i / 14, x1 = x0 + hwp / 7; ctx.moveTo(x0, sy - th / 2); ctx.lineTo(x1, sy + th / 2); ctx.moveTo(x1, sy - th / 2); ctx.lineTo(x0, sy + th / 2); } ctx.stroke();
+    ctx.fillStyle = night ? '#0a0b10' : '#2e2b35'; for (const sg of [-1, 1]) ctx.fillRect(cxp + sg * hwp - th * 0.45, sy - th * 0.75, th * 0.9, th * 1.5);
+    const bwp = LW * 0.84 / tk * H, bhp = th * 1.7;
+    for (let i = 0; i < 3; i++) { const bx = cxp + (i - 1) * LW / tk * H - bwp / 2, by = sy + th * 0.5;
+      ctx.fillStyle = rgba(tone(RGB[i % RGB.length], night ? 30 : 38, 55), 1); ctx.beginPath(); ctx.roundRect(bx, by, bwp, bhp, bhp * 0.14); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.lineWidth = Math.max(1, bhp * 0.05); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.beginPath(); ctx.moveTo(bx + bwp / 2, by + bhp * 0.2); ctx.lineTo(bx + bwp * 0.64, by + bhp * 0.5); ctx.lineTo(bx + bwp * 0.545, by + bhp * 0.5); ctx.lineTo(bx + bwp * 0.545, by + bhp * 0.8); ctx.lineTo(bx + bwp * 0.455, by + bhp * 0.8); ctx.lineTo(bx + bwp * 0.455, by + bhp * 0.5); ctx.lineTo(bx + bwp * 0.36, by + bhp * 0.5); ctx.closePath(); ctx.fill(); }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; for (let i = 0; i < 4; i++) { const lx = cxp + (i - 1.5) * LW / tk * H, gr = th * (1.3 + 1.4 * P * flash), g = ctx.createRadialGradient(lx, sy, 0, lx, sy, gr); g.addColorStop(0, `rgba(255,214,150,${(night ? 0.8 : 0.4) * (0.5 + 0.5 * P * flash + 0.2)})`); g.addColorStop(1, 'rgba(255,200,120,0)'); ctx.fillStyle = g; ctx.fillRect(lx - gr, sy - gr, gr * 2, gr * 2); } ctx.restore(); }
   // por encima pasa de vez en cuando una bandada de gaviotas (aletean al compás) con su sombra sobre el puente
   if (!auto.flock && auto.b > 3 && Math.floor(auto.b / 16) !== auto.flockN) { auto.flockN = Math.floor(auto.b / 16); const dir = Math.random() < 0.5 ? 1 : -1;
     auto.flock = { t0: auto.b, dir, y0: 0.35 + Math.random() * 0.4, birds: Array.from({ length: 4 + Math.floor(Math.random() * 2) }, (_, i) => ({ ox: -Math.abs(i - 2) * 0.07 - Math.random() * 0.03, oy: (i - 2) * 0.075 + (Math.random() - 0.5) * 0.03, ph: Math.random() * 2, sc: 0.85 + Math.random() * 0.3 })) }; }
