@@ -711,6 +711,7 @@
         <button data-mode="columns">Columnas</button>
         <button data-mode="tubos">Tubos</button>
         <button data-mode="ruta">Ruta</button>
+        <button data-mode="autopista">Autopista</button>
         <button data-mode="circles">Círculos</button>
         <button data-mode="fan">Abanico</button>
         <button data-mode="traces">Trazos</button>
@@ -4346,7 +4347,7 @@ function drawRecOverlay() {
 }
 const artistClean = new Map();
 const LYRIC_LOW = new Set(['disco', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'capsules', 'columns', 'tubos', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura']);
-const LYRIC_HIGH = new Set(['bars', 'fire', 'mountains', 'tubes', 'cats', 'puffs', 'harp']);
+const LYRIC_HIGH = new Set(['autopista', 'bars', 'fire', 'mountains', 'tubes', 'cats', 'puffs', 'harp']);
 
 // ================= Director automático =================
 // Elige la animación según cómo es la canción: tranquila, media o enérgica. Mide la energía
@@ -11051,7 +11052,138 @@ function drawRuta(dt) {
   ctx.restore();
 }
 
-const scenes = { ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+// ================= Escena: Autopista (vista desde arriba) =================
+// Una autopista de noche vista desde el aire, sobre la portada: tu carro va abajo, con luz de neón por debajo
+// (del color de la nota que se canta) y dos estelas rojas detrás, y va esquivando a los demás. Todo va con la
+// canción: la carretera corre al tempo (una farola con su charco de luz por cada tiempo), los cambios de carril
+// caen en los golpes, las estelas se alargan en lo fuerte, los faros se abren con el bombo y los demás carros
+// frenan con la caja. Sin música, el tráfico se detiene.
+const auto = { prog: null, cars: null, lane: 1, x: 0, xv: 0, dist: 0, gPrev: null, spawnB: 0, beats: 0, U: new Float32Array(28), K: new Float32Array(21), trail: 0, glow: 0, brake: 0 };
+function autoSetup() {
+  auto.prog = glProgram(`uniform vec2 uRes, uRoad; uniform float uDist, uLW, uNight, uP, uTrail, uGlow, uLamp, uBrake; uniform vec3 uBg, uMel, uC0, uC1, uC2; uniform vec4 uCar[7]; uniform vec3 uK[7];
+    ${GLSL_COVER} ${GLSL_NOISE}
+    float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
+    void main() {
+      float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 cov = withCover(uBg);
+      vec3 col = cov * mix(.92, .5, uNight);                                   // a los lados, la portada
+      float rx = p.x - uRoad.x, ed = abs(rx) - uRoad.y, s = p.y + uDist, inR = smoothstep(px, -px, ed);
+      col *= 1. - .45 * exp(-max(ed, 0.) * 30.) * (1. - inR);                  // la sombra del borde de la vía
+      // el asfalto: oscuro, con un eco del color de la portada y grano fino
+      vec3 asf = mix(vec3(.2, .2, .22), vec3(.03, .032, .04), uNight);
+      asf = mix(asf, cov * .55, .16) * (.88 + .24 * n(vec2(rx * 90., s * 90.)));
+      float lx = rx / uLW + .5, lr = floor(lx + .5), bd = abs(lx - lr) * uLW;   // tres carriles
+      float line = smoothstep(.0036 + px, .0036 - px, bd) * (lr > -.5 && lr < 1.5 ? step(.52, fract(s / (uLW * 1.5))) : 0.);
+      line = max(line, smoothstep(.0034 + px, .0034 - px, abs(abs(rx) - (uRoad.y - .012))));    // bordes continuos
+      vec3 rd = mix(asf, mix(vec3(.95, .93, .86), vec3(.62, .6, .52), uNight), line * .85);
+      col = mix(col, rd, inR);
+      // farolas alternadas a los lados: una por tiempo, cada una con su charco de luz sobre la vía y la acera
+      float SPc = .5;
+      for (int k = -1; k <= 2; k++) { float li = floor(s / SPc) + float(k), sd_ = mod(li, 2.) < .5 ? -1. : 1.;
+        vec2 lp = vec2(uRoad.x + sd_ * (uRoad.y + .012), li * SPc - uDist), d = p - lp;
+        vec3 lc = mix(sd_ < 0. ? uC0 : uC2, vec3(1., .88, .66), .5);
+        col += lc * (exp(-dot(d, d) / .028) * .3 + exp(-dot(d - vec2(-sd_ * .05, 0.), d - vec2(-sd_ * .05, 0.)) / .008) * .32) * uLamp * (inR * .9 + .45);
+        col += lc * smoothstep(.007, .003, length(d)) * (.6 + .4 * uLamp);
+        col = mix(col, vec3(.02), smoothstep(.0025, .001, abs(d.y)) * step(0., -sd_ * d.x) * step(-sd_ * d.x, .05) * .55); }
+      // luces de los carros sobre el asfalto (antes de las carrocerías)
+      for (int i = 0; i < 7; i++) { vec4 c = uCar[i]; if (c.y < -.5) continue;
+        float ca = cos(c.z), sa = sin(c.z); vec2 q = p - c.xy; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
+        float w = uLW * .56, L = uLW * 1.26, me = i == 0 ? 1. : 0.;
+        vec2 v = q - vec2(0., L * .5); float wd = .016 + max(v.y, 0.) * (.42 + .25 * uP * me);
+        float cone = exp(-pow(v.x / wd, 2.)) * exp(-max(v.y, 0.) * (me > .5 ? 4.2 : 7.)) * smoothstep(-.01, .02, v.y);
+        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .45 * uP : .22) * mix(.25, 1., uNight) * inR;
+        vec2 v2 = q + vec2(0., L * .5);
+        float brk = me > .5 ? .5 + .5 * uP : .35 + uBrake * .9;
+        col += vec3(1., .06, .04) * exp(-dot(v2, v2) / (.0009 + .0012 * brk)) * (.3 + .5 * brk) * mix(.4, 1., uNight);
+        if (i == 0) {
+          // las dos estelas rojas (más largas en lo fuerte) y el neón bajo el carro, del color de la nota
+          for (int k = 0; k < 2; k++) { float xs = v2.x + (k == 0 ? -1. : 1.) * w * .34;
+            col += vec3(1., .1, .06) * exp(-pow(xs / .0045, 2.)) * exp(v2.y / (.05 + uTrail * .34)) * step(v2.y, 0.) * (.45 + .5 * uTrail); }
+          float sdm = sdBox(q, vec2(w * .5, L * .5), w * .32);
+          col += uMel * exp(-max(sdm, 0.) / (.012 + .02 * uGlow)) * (.25 + .9 * uGlow) * inR; } }
+      // las carrocerías
+      for (int i = 0; i < 7; i++) { vec4 c = uCar[i]; if (c.y < -.5) continue;
+        float ca = cos(c.z), sa = sin(c.z); vec2 q = p - c.xy; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
+        float w = uLW * .56, L = uLW * 1.26;
+        float sh = sdBox(q - vec2(.006, -.008), vec2(w * .5, L * .5), w * .32); col *= 1. - .55 * smoothstep(.012, -.004, sh) * mix(1., .6, uNight);
+        float sd = sdBox(q, vec2(w * .5, L * .5), w * .32), a = smoothstep(px, -px, sd);
+        if (a <= 0.) continue;
+        float nx = q.x / (w * .5), ny = q.y / (L * .5);
+        vec3 body = uK[i] * (.62 + .5 * (1. - nx * nx)) * (.92 + .1 * ny);                 // lomo claro, costados hondos
+        body += vec3(1.) * exp(-pow((nx + .35) * 5., 2.)) * .1 * smoothstep(-1., .2, ny);   // un reflejo largo
+        body *= mix(1., .55, uNight) + mix(0., .25, uNight) * exp(-sd * sd * 3000.);
+        // cabina: vidrio oscuro con un brillo
+        float cab = sdBox(q - vec2(0., -L * .05), vec2(w * .37, L * .27), w * .2), ca2 = smoothstep(px, -px, cab);
+        vec3 glass = mix(vec3(.05, .07, .1), cov * .35, .3) + vec3(.25, .3, .36) * exp(-pow((nx - .2) * 4., 2.)) * smoothstep(.1, .5, ny + .3) * .5;
+        float roof = sdBox(q - vec2(0., -L * .075), vec2(w * .335, L * .165), w * .17);
+        body = mix(body, glass, ca2); body = mix(body, uK[i] * (.8 + .3 * (1. - nx * nx)) * (mix(1., .6, uNight)), smoothstep(px, -px, roof));
+        // faros y stops
+        float hl = smoothstep(.2, .0, abs(abs(nx) - .62)) * smoothstep(.9, .97, ny), tl = smoothstep(.22, .0, abs(abs(nx) - .6)) * smoothstep(-.9, -.97, ny);
+        body = mix(body, vec3(1., .97, .88), hl * .95);
+        body = mix(body, vec3(1., .1, .06) * (.8 + .6 * (i == 0 ? uP : uBrake)), tl * .95);
+        col = mix(col, body, a); }
+      col *= 1. - .3 * smoothstep(.4, 1.1, length((vUv - .5) * vec2(1., .9)) * 1.25);
+      col += (h(gl_FragCoord.xy) - .5) * .02;
+      o = vec4(col, 1.);
+    }`);
+}
+function drawAuto(dt) {
+  if (!glInit()) { drawInfinity(dt); return; }
+  if (!auto.prog) autoSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  const halfW = Math.min(asp * 0.34, 0.27), LW = halfW * 2 / 3.25, cx = asp / 2, laneX = l => (l - 1) * LW, myY = 0.3;
+  // la carretera corre al tempo: medio alto de pantalla (una farola) por tiempo; más rápido en lo fuerte
+  if (auto.gPrev == null) auto.gPrev = groove;
+  auto.dist += (groove - auto.gPrev) * 0.5 * (0.6 + 0.5 * Math.min(1, dynL * 1.3)); auto.gPrev = groove;
+  if (!auto.cars) auto.cars = [{ lane: 1, y: 0.78, v: 0.24, k: 0, sw: 1 }, { lane: 0, y: 1.05, v: 0.2, k: 2, sw: 3 }];
+  if (pulse.on) auto.beats++;
+  // el tráfico: va más lento que tú, así que baja por la pantalla; sale uno nuevo arriba cada dos tiempos
+  const per = Math.max(0.3, tempo.period || 0.5), flow = (audible ? 1 : 0) * Math.min(1, 0.25 + energy * 4);
+  if (pulse.on && auto.beats % 2 === 0 && auto.cars.length < 5) {
+    const free = [0, 1, 2].filter(l => !auto.cars.some(c => c.lane === l && c.y > 0.7));
+    // nunca se cierra el paso: de los tres carriles, como mucho dos ocupados a la misma altura
+    const busy = new Set(auto.cars.filter(c => c.y > 0.6).map(c => c.lane));
+    const ok = free.filter(l => busy.has(l) || busy.size < 2);
+    if (ok.length) { const l = ok[Math.floor(Math.random() * ok.length)]; auto.cars.push({ lane: l, y: 1.2, v: 0.2 + Math.random() * 0.12, k: Math.floor(Math.random() * 5), sw: Math.random() * 6 }); }
+  }
+  auto.cars.forEach(c => { c.y -= dt * c.v / per * 0.62 * flow * (0.7 + 0.5 * dynL); });
+  auto.cars = auto.cars.filter(c => c.y > -0.25);
+  // esquivar: si hay un carro cerca delante en mi carril, busco el carril libre más cercano y me cambio en el golpe
+  const ahead = auto.cars.filter(c => c.lane === auto.lane && c.y > myY - 0.05).sort((a, b) => a.y - b.y)[0];
+  const gap = ahead ? ahead.y - myY : 9;
+  if (gap < 0.5 && (pulse.on || gap < 0.26)) {
+    const safe = l => l >= 0 && l <= 2 && !auto.cars.some(c => c.lane === l && c.y > myY - 0.24 && c.y < myY + 0.45);
+    const opts = [auto.lane - 1, auto.lane + 1].filter(safe);
+    if (opts.length) auto.lane = opts[0];
+  }
+  // el cambio de carril: un resorte (entra decidido y se asienta), y el carro se inclina hacia donde va
+  const tx = laneX(auto.lane); auto.xv += ((tx - auto.x) * 110 - auto.xv * 15) * dt; auto.x += auto.xv * dt;
+  auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
+  auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
+  auto.brake = Math.max(auto.brake * Math.pow(0.03, dt), hits.snare ? 1 : 0);
+  auto.U.fill(-9); auto.U.set([cx + auto.x, myY + P * 0.006, Math.max(-0.5, Math.min(0.5, auto.xv * 1.6)), 0], 0);
+  auto.cars.slice(0, 6).forEach((c, i) => auto.U.set([cx + laneX(c.lane) + Math.sin(groove * 0.4 + c.sw) * LW * 0.03, c.y, 0, c.k], (i + 1) * 4));
+  const tone = (c, l, sMin = 60) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)).map(v => v / 255); };
+  const kinds = [tone(RGB[0], 46), tone(RGB[2], 50), [0.82, 0.83, 0.86], [0.2, 0.21, 0.24], tone(RGB[1], 40)];
+  auto.K.set(tone(RGB[1], 72, 70).map(v => v * 0.85 + 0.15), 0);   // el tuyo: claro, del color de la portada
+  auto.cars.slice(0, 6).forEach((c, i) => auto.K.set(kinds[c.k], (i + 1) * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
+  const [cw, ch] = glCanvas(1), p = auto.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uRoad, cx, halfW);
+  gl.uniform1f(p.u.uDist, auto.dist % 4000); gl.uniform1f(p.u.uLW, LW); gl.uniform1f(p.u.uNight, night ? 1 : 0.15); gl.uniform1f(p.u.uP, P * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.25) * (0.35 + 0.65 * musicGate)); gl.uniform1f(p.u.uBrake, auto.brake);
+  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 22, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 16, 70)).map(v => v / 255));
+  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uC0, tone(RGB[0], 58, 75)); gl.uniform3fv(p.u.uC1, tone(RGB[1], 58, 75)); gl.uniform3fv(p.u.uC2, tone(RGB[2], 60, 75));
+  gl.uniform4fv(p.u['uCar[0]'], auto.U); gl.uniform3fv(p.u['uK[0]'], auto.K);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.2 + P * 0.1);
+}
+
+const scenes = { autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
