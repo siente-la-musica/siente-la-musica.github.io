@@ -4319,7 +4319,12 @@ function drawRecOverlay() {
   } else if (lyricsOn && ly && state.mode !== 'livecover') {
     // Subtítulos en el tercio inferior, por encima de la zona de texto de TikTok
     // en vertical, algo a la izquierda y más estrecha: la columna de botones de TikTok ocupa el borde derecho
-    drawLyricStyled(ly, (vertical ? 64 : 58) * u, vertical ? W * 0.45 : W / 2, H * (vertical ? 0.64 : 0.8), vertical ? W * 0.7 : W * 0.8);
+    // La letra no cambia de estilo, solo de sitio: cada animación tiene su figura principal y la letra va a la zona
+    // libre. Con figura en el centro (la bola Disco, la esfera, el vinilo…) baja un poco para no taparla; con la
+    // figura abajo (barras, fuego, montañas…) sube al centro. Siempre dentro de la zona segura de TikTok.
+    const zone = LYRIC_LOW.has(state.mode) ? 0 : LYRIC_HIGH.has(state.mode) ? 2 : 1;
+    const yV = [0.745, 0.64, 0.43][zone], yH = [0.88, 0.8, 0.36][zone];
+    drawLyricStyled(ly, (vertical ? 64 : 58) * u, vertical ? W * 0.45 : W / 2, H * (vertical ? yV : yH), vertical ? W * 0.7 : W * 0.8);
   }
   // Firma discreta
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
@@ -4333,6 +4338,8 @@ function drawRecOverlay() {
   ctx.restore();
 }
 const artistClean = new Map();
+const LYRIC_LOW = new Set(['disco', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'capsules', 'columns', 'tubos', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'carro']);
+const LYRIC_HIGH = new Set(['bars', 'fire', 'mountains', 'tubes', 'cats', 'puffs', 'harp']);
 
 // ================= Director automático =================
 // Elige la animación según cómo es la canción: tranquila, media o enérgica. Mide la energía
