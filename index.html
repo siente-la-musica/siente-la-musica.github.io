@@ -448,6 +448,7 @@
   body:not(.idle) .song:not([hidden]) ~ .corner { opacity: 0; }
   body.idle .song { opacity: 0; pointer-events: none; }
   body.idle:has(.lib:not([hidden])) .song { opacity: 1; pointer-events: auto; }
+  body.idle:has(.lib:not([hidden])) .song:not([hidden]) ~ .corner { opacity: 0; }   /* con el panel abierto el reproductor sigue a la vista: el rótulo de la esquina no se le monta */
   .song { transition: opacity .5s; }
 
   /* Letra: línea actual grande, anterior y siguiente atenuadas */
@@ -546,6 +547,7 @@
     .pop.grid #modes { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 60vh; overflow-y: auto; }
     body:has(.song:not([hidden])) .status { display: none; }
     .corner { max-width: calc(100% - 40px); }
+    body.idle .lyrics { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }   /* en el celular la letra va por encima del rótulo de la canción (antes se montaban) */
   }
 
   /* ===== Interfaz viva: la barra, el reproductor y los avisos laten con la música =====
@@ -677,6 +679,8 @@
         <div class="fav-list" id="favList"></div>
       </div>
       <div class="group" role="group" aria-label="Animación" id="modes">
+        <button data-mode="ruta">Ruta</button>
+        <button data-mode="autopista">Autopista</button>
         <button data-mode="bars">Barras</button>
         <button data-mode="lava">Lava</button>
         <button data-mode="dots">Puntos</button>
@@ -710,8 +714,6 @@
         <button data-mode="icons">Íconos</button>
         <button data-mode="columns">Columnas</button>
         <button data-mode="tubos">Tubos</button>
-        <button data-mode="ruta">Ruta</button>
-        <button data-mode="autopista">Autopista</button>
         <button data-mode="circles">Círculos</button>
         <button data-mode="fan">Abanico</button>
         <button data-mode="traces">Trazos</button>
