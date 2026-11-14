@@ -10842,8 +10842,8 @@ const ruta = { prog: null, cars: [], tail: 0, tailV: 0, sway: 0, beats: 0, on: n
   pend: 0, pendV: 0, pendDir: 1, rpm: 0, rpmV: 0, vu: 0, vuV: 0, kmh: 0, vol: 0.3, led: 0, key: '', cab: null, wheel: null, fx: null };
 const RUTA_AMB = {
   dia:     { top: [0.14, 0.40, 0.86], hor: [0.72, 0.87, 0.98], gnd: [0.22, 0.38, 0.17], tree: [0.09, 0.30, 0.15], cl0: [1, 0.99, 0.96], cl1: [0.66, 0.77, 0.92], cov: 0.5, night: 0, lamp: 0, sun: 0, rain: 0, city: 0, pink: [0.98, 0.6, 0.74], cum: 1, cab: 2.3 },
-  tarde:   { top: [0.17, 0.12, 0.38], hor: null, gnd: [0.08, 0.06, 0.11], tree: [0.075, 0.04, 0.10], cl0: [1.0, 0.60, 0.44], cl1: [0.44, 0.22, 0.44], cov: 0.5, night: 0.55, lamp: 0.5, sun: 1, rain: 0, city: 0.5, pink: [0.42, 0.16, 0.3], cum: 1, cab: 1.45 },
-  noche:   { top: [0.012, 0.016, 0.05], hor: [0.045, 0.045, 0.12], gnd: [0.010, 0.012, 0.024], tree: [0.007, 0.009, 0.018], cl0: [0.075, 0.08, 0.16], cl1: [0.024, 0.028, 0.065], cov: 0.56, night: 1, lamp: 1, sun: 0, rain: 0, city: 1, pink: [0.03, 0.014, 0.03], cum: 0.6, cab: 1 },
+  tarde:   { top: [0.17, 0.12, 0.38], hor: null, gnd: [0.08, 0.06, 0.11], tree: [0.075, 0.04, 0.10], cl0: [1.0, 0.60, 0.44], cl1: [0.44, 0.22, 0.44], cov: 0.5, night: 0.55, lamp: 0.5, sun: 1, rain: 0, city: 0.5, pink: [0.42, 0.16, 0.3], cum: 0.85, cab: 1.45 },
+  noche:   { top: [0.012, 0.016, 0.05], hor: [0.045, 0.045, 0.12], gnd: [0.010, 0.012, 0.024], tree: [0.007, 0.009, 0.018], cl0: [0.075, 0.08, 0.16], cl1: [0.024, 0.028, 0.065], cov: 0.56, night: 1, lamp: 1, sun: 0, rain: 0, city: 1, pink: [0.03, 0.014, 0.03], cum: 0.55, cab: 1 },
   lluvia:  { top: [0.33, 0.38, 0.45], hor: [0.62, 0.66, 0.70], gnd: [0.13, 0.19, 0.14], tree: [0.07, 0.14, 0.10], cl0: [0.66, 0.69, 0.73], cl1: [0.42, 0.46, 0.52], cov: 0.36, night: 0.3, lamp: 0.35, sun: 0, rain: 1, city: 0, pink: [0.6, 0.4, 0.48], cum: 0, cab: 1.9 },
   nochell: { top: [0.014, 0.017, 0.045], hor: [0.055, 0.05, 0.12], gnd: [0.008, 0.009, 0.018], tree: [0.006, 0.007, 0.014], cl0: [0.065, 0.065, 0.13], cl1: [0.022, 0.024, 0.055], cov: 0.4, night: 1, lamp: 1, sun: 0, rain: 1, city: 1, pink: [0.024, 0.011, 0.024], cum: 0, cab: 1 },
 };
@@ -10873,9 +10873,9 @@ function rutaSetup() {
         col += uSun * mix(uC0, vec3(1., .78, .5), .55) * (exp(-sdn * sdn * 30.) * .45 + exp(-sdn * sdn * 5.) * .2);
         col = mix(col, mix(vec3(1., .5, .4), vec3(1., .94, .72), smoothstep(-.07, .07, sp.y)), uSun * smoothstep(.078, .074, sdn));
         float mn = uNight * (1. - uSun) * (1. - uRain * .85);
-        vec2 mp = vec2((uv.x - .76) * asp, dy0 - .3); float md = length(mp);
-        col += vec3(.75, .82, 1.) * mn * (exp(-md * md * 500.) * .25 + exp(-md * md * 40.) * .08);
-        col = mix(col, vec3(.95, .96, .9), mn * smoothstep(.026, .0245, md) * (1. - smoothstep(.0235, .022, length(mp - vec2(.011, .006))) * .93));
+        vec2 mp = vec2((uv.x - .27) * asp, dy0 - .27); float md = length(mp);
+        col += vec3(.75, .82, 1.) * mn * (exp(-md * md * 220.) * .3 + exp(-md * md * 25.) * .1);
+        col = mix(col, vec3(.93, .95, .92) * (.88 + .12 * n(mp * 60.)) - .07 * smoothstep(.014, .008, length(mp - vec2(.012, .01))) - .05 * smoothstep(.01, .005, length(mp + vec2(.016, .006))), mn * smoothstep(.046, .0445, md));
         vec2 sgp = uv * vec2(asp, 1.) * 150., sg = floor(sgp); float st = h(sg), sdot = smoothstep(.32, .05, length(fract(sgp) - .5 - (vec2(h(sg + 5.), h(sg + 9.)) - .5) * .5));
         col += vec3(.8, .85, 1.) * step(.972, st) * sdot * (.4 + .6 * uHi) * mn * smoothstep(.05, .3, ty) * (.5 + .5 * sin(uT * 3. + st * 40.));
         vec2 cp = vec2(mx * 1.25 + uT * .012, ty * 2.4 + 2.);
@@ -10885,6 +10885,12 @@ function rutaSetup() {
         vec3 cc = mix(uCl1, uCl0, smoothstep(-.02, .08, cd - cd2));
         cc = mix(cc, uCl1 * .8, smoothstep(uCov + .16, uCov + .19, cd) * .5);
         col = mix(col, mix(cc, hazeC, exp(-ty * 7.) * .7), cm * .94);
+        // nubes grandes de torre sobre el horizonte (pintadas con el mismo ruido que las demás): cima clara, panza en sombra
+        { vec2 q = vec2(mx * 1.1 + uT * .004, dy0);
+          float env = (.09 + .22 * n(vec2(q.x * 1.3 + 7., 2.))) * smoothstep(.3, .62, n(vec2(q.x * .7 + 3., 9.)));
+          float bil = fbm(vec2(q.x * 5., q.y * 6.5) + 11.), dC = dy0 - .012 - env * (.4 + 1.2 * bil), t = -dC / max(env, .02);
+          vec3 cc2 = mix(uCl0, uCl1, smoothstep(.3, .4, t + (bil - .5) * 1.1)); cc2 = mix(cc2, hazeC, smoothstep(.09, 0., dy0) * .65);
+          col = mix(col, cc2, smoothstep(px * 2., -px * 2., dC) * uCum); }
         // cerros en dos planos y, de noche, la ciudad con ventanas que titilan con los agudos
         float m1 = .05 + .075 * n(vec2(mx * 1.1 + 3., 1.)) + .02 * n(vec2(mx * 4.3, 7.));
         vec3 m1c = mix(uTop, hazeC, mix(.62, .3, uNight)) * mix(1., .7, uNight);
@@ -10913,7 +10919,13 @@ function rutaSetup() {
         float beam = exp(-z * .07) * smoothstep(3.4, .3, abs(X - .1)) * uNight;   // nuestros faros alumbran lo cercano
         asf += vec3(.075, .068, .056) * beam;
         vec3 rd = mix(asf, paint * (.3 + 1. * beam + (1. - uNight) * .7), max(dash * .9, edges * .8));
-        vec3 gnd = uGnd * (.85 + .3 * n(vec2(X * .5, zz * .3))) * (1. + .1 * step(.5, fract(zz / 14.))) + uGnd * beam * 2.;
+        vec3 gnd = uGnd * (.8 + .45 * n(vec2(X * .5, zz * .3))) * (.9 + .3 * n(vec2(X * 2.6, zz * .9))) + uGnd * beam * 2.;
+        // flores a la orilla (blancas, amarillas y rosadas)
+        { vec2 fc = vec2(X, zz) * 1.5, fi = floor(fc); float fr = h(fi);
+          float dot_ = smoothstep(.3, .14, length(fract(fc) - .5 - (vec2(h(fi + 3.), h(fi + 7.)) - .5) * .55)) * step(.58, fr) * smoothstep(45., 5., z) * smoothstep(3., 3.4, abs(X + .9));
+          gnd = mix(gnd, (fr > .87 ? vec3(1., .62, .78) : fr > .73 ? vec3(1., .88, .35) : vec3(1., .99, .94)) * mix(1., .07, uNight), dot_ * .92); }
+        // la sombra de los árboles cae a manchas sobre la orilla de la vía
+        rd *= 1. - .3 * (1. - uNight) * (1. - uRain) * smoothstep(.47, .6, n(vec2(X * .7 + 3., zz * .22))) * smoothstep(.9, 2.7, abs(X + .9));
         col = mix(gnd, rd, road);
         col = mix(col, hazeC, fog);
       }
