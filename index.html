@@ -4283,7 +4283,7 @@ function drawRecOverlay() {
   ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)'; ctx.shadowBlur = 24 * u;
   const it = spConnected() && sp.item;
   // Canción arriba a la izquierda (fuera de la zona de botones de TikTok)
-  if (it && state.mode !== 'artist' && state.mode !== 'cover' && state.mode !== 'livecover') {
+  if (it && state.mode !== 'artist' && state.mode !== 'cover' && state.mode !== 'livecover' && state.mode !== 'ruta') {   // en la Ruta el nombre va en la radio y la portada cuelga del retrovisor
     // en vertical, bajo la franja de «Siguiendo / Para ti» y el botón LIVE de TikTok (la zona segura empieza ~14 %)
     const x0 = W * 0.07, y0 = H * (vertical ? 0.165 : 0.1), s_ = 120 * u;
     let tx = x0;
@@ -4338,11 +4338,11 @@ function drawRecOverlay() {
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
   // la firma: el aura viva y el usuario de TikTok, como en el perfil
   { ctx.font = `500 ${30 * u}px ${FONT_BRAND}`; const tag = '@sientelamusicaco', tw = ctx.measureText(tag).width, lr = 28 * u, gap = 14 * u;
-    const y = H * (vertical ? 0.245 : 0.94), x0 = W / 2 - (lr * 2 + gap + tw) / 2;   // en vertical, dentro de la zona segura (bajo el título)
+    const inCar = state.mode === 'ruta' && vertical, y = H * (inCar ? 0.16 : vertical ? 0.245 : 0.94), x0 = inCar ? W * 0.085 : W / 2 - (lr * 2 + gap + tw) / 2, xc = inCar ? x0 + (lr * 2 + gap + tw) / 2 : W / 2;   // en vertical, dentro de la zona segura (bajo el título)
     ctx.save(); ctx.beginPath(); ctx.arc(x0 + lr, y, lr, 0, 7); ctx.clip(); ctx.drawImage(logo.cv, x0, y - lr, lr * 2, lr * 2); ctx.restore();
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y);
     // y la página, debajo y más discreta, para quien quiera la app
-    ctx.textAlign = 'center'; ctx.font = `700 ${23 * u}px ${FONT_UI}`; ctx.fillStyle = textFg(0.8); ctx.fillText("siente-la-musica.github.io", W / 2, y + lr + 22 * u); }
+    ctx.textAlign = 'center'; ctx.font = `700 ${23 * u}px ${FONT_UI}`; ctx.fillStyle = textFg(0.8); ctx.fillText("siente-la-musica.github.io", xc, y + lr + 22 * u); }
   ctx.restore();
 }
 const artistClean = new Map();
@@ -10826,114 +10826,200 @@ function drawCircles(dt) {
 }
 
 // ================= Escena: Ruta (desde adentro del carro) =================
-// Vas manejando y miras por el parabrisas: la carretera se pierde en el horizonte, las farolas pasan una por
-// cada tiempo de la canción, el carro de adelante frena con el bombo (sus luces rojas son el punto donde se fija
-// la vista), de frente vienen faros que te cruzan, la ciudad titila a lo lejos con los agudos y, si llueve, las
-// gotas resbalan por el vidrio y el limpiaparabrisas va al compás. Abajo, el tablero con la radio: la portada,
-// la canción y un ecualizador. Cinco ambientes: día, atardecer, noche, día lluvioso y noche lluviosa.
-// Sin música el carro se detiene (nada avanza) y todo queda en penumbra.
-const ruta = { prog: null, cars: [], tail: 0, tailV: 0, sway: 0, swayV: 0, beats: 0, lamp: 0, on: new Float32Array(12), eq: new Float32Array(10), eqV: new Float32Array(10), eqT: new Float32Array(10), drift: 0 };
+// Un viaje en carro dibujado como en un animé: por el parabrisas se ve la carretera con sus farolas (pasa una por
+// cada tiempo de la canción), los postes con sus cables (pasan a contratiempo), árboles, barandas, cerros y la
+// ciudad a lo lejos. El carro de adelante frena con el bombo; de frente vienen otros que te cruzan. Adentro, la
+// cabina: el volante sigue la melodía, las agujas del tablero suben con la fuerza de la canción, la radio análoga
+// muestra el nombre (la aguja del dial es por dónde va la canción y el vúmetro salta con el sonido) y del
+// retrovisor cuelga la portada, que se mece al compás. La luz de cada farola barre el tablero al pasar.
+// Cinco ambientes: día, atardecer, noche, día lluvioso y noche lluviosa. Sin música el carro se detiene.
+const ruta = { prog: null, cars: [], tail: 0, tailV: 0, sway: 0, beats: 0, on: new Float32Array(12), dist: 0, gPrev: null, spd: 0.6, hi: 0, glow: 0,
+  pend: 0, pendV: 0, pendDir: 1, rpm: 0, rpmV: 0, vu: 0, vuV: 0, kmh: 0, vol: 0.3, led: 0, key: '', cab: null, wheel: null, fx: null };
 const RUTA_AMB = {
-  dia:      { top: [0.20, 0.46, 0.86], hor: [0.74, 0.86, 0.97], gnd: [0.16, 0.26, 0.14], night: 0, lamp: 0, sun: 0, rain: 0, city: 0 },
-  tarde:    { top: [0.13, 0.11, 0.32], hor: null,               gnd: [0.05, 0.05, 0.08], night: 0.55, lamp: 0.45, sun: 1, rain: 0, city: 0.5 },
-  noche:    { top: [0.008, 0.01, 0.03], hor: [0.035, 0.03, 0.08], gnd: [0.006, 0.007, 0.014], night: 1, lamp: 1, sun: 0, rain: 0, city: 1 },
-  lluvia:   { top: [0.36, 0.40, 0.46], hor: [0.62, 0.65, 0.68], gnd: [0.10, 0.13, 0.11], night: 0.3, lamp: 0.35, sun: 0, rain: 1, city: 0 },
-  nochell:  { top: [0.012, 0.014, 0.035], hor: [0.05, 0.04, 0.10], gnd: [0.006, 0.007, 0.014], night: 1, lamp: 1, sun: 0, rain: 1, city: 1 },
+  dia:     { top: [0.14, 0.40, 0.86], hor: [0.72, 0.87, 0.98], gnd: [0.22, 0.38, 0.17], tree: [0.09, 0.30, 0.15], cl0: [1, 0.99, 0.96], cl1: [0.66, 0.77, 0.92], cov: 0.5, night: 0, lamp: 0, sun: 0, rain: 0, city: 0, cab: 2.3 },
+  tarde:   { top: [0.17, 0.12, 0.38], hor: null, gnd: [0.08, 0.06, 0.11], tree: [0.075, 0.04, 0.10], cl0: [1.0, 0.60, 0.44], cl1: [0.44, 0.22, 0.44], cov: 0.5, night: 0.55, lamp: 0.5, sun: 1, rain: 0, city: 0.5, cab: 1.45 },
+  noche:   { top: [0.012, 0.016, 0.05], hor: [0.045, 0.045, 0.12], gnd: [0.010, 0.012, 0.024], tree: [0.007, 0.009, 0.018], cl0: [0.075, 0.08, 0.16], cl1: [0.024, 0.028, 0.065], cov: 0.56, night: 1, lamp: 1, sun: 0, rain: 0, city: 1, cab: 1 },
+  lluvia:  { top: [0.33, 0.38, 0.45], hor: [0.62, 0.66, 0.70], gnd: [0.13, 0.19, 0.14], tree: [0.07, 0.14, 0.10], cl0: [0.66, 0.69, 0.73], cl1: [0.42, 0.46, 0.52], cov: 0.36, night: 0.3, lamp: 0.35, sun: 0, rain: 1, city: 0, cab: 1.9 },
+  nochell: { top: [0.014, 0.017, 0.045], hor: [0.055, 0.05, 0.12], gnd: [0.008, 0.009, 0.018], tree: [0.006, 0.007, 0.014], cl0: [0.065, 0.065, 0.13], cl1: [0.022, 0.024, 0.055], cov: 0.4, night: 1, lamp: 1, sun: 0, rain: 1, city: 1, cab: 1 },
 };
 function rutaSetup() {
-  ruta.prog = glProgram(`uniform vec2 uRes; uniform float uDist, uT, uNight, uLamp, uSun, uRain, uCity, uTail, uSway, uP, uHi, uWip, uGlow, uHz, uDash, uBob;
-    uniform vec3 uTop, uHor, uGnd, uC0, uC1, uC2, uMel; uniform vec4 uOn[3];
+  ruta.prog = glProgram(`uniform vec2 uRes, uPiv; uniform float uDist, uT, uNight, uLamp, uSun, uRain, uCity, uTail, uSway, uP, uHi, uWip, uGlow, uHz, uBob, uCov, uCut;
+    uniform vec3 uTop, uHor, uGnd, uTree, uCl0, uCl1, uC0, uC1, uC2, uMel, uCarC; uniform vec4 uOn[3], uWp;
     ${GLSL_NOISE}
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
-    const float HC = 1.2, K = .22, SP = 14.;
+    const float HC = 1.25, K = .55, SP = 14.;
     vec2 proj(vec3 w, float asp) { return vec2(.5 + w.x * K / (w.z * asp), uHz - (HC - w.y) * K / w.z); }
+    float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
+    float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
     // un punto de luz desenfocado (como se ve una luz a través de un vidrio): disco suave + halo
     float bokeh(vec2 d, float r) { float q = length(d) / r; return smoothstep(1., .72, q) * .75 + exp(-q * q * .55) * .5; }
+    float cloudD(vec2 cp) { return fbm(vec2(cp.x * 1.5, cp.y * 3.4)); }
     vec3 scene(vec2 uv, float foc) {
-      float asp = uRes.x / uRes.y; vec3 col;
-      float fogK = mix(.012, .03, uRain);
-      vec3 hazeC = mix(uHor, uHor + (uC1 * .5 + uMel * .25) * uGlow, uNight);
+      float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec3 col;
+      float fogK = mix(.008, .022, uRain), gX = 0., gz = 1e4;
+      vec3 hazeC = mix(uHor, uHor + (uC1 * .5 + uMel * .25) * uGlow * .6, uNight);
+      vec3 poleC = mix(vec3(.13, .10, .09), vec3(.006, .006, .01), uNight);
       if (uv.y > uHz) {
-        // cielo: degradado, resplandor de la ciudad o del sol, nubes
-        float ty = (uv.y - uHz) / (1. - uHz);
-        col = mix(hazeC, uTop, pow(ty, .55));
-        float cl = fbm(vec2(uv.x * asp * 1.6 + uT * .01, ty * 3.2));
-        col = mix(col, mix(col * 1.5 + .04, hazeC, .5), smoothstep(.45, .8, cl) * min(1., mix(.25, .8, uRain) + (1. - uNight) * .55) * (1. - ty * .4));
-        vec2 sp = vec2((uv.x - .44) * asp, uv.y - uHz - .035);
-        col += uSun * (mix(uC0, vec3(1., .8, .5), .5) * (exp(-dot(sp, sp) * 60.) * .5 + exp(-dot(sp, sp) * 9.) * .22) + vec3(1., .86, .6) * smoothstep(.05, .044, length(sp)) * .55);
-        // estrellas (solo noche despejada)
+        // ---- cielo: degradado de tres tonos, sol o luna, estrellas y nubes de bordes limpios con dos tonos ----
+        float dy0 = uv.y - uHz, ty = clamp(dy0 / (1. - uHz), 0., 1.), mx = uv.x * asp;
+        vec3 mid = mix(uHor, uTop, .55) + vec3(.16, .0, .06) * uSun;
+        col = ty < .32 ? mix(hazeC, mid, smoothstep(0., .32, ty)) : mix(mid, uTop, smoothstep(.32, 1., ty));
+        vec2 sp = vec2((uv.x - .42) * asp, dy0 - .05); float sdn = length(sp);
+        col += uSun * mix(uC0, vec3(1., .78, .5), .55) * (exp(-sdn * sdn * 30.) * .45 + exp(-sdn * sdn * 5.) * .2);
+        col = mix(col, mix(vec3(1., .5, .4), vec3(1., .94, .72), smoothstep(-.07, .07, sp.y)), uSun * smoothstep(.078, .074, sdn));
+        float mn = uNight * (1. - uSun) * (1. - uRain * .85);
+        vec2 mp = vec2((uv.x - .76) * asp, dy0 - .3); float md = length(mp);
+        col += vec3(.75, .82, 1.) * mn * (exp(-md * md * 500.) * .25 + exp(-md * md * 40.) * .08);
+        col = mix(col, vec3(.95, .96, .9), mn * smoothstep(.026, .0245, md) * (1. - smoothstep(.0235, .022, length(mp - vec2(.011, .006))) * .93));
         vec2 sgp = uv * vec2(asp, 1.) * 150., sg = floor(sgp); float st = h(sg), sdot = smoothstep(.32, .05, length(fract(sgp) - .5 - (vec2(h(sg + 5.), h(sg + 9.)) - .5) * .5));
-        col += vec3(.8, .85, 1.) * step(.975, st) * sdot * (.4 + .6 * uHi) * uNight * (1. - uRain) * (1. - uSun) * smoothstep(.05, .3, ty) * (.5 + .5 * sin(uT * 3. + st * 40.));
-        // el horizonte: de noche, la ciudad con ventanas que titilan con los agudos; de día, cerros
-        float bx = uv.x * asp * 34., bid = floor(bx), bh = (.012 + .05 * h1(bid) * h1(bid + 7.)) * uCity + (.018 + .03 * n(vec2(uv.x * asp * 2.2, 3.))) * (1. - uCity);
-        float sil = smoothstep(bh + .002, bh - .002, uv.y - uHz);
-        vec3 silC = mix(mix(uGnd, hazeC, .55), hazeC * .25, uNight);
-        vec2 wn = vec2(fract(bx) * 5., (uv.y - uHz) * 420.); float wid = h(vec2(bid, floor(wn.y)) + floor(wn.x) * 3.1);
-        float win = step(.74, wid) * step(.25, fract(wn.x)) * step(.3, fract(wn.y)) * uCity * uNight * step(.55, foc + .1);
-        silC += mix(uC0, vec3(1., .85, .6), .5) * win * (.25 + .9 * uHi * step(.5, fract(wid * 9. + uT * .5)));
+        col += vec3(.8, .85, 1.) * step(.972, st) * sdot * (.4 + .6 * uHi) * mn * smoothstep(.05, .3, ty) * (.5 + .5 * sin(uT * 3. + st * 40.));
+        vec2 cp = vec2(mx * 1.25 + uT * .012, ty * 2.4 + 2.);
+        vec2 ld = vec2((.42 - uv.x) * asp * uSun * 2., mix(1., -1., max(uNight, uSun)));
+        float cd = cloudD(cp), cd2 = cloudD(cp + normalize(ld) * .09);
+        float cm = smoothstep(uCov, uCov + .03, cd) * smoothstep(0., .1, ty);
+        vec3 cc = mix(uCl1, uCl0, smoothstep(-.02, .08, cd - cd2));
+        cc = mix(cc, uCl1 * .8, smoothstep(uCov + .16, uCov + .19, cd) * .5);
+        col = mix(col, mix(cc, hazeC, exp(-ty * 7.) * .7), cm * .94);
+        // cerros en dos planos y, de noche, la ciudad con ventanas que titilan con los agudos
+        float m1 = .05 + .075 * n(vec2(mx * 1.1 + 3., 1.)) + .02 * n(vec2(mx * 4.3, 7.));
+        vec3 m1c = mix(uTop, hazeC, mix(.62, .3, uNight)) * mix(1., .7, uNight);
+        col = mix(col, mix(m1c, hazeC, .35 * smoothstep(m1, 0., dy0)), smoothstep(m1 + px, m1 - px, dy0));
+        float bx = mx * 30., bid = floor(bx), bh = (.014 + .075 * h1(bid) * h1(bid + 7.)) * uCity;
+        float sil = smoothstep(bh + px, bh - px, dy0) * step(.07, fract(bx)) * step(.001, uCity);
+        vec3 silC = mix(mix(uGnd, hazeC, .5), hazeC * .22, uNight);
+        vec2 wn = vec2(fract(bx) * 5., dy0 * 420.); float wid = h(vec2(bid, floor(wn.y)) + floor(wn.x) * 3.1);
+        float win = step(.7, wid) * step(.3, fract(wn.x)) * step(.35, fract(wn.y)) * uCity * max(uNight, .3) * step(.55, foc + .1);
+        silC += mix(uC0, vec3(1., .85, .6), .5) * win * (.3 + .9 * uHi * step(.5, fract(wid * 9. + uT * .5)));
         col = mix(col, silC, sil);
+        float m2 = (.014 + .045 * n(vec2(mx * 2.1 + 11., 4.)) + .012 * n(vec2(mx * 7., 2.))) * (1. - uCity * .75);
+        col = mix(col, mix(uTree * 1.2, hazeC, .5), smoothstep(m2 + px, m2 - px, dy0));
       } else {
-        float t = max(uHz - uv.y, 1e-4), z = HC * K / t, X = (uv.x - .5) * asp * z / K, zz = z + uDist;
+        float t = max(uHz - uv.y, 1e-4), z = HC * K / t, X = (uv.x - .5) * asp * z / K, zz = z + uDist, aa = z / K * px; gX = X; gz = z;
         float fog = 1. - exp(-z * fogK);
         // la carretera: dos carriles (vamos por el derecho), raya del centro a trazos, bordes continuos
-        float lw = .05 + z * .004;
-        float road = smoothstep(2.9 + lw, 2.9 - lw, abs(X + .9));
-        vec3 asf = mix(vec3(.105, .11, .12), vec3(.012, .013, .018), uNight) * (.85 + .3 * n(vec2(X * 3., zz * 1.5)));
-        asf *= mix(1., .62, uRain);
-        float dash = smoothstep(lw * 1.5, lw * .5, abs(X + .9)) * step(.5, fract(zz / 7.));
-        float edges = smoothstep(lw * 1.4, lw * .4, abs(abs(X + .9) - 2.7));
-        vec3 paint = mix(vec3(.85, .82, .7), vec3(.5, .47, .36), uNight);
-        // nuestros faros alumbran lo cercano
-        float beam = exp(-z * .09) * smoothstep(3.2, .3, abs(X)) * uNight;
-        asf += vec3(.055, .05, .042) * beam;
-        vec3 rd = mix(asf, paint * (.3 + .9 * beam + (1. - uNight) * .7), max(dash * .9, edges * .8));
-        vec3 gnd = uGnd * (.8 + .4 * n(vec2(X * .8, zz * .4)));
+        float lw = .06 + z * .003;
+        float road = smoothstep(2.9 + aa, 2.9 - aa, abs(X + .9));
+        vec3 asf = mix(vec3(.15, .15, .17), vec3(.016, .017, .024), uNight) * (.88 + .24 * n(vec2(X * 3., zz * 1.5)));
+        asf *= mix(1., .6, uRain);
+        asf += hazeC * mix(.05, .32, uRain) * smoothstep(3., 60., z);     // a lo lejos el asfalto refleja el cielo (más si está mojado)
+        float dash = smoothstep(lw + aa, lw - aa, abs(X + .9)) * step(.5, fract(zz / 7.));
+        float edges = smoothstep(lw + aa, lw - aa, abs(abs(X + .9) - 2.65));
+        vec3 paint = mix(vec3(.93, .9, .8), vec3(.5, .47, .36), uNight);
+        float beam = exp(-z * .07) * smoothstep(3.4, .3, abs(X - .1)) * uNight;   // nuestros faros alumbran lo cercano
+        asf += vec3(.075, .068, .056) * beam;
+        vec3 rd = mix(asf, paint * (.3 + 1. * beam + (1. - uNight) * .7), max(dash * .9, edges * .8));
+        vec3 gnd = uGnd * (.85 + .3 * n(vec2(X * .5, zz * .3))) * (1. + .1 * step(.5, fract(zz / 14.))) + uGnd * beam * 2.;
         col = mix(gnd, rd, road);
         col = mix(col, hazeC, fog);
       }
-      // ---- luces (se suman encima; en el suelo mojado dejan su reflejo alargado) ----
-      vec3 L = vec3(0.); float wet = mix(.25, 1., uRain) * mix(.25, 1., uNight);
-      float below = step(uv.y, uHz), wob = (n(vec2(uv.x * 40., uv.y * 180.)) - .5) * .012 * below;
-      // farolas a los dos lados: una pasa por cada tiempo de la canción
-      for (int i = 0; i < 7; i++) for (int sd = 0; sd < 2; sd++) {
-        float zl = (float(i) + 1. - fract(uDist / SP)) * SP; if (zl < 1.5) continue;
-        vec3 w = vec3(sd == 0 ? -4.3 : 2.5, 3.6, zl); vec2 s = proj(w, asp), g = proj(vec3(w.x, 0., zl), asp);
-        vec2 d = vec2((uv.x - s.x) * asp, uv.y - s.y); float fade = exp(-zl * .016) * smoothstep(1.5, 5., zl);
-        vec3 lc = mix(sd == 0 ? uC0 : uC2, vec3(1., .86, .62), .45);
-        float r = (.006 + .16 / zl) * (.55 + .6 * foc);
-        L += lc * bokeh(d, r) * fade * uLamp * 1.25;
-        // poste (se ve sobre todo de día) y reflejo en el suelo
-        float pole = smoothstep(.0035 + .02 / zl, .0, abs((uv.x - s.x) * asp)) * step(g.y, uv.y) * step(uv.y, s.y);
-        L -= vec3(.5) * pole * (1. - uNight) * .5 * fade;
-        L += lc * exp(-pow((uv.x - s.x + wob) * asp / (r * 1.3), 2.)) * smoothstep(g.y + .0, g.y - .12 - .5 / zl, uv.y) * below * step(uv.y, g.y) * fade * uLamp * wet * .5;
+      // ---- al borde de la vía: árboles en dos planos y la baranda (cada uno en su plano vertical) ----
+      for (int sd = 0; sd < 2; sd++) {
+        float dxs = (uv.x - .5) * asp * (sd == 0 ? -1. : 1.); if (dxs < 1e-4) continue;
+        float edge = sd == 0 ? 3.8 : 2.;
+        for (int l = 0; l < 2; l++) {
+          float xw = edge + (l == 0 ? 9. : 3.4), z = xw * K / dxs; if (z > 500.) continue;
+          float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px, fq = l == 0 ? .09 : .16;
+          float th;
+          if (l == 0) th = 5. + 5.5 * n(vec2(zz * .05 + float(sd) * 37., 1.)) + 1.2 * n(vec2(zz * .22, 5.));          // el bosque de atrás: lomas suaves
+          else { float ci = floor(zz / 3.2), cf = fract(zz / 3.2), rr = h1(ci + float(sd) * 71.);                          // adelante: pinos, uno por celda
+            th = step(.42, rr) * (2.6 + 3.6 * rr) * pow(max(0., 1. - abs(cf - .5) * 2.2), .75) + .7 + .5 * n(vec2(zz * .6, 3.)); }
+          float m = smoothstep(th + aa, th - aa, Y) * step(-.02, Y);
+          vec3 tc = uTree * (l == 0 ? 1.3 : 1.) * (1. + .6 * smoothstep(th - 1.5, th - .3, Y) * (1. - uNight * .5));
+          col = mix(col, mix(tc, hazeC, 1. - exp(-z * fogK * 1.2)), m);
+        }
+        { float xw = edge + .55, z = xw * K / dxs, Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
+          float rail = smoothstep(.1 + aa, .1 - aa, abs(Y - .6));
+          float post = smoothstep(.07 + aa, .07 - aa, abs(fract(zz / 3.5) - .5) * 3.5) * step(0., Y) * step(Y, .62);
+          vec3 rc = mix(vec3(.6, .62, .66), vec3(.035, .037, .05), uNight) + vec3(.14, .13, .115) * exp(-z * .08) * uNight;
+          col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9) * step(z, 300.)); }
       }
-      // el carro de adelante: sus luces rojas frenan con el bombo
-      { float zc = 8.5; vec2 c = proj(vec3(uSway, .95, zc), asp), gc = proj(vec3(uSway, 0., zc), asp); float sc = K / zc;
-        vec2 q = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
-        float body = smoothstep(1.02, .96, abs(q.x) / .92) * smoothstep(.75, .68, q.y) * smoothstep(-.98, -.9, q.y) * (1. - smoothstep(.2, .75, q.y) * smoothstep(.55, .95, abs(q.x) / .92));
-        vec3 bc = mix(vec3(.09, .095, .11), vec3(.012, .013, .02), uNight) + vec3(.03, .028, .025) * exp(-15. * .09) * uNight;
-        L = mix(L, bc - 1., body * 0.);   // (la carrocería se mezcla abajo, sobre el color ya compuesto)
-        for (int k = 0; k < 2; k++) { vec2 d = (q - vec2(k == 0 ? -.68 : .68, -.12)) * sc;
-          L += vec3(1., .07, .05) * (bokeh(d, (.011 + .012 * uTail) * (.6 + .5 * foc)) * (.55 + 1.3 * uTail) + exp(-abs(d.y) / .003) * exp(-abs(d.x) / (.02 + .05 * uTail)) * .5 * uTail) * mix(.55, 1., uNight);
-          L += vec3(1., .07, .05) * exp(-pow((d.x + wob) / .012, 2.)) * smoothstep(0., -.1, uv.y - gc.y) * step(uv.y, gc.y) * (.25 + .7 * uTail) * wet * .5; }
-        L += vec3(0., 0., 0.); }
-      // los que vienen de frente por el otro carril: faros blancos con destello ancho
-      for (int j = 0; j < 3; j++) { float zo = uOn[j].x; if (zo < 1.2 || zo > 200.) continue; float br = uOn[j].y;
-        for (int k = 0; k < 2; k++) { vec3 w = vec3(-2.6 + (k == 0 ? -.62 : .62), .78, zo); vec2 s = proj(w, asp), g = proj(vec3(w.x, 0., zo), asp);
-          vec2 d = vec2((uv.x - s.x) * asp, uv.y - s.y); float fade = exp(-zo * .012) * smoothstep(1.2, 3.5, zo), r = (.005 + .12 / zo) * (.55 + .6 * foc);
+      // postes de luz a la derecha, con sus tres cables que cuelgan de poste a poste: pasan a contratiempo
+      { float dxs = (uv.x - .5) * asp;
+        if (dxs > 1e-4) for (int k = 0; k < 3; k++) {
+          float xw = 3.8 + float(k - 1) * .55, z = xw * K / dxs, Y = HC - (uHz - uv.y) * z / K, f = fract((z + uDist) / SP - .5);
+          float sagY = 6.9 - (.9 + .25 * float(k)) * 4. * f * (1. - f), th = max(.02, z / K * px * .6);
+          col = mix(col, mix(poleC, hazeC, 1. - exp(-z * fogK)), smoothstep(th, th * .4, abs(Y - sagY)) * step(z, 170.) * .85);
+        }
+        for (int i = 0; i < 7; i++) { float zl = (float(i) + .5 - fract(uDist / SP)) * SP; if (zl < .7) continue;
+          vec2 g = proj(vec3(3.8, 0., zl), asp), s = proj(vec3(3.8, 7.3, zl), asp), b = proj(vec3(3.8, 6.9, zl), asp); float r = .1 * K / zl;
+          float pole = smoothstep(r + px * .7, r - px * .7, abs((uv.x - g.x) * asp)) * step(g.y, uv.y) * step(uv.y, s.y);
+          float bar = smoothstep(r * .8 + px * .7, r * .8 - px * .7, abs(uv.y - b.y)) * step(abs((uv.x - b.x) * asp), .85 * K / zl);
+          col = mix(col, mix(poleC, hazeC, 1. - exp(-zl * fogK)), max(pole, bar)); }
+      }
+      // ---- luces (se suman al final; en el suelo mojado dejan su reflejo alargado) ----
+      vec3 L = vec3(0.); float wet = mix(.25, 1., uRain) * mix(.3, 1., uNight);
+      float below = step(uv.y, uHz), wob = (n(vec2(uv.x * 40., uv.y * 180.)) - .5) * .012 * below;
+      vec2 pa = vec2(uv.x * asp, uv.y);
+      // farolas a la izquierda, con su brazo sobre la vía: pasa una por cada tiempo de la canción
+      for (int i = 0; i < 7; i++) {
+        float zl = (float(i) + 1. - fract(uDist / SP)) * SP; if (zl < .8) continue;
+        vec2 g = proj(vec3(-5., 0., zl), asp), t = proj(vec3(-5., 5.3, zl), asp), hd = proj(vec3(-3.3, 5.75, zl), asp); float r = .08 * K / zl, fg = 1. - exp(-zl * fogK);
+        float pole = smoothstep(r + px * .7, r - px * .7, abs((uv.x - g.x) * asp)) * step(g.y, uv.y) * step(uv.y, t.y);
+        float arm = smoothstep(r * .8 + px * .7, r * .8 - px * .7, sdSeg(pa, vec2(t.x * asp, t.y), vec2(hd.x * asp, hd.y)));
+        float head = smoothstep(px, -px, sdBox(pa - vec2(hd.x * asp, hd.y), vec2(.34, .08) * K / zl, .05 * K / zl));
+        col = mix(col, mix(poleC, hazeC, fg), max(max(pole, arm), head));
+        vec2 d = vec2((uv.x - hd.x) * asp, uv.y - hd.y + .1 * K / zl); float fade = exp(-zl * .012);
+        vec3 lc = mix(mod(float(i) + floor(uDist / SP), 2.) < .5 ? uC0 : uC2, vec3(1., .86, .62), .5);
+        float rb = (.005 + .3 / zl) * (.5 + .6 * foc);
+        L += lc * bokeh(d, rb) * fade * uLamp * 1.2;
+        L += lc * exp(-pow(d.x / (rb * .8 + max(-d.y, 0.) * .32), 2.)) * step(d.y, 0.) * smoothstep(g.y, g.y + .06, uv.y) * fade * uLamp * mix(.03, .12, uRain);   // el cono de luz en el aire
+        if (uv.y < uHz) { vec2 dw = vec2(gX + 3.3, (gz - zl) * .45); L += lc * exp(-dot(dw, dw) / 14.) * fade * uLamp * .16; }                    // su charco de luz en el suelo
+        L += lc * exp(-pow((uv.x - hd.x + wob) * asp / (rb * 1.2), 2.)) * smoothstep(g.y, g.y - .1 - .6 / zl, uv.y) * step(uv.y, g.y) * fade * uLamp * wet * .4;
+      }
+      // los que vienen de frente por el otro carril: su carrocería y sus faros con destello ancho
+      for (int j = 0; j < 3; j++) { float zo = uOn[j].x; if (zo < 1.5 || zo > 200.) continue; float br = uOn[j].y, sc = K / zo;
+        vec2 c = proj(vec3(-2.35, 0., zo), asp), q = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
+        if (abs(q.x) < 1.3 && q.y < 1.7 && q.y > -.3 && zo < 120.) {
+          float aa = px / sc, fg = (1. - exp(-zo * fogK)) * .7;
+          float body = smoothstep(aa, -aa, sdBox(q - vec2(0., .58), vec2(.9, .34), .14));
+          float hw = mix(.8, .6, clamp((q.y - .85) / .55, 0., 1.));
+          float cab = smoothstep(aa, -aa, sdBox(vec2(q.x, q.y - 1.1), vec2(hw, .33), .1));
+          float tire = smoothstep(aa, -aa, sdBox(vec2(abs(q.x) - .66, q.y - .16), vec2(.15, .16), .06));
+          vec3 kc = uOn[j].z < .33 ? uC0 : uOn[j].z < .66 ? vec3(.72, .74, .78) : uC2;
+          vec3 bc = kc * mix(.8, .045, uNight);
+          col *= 1. - .5 * smoothstep(1.15, .7, abs(q.x)) * smoothstep(-.14, -.02, q.y) * smoothstep(.3, .1, q.y);
+          col = mix(col, mix(vec3(.012), hazeC, fg * .5), tire);
+          col = mix(col, mix(bc * (.75 + .35 * smoothstep(.3, .9, q.y)), hazeC, fg), max(body, cab));
+          float ws = smoothstep(aa, -aa, sdBox(vec2(q.x, q.y - 1.12), vec2(hw - .09, .22), .06));
+          col = mix(col, mix(mix(uTop, hazeC, .5) * .6 + .01, hazeC, fg), ws * .9); }
+        for (int k = 0; k < 2; k++) { vec3 w = vec3(-2.35 + (k == 0 ? -.62 : .62), .66, zo); vec2 s = proj(w, asp), g = proj(vec3(w.x, 0., zo), asp);
+          vec2 d = vec2((uv.x - s.x) * asp, uv.y - s.y); float fade = exp(-zo * .012) * smoothstep(1.5, 3.5, zo), r = (.004 + .22 / zo) * (.55 + .6 * foc);
           vec3 hc = vec3(1., .96, .88);
-          L += hc * (bokeh(d, r) * 1.2 + exp(-abs(d.y) / (.0025 + .01 / zo)) * exp(-abs(d.x) / (.05 + .9 / zo)) * .6) * fade * br * mix(.5, 1., uNight);
-          L += hc * exp(-pow((d.x + wob) / (r * 1.2), 2.)) * smoothstep(g.y, g.y - .14 - .6 / zo, uv.y) * step(uv.y, g.y) * fade * br * wet * .6; } }
+          L += hc * (bokeh(d, r) * 1.2 + exp(-abs(d.y) / (.0025 + .02 / zo)) * exp(-abs(d.x) / (.05 + 1.6 / zo)) * .6) * fade * br * mix(.4, 1., uNight);
+          L += hc * exp(-pow((d.x + wob) / (r * 1.2), 2.)) * smoothstep(g.y, g.y - .14 - .9 / zo, uv.y) * step(uv.y, g.y) * fade * br * wet * .6; } }
+      // el carro de adelante (dos tonos planos, luneta, placa, stops de barra): sus luces frenan con el bombo
+      { const float zc = 8.; float sc = K / zc; vec2 c = proj(vec3(uSway, 0., zc), asp), q = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc; q.y -= .02 * uTail;
+        if (abs(q.x) < 1.5 && q.y > -.4 && q.y < 1.8) {
+          float aa = px / sc, fg = (1. - exp(-zc * fogK)) * .6;
+          col *= 1. - .62 * smoothstep(1.2, .7, abs(q.x)) * smoothstep(-.16, -.02, q.y) * smoothstep(.32, .1, q.y);
+          col += hazeC * .22 * uRain * exp(-pow(q.x / 1.3, 2.) - pow((q.y - .1) / .35, 2.));          // la bruma que levanta con la vía mojada
+          vec3 base = uCarC * mix(1., mix(.62, .3, clamp(q.y / 1.45, 0., 1.)), uNight);
+          float tire = smoothstep(aa, -aa, sdBox(vec2(abs(q.x) - .68, q.y - .17), vec2(.15, .17), .07));
+          col = mix(col, vec3(.012, .012, .016) * (1. + (1. - uNight) * 1.5), tire);
+          float body = smoothstep(aa, -aa, sdBox(q - vec2(0., .58), vec2(.92, .36), .13));
+          float hw = mix(.84, .64, clamp((q.y - .86) / .56, 0., 1.));
+          float cab = smoothstep(aa, -aa, sdBox(vec2(q.x, q.y - 1.1), vec2(hw, .34), .12));
+          vec3 bcol = base * (.8 + .3 * smoothstep(.5, .56, q.y));
+          bcol = mix(bcol, base * 1.3, smoothstep(.8, .83, q.y) * smoothstep(.93, .9, q.y) * step(abs(q.x), .84));
+          bcol = mix(bcol, base * .5, smoothstep(aa, -aa, sdBox(q - vec2(0., .31), vec2(.92, .09), .05)));
+          col = mix(col, mix(base * .92 * (1. + .3 * smoothstep(1.34, 1.38, q.y)), hazeC, fg), cab);
+          col = mix(col, mix(bcol, hazeC, fg), body);
+          float hw2 = mix(.72, .56, clamp((q.y - .95) / .4, 0., 1.));
+          float win = smoothstep(aa, -aa, sdBox(vec2(q.x, q.y - 1.15), vec2(hw2, .2), .06));
+          vec3 gl = mix(uTop, hazeC, .5 + .3 * (q.y - .95) / .4) * mix(.7, .9, uNight) + .012;
+          gl += vec3(.28) * smoothstep(.07, .0, abs(q.x + q.y * .5 - .5)) * (1. - uNight * .7);
+          col = mix(col, gl, win * .96);
+          col = mix(col, vec3(.86, .86, .8) * mix(1., .45, uNight), smoothstep(aa, -aa, sdBox(q - vec2(0., .47), vec2(.2, .065), .015)));
+          float tl = smoothstep(aa, -aa, sdBox(vec2(abs(q.x) - .6, q.y - .69), vec2(.25, .065), .035));
+          float gar = smoothstep(aa, -aa, sdBox(q - vec2(0., .69), vec2(.36, .05), .02));
+          col = mix(col, vec3(.25, .02, .03) * (1. + uTail), gar * (1. - tl));
+          col = mix(col, vec3(1., .13, .08) * (.55 + .75 * uTail) * mix(.85, 1., uNight), tl);
+        }
+        vec2 gc = proj(vec3(uSway, 0., zc), asp);
+        for (int k = 0; k < 2; k++) { vec2 d = (q - vec2(k == 0 ? -.6 : .6, .69)) * sc;
+          L += vec3(1., .07, .05) * (exp(-pow(d.x / (.03 + .03 * uTail), 2.) - pow(d.y / (.013 + .014 * uTail), 2.)) * (.3 + 1.1 * uTail) + exp(-abs(d.y) / .004) * exp(-abs(d.x) / (.03 + .09 * uTail)) * .5 * uTail) * mix(.5, 1., uNight);
+          L += vec3(1., .07, .05) * exp(-pow((d.x + wob) / .02, 2.)) * smoothstep(0., -.16, uv.y - gc.y) * step(uv.y, gc.y) * (.25 + .7 * uTail) * wet * .5; } }
       col += L;
-      // la carrocería del de adelante (oscura, con su vidrio)
-      { float zc = 8.5; vec2 c = proj(vec3(uSway, .95, zc), asp); float sc = K / zc; vec2 q = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
-        float bodyA = smoothstep(.95, .9, abs(q.x)) * smoothstep(.2, .14, q.y) * smoothstep(-.98, -.9, q.y);
-        float cab = smoothstep(.7, .64, abs(q.x) + max(q.y - .2, 0.) * .35) * smoothstep(.78, .72, q.y) * step(.14, q.y);
-        vec3 bc = mix(vec3(.08, .085, .1), vec3(.01, .011, .017), uNight);
-        float fogc = 1. - exp(-zc * mix(.012, .03, uRain));
-        col = mix(col, mix(bc, hazeC, fogc * .6) + L * .25, max(bodyA, cab) * .96);
-        col = mix(col, mix(uTop, hazeC, .6) * .5 + .01, smoothstep(.58, .52, abs(q.x) + max(q.y - .2, 0.) * .35) * smoothstep(.7, .64, q.y) * step(.26, q.y) * .7);
-        for (int k = 0; k < 2; k++) { vec2 d = (q - vec2(k == 0 ? -.68 : .68, -.12)) * sc; col += vec3(1., .08, .05) * smoothstep(.006, .003, length(d * vec2(.6, 1.))) * (.5 + uTail) * mix(.6, 1., uNight); } }
       // lluvia en el aire, iluminada por las luces
       { float rc = floor(uv.x * asp * 260. + uv.y * 40.), rr = h1(rc); float rl = smoothstep(.93, 1., fract(uv.y * 4.5 + uT * (9. + rr * 6.) + rr * 9.));
         col += (hazeC * .6 + .08) * rl * step(.6, rr) * uRain * .16 * (.35 + .65 * foc); }
@@ -10954,233 +11040,546 @@ function rutaSetup() {
       return m;
     }
     void main() {
+      if (vUv.y < uCut) { o = vec4(0., 0., 0., 1.); return; }                       // lo que tapa el tablero no se calcula
       float asp = uRes.x / uRes.y; vec2 uv = vUv; uv.y += uBob;
       float m = 0.; vec2 off = vec2(0.);
-      if (uRain > .01) { vec2 e = vec2(.0025, 0.);
-        m = drops(uv, asp) * uRain;
-        off = vec2(drops(uv + e.xy, asp) - drops(uv - e.xy, asp), drops(uv + e.yx, asp) - drops(uv - e.yx, asp)) * uRain; }
+      if (uRain > .01) {
+        // el limpiaparabrisas despeja su abanico y las gotas vuelven poco a poco
+        vec2 q = vec2(vUv.x * asp, vUv.y) - uPiv; float rr = length(q), th = atan(q.x, q.y), wetK = 1.;
+        if (rr > uWp.z && rr < uWp.w && th > uWp.x && th < uWp.y) {
+          float s = (th - uWp.x) / (uWp.y - uWp.x), ph = acos(1. - 2. * s), f = mod(uWip, 6.2832);
+          float since = min(mod(f - ph + 6.2832, 6.2832), mod(f + ph, 6.2832));
+          wetK = smoothstep(.05, 4.4, since); }
+        vec2 e = vec2(.0025, 0.);
+        m = drops(uv, asp) * uRain * wetK;
+        off = vec2(drops(uv + e.xy, asp) - drops(uv - e.xy, asp), drops(uv + e.yx, asp) - drops(uv - e.yx, asp)) * uRain * wetK; }
       float mm = clamp(m, 0., 1.);
       // por el vidrio todo se ve algo desenfocado; a través de cada gota, nítido, pequeño y corrido (como una lente)
       vec3 col = scene(uv - off * .16 + vec2(0., mm * .03), mix(1., .25, mm));
-      col += vec3(1.) * pow(mm, 3.) * .1 * (uHor + .1);                                 // brillo de la gota
-      col = mix(col, col * .96 + uHor * .04, uRain * .5);                               // vidrio empañado
-      // limpiaparabrisas al compás (solo con lluvia)
-      if (uRain > .01) { vec2 pv = vec2(.5 * asp, uDash - .02), q = vec2(uv.x * asp, uv.y) - pv; float an = sin(uWip) * 1.05, len = min(.62, asp * .9);
-        vec2 dir = vec2(sin(an), cos(an)); float tq = clamp(dot(q, dir), .03, len); float dl = length(q - dir * tq);
-        col = mix(col, vec3(.004, .004, .006), smoothstep(.007, .004, dl) * uRain);
-        col = mix(col, col * 1.12, smoothstep(.02, .007, dl) * .25 * uRain); }
-      // ---- adentro del carro: tablero, capota del velocímetro, volante y parales ----
-      float dashY = uDash + .02 * cos((uv.x - .5) * 3.1416) + .045 * exp(-pow((uv.x - .27) / .17, 2.));
-      vec3 amb = mix(uHor * .5, (uC0 + uC2) * .12 * uGlow + vec3(.5, .04, .03) * uTail * .12, uNight);
-      vec3 inC = vec3(.016, .016, .021) + amb * .07 + vec3(.02, .02, .026) * smoothstep(.0, 1., uv.y / uDash);   // el tablero no es un hueco negro: se aclara hacia el vidrio
-      inC += amb * exp(-(dashY - uv.y) * 38.) * .55;                                     // el filo del tablero recoge la luz de fuera
-      inC += (uC1 * .5 + .1) * exp(-pow((uv.x - .27) / .12, 2.) - pow((uv.y - (uDash - .075)) / .04, 2.)) * .22 * (.5 + uP * .6);   // resplandor de los relojes
-      col = mix(col, inC, smoothstep(dashY + .0015, dashY - .0015, uv.y));
-      { vec2 wc = vec2(.27 * asp, uDash - .2), q = vec2(uv.x * asp, uv.y) - wc; float R = min(.21, asp * .36), rr = length(q);
-        float ring = smoothstep(.019, .016, abs(rr - R)), spoke = smoothstep(.02, .016, abs(q.y + .02)) * step(rr, R) + smoothstep(.022, .018, abs(q.x)) * step(q.y, 0.) * step(rr, R);
-        vec3 wcol = vec3(.03, .03, .038) + amb * .28 * smoothstep(-.4, 1., q.y / R) + (vec3(.1) + amb * .5) * exp(-pow((rr - R - .007) * 140., 2.)) * smoothstep(-.2, 1., q.y / R);
-        col = mix(col, wcol, max(ring, spoke * .9)); }
-      float pil = smoothstep(.0, .05, uv.x - .012 - (1. - uv.y) * .02) * smoothstep(.0, .05, (1. - uv.x) - .012 - (1. - uv.y) * .02);
-      col = mix(vec3(.008, .008, .011), col, pil);
-      col *= 1. - .35 * smoothstep(.45, 1.05, length((vUv - vec2(.5, .55)) * vec2(1., .85)) * 1.25);
-      col += (h(gl_FragCoord.xy) - .5) * .022;
+      col += vec3(1.) * pow(mm, 3.) * .1 * (uHor + .1);
+      col = mix(col, col * .96 + uHor * .04, uRain * .5);
+      col *= 1. - .3 * smoothstep(.84, 1.02, vUv.y);                                   // la franja oscura de arriba del parabrisas
+      col += (h(gl_FragCoord.xy) - .5) * .02;
       o = vec4(col, 1.);
     }`);
 }
 function rutaAmb() { const a = state.ruta || 'auto'; return RUTA_AMB[a] ? a : state.theme === 'dark' ? 'nochell' : 'tarde'; }
+// dónde va cada cosa de la cabina (cambia entre vertical y horizontal)
+function rutaLayout() {
+  const vertical = W < H, dash = vertical ? 0.36 : 0.32, dy = H * (1 - dash), dh = H * dash, u = MIN / 1000;
+  const R = vertical ? W * 0.34 : H * 0.3, wx = vertical ? W * 0.14 : W * 0.25, wy = dy + dh * (vertical ? 0.62 : 0.72);
+  const rw = vertical ? W * 0.5 : W * 0.27, rh = rw * 0.46, rx = vertical ? W * 0.455 : W * 0.45, ry = dy + dh * (vertical ? 0.075 : 0.2);
+  const mw = vertical ? W * 0.3 : W * 0.15, mh = mw * 0.3, mx = vertical ? W * 0.7 : W * 0.5, my = H * (vertical ? 0.034 : 0.05);
+  const gr = R * 0.25, gy = wy - R * 0.5, hb = Math.max(0, dy - (wy - R * 0.86));
+  return { vertical, dash, dy, dh, u, R, wx, wy, rw, rh, rx, ry, mw, mh, mx, my, gr, gy, hb, g0x: wx - R * 0.32, g1x: wx + R * 0.32,
+    pivX: vertical ? W * 0.74 : W * 0.63, pivY: dy + dh * 0.03, wl: vertical ? H * 0.47 : H * 0.6,
+    dsx: rx + rw * 0.19, dsy: ry + rh * 0.09, dsw: rw * 0.62, dsh: rh * 0.58 };
+}
+// la cabina (lo que no cambia) se dibuja una vez: parales, techo, retrovisor, tablero, relojes, consola y radio
+function rutaCabin(A, Lo, tones, hor) {
+  const { vertical, dy, dh, u, R, wx, wy, rw, rh, rx, ry, mw, mh, mx, my, gr, gy, hb } = Lo, { deep, base, mid, lite, edge, acc } = tones;
+  const c = ruta.cab || (ruta.cab = document.createElement('canvas')); c.width = W; c.height = H;
+  const x = c.getContext('2d'); x.clearRect(0, 0, W, H); x.lineCap = 'round'; x.lineJoin = 'round';
+  const sm = t => { t = Math.max(0, Math.min(1, t)); return t * t * (3 - 2 * t); };
+  const topY = X => dy - H * 0.008 * Math.sin(Math.PI * X / W) - hb * sm((X - (wx - R * 1.05)) / (R * 0.3)) * sm(((wx + R * 1.05) - X) / (R * 0.3));
+  const horCss = a => rgba(hor.map(v => Math.min(255, v * 255)), a);
+  const topPath = () => { x.beginPath(); x.moveTo(0, topY(0)); for (let i = 1; i <= 90; i++) x.lineTo(W * i / 90, topY(W * i / 90)); };
+  // ---- el tablero: cara de frente con dos tonos y, arriba, la franja que recibe la luz de afuera ----
+  topPath(); x.lineTo(W, H); x.lineTo(0, H); x.closePath();
+  const g = x.createLinearGradient(0, dy, 0, H); g.addColorStop(0, mid); g.addColorStop(0.5, base); g.addColorStop(1, deep);
+  x.fillStyle = g; x.fill();
+  x.save(); x.clip();
+  topPath(); x.strokeStyle = lite; x.lineWidth = dh * 0.11; x.stroke();
+  topPath(); x.strokeStyle = horCss(0.5); x.lineWidth = Math.max(2, 3 * u); x.stroke();
+  // la ceja: una línea de sombra bajo la franja clara
+  x.beginPath(); for (let i = 0; i <= 90; i++) { const X = W * i / 90; x[i ? 'lineTo' : 'moveTo'](X, topY(X) + dh * 0.058); } x.strokeStyle = deep; x.lineWidth = Math.max(1.5, 2.5 * u); x.stroke();
+  x.restore();
+  // ---- los relojes, hundidos bajo su visera ----
+  x.fillStyle = deep; x.beginPath(); x.roundRect(wx - R * 0.72, gy - gr * 1.3, R * 1.44, gr * 2.55, gr * 0.9); x.fill();
+  x.strokeStyle = lite; x.lineWidth = Math.max(1.5, 2 * u); x.stroke();
+  for (const [gx, red] of [[Lo.g0x, 0], [Lo.g1x, 1]]) {
+    x.fillStyle = '#040508'; x.beginPath(); x.arc(gx, gy, gr, 0, 7); x.fill(); x.strokeStyle = mid; x.lineWidth = Math.max(1.5, 2.5 * u); x.stroke();
+    for (let d = -120; d <= 120; d += 10) { const a = (d - 90) * Math.PI / 180, big = d % 30 === 0, r0 = gr * (big ? 0.72 : 0.82), r1 = gr * 0.92;
+      x.strokeStyle = red && d >= 70 ? 'rgba(255,82,56,.95)' : rgba(acc, big ? 0.95 : 0.5); x.lineWidth = Math.max(1, (big ? 2.4 : 1.4) * u);
+      x.beginPath(); x.moveTo(gx + Math.cos(a) * r0, gy + Math.sin(a) * r0); x.lineTo(gx + Math.cos(a) * r1, gy + Math.sin(a) * r1); x.stroke(); }
+  }
+  // ---- la consola del centro: un panel con la radio y las rejillas del aire ----
+  const vent = (vx, vy, vw, vh) => { x.fillStyle = deep; x.beginPath(); x.roundRect(vx, vy, vw, vh, vh * 0.18); x.fill(); x.strokeStyle = lite; x.lineWidth = Math.max(1, 1.5 * u); x.stroke();
+    x.strokeStyle = mid; x.lineWidth = Math.max(1.5, vh * 0.06); for (let i = 1; i <= 4; i++) { x.beginPath(); x.moveTo(vx + vw * 0.07, vy + vh * i / 5); x.lineTo(vx + vw * 0.93, vy + vh * i / 5); x.stroke(); }
+    x.fillStyle = lite; x.beginPath(); x.roundRect(vx + vw * 0.46, vy + vh * 0.3, vw * 0.08, vh * 0.4, vw * 0.02); x.fill(); };
+  const sh = vertical ? rh * 1.95 : rh * 1.3;
+  x.fillStyle = mid; x.beginPath(); x.roundRect(rx - rw * 0.06, ry - rh * 0.14, rw * 1.12, sh, rw * 0.05); x.fill();
+  x.strokeStyle = lite; x.lineWidth = Math.max(1.5, 2 * u); x.stroke();
+  if (vertical) { vent(rx, ry + rh * 1.14, rw * 0.47, rh * 0.56); vent(rx + rw * 0.53, ry + rh * 1.14, rw * 0.47, rh * 0.56); }
+  else { vent(rx + rw * 1.2, ry + rh * 0.1, rw * 0.42, rh * 0.5); vent(W * 0.86, ry + rh * 0.1, rw * 0.42, rh * 0.5);
+    x.strokeStyle = deep; x.lineWidth = Math.max(1.5, 2.5 * u); x.beginPath(); x.roundRect(W * 0.72, ry + rh * 0.86, W * 0.24, dh * 0.5, rh * 0.1); x.stroke(); }
+  // la radio: carátula oscura, ventana del dial, dos perillas y seis botones de memoria
+  x.fillStyle = '#07080c'; x.beginPath(); x.roundRect(rx, ry, rw, rh, rh * 0.1); x.fill(); x.strokeStyle = edge; x.lineWidth = Math.max(1.5, 2 * u); x.stroke();
+  x.fillStyle = '#020305'; x.beginPath(); x.roundRect(Lo.dsx, Lo.dsy, Lo.dsw, Lo.dsh, rh * 0.06); x.fill(); x.strokeStyle = mid; x.lineWidth = Math.max(1, 1.5 * u); x.stroke();
+  for (let i = 0; i < 6; i++) { const bw = Lo.dsw / 6, bx = Lo.dsx + i * bw; x.fillStyle = base; x.beginPath(); x.roundRect(bx + bw * 0.07, ry + rh * 0.745, bw * 0.86, rh * 0.16, rh * 0.035); x.fill();
+    x.fillStyle = lite; x.fillRect(bx + bw * 0.14, ry + rh * 0.757, bw * 0.72, Math.max(1, rh * 0.012));
+    x.fillStyle = rgba(acc, 0.6); x.font = `600 ${Math.round(rh * 0.085)}px ${FONT_UI}`; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(String(i + 1), bx + bw / 2, ry + rh * 0.83); }
+  for (const kx of [rx + rw * 0.1, rx + rw * 0.9]) { const ky = ry + rh * 0.46, kr = rh * 0.3;
+    x.fillStyle = base; x.beginPath(); x.arc(kx, ky, kr, 0, 7); x.fill(); x.strokeStyle = edge; x.lineWidth = Math.max(1.5, 2 * u); x.stroke();
+    x.strokeStyle = lite; x.lineWidth = Math.max(1, 1.3 * u); for (let i = 0; i < 28; i++) { const a = i / 28 * 6.2832; x.beginPath(); x.moveTo(kx + Math.cos(a) * kr * 0.8, ky + Math.sin(a) * kr * 0.8); x.lineTo(kx + Math.cos(a) * kr * 0.96, ky + Math.sin(a) * kr * 0.96); x.stroke(); }
+    x.fillStyle = mid; x.beginPath(); x.arc(kx, ky, kr * 0.66, 0, 7); x.fill(); }
+  x.fillStyle = rgba(acc, 0.55); x.font = `600 ${Math.round(rh * 0.075)}px ${FONT_UI}`; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('VOL', rx + rw * 0.1, ry + rh * 0.88); x.fillText('TUNE', rx + rw * 0.9, ry + rh * 0.88);
+  // ---- parales, techo y retrovisor ----
+  const pT = W * (vertical ? 0.1 : 0.075), pB = W * 0.018, hh0 = H * (vertical ? 0.03 : 0.05);
+  for (const s of [0, 1]) { const X = v => s ? W - v : v;
+    x.fillStyle = deep; x.beginPath(); x.moveTo(X(0), 0); x.lineTo(X(pT), 0); x.lineTo(X(pB), topY(X(pB)) + 3); x.lineTo(X(0), topY(X(0)) + 3); x.closePath(); x.fill();
+    x.strokeStyle = base; x.lineWidth = Math.max(3, 7 * u); x.beginPath(); x.moveTo(X(pT), 0); x.lineTo(X(pB), topY(X(pB))); x.stroke();
+    x.strokeStyle = horCss(0.35); x.lineWidth = Math.max(1.5, 2 * u); x.beginPath(); x.moveTo(X(pT + 4 * u), 0); x.lineTo(X(pB + 4 * u), topY(X(pB))); x.stroke(); }
+  x.fillStyle = deep; x.beginPath(); x.moveTo(0, 0); x.lineTo(W, 0); x.lineTo(W, hh0); x.quadraticCurveTo(W / 2, hh0 * 0.25, 0, hh0); x.closePath(); x.fill();
+  x.strokeStyle = base; x.lineWidth = Math.max(2, 4 * u); x.beginPath(); x.moveTo(W, hh0); x.quadraticCurveTo(W / 2, hh0 * 0.25, 0, hh0); x.stroke();
+  x.fillStyle = deep; x.fillRect(mx - mw * 0.035, 0, mw * 0.07, my + mh * 0.3);
+  x.fillStyle = base; x.beginPath(); x.roundRect(mx - mw / 2, my, mw, mh, mh * 0.4); x.fill(); x.strokeStyle = lite; x.lineWidth = Math.max(1.5, 2 * u); x.stroke();
+  const gm = x.createLinearGradient(0, my, 0, my + mh); gm.addColorStop(0, rgba(A.top.map(v => v * 235), 1)); gm.addColorStop(0.62, horCss(0.75)); gm.addColorStop(0.64, 'rgba(8,9,13,1)'); gm.addColorStop(1, 'rgba(14,15,20,1)');
+  x.save(); x.beginPath(); x.roundRect(mx - mw * 0.46, my + mh * 0.11, mw * 0.92, mh * 0.78, mh * 0.32); x.clip(); x.fillStyle = '#05060a'; x.fill(); x.globalAlpha = 0.85; x.fillStyle = gm; x.fill();
+  x.globalAlpha = 0.1; x.fillStyle = '#fff'; x.beginPath(); x.moveTo(mx - mw * 0.2, my); x.lineTo(mx - mw * 0.05, my); x.lineTo(mx - mw * 0.22, my + mh); x.lineTo(mx - mw * 0.37, my + mh); x.fill(); x.restore();
+  // la sombra del volante sobre el tablero
+  x.save(); x.globalCompositeOperation = 'source-atop'; x.shadowColor = 'rgba(0,0,0,.55)'; x.shadowBlur = 34 * u; x.shadowOffsetX = 20000; x.shadowOffsetY = 16 * u;
+  x.translate(wx - 20000, wy); x.scale(1, 0.94); x.drawImage(ruta.wheel, -ruta.wheel.width / 2, -ruta.wheel.height / 2); x.restore();
+}
+// el volante: aro grueso de tres radios con su centro (se dibuja una vez y luego solo gira)
+function rutaWheel(Lo, tones, hor) {
+  const { R, u } = Lo, { deep, base, mid, lite, edge, acc } = tones, pad = 10, S = Math.ceil(R * 2 + pad * 2);
+  const c = ruta.wheel || (ruta.wheel = document.createElement('canvas')); c.width = c.height = S;
+  const x = c.getContext('2d'); x.clearRect(0, 0, S, S); x.translate(S / 2, S / 2); x.lineCap = 'round'; x.lineJoin = 'round';
+  const horCss = a => rgba(hor.map(v => Math.min(255, v * 255)), a);
+  // los radios
+  const spoke = s => { x.beginPath(); x.moveTo(s * R * 0.16, -R * 0.13); x.quadraticCurveTo(s * R * 0.55, -R * 0.2, s * R * 0.88, -R * 0.15); x.lineTo(s * R * 0.88, R * 0.05); x.quadraticCurveTo(s * R * 0.55, R * 0.1, s * R * 0.2, R * 0.24); x.closePath(); };
+  for (const s of [-1, 1]) { x.fillStyle = base; spoke(s); x.fill();
+    x.strokeStyle = lite; x.lineWidth = Math.max(1.5, 3 * u); x.beginPath(); x.moveTo(s * R * 0.2, -R * 0.135); x.quadraticCurveTo(s * R * 0.55, -R * 0.2, s * R * 0.85, -R * 0.15); x.stroke();
+    for (let i = 0; i < 2; i++) { x.fillStyle = deep; x.beginPath(); x.roundRect(s * R * (0.5 + i * 0.13) - R * 0.045, -R * 0.085, R * 0.09, R * 0.06, R * 0.02); x.fill(); } }
+  x.fillStyle = base; x.beginPath(); x.moveTo(-R * 0.15, R * 0.15); x.lineTo(R * 0.15, R * 0.15); x.lineTo(R * 0.1, R * 0.88); x.lineTo(-R * 0.1, R * 0.88); x.closePath(); x.fill();
+  // el centro
+  const gh = x.createLinearGradient(0, -R * 0.22, 0, R * 0.3); gh.addColorStop(0, lite); gh.addColorStop(0.3, mid); gh.addColorStop(1, base);
+  x.fillStyle = gh; x.beginPath(); x.roundRect(-R * 0.31, -R * 0.2, R * 0.62, R * 0.48, [R * 0.14, R * 0.14, R * 0.22, R * 0.22]); x.fill(); x.strokeStyle = deep; x.lineWidth = Math.max(1.5, 2.5 * u); x.stroke();
+  x.strokeStyle = rgba(acc, 0.85); x.lineWidth = Math.max(1.5, R * 0.016); x.beginPath(); x.arc(0, R * 0.03, R * 0.075, 0, 7); x.stroke();
+  x.fillStyle = rgba(acc, 0.85); x.beginPath(); x.arc(0, R * 0.03, R * 0.026, 0, 7); x.fill();
+  // el aro: tono medio, una banda clara arriba (donde le da la luz), sombra abajo y un filo de luz
+  x.fillStyle = mid; x.beginPath(); x.arc(0, 0, R, 0, 6.2832); x.arc(0, 0, R * 0.835, 0, 6.2832, true); x.fill('evenodd');
+  x.strokeStyle = lite; x.lineWidth = R * 0.07; x.beginPath(); x.arc(0, 0, R * 0.945, -2.6, -0.54); x.stroke();
+  x.strokeStyle = base; x.lineWidth = R * 0.075; x.beginPath(); x.arc(0, 0, R * 0.885, 0.5, 2.64); x.stroke();
+  x.strokeStyle = horCss(0.6); x.lineWidth = Math.max(1.5, 2.5 * u); x.beginPath(); x.arc(0, 0, R * 0.985, -2.4, -0.74); x.stroke();
+  x.strokeStyle = deep; x.lineWidth = Math.max(1.5, 2 * u); x.beginPath(); x.arc(0, 0, R * 0.835, 0, 6.2832); x.stroke(); x.beginPath(); x.arc(0, 0, R - 1, 0, 6.2832); x.stroke();
+}
 function drawRuta(dt) {
   if (!glInit()) { drawInfinity(dt); return; }
   if (!ruta.prog) rutaSetup();
-  const A = RUTA_AMB[rutaAmb()], P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, vertical = asp < 1;
-  // avanza al tempo: 14 m (una farola) por tiempo; en lo suave, la mitad. Sin música, el carro se detiene
-  ruta.spd = (ruta.spd || 0.6) + ((0.5 + 0.5 * Math.min(1, dynL * 1.4)) - (ruta.spd || 0.6)) * (1 - Math.pow(0.4, dt));
-  const g0 = ruta.g0 === undefined ? (ruta.g0 = groove) : ruta.g0; ruta.dist = (ruta.dist || 0) + (groove - (ruta.gPrev ?? groove)) * 14 * ruta.spd; ruta.gPrev = groove; void g0;
+  const amb = rutaAmb(), A = RUTA_AMB[amb], P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, Lo = rutaLayout(), { vertical, dy, dh, u, R, wx, wy, rw, rh, rx, ry } = Lo;
+  // avanza al tempo: 14 m (una farola) por tiempo; en lo suave, algo menos. Sin música, el carro se detiene
+  ruta.spd += ((0.5 + 0.5 * Math.min(1, dynL * 1.4)) - ruta.spd) * (1 - Math.pow(0.4, dt));
+  if (ruta.gPrev == null) ruta.gPrev = groove;
+  ruta.dist += Math.max(0, Math.min(1, groove - ruta.gPrev)) * 14 * ruta.spd; ruta.gPrev = groove;
   // el de adelante frena con el bombo (resorte: se enciende de golpe y suelta) y se mece con la melodía
-  if (pulse.on) { ruta.tailV += 9 + pulse.k * 10; ruta.beats++; }
+  if (pulse.on) { ruta.tailV += 9 + pulse.k * 10; ruta.beats++; ruta.rpmV += 2.2 + pulse.k * 2; ruta.pendV += ruta.pendDir * (0.7 + pulse.k * 0.8); ruta.pendDir = -ruta.pendDir; }
   ruta.tailV += (-ruta.tail * 60 - ruta.tailV * 9) * dt; ruta.tail = Math.max(0, ruta.tail + ruta.tailV * dt);
-  const swT = (voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.9 : 0) + Math.sin(groove * Math.PI / 8) * 0.25;
+  const swT = (voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.9 : 0) + Math.sin(groove * Math.PI / 8) * 0.3;
   ruta.sway += (swT - ruta.sway) * (1 - Math.pow(0.3, dt));
-  // de frente: cada cuatro tiempos sale un carro del horizonte y te cruza en dos tiempos; la caja suelta otro de vez en cuando
+  // de frente: cada cuatro tiempos sale un carro del horizonte y te cruza en dos tiempos
   const per = Math.max(0.3, tempo.period || 0.5);
-  if (pulse.on && ruta.beats % 4 === 0 && ruta.cars.length < 3) ruta.cars.push({ z: 150, br: 0.7 + pulse.k * 0.5 });
+  if (pulse.on && ruta.beats % 4 === 0 && ruta.cars.length < 3) ruta.cars.push({ z: 150, br: 0.7 + pulse.k * 0.5, k: Math.random() });
   ruta.cars.forEach(c => { c.z -= dt * (c.z > 40 ? 150 : 60 + c.z * 2.2) / (per * 2) * Math.min(1, energy * 5 + 0.15) * (audible ? 1 : 0); });
-  ruta.cars = ruta.cars.filter(c => c.z > 1.2);
-  ruta.on.fill(999); ruta.cars.forEach((c, i) => { ruta.on[i * 4] = c.z; ruta.on[i * 4 + 1] = c.br * (0.75 + P * 0.5); });
-  const hi = bandX(40, BANDS); ruta.hi = (ruta.hi || 0) + (hi - (ruta.hi || 0)) * (1 - Math.pow(0.02, dt));
-  ruta.glow = (ruta.glow || 0) + ((0.35 + bandX(10, 36) * 0.9 + dynL * 0.5) * musicGate - (ruta.glow || 0)) * (1 - Math.pow(0.1, dt));
-  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(75, s_), l)).map(v => v / 255); };
+  ruta.cars = ruta.cars.filter(c => c.z > 1.5);
+  ruta.on.fill(999); ruta.cars.forEach((c, i) => { ruta.on[i * 4] = c.z; ruta.on[i * 4 + 1] = c.br * (0.75 + P * 0.5); ruta.on[i * 4 + 2] = c.k; });
+  const hi = bandX(40, BANDS); ruta.hi += (hi - ruta.hi) * (1 - Math.pow(0.02, dt));
+  ruta.glow += ((0.35 + bandX(10, 36) * 0.9 + dynL * 0.5) * musicGate - ruta.glow) * (1 - Math.pow(0.1, dt));
+  // las agujas: revoluciones (saltan con el bombo), velocidad (la fuerza de la canción), el vúmetro y el volumen
+  const loud = Math.min(1, dynL * 1.15);
+  ruta.rpmV += (((0.22 + 0.45 * loud) * musicGate - ruta.rpm) * 70 - ruta.rpmV * 9) * dt; ruta.rpm = Math.max(0, Math.min(1.05, ruta.rpm + ruta.rpmV * dt));
+  ruta.kmh += ((0.2 + 0.6 * loud) * musicGate - ruta.kmh) * (1 - Math.pow(0.35, dt));
+  ruta.vuV += ((Math.min(1, 0.12 + energy * 2.2 + P * 0.3) * (audible ? 1 : 0) - ruta.vu) * 240 - ruta.vuV * 17) * dt; ruta.vu = Math.max(0, Math.min(1.08, ruta.vu + ruta.vuV * dt));
+  ruta.vol += ((0.25 + 0.5 * loud) - ruta.vol) * (1 - Math.pow(0.5, dt));
+  ruta.led = Math.max(ruta.led * Math.pow(0.02, dt), hits.hat || hits.snare ? 1 : 0);
+  // la portada que cuelga: un péndulo afinado al compás (cada bombo lo empuja para un lado), que en silencio se aquieta
+  const pk = Math.pow(Math.PI / per, 2);
+  ruta.pendV += (-ruta.pend * pk - ruta.pendV * (audible ? 1.3 : 3.5)) * dt; ruta.pend += ruta.pendV * dt; ruta.pend = Math.max(-0.5, Math.min(0.5, ruta.pend));
+  const sat = (c, l, sMin = 75) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)).map(v => v / 255); };
   const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];
   const hor = A.hor || sat(warm, 62).map((v, i) => v * 0.9 + [0.1, 0.03, 0][i]);
-  const hz = vertical ? 0.58 : 0.58, dash = vertical ? 0.32 : 0.3;
+  const hz = 0.58, wphi = groove * Math.PI / 2, wa0 = -1.42, wa1 = 0.14, wr1 = Lo.wl / H, wr0 = wr1 * 0.42;
   const [cw, ch] = glCanvas(1), p = ruta.prog;
   gl.useProgram(p.pr);
-  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uPiv, Lo.pivX / H, 1 - Lo.pivY / H); gl.uniform4f(p.u.uWp, wa0, wa1, wr0, wr1);
   gl.uniform1f(p.u.uDist, ruta.dist % 14000); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
-  gl.uniform1f(p.u.uSun, A.sun); gl.uniform1f(p.u.uRain, A.rain); gl.uniform1f(p.u.uCity, A.city); gl.uniform1f(p.u.uTail, Math.min(1.6, ruta.tail * 0.6 + bandX(0, 10) * 0.35) * (state.noFlash ? 0.5 : 1));
-  gl.uniform1f(p.u.uSway, ruta.sway); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uHi, ruta.hi); gl.uniform1f(p.u.uWip, groove * Math.PI / 2); gl.uniform1f(p.u.uGlow, ruta.glow);
-  gl.uniform1f(p.u.uHz, hz); gl.uniform1f(p.u.uDash, dash); gl.uniform1f(p.u.uBob, P * 0.004 + Math.sin(groove * Math.PI) * 0.0012 * musicGate);
-  gl.uniform3fv(p.u.uTop, A.top); gl.uniform3fv(p.u.uHor, hor); gl.uniform3fv(p.u.uGnd, A.gnd);
-  gl.uniform3fv(p.u.uC0, sat(RGB[0], 58)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 58)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 60)); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.uniform1f(p.u.uSun, A.sun); gl.uniform1f(p.u.uRain, A.rain); gl.uniform1f(p.u.uCity, A.city); gl.uniform1f(p.u.uCov, A.cov);
+  const tail = Math.min(1.6, ruta.tail * 0.6 + bandX(0, 10) * 0.35) * (state.noFlash ? 0.5 : 1);
+  gl.uniform1f(p.u.uTail, tail); gl.uniform1f(p.u.uSway, ruta.sway); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uHi, ruta.hi); gl.uniform1f(p.u.uWip, wphi % (Math.PI * 2)); gl.uniform1f(p.u.uGlow, ruta.glow);
+  gl.uniform1f(p.u.uCut, 1 - (dy - H * 0.012 - Lo.hb) / H - 0.012); gl.uniform1f(p.u.uHz, hz); gl.uniform1f(p.u.uBob, P * 0.004 + Math.sin(groove * Math.PI) * 0.0012 * musicGate);
+  gl.uniform3fv(p.u.uTop, A.top); gl.uniform3fv(p.u.uHor, hor); gl.uniform3fv(p.u.uGnd, A.gnd); gl.uniform3fv(p.u.uTree, A.tree); gl.uniform3fv(p.u.uCl0, A.sun ? hor.map((v, i) => Math.min(1, v * 1.05 + [0.1, 0.02, 0][i])) : A.cl0); gl.uniform3fv(p.u.uCl1, A.cl1);
+  gl.uniform3fv(p.u.uC0, sat(RGB[0], 58)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 58)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 60)); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uCarC, sat(RGB[1], 52, 60));
   gl.uniform4fv(p.u['uOn[0]'], ruta.on);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
   if (A.night > 0.4) bloom(GLX.c, (0.22 + P * 0.12) * (A.sun ? 0.35 : 1));
-  // ---- la radio: portada, canción y ecualizador, en el centro del tablero ----
-  const it = spConnected() && sp.item, u = MIN / 1000;
-  const rw = vertical ? W * 0.5 : Math.min(W * 0.3, H * 0.62), rh = rw * 0.3, rx = vertical ? W * 0.455 : W * 0.5 - rw / 2 + W * 0.06, ry = H * (1 - dash) + H * (vertical ? 0.055 : 0.07);
-  ctx.save();
-  ctx.shadowColor = rgba(RGB[1], 0.55 + P * 0.3); ctx.shadowBlur = 26 * u * (1 + P * 0.6);
-  ctx.fillStyle = 'rgba(9,10,14,.94)'; ctx.beginPath(); ctx.roundRect(rx, ry, rw, rh, rh * 0.16); ctx.fill(); ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,255,255,.12)'; ctx.lineWidth = Math.max(1, 1.2 * u); ctx.stroke();
-  const pad = rh * 0.12, cs = rh - pad * 2, img = coverClean || coverAny;
-  ctx.save(); ctx.beginPath(); ctx.roundRect(rx + pad, ry + pad, cs, cs, cs * 0.12); ctx.clip();
-  if (img) ctx.drawImage(img, rx + pad, ry + pad, cs, cs); else { ctx.fillStyle = rgba(RGB[0], 1); ctx.fillRect(rx + pad, ry + pad, cs, cs); }
-  ctx.restore();
-  const tx = rx + pad * 2 + cs, tw = rw - cs - pad * 3;
-  const fit = (t, f) => { ctx.font = f; if (ctx.measureText(t).width <= tw) return t; while (t.length > 1 && ctx.measureText(t + '…').width > tw) t = t.slice(0, -1); return t.trimEnd() + '…'; };
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-  const f1 = `700 ${Math.round(rh * 0.2)}px ${FONT_UI}`, f2 = `500 ${Math.round(rh * 0.15)}px ${FONT_UI}`;
-  ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.fillText(fit(it ? it.name || '' : 'Siente la música', f1), tx, ry + rh * 0.36);
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillText(fit(it ? (it.artists || []).map(a => a.name).join(', ') : 'Pon una canción', f2), tx, ry + rh * 0.56);
-  // ecualizador de la radio (con resortes) y la línea de avance
-  for (let i = 0; i < 10; i++) { const k0 = Math.floor(i / 10 * BANDS * 0.9); ruta.eqT[i] = bandX(k0, Math.min(BANDS, k0 + 5)); }
-  springTo(ruta.eq, ruta.eqV, ruta.eqT, dt, 260, 0.55);
-  const bw = tw / 10, bh = rh * 0.24, by = ry + rh - pad;
-  for (let i = 0; i < 10; i++) { const v = Math.max(0.06, Math.min(1.1, ruta.eq[i])); ctx.fillStyle = rgba(mix(i / 9).map(c => c + (255 - c) * 0.25), 0.9); ctx.beginPath(); ctx.roundRect(tx + i * bw, by - bh * v, bw * 0.62, bh * v, bw * 0.2); ctx.fill(); }
+  // ---- la cabina (se vuelve a dibujar solo si cambia el tamaño, el ambiente o los colores) ----
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round))), [ha, sa] = hexToHsl(rgbToHex(...RGB[1].map(Math.round)));
+  const key = [W, H, amb, Math.round(hh / 8), Math.round(ha / 8), hor.map(v => Math.round(v * 12)).join('.')].join();
+  const acc = hexToRgb(hsl(ha, Math.max(72, sa), 70));
+  if (ruta.key !== key) { ruta.key = key; const T = (l, s = 13) => hsl(hh, s, Math.min(62, l * A.cab));
+    const tones = { deep: T(3.4), base: T(6.4), mid: T(9.4), lite: T(14.5), edge: T(25, 16), acc };
+    rutaWheel(Lo, tones, hor); rutaCabin(A, Lo, tones, hor); }
+  ctx.save(); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // el limpiaparabrisas (con lluvia): brazo con su bisagra y la plumilla, al compás
+  if (A.rain) { const an = wa0 + (wa1 - wa0) * (0.5 - 0.5 * Math.cos(wphi)), wl = Lo.wl, al = wl * 0.71, k = H / 1000;
+    ctx.save(); ctx.translate(Lo.pivX, Lo.pivY); ctx.rotate(an);
+    // el brazo: grueso en la bisagra y fino hacia la punta, con su filo de luz
+    ctx.fillStyle = '#08090c'; ctx.beginPath(); ctx.moveTo(-11 * k, 0); ctx.lineTo(-7 * k, -al * 0.3); ctx.lineTo(-3.5 * k, -al); ctx.lineTo(3.5 * k, -al); ctx.lineTo(7 * k, -al * 0.3); ctx.lineTo(11 * k, 0); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(170,176,192,.55)'; ctx.lineWidth = 1.6 * k; ctx.beginPath(); ctx.moveTo(-8 * k, -al * 0.03); ctx.lineTo(-5.4 * k, -al * 0.3); ctx.lineTo(-2.2 * k, -al * 0.98); ctx.stroke();
+    ctx.translate(0, -al); ctx.rotate(-0.07);
+    // la plumilla: el caucho, su armazón con dos puentes y el broche del centro
+    ctx.fillStyle = '#020203'; ctx.beginPath(); ctx.roundRect(-13 * k, -wl * 0.29, 9 * k, wl * 0.58, 4 * k); ctx.fill();
+    ctx.fillStyle = '#101116'; ctx.beginPath(); ctx.roundRect(-5 * k, -wl * 0.27, 9 * k, wl * 0.54, 4 * k); ctx.fill();
+    ctx.strokeStyle = 'rgba(170,176,192,.5)'; ctx.lineWidth = 1.5 * k; ctx.beginPath(); ctx.moveTo(1.5 * k, -wl * 0.26); ctx.lineTo(1.5 * k, wl * 0.26); ctx.stroke();
+    ctx.fillStyle = '#1b1c22'; for (const yy of [-0.16, 0.16]) { ctx.beginPath(); ctx.roundRect(-7 * k, wl * yy - 9 * k, 14 * k, 18 * k, 3 * k); ctx.fill(); }
+    ctx.fillStyle = '#16171c'; ctx.beginPath(); ctx.roundRect(-10 * k, -16 * k, 22 * k, 32 * k, 5 * k); ctx.fill(); ctx.strokeStyle = 'rgba(170,176,192,.4)'; ctx.lineWidth = 1.3 * k; ctx.stroke();
+    ctx.restore();
+    ctx.fillStyle = '#0b0c10'; ctx.beginPath(); ctx.arc(Lo.pivX, Lo.pivY, 19 * k, 0, 7); ctx.fill(); ctx.strokeStyle = 'rgba(170,176,192,.35)'; ctx.lineWidth = 1.5 * k; ctx.stroke(); }
+  ctx.drawImage(ruta.cab, 0, 0);
+  // agujas de los relojes
+  const needle = (gx, v) => { const a = (-120 + 240 * Math.min(1.04, v) - 90) * Math.PI / 180;
+    ctx.strokeStyle = '#ff5a3a'; ctx.lineWidth = Math.max(2, Lo.gr * 0.05); ctx.shadowColor = 'rgba(255,80,50,.9)'; ctx.shadowBlur = 8 * u;
+    ctx.beginPath(); ctx.moveTo(gx - Math.cos(a) * Lo.gr * 0.12, Lo.gy - Math.sin(a) * Lo.gr * 0.12); ctx.lineTo(gx + Math.cos(a) * Lo.gr * 0.8, Lo.gy + Math.sin(a) * Lo.gr * 0.8); ctx.stroke(); ctx.shadowBlur = 0;
+    ctx.fillStyle = '#16171c'; ctx.beginPath(); ctx.arc(gx, Lo.gy, Lo.gr * 0.13, 0, 7); ctx.fill(); };
+  needle(Lo.g0x, ruta.kmh); needle(Lo.g1x, ruta.rpm);
+  // el volante gira un poco siguiendo al de adelante
+  ctx.save(); ctx.translate(wx, wy); ctx.scale(1, 0.94); ctx.rotate(ruta.sway * 0.13); ctx.drawImage(ruta.wheel, -ruta.wheel.width / 2, -ruta.wheel.height / 2); ctx.restore();
+  // ---- la luz que entra: cada farola barre el tablero al pasar; los stops y los faros de frente lo tiñen ----
+  { const fy0 = Math.max(0, Math.floor(dy - R * 0.25 - Lo.hb)), fh = H - fy0, f = ruta.fx || (ruta.fx = document.createElement('canvas'));
+    if (f.width !== W || f.height !== fh) { f.width = W; f.height = fh; }
+    const fc = f.getContext('2d'); fc.globalCompositeOperation = 'source-over'; fc.clearRect(0, 0, W, fh); fc.globalCompositeOperation = 'lighter';
+    const lampC = mix(0).map((c, i) => c * 0.5 + [255, 220, 160][i] * 0.5), t = ((ruta.dist / 14) % 1 - 0.4) / 0.6, lamp = A.lamp * musicGate;
+    if (t > 0 && lamp > 0.01) { const yb = dy - fy0 - dh * 0.15 + t * dh * 1.3, th = dh * 0.34, a = Math.sin(Math.PI * t) * lamp * 0.26;
+      const g = fc.createLinearGradient(0, yb - th, W * 0.16, yb + th); g.addColorStop(0, rgba(lampC, 0)); g.addColorStop(0.5, rgba(lampC, a)); g.addColorStop(1, rgba(lampC, 0)); fc.fillStyle = g; fc.fillRect(0, 0, W, fh); }
+    const rad = (X, Y, r, c, a) => { if (a < 0.01) return; const g = fc.createRadialGradient(X, Y, 0, X, Y, r); g.addColorStop(0, rgba(c, a)); g.addColorStop(1, rgba(c, 0)); fc.fillStyle = g; fc.fillRect(X - r, Y - r, r * 2, r * 2); };
+    rad(W * (0.5 + ruta.sway * 0.55 / (8 * asp)), dy - fy0, W * (vertical ? 0.8 : 0.45), [255, 40, 28], Math.min(0.5, tail * 0.3) * (0.3 + 0.7 * A.night));
+    const near = ruta.cars.reduce((m, c) => Math.max(m, c.z < 30 ? 1 - c.z / 30 : 0), 0);
+    rad(0, dy - fy0, W * (vertical ? 1.1 : 0.6), [255, 245, 225], near * 0.24 * (0.25 + 0.75 * A.night));
+    const glowK = (0.5 + 0.5 * A.night) * (0.45 + 0.55 * musicGate);
+    rad((Lo.g0x + Lo.g1x) / 2, Lo.gy - fy0, R * 0.95, acc, (0.2 + P * 0.1) * glowK);
+    rad(Lo.dsx + Lo.dsw / 2, Lo.dsy + Lo.dsh / 2 - fy0, rw * 0.75, acc, (0.2 + P * 0.1) * glowK);
+    fc.globalCompositeOperation = 'destination-in'; fc.drawImage(ruta.cab, 0, fy0, W, fh, 0, 0, W, fh);
+    ctx.globalCompositeOperation = 'lighter'; ctx.drawImage(f, 0, fy0); ctx.globalCompositeOperation = 'source-over'; }
+  // ---- la radio análoga: dial con su aguja (por dónde va la canción), el nombre y un vúmetro de aguja ----
+  { const it = spConnected() && sp.item, { dsx, dsy, dsw, dsh } = Lo, live = 0.55 + 0.45 * musicGate, tw = dsw * 0.66, tx = dsx + dsw * 0.04;
+    const bgG = ctx.createLinearGradient(0, dsy, 0, dsy + dsh); bgG.addColorStop(0, rgba(acc, 0.2 * live)); bgG.addColorStop(1, rgba(acc, 0.07 * live));
+    ctx.fillStyle = bgG; ctx.beginPath(); ctx.roundRect(dsx, dsy, dsw, dsh, rh * 0.06); ctx.fill();
+    // el dial
+    const sy = dsy + dsh * 0.2; ctx.strokeStyle = rgba(acc, 0.75 * live); ctx.lineWidth = Math.max(1, 1.2 * u);
+    for (let i = 0; i <= 20; i++) { const X = tx + tw * i / 20, big = i % 4 === 0; ctx.beginPath(); ctx.moveTo(X, sy); ctx.lineTo(X, sy - dsh * (big ? 0.1 : 0.055)); ctx.stroke(); }
+    ctx.beginPath(); ctx.moveTo(tx, sy); ctx.lineTo(tx + tw, sy); ctx.stroke();
+    ctx.fillStyle = rgba(acc, 0.7 * live); ctx.font = `600 ${Math.round(dsh * 0.105)}px ${FONT_UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ['88', '92', '96', '100', '104', '108'].forEach((s, i) => ctx.fillText(s, tx + tw * i / 5, sy + dsh * 0.025));
+    const prog = it && sp.duration ? Math.max(0, Math.min(1, spPos() / sp.duration)) : 0.5, nx = tx + tw * prog;
+    ctx.strokeStyle = '#ff5a3a'; ctx.lineWidth = Math.max(2, 2.6 * u); ctx.shadowColor = 'rgba(255,80,50,.95)'; ctx.shadowBlur = 9 * u;
+    ctx.beginPath(); ctx.moveTo(nx, dsy + dsh * 0.05); ctx.lineTo(nx, dsy + dsh * 0.36); ctx.stroke();
+    // el nombre de la canción y los artistas, como en una pantalla de luz
+    const fit = (t, f) => { ctx.font = f; if (ctx.measureText(t).width <= tw) return t; while (t.length > 1 && ctx.measureText(t + '…').width > tw) t = t.slice(0, -1); return t.trimEnd() + '…'; };
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.shadowColor = rgba(acc, 0.9); ctx.shadowBlur = 10 * u * (1 + P * 0.5);
+    const lightAcc = acc.map(c => c + (255 - c) * 0.45);
+    ctx.fillStyle = rgba(lightAcc, 0.98 * live); ctx.fillText(fit(it ? it.name || '' : 'Siente la música', `700 ${Math.round(dsh * 0.29)}px ${FONT_UI}`), tx, dsy + dsh * 0.72);
+    ctx.shadowBlur = 5 * u; ctx.fillStyle = rgba(lightAcc, 0.72 * live); ctx.fillText(fit(it ? (it.artists || []).map(a => a.name).join(', ') : 'Pon una canción', `500 ${Math.round(dsh * 0.17)}px ${FONT_UI}`), tx, dsy + dsh * 0.92);
+    ctx.shadowBlur = 0;
+    // el vúmetro
+    const vx = dsx + dsw * 0.73, vw = dsw * 0.24, vy = dsy + dsh * 0.1, vh = dsh * 0.8, cxv = vx + vw / 2, cyv = vy + vh * 1.05, rv = vh * 0.86;
+    ctx.fillStyle = `rgba(255,222,170,${0.2 * live})`; ctx.beginPath(); ctx.roundRect(vx, vy, vw, vh, rh * 0.04); ctx.fill();
+    ctx.save(); ctx.beginPath(); ctx.roundRect(vx, vy, vw, vh, rh * 0.04); ctx.clip();
+    for (let i = 0; i <= 10; i++) { const a = -Math.PI / 2 + (i / 10 - 0.5) * 1.25; ctx.strokeStyle = i >= 8 ? 'rgba(255,90,60,.95)' : `rgba(255,236,205,${0.85 * live})`; ctx.lineWidth = Math.max(1, 1.4 * u);
+      ctx.beginPath(); ctx.moveTo(cxv + Math.cos(a) * rv * 0.86, cyv + Math.sin(a) * rv * 0.86); ctx.lineTo(cxv + Math.cos(a) * rv, cyv + Math.sin(a) * rv); ctx.stroke(); }
+    const va = -Math.PI / 2 + (Math.min(1.05, ruta.vu) - 0.5) * 1.25;
+    ctx.strokeStyle = '#fff3df'; ctx.lineWidth = Math.max(1.5, 2 * u); ctx.beginPath(); ctx.moveTo(cxv, cyv); ctx.lineTo(cxv + Math.cos(va) * rv * 0.95, cyv + Math.sin(va) * rv * 0.95); ctx.stroke();
+    ctx.fillStyle = `rgba(255,236,205,${0.7 * live})`; ctx.font = `700 ${Math.round(dsh * 0.1)}px ${FONT_UI}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('VU', cxv, vy + vh * 0.93);
+    ctx.restore();
+    // lucecita de estéreo (parpadea con los platillos) y las marcas de las perillas
+    ctx.fillStyle = `rgba(255,70,50,${0.25 + 0.75 * ruta.led})`; ctx.shadowColor = 'rgba(255,70,50,.9)'; ctx.shadowBlur = 8 * u * ruta.led; ctx.beginPath(); ctx.arc(dsx + dsw * 0.69, dsy + dsh * 0.14, Math.max(1.5, dsh * 0.03), 0, 7); ctx.fill(); ctx.shadowBlur = 0;
+    [[rx + rw * 0.1, ruta.vol], [rx + rw * 0.9, prog]].forEach(([kx, v]) => { const a = (-135 + 270 * v - 90) * Math.PI / 180, ky = ry + rh * 0.46, kr = rh * 0.3;
+      ctx.strokeStyle = rgba(lightAcc, 0.95); ctx.lineWidth = Math.max(2, kr * 0.11); ctx.beginPath(); ctx.moveTo(kx + Math.cos(a) * kr * 0.22, ky + Math.sin(a) * kr * 0.22); ctx.lineTo(kx + Math.cos(a) * kr * 0.58, ky + Math.sin(a) * kr * 0.58); ctx.stroke(); }); }
+  // ---- la portada cuelga del retrovisor (una foto instantánea) y se mece al compás ----
+  { const img = coverClean || coverAny, ps = vertical ? W * 0.2 : H * 0.15, len = H * (vertical ? 0.026 : 0.03), b = 1 - 0.3 * A.night, m = ps * 0.07;
+    ctx.save(); ctx.translate(Lo.mx, Lo.my + Lo.mh * 0.92); ctx.rotate(ruta.pend);
+    ctx.strokeStyle = 'rgba(225,225,235,.75)'; ctx.lineWidth = Math.max(1.2, 1.6 * u); ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, len + m); ctx.stroke();
+    ctx.translate(0, len); ctx.rotate(ruta.pend * 0.35 + 0.03);
+    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 14 * u; ctx.shadowOffsetY = 5 * u;
+    ctx.fillStyle = `rgb(${244 * b | 0},${241 * b | 0},${236 * b | 0})`; ctx.beginPath(); ctx.roundRect(-ps / 2, 0, ps, ps * 1.2, ps * 0.025); ctx.fill(); ctx.shadowColor = 'transparent';
+    if (img) ctx.drawImage(img, -ps / 2 + m, m, ps - m * 2, ps - m * 2); else { ctx.fillStyle = rgba(RGB[0], 1); ctx.fillRect(-ps / 2 + m, m, ps - m * 2, ps - m * 2); }
+    ctx.fillStyle = `rgba(4,6,16,${0.22 * A.night})`; ctx.fillRect(-ps / 2 + m, m, ps - m * 2, ps - m * 2);
+    ctx.fillStyle = '#c9c4bb'; ctx.beginPath(); ctx.arc(0, m * 0.5, Math.max(2, m * 0.3), 0, 7); ctx.fill();
+    ctx.restore(); }
   ctx.restore();
 }
 
 // ================= Escena: Autopista (vista desde arriba) =================
-// Una autopista de noche vista desde el aire, sobre la portada: tu carro va abajo, con luz de neón por debajo
-// (del color de la nota que se canta) y dos estelas rojas detrás, y va esquivando a los demás. Todo va con la
-// canción: la carretera corre al tempo (una farola con su charco de luz por cada tiempo), los cambios de carril
-// caen en los golpes, las estelas se alargan en lo fuerte, los faros se abren con el bombo y los demás carros
-// frenan con la caja. Sin música, el tráfico se detiene.
-const auto = { prog: null, cars: null, lane: 1, x: 0, xv: 0, dist: 0, gPrev: null, spawnB: 0, beats: 0, U: new Float32Array(28), K: new Float32Array(21), trail: 0, glow: 0, brake: 0 };
+// Una autopista vista desde el aire, de noche o al atardecer, con la portada a los lados: tu carro (el de las
+// franjas, con luz de neón por debajo del color de la nota que se canta) va esquivando el tráfico. Todo va con la
+// canción: pasa una farola por cada tiempo, el tráfico llega en filas cada dos tiempos y el cambio de carril cae
+// justo en el golpe; las estelas se alargan en lo fuerte, los faros se abren con el bombo, los demás frenan con la
+// caja y el reflejo de cada farola les recorre el techo. Nunca se atraviesan: las filas siempre dejan un carril
+// libre al alcance y, si aun así no hay paso, tu carro frena. Sin música, todo se detiene.
+const auto = { prog: null, rows: [], cars: [], lane: 1, plan: 1, x: 0, xv: 0, dist: 0, gPrev: null, b: 0, err: 0, hold: 0, nextRow: 0, stuck: 0,
+  U: new Float32Array(28), D: new Float32Array(28), trail: 0, glow: 0, brake: 0, myBrake: 0, hi: 0, spr: new Map(), sprKey: '', flock: null };
+// ancho y largo de cada vehículo, en carriles: sedán, cupé (el tuyo), taxi, furgoneta, camioneta y camión
+const AUTO_KIND = [{ w: 0.56, l: 1.26 }, { w: 0.56, l: 1.22 }, { w: 0.56, l: 1.26 }, { w: 0.6, l: 1.42 }, { w: 0.59, l: 1.32 }, { w: 0.66, l: 2.15 }];
 function autoSetup() {
-  auto.prog = glProgram(`uniform vec2 uRes, uRoad; uniform float uDist, uLW, uNight, uP, uTrail, uGlow, uLamp, uBrake; uniform vec3 uBg, uMel, uC0, uC1, uC2; uniform vec4 uCar[7]; uniform vec3 uK[7];
+  auto.prog = glProgram(`uniform vec2 uRes, uRoad; uniform float uDist, uLW, uNight, uP, uTrail, uGlow, uLamp, uSpd, uT, uHi; uniform vec3 uBg, uMel, uC0, uC2; uniform vec4 uCar[7], uDim[7];
     ${GLSL_COVER} ${GLSL_NOISE}
     float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
+    float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
     void main() {
       float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 cov = withCover(uBg);
-      vec3 col = cov * mix(.92, .5, uNight);                                   // a los lados, la portada
+      vec3 cov = withCover(uBg), sunC = vec3(1., .74, .52);
       float rx = p.x - uRoad.x, ed = abs(rx) - uRoad.y, s = p.y + uDist, inR = smoothstep(px, -px, ed);
-      col *= 1. - .45 * exp(-max(ed, 0.) * 30.) * (1. - inR);                  // la sombra del borde de la vía
-      // el asfalto: oscuro, con un eco del color de la portada y grano fino
-      vec3 asf = mix(vec3(.2, .2, .22), vec3(.03, .032, .04), uNight);
-      asf = mix(asf, cov * .55, .16) * (.88 + .24 * n(vec2(rx * 90., s * 90.)));
-      float lx = rx / uLW + .5, lr = floor(lx + .5), bd = abs(lx - lr) * uLW;   // tres carriles
+      // a los lados, el mar: lleva los colores de la portada, se riza y sus destellos titilan con los agudos
+      vec2 wp = vec2(p.x, s);
+      float rip = n(wp * vec2(26., 60.) + vec2(uT * .35, uT * .2)) * n(wp * vec2(44., 34.) - vec2(uT * .27, -uT * .31));
+      vec3 col = mix(mix(vec3(.05, .17, .24), vec3(.008, .017, .038), uNight), cov * mix(1.05, .7, uNight), mix(.78, .6, uNight));
+      col = mix(col, col * sunC * 1.15 + vec3(.03, 0., 0.), (1. - uNight) * .45) * (.8 + .6 * rip);
+      float gl = smoothstep(.3, .6, rip), sunSide = mix(smoothstep(asp, 0., p.x), .5, uNight);
+      col += mix(sunC, vec3(.65, .78, 1.), uNight) * gl * (.3 + .9 * uHi) * mix(.6, .2, uNight) * (.35 + .65 * sunSide);
+      col += vec3(1., .96, .86) * step(.986 - .03 * uHi, h(floor(wp * 430.) + floor(uT * 7.))) * gl * mix(.9, .5, uNight);
+      // el puente: su sombra sobre el agua, las pilas cada dos tiempos, el andén angosto y la baranda con sus postes
+      float sw = uLW * .2, pier = smoothstep(.026, .023, abs(fract(s) - .5)) * .018;
+      float inS = smoothstep(px, -px, ed - sw - pier) * (1. - inR);
+      col *= 1. - mix(.5, .35, uNight) * smoothstep(.085, .0, ed - sw - (rx > 0. ? 0. : .06) * (1. - uNight)) * (1. - inS) * (1. - inR) * (rx > 0. ? 1. : uNight);
+      vec3 pav = mix(vec3(.7, .6, .57), vec3(.085, .09, .118), uNight) * (.93 + .1 * n(vec2(rx * 70., s * 70.)));
+      pav *= 1. - .2 * smoothstep(.0022, .0008, abs(fract(s / (uLW * .5)) - .5) * uLW * .5);
+      pav *= 1. - .3 * step(sw, ed);                                                // las pilas, más hondas
+      pav = mix(pav, pav * 1.4 + .05, smoothstep(.0028 + px, .0028 - px, abs(ed - sw + .0045)) * (.55 + .45 * step(.5, fract(s / .035))));
+      col = mix(col, pav, inS * .97);
+      // el asfalto: con un eco del color de la portada, grano fino y las huellas de rodadura de cada carril
+      vec3 asf = mix(vec3(.33, .27, .3), vec3(.034, .036, .047), uNight);
+      asf = mix(asf, cov * .55, .14) * (.9 + .2 * n(vec2(rx * 110., s * 110.)));
+      asf *= 1. + .1 * (1. - uNight) * (-rx / uRoad.y);                           // al atardecer la luz viene de un lado
+      float lx = rx / uLW + .5, lr = floor(lx + .5), bd = abs(lx - lr) * uLW;       // tres carriles
+      asf *= 1. - .075 * smoothstep(.1, 0., abs(abs(fract(lx) - .5) - .2));
+      asf *= 1. - .3 * smoothstep(.0028, .001, abs(fract(s / .5 + .5) - .5) * .5);   // las juntas del puente: una por tiempo
+      asf *= 1. - .2 * (1. - uNight) * smoothstep(.07, .0, rx + uRoad.y) * step(.45, fract((s + rx * .4) / .035));   // la sombra rayada de la baranda
       float line = smoothstep(.0036 + px, .0036 - px, bd) * (lr > -.5 && lr < 1.5 ? step(.52, fract(s / (uLW * 1.5))) : 0.);
       line = max(line, smoothstep(.0034 + px, .0034 - px, abs(abs(rx) - (uRoad.y - .012))));    // bordes continuos
-      vec3 rd = mix(asf, mix(vec3(.95, .93, .86), vec3(.62, .6, .52), uNight), line * .85);
+      { vec2 a = vec2(rx, (fract(s / 2. + .3) - .5) * 2.);                           // una flecha pintada cada cuatro tiempos
+        float st = smoothstep(.0055 + px, .0055 - px, abs(a.x)) * step(-.055, a.y) * step(a.y, .02);
+        float hd = smoothstep(px, -px, abs(a.x) - (.052 - a.y) * .5) * step(.02, a.y) * step(a.y, .052); line = max(line, max(st, hd) * .7); }
+      vec3 rd = mix(asf, mix(vec3(.97, .93, .85), vec3(.6, .58, .5), uNight), line * .85);
+      rd += vec3(.6) * smoothstep(.8, 1., n(vec2(rx * 260., s * 2.2))) * uSpd * .05;   // en lo fuerte, rayas de velocidad
       col = mix(col, rd, inR);
-      // farolas alternadas a los lados: una por tiempo, cada una con su charco de luz sobre la vía y la acera
-      float SPc = .5;
-      for (int k = -1; k <= 2; k++) { float li = floor(s / SPc) + float(k), sd_ = mod(li, 2.) < .5 ? -1. : 1.;
-        vec2 lp = vec2(uRoad.x + sd_ * (uRoad.y + .012), li * SPc - uDist), d = p - lp;
+      // farolas alternadas a los lados (una por tiempo): su charco de luz, su brazo y, al atardecer, su sombra larga
+      vec2 sdir = mix(vec2(.075, -.03), vec2(.01, -.012), uNight);
+      for (int k = -1; k <= 2; k++) { float li = floor(s / .5) + float(k), sd_ = mod(li, 2.) < .5 ? -1. : 1.;
+        vec2 lp = vec2(uRoad.x + sd_ * (uRoad.y + sw * .5), li * .5 - uDist), hd = lp + vec2(-sd_ * .06, 0.), dh = p - hd;
         vec3 lc = mix(sd_ < 0. ? uC0 : uC2, vec3(1., .88, .66), .5);
-        col += lc * (exp(-dot(d, d) / .028) * .3 + exp(-dot(d - vec2(-sd_ * .05, 0.), d - vec2(-sd_ * .05, 0.)) / .008) * .32) * uLamp * (inR * .9 + .45);
-        col += lc * smoothstep(.007, .003, length(d)) * (.6 + .4 * uLamp);
-        col = mix(col, vec3(.02), smoothstep(.0025, .001, abs(d.y)) * step(0., -sd_ * d.x) * step(-sd_ * d.x, .05) * .55); }
-      // luces de los carros sobre el asfalto (antes de las carrocerías)
-      for (int i = 0; i < 7; i++) { vec4 c = uCar[i]; if (c.y < -.5) continue;
+        col += lc * (exp(-dot(dh, dh) / .03) * .3 + exp(-dot(dh, dh) / .007) * .3) * uLamp * (inR * .9 + .4);
+        col *= 1. - .2 * smoothstep(.009, .003, sdSeg(p, lp, lp + sdir * 5.5)) * (1. - uNight) * max(inR, inS);
+        col += lc * exp(-pow(dh.y / .022, 2.)) * exp(-max(ed - sw, 0.) * 11.) * step(0., sd_ * rx) * (.25 + 2.2 * rip) * uLamp * .5 * (1. - inR) * (1. - inS);   // su reflejo en el agua
+        col = mix(col, mix(vec3(.2, .18, .2), vec3(.025, .026, .032), uNight), max(smoothstep(.0028 + px, .0028 - px, sdSeg(p, lp, hd)), smoothstep(.0055 + px, .0055 - px, length(p - lp))));
+        col = mix(col, mix(vec3(.34, .32, .32), lc, uLamp), smoothstep(.0075 + px, .0075 - px, length(dh)));
+        col += lc * smoothstep(.006, .002, length(dh)) * uLamp * .8; }
+      // las sombras de los carros (largas al atardecer)
+      for (int i = 0; i < 7; i++) { vec4 c = uCar[i]; if (c.y < -.5) continue; vec2 hb = uDim[i].xy;
+        vec2 d0 = p - c.xy; if (abs(d0.x) > .2 || abs(d0.y) > .25) continue;
+        float ca = cos(c.z), sa = sin(c.z), sdm = 1.;
+        for (int k = 1; k <= 4; k++) { vec2 q = d0 - sdir * float(k) * .25; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y); sdm = min(sdm, sdBox(q, hb * .96, hb.x * .6)); }
+        col *= 1. - .52 * smoothstep(.01, -.005, sdm); }
+      // sus luces sobre el asfalto: faros, stops, y para el tuyo las dos estelas rojas y el neón de abajo
+      for (int i = 0; i < 7; i++) { vec4 c = uCar[i]; if (c.y < -.5) continue; vec2 hb = uDim[i].xy; float me = i == 0 ? 1. : 0.;
         float ca = cos(c.z), sa = sin(c.z); vec2 q = p - c.xy; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
-        float w = uLW * .56, L = uLW * 1.26, me = i == 0 ? 1. : 0.;
-        vec2 v = q - vec2(0., L * .5); float wd = .016 + max(v.y, 0.) * (.42 + .25 * uP * me);
+        vec2 v = q - vec2(0., hb.y); float wd = hb.x * .6 + max(v.y, 0.) * (.42 + .25 * uP * me);
         float cone = exp(-pow(v.x / wd, 2.)) * exp(-max(v.y, 0.) * (me > .5 ? 4.2 : 7.)) * smoothstep(-.01, .02, v.y);
-        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .45 * uP : .22) * mix(.25, 1., uNight) * inR;
-        vec2 v2 = q + vec2(0., L * .5);
-        float brk = me > .5 ? .5 + .5 * uP : .35 + uBrake * .9;
-        col += vec3(1., .06, .04) * exp(-dot(v2, v2) / (.0009 + .0012 * brk)) * (.3 + .5 * brk) * mix(.4, 1., uNight);
+        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .45 * uP : .22) * mix(.14, 1., uNight) * inR;
+        vec2 v2 = q + vec2(0., hb.y); float brk = uDim[i].z;
+        col += vec3(1., .06, .04) * exp(-dot(v2, v2) / (.0009 + .0014 * brk)) * (.22 + .6 * brk) * mix(.3, 1., uNight);
         if (i == 0) {
-          // las dos estelas rojas (más largas en lo fuerte) y el neón bajo el carro, del color de la nota
-          for (int k = 0; k < 2; k++) { float xs = v2.x + (k == 0 ? -1. : 1.) * w * .34;
-            col += vec3(1., .1, .06) * exp(-pow(xs / .0045, 2.)) * exp(v2.y / (.05 + uTrail * .34)) * step(v2.y, 0.) * (.45 + .5 * uTrail); }
-          float sdm = sdBox(q, vec2(w * .5, L * .5), w * .32);
-          col += uMel * exp(-max(sdm, 0.) / (.012 + .02 * uGlow)) * (.25 + .9 * uGlow) * inR; } }
-      // las carrocerías
-      for (int i = 0; i < 7; i++) { vec4 c = uCar[i]; if (c.y < -.5) continue;
-        float ca = cos(c.z), sa = sin(c.z); vec2 q = p - c.xy; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
-        float w = uLW * .56, L = uLW * 1.26;
-        float sh = sdBox(q - vec2(.006, -.008), vec2(w * .5, L * .5), w * .32); col *= 1. - .55 * smoothstep(.012, -.004, sh) * mix(1., .6, uNight);
-        float sd = sdBox(q, vec2(w * .5, L * .5), w * .32), a = smoothstep(px, -px, sd);
-        if (a <= 0.) continue;
-        float nx = q.x / (w * .5), ny = q.y / (L * .5);
-        vec3 body = uK[i] * (.62 + .5 * (1. - nx * nx)) * (.92 + .1 * ny);                 // lomo claro, costados hondos
-        body += vec3(1.) * exp(-pow((nx + .35) * 5., 2.)) * .1 * smoothstep(-1., .2, ny);   // un reflejo largo
-        body *= mix(1., .55, uNight) + mix(0., .25, uNight) * exp(-sd * sd * 3000.);
-        // cabina: vidrio oscuro con un brillo
-        float cab = sdBox(q - vec2(0., -L * .05), vec2(w * .37, L * .27), w * .2), ca2 = smoothstep(px, -px, cab);
-        vec3 glass = mix(vec3(.05, .07, .1), cov * .35, .3) + vec3(.25, .3, .36) * exp(-pow((nx - .2) * 4., 2.)) * smoothstep(.1, .5, ny + .3) * .5;
-        float roof = sdBox(q - vec2(0., -L * .075), vec2(w * .335, L * .165), w * .17);
-        body = mix(body, glass, ca2); body = mix(body, uK[i] * (.8 + .3 * (1. - nx * nx)) * (mix(1., .6, uNight)), smoothstep(px, -px, roof));
-        // faros y stops
-        float hl = smoothstep(.2, .0, abs(abs(nx) - .62)) * smoothstep(.9, .97, ny), tl = smoothstep(.22, .0, abs(abs(nx) - .6)) * smoothstep(-.9, -.97, ny);
-        body = mix(body, vec3(1., .97, .88), hl * .95);
-        body = mix(body, vec3(1., .1, .06) * (.8 + .6 * (i == 0 ? uP : uBrake)), tl * .95);
-        col = mix(col, body, a); }
+          for (int k = 0; k < 2; k++) { float xs = v2.x + (k == 0 ? -1. : 1.) * hb.x * .62;
+            col += vec3(1., .1, .06) * exp(-pow(xs / .0045, 2.)) * exp(v2.y / (.05 + uTrail * .34)) * step(v2.y, 0.) * (.45 + .5 * uTrail) * mix(.55, 1., uNight); }
+          float sdm = sdBox(q, hb, hb.x * .64);
+          col += uMel * exp(-max(sdm, 0.) / (.012 + .02 * uGlow)) * (.25 + .9 * uGlow) * inR * mix(.6, 1., uNight); } }
       col *= 1. - .3 * smoothstep(.4, 1.1, length((vUv - .5) * vec2(1., .9)) * 1.25);
       col += (h(gl_FragCoord.xy) - .5) * .02;
       o = vec4(col, 1.);
     }`);
 }
+// cada vehículo se dibuja una vez (de frente hacia arriba) con tres tonos planos, vidrios con brillo y contorno
+function autoSprite(kind, col, night, hw, hl, hero) {
+  const pad = Math.ceil(hw * 0.3), c = document.createElement('canvas'); c.width = Math.ceil((hw + pad) * 2); c.height = Math.ceil(hl * 2 + 8);
+  const x = c.getContext('2d'); x.translate(c.width / 2, c.height / 2); x.lineJoin = 'round'; x.lineCap = 'round';
+  const css = (v, k = 1, a = 1) => `rgba(${Math.min(255, v[0] * k) | 0},${Math.min(255, v[1] * k) | 0},${Math.min(255, v[2] * k) | 0},${a})`;
+  const lit = (v, t) => v.map(q => q + (255 - q) * t), ow = Math.max(1.5, hw * 0.075);
+  const band = v => { const g = x.createLinearGradient(-hw, 0, hw, 0), a = css(lit(v, 0.3)), b = css(v), d = css(v, 0.64);
+    g.addColorStop(0, a); g.addColorStop(0.27, a); g.addColorStop(0.31, b); g.addColorStop(0.7, b); g.addColorStop(0.74, d); g.addColorStop(1, d); return g; };
+  const glass = () => { const g = x.createLinearGradient(0, -hl, 0, hl); g.addColorStop(0, '#2a3c52'); g.addColorStop(0.4, '#0e151f'); g.addColorStop(1, '#17212e'); return g; };
+  const bodyPath = () => { x.beginPath(); x.moveTo(0, -hl); x.bezierCurveTo(hw * 0.62, -hl, hw * 0.97, -hl * 0.93, hw * 0.97, -hl * 0.6); x.lineTo(hw, hl * 0.55); x.bezierCurveTo(hw, hl * 0.92, hw * 0.78, hl, 0, hl);
+    x.bezierCurveTo(-hw * 0.78, hl, -hw, hl * 0.92, -hw, hl * 0.55); x.lineTo(-hw * 0.97, -hl * 0.6); x.bezierCurveTo(-hw * 0.97, -hl * 0.93, -hw * 0.62, -hl, 0, -hl); x.closePath(); };
+  const mirrors = (y, v) => { x.fillStyle = css(v, 0.6); for (const s of [-1, 1]) { x.beginPath(); x.ellipse(s * hw * 1.04, y, hw * 0.14, hl * 0.032, s * 0.5, 0, 7); x.fill(); } };
+  const glint = (gx0, gy0, gy1) => { x.fillStyle = 'rgba(255,255,255,.17)'; x.beginPath(); x.moveTo(-hw * gx0, gy0); x.lineTo(-hw * 0.15, gy0); x.lineTo(-hw * 0.55, gy1); x.lineTo(-hw * gx0, gy1); x.fill(); };
+  const lamps = [];   // [x, y, w, h, color] en píxeles, para volver a pintarlas encendidas de noche
+  const car = o => {
+    mirrors(-hl * (o.g0 - 0.07), col);
+    bodyPath(); x.fillStyle = band(col); x.fill();
+    x.save(); x.clip();
+    const ends = x.createLinearGradient(0, -hl, 0, hl); ends.addColorStop(0, 'rgba(0,0,0,.22)'); ends.addColorStop(0.14, 'rgba(0,0,0,0)'); ends.addColorStop(0.86, 'rgba(0,0,0,0)'); ends.addColorStop(1, 'rgba(0,0,0,.3)');
+    x.fillStyle = ends; x.fillRect(-hw, -hl, hw * 2, hl * 2);
+    if (o.stripes) { x.fillStyle = 'rgba(255,255,255,.9)'; x.fillRect(-hw * 0.3, -hl, hw * 0.2, hl * 2); x.fillRect(hw * 0.1, -hl, hw * 0.2, hl * 2); }
+    x.restore();
+    // capó: dos nervios; baúl: su línea
+    x.strokeStyle = css(lit(col, 0.45), 1, 0.55); x.lineWidth = ow * 0.6;
+    for (const s of [-1, 1]) { x.beginPath(); x.moveTo(s * hw * 0.56, -hl * (o.g0 + 0.03)); x.lineTo(s * hw * 0.4, -hl * 0.92); x.stroke(); }
+    x.strokeStyle = css(col, 0.5); x.beginPath(); x.moveTo(-hw * 0.7, hl * (o.g1 + 0.07)); x.quadraticCurveTo(0, hl * (o.g1 + 0.11), hw * 0.7, hl * (o.g1 + 0.07)); x.stroke();
+    // vidrios (parabrisas, ventanas y luneta en una sola pieza) y, encima, el techo
+    x.beginPath(); x.roundRect(-hw * 0.82, -hl * o.g0, hw * 1.64, hl * (o.g0 + o.g1), [hw * 0.46, hw * 0.46, hw * 0.3, hw * 0.3]); x.fillStyle = glass(); x.fill();
+    x.save(); x.clip(); glint(0.82, -hl * o.g0, hl * o.g1); x.restore();
+    x.beginPath(); x.roundRect(-hw * 0.62, -hl * o.r0, hw * 1.24, hl * (o.r0 + o.r1), hw * 0.26); x.fillStyle = band(lit(col, 0.14)); x.fill();
+    if (o.stripes) { x.save(); x.clip(); x.fillStyle = 'rgba(255,255,255,.92)'; x.fillRect(-hw * 0.3, -hl, hw * 0.2, hl * 2); x.fillRect(hw * 0.1, -hl, hw * 0.2, hl * 2); x.restore(); }
+    x.strokeStyle = css(col, 0.45); x.lineWidth = ow * 0.6; x.stroke();
+    x.strokeStyle = css(col, 0.85); x.lineWidth = ow * 0.9;
+    for (const s of [-1, 1]) { x.beginPath(); x.moveTo(s * hw * 0.56, -hl * o.r0 + hw * 0.1); x.lineTo(s * hw * 0.76, -hl * o.g0 + hw * 0.2); x.moveTo(s * hw * 0.56, hl * o.r1 - hw * 0.1); x.lineTo(s * hw * 0.78, hl * o.g1 - hw * 0.12);
+      x.moveTo(s * hw * 0.62, hl * (o.r1 - o.r0) * 0.5); x.lineTo(s * hw * 0.82, hl * (o.r1 - o.r0) * 0.5); x.stroke(); }
+    if (o.rails) { x.strokeStyle = css(col, 0.4); x.lineWidth = ow * 0.8; for (const s of [-1, 1]) { x.beginPath(); x.moveTo(s * hw * 0.46, -hl * o.r0 + hw * 0.2); x.lineTo(s * hw * 0.46, hl * o.r1 - hw * 0.2); x.stroke(); } }
+    if (o.sign) { x.fillStyle = '#fffbe8'; x.beginPath(); x.roundRect(-hw * 0.34, hl * (o.r1 - o.r0) * 0.5 - hl * 0.045, hw * 0.68, hl * 0.09, hl * 0.02); x.fill(); x.strokeStyle = 'rgba(40,30,0,.7)'; x.lineWidth = ow * 0.5; x.stroke(); }
+    if (o.spoiler) { x.fillStyle = css(col, 0.42); x.beginPath(); x.roundRect(-hw * 0.86, hl * 0.8, hw * 1.72, hl * 0.075, hl * 0.025); x.fill(); }
+    bodyPath(); x.strokeStyle = css(col, 0.3); x.lineWidth = ow; x.stroke();
+    for (const s of [-1, 1]) lamps.push([s * hw * 0.6 - hw * 0.17, -hl * 0.975, hw * 0.34, hl * 0.05, '#fff4d2']);
+    if (o.bar) lamps.push([-hw * 0.76, hl * 0.925, hw * 1.52, hl * 0.045, '#ff3a2c']); else for (const s of [-1, 1]) lamps.push([s * hw * 0.58 - hw * 0.2, hl * 0.925, hw * 0.4, hl * 0.05, '#ff3a2c']);
+  };
+  if (kind === 3) {            // furgoneta: caja redondeada, parabrisas adelante y techo largo con nervios
+    mirrors(-hl * 0.66, col);
+    x.beginPath(); x.roundRect(-hw, -hl, hw * 2, hl * 2, [hw * 0.5, hw * 0.5, hw * 0.22, hw * 0.22]); x.fillStyle = band(col); x.fill();
+    x.beginPath(); x.roundRect(-hw * 0.82, -hl * 0.86, hw * 1.64, hl * 0.3, [hw * 0.4, hw * 0.4, hw * 0.1, hw * 0.1]); x.fillStyle = glass(); x.fill(); x.save(); x.clip(); glint(0.82, -hl * 0.86, -hl * 0.56); x.restore();
+    x.beginPath(); x.roundRect(-hw * 0.84, -hl * 0.6, hw * 1.68, hl * 1.5, hw * 0.16); x.fillStyle = band(lit(col, 0.12)); x.fill(); x.strokeStyle = css(col, 0.5); x.lineWidth = ow * 0.6; x.stroke();
+    x.strokeStyle = css(col, 0.72); for (let i = 1; i <= 4; i++) { x.beginPath(); x.moveTo(-hw * 0.7, -hl * 0.6 + hl * 1.5 * i / 5); x.lineTo(hw * 0.7, -hl * 0.6 + hl * 1.5 * i / 5); x.stroke(); }
+    x.beginPath(); x.roundRect(-hw, -hl, hw * 2, hl * 2, [hw * 0.5, hw * 0.5, hw * 0.22, hw * 0.22]); x.strokeStyle = css(col, 0.3); x.lineWidth = ow; x.stroke();
+    for (const s of [-1, 1]) { lamps.push([s * hw * 0.62 - hw * 0.17, -hl * 0.98, hw * 0.34, hl * 0.04, '#fff4d2']); lamps.push([s * hw * 0.66 - hw * 0.16, hl * 0.94, hw * 0.32, hl * 0.04, '#ff3a2c']); }
+  } else if (kind === 5) {     // camión: cabina y, atrás, el furgón con la portada pintada en el techo
+    mirrors(-hl * 0.8, col);
+    x.beginPath(); x.roundRect(-hw * 0.9, -hl, hw * 1.8, hl * 0.52, [hw * 0.42, hw * 0.42, hw * 0.1, hw * 0.1]); x.fillStyle = band(col); x.fill(); x.strokeStyle = css(col, 0.3); x.lineWidth = ow; x.stroke();
+    x.beginPath(); x.roundRect(-hw * 0.76, -hl * 0.91, hw * 1.52, hl * 0.17, [hw * 0.32, hw * 0.32, hw * 0.08, hw * 0.08]); x.fillStyle = glass(); x.fill(); x.save(); x.clip(); glint(0.76, -hl * 0.91, -hl * 0.74); x.restore();
+    x.beginPath(); x.roundRect(-hw * 0.7, -hl * 0.72, hw * 1.4, hl * 0.17, hw * 0.12); x.fillStyle = band(lit(col, 0.14)); x.fill();
+    x.beginPath(); x.roundRect(-hw, -hl * 0.54, hw * 2, hl * 1.54, hw * 0.1); x.fillStyle = band([228, 226, 220]); x.fill();
+    const img = coverClean || coverAny;
+    if (img) { const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height, tw = hw * 1.7, th = hl * 1.4, sc = Math.max(tw / iw, th / ih);
+      x.save(); x.beginPath(); x.roundRect(-tw / 2, -hl * 0.47, tw, th, hw * 0.06); x.clip();
+      try { x.drawImage(img, -iw * sc / 2, -hl * 0.47 + th / 2 - ih * sc / 2, iw * sc, ih * sc); } catch (e) {}
+      x.fillStyle = 'rgba(255,255,255,.12)'; x.beginPath(); x.moveTo(-tw / 2, -hl * 0.47); x.lineTo(-tw * 0.1, -hl * 0.47); x.lineTo(-tw * 0.36, -hl * 0.47 + th); x.lineTo(-tw / 2, -hl * 0.47 + th); x.fill(); x.restore(); }
+    x.beginPath(); x.roundRect(-hw, -hl * 0.54, hw * 2, hl * 1.54, hw * 0.1); x.strokeStyle = 'rgba(40,40,48,.85)'; x.lineWidth = ow; x.stroke();
+    for (const s of [-1, 1]) { lamps.push([s * hw * 0.58 - hw * 0.16, -hl * 0.99, hw * 0.32, hl * 0.028, '#fff4d2']); lamps.push([s * hw * 0.72 - hw * 0.16, hl * 0.965, hw * 0.32, hl * 0.028, '#ff3a2c']); }
+  } else car(hero ? { g0: 0.3, g1: 0.6, r0: 0.07, r1: 0.36, stripes: 1, spoiler: 1, bar: 1 } : kind === 4 ? { g0: 0.5, g1: 0.8, r0: 0.3, r1: 0.64, rails: 1 } : kind === 2 ? { g0: 0.42, g1: 0.66, r0: 0.18, r1: 0.42, sign: 1 } : kind === 1 ? { g0: 0.34, g1: 0.62, r0: 0.1, r1: 0.38, bar: 1 } : { g0: 0.42, g1: 0.66, r0: 0.18, r1: 0.42 });
+  // de noche todo se oscurece y se enfría, menos las luces
+  if (night) { x.globalCompositeOperation = 'source-atop'; x.fillStyle = hero ? 'rgba(6,9,26,.3)' : 'rgba(5,8,24,.56)'; x.fillRect(-c.width, -c.height, c.width * 2, c.height * 2); x.globalCompositeOperation = 'source-over'; }
+  for (const [lx, ly, lw, lh, lc] of lamps) { x.fillStyle = lc; x.beginPath(); x.roundRect(lx, ly, lw, lh, lh * 0.45); x.fill(); }
+  return c;
+}
 function drawAuto(dt) {
   if (!glInit()) { drawInfinity(dt); return; }
   if (!auto.prog) autoSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  const halfW = Math.min(asp * 0.34, 0.27), LW = halfW * 2 / 3.25, cx = asp / 2, laneX = l => (l - 1) * LW, myY = 0.3;
-  // la carretera corre al tempo: medio alto de pantalla (una farola) por tiempo; más rápido en lo fuerte
+  const halfW = Math.min(asp * 0.3, 0.27), LW = halfW * 2 / 3.25, cx = asp / 2, laneX = l => (l - 1) * LW, myY = 0.3, V = 0.34;
+  const dim = k => [AUTO_KIND[k].w * LW / 2, AUTO_KIND[k].l * LW / 2], [myHW, myHL] = dim(1);
+  // el reloj de la escena cuenta tiempos de la canción y se va cuadrando con cada bombo, para que las filas pasen
+  // a tu lado justo entre dos golpes y el cambio de carril caiga en el golpe
   if (auto.gPrev == null) auto.gPrev = groove;
-  auto.dist += (groove - auto.gPrev) * 0.5 * (0.6 + 0.5 * Math.min(1, dynL * 1.3)); auto.gPrev = groove;
-  if (!auto.cars) auto.cars = [{ lane: 1, y: 0.78, v: 0.24, k: 0, sw: 1 }, { lane: 0, y: 1.05, v: 0.2, k: 2, sw: 3 }];
-  if (pulse.on) auto.beats++;
-  // el tráfico: va más lento que tú, así que baja por la pantalla; sale uno nuevo arriba cada dos tiempos
-  const per = Math.max(0.3, tempo.period || 0.5), flow = (audible ? 1 : 0) * Math.min(1, 0.25 + energy * 4);
-  if (pulse.on && auto.beats % 2 === 0 && auto.cars.length < 5) {
-    const free = [0, 1, 2].filter(l => !auto.cars.some(c => c.lane === l && c.y > 0.7));
-    // nunca se cierra el paso: de los tres carriles, como mucho dos ocupados a la misma altura
-    const busy = new Set(auto.cars.filter(c => c.y > 0.6).map(c => c.lane));
-    const ok = free.filter(l => busy.has(l) || busy.size < 2);
-    if (ok.length) { const l = ok[Math.floor(Math.random() * ok.length)]; auto.cars.push({ lane: l, y: 1.2, v: 0.2 + Math.random() * 0.12, k: Math.floor(Math.random() * 5), sw: Math.random() * 6 }); }
+  let db = groove - auto.gPrev; auto.gPrev = groove; if (!(db > 0 && db < 1)) db = 0;
+  if (pulse.on) { auto.err = 0; const e = Math.round(auto.b) - auto.b; if (Math.abs(e) < 0.3) auto.err = e; }
+  const corr = db > 0 ? auto.err * (1 - Math.pow(0.01, dt)) : 0; auto.err -= corr;
+  const step = Math.max(0, db + corr); auto.b += step;
+  let tb = auto.b - auto.hold;
+  // el tráfico llega en filas, una cada dos tiempos, de uno o dos carros (dos en lo fuerte); cada fila deja libre
+  // un carril al que se llega moviéndose como mucho uno desde donde vas a estar
+  const loud = Math.min(1, dynL * 1.2);
+  while (2 * auto.nextRow + 1 - tb <= 2.9) {
+    const arr = 2 * auto.nextRow++ + 1; if (arr - tb < 1.6) continue;
+    const n = loud > 0.5 && Math.random() < 0.65 ? 2 : 1; let lanes = null;
+    for (let t = 0; t < 12 && !lanes; t++) { let l = [0, 1, 2].sort(() => Math.random() - 0.5).slice(0, n);
+      if (Math.random() < 0.75 && !l.includes(auto.plan)) l[0] = auto.plan;
+      l = [...new Set(l)]; if ([0, 1, 2].some(q => !l.includes(q) && Math.abs(q - auto.plan) <= 1)) lanes = l; }
+    if (!lanes) lanes = [auto.plan];
+    const free = [0, 1, 2].filter(q => !lanes.includes(q)).sort((a, b) => Math.abs(a - auto.plan) - Math.abs(b - auto.plan) + (Math.random() - 0.5) * 0.2);
+    auto.plan = lanes.includes(auto.plan) ? free[0] : auto.plan;
+    auto.rows.push({ arr, target: auto.plan });
+    for (const lane of lanes) { const r = Math.random(), k = r < 0.26 ? 0 : r < 0.44 ? 1 : r < 0.6 ? 2 : r < 0.74 ? 3 : r < 0.88 ? 4 : 5;
+      auto.cars.push({ lane, b: arr + (Math.random() - 0.5) * 0.14, k, tone: Math.floor(Math.random() * 3), sw: Math.random() * 6, hw: dim(k)[0], hl: dim(k)[1], y: 2 }); }
   }
-  auto.cars.forEach(c => { c.y -= dt * c.v / per * 0.62 * flow * (0.7 + 0.5 * dynL); });
-  auto.cars = auto.cars.filter(c => c.y > -0.25);
-  // esquivar: si hay un carro cerca delante en mi carril, busco el carril libre más cercano y me cambio en el golpe
-  const ahead = auto.cars.filter(c => c.lane === auto.lane && c.y > myY - 0.05).sort((a, b) => a.y - b.y)[0];
-  const gap = ahead ? ahead.y - myY : 9;
-  if (gap < 0.5 && (pulse.on || gap < 0.26)) {
-    const safe = l => l >= 0 && l <= 2 && !auto.cars.some(c => c.lane === l && c.y > myY - 0.24 && c.y < myY + 0.45);
-    const opts = [auto.lane - 1, auto.lane + 1].filter(safe);
-    if (opts.length) auto.lane = opts[0];
-  }
-  // el cambio de carril: un resorte (entra decidido y se asienta), y el carro se inclina hacia donde va
-  const tx = laneX(auto.lane); auto.xv += ((tx - auto.x) * 110 - auto.xv * 15) * dt; auto.x += auto.xv * dt;
+  const place = t => auto.cars.forEach(c => { c.y = myY + (c.b - t) * V; });
+  place(tb);
+  // nunca se atraviesan: si un carro quedara encima del tuyo, el tráfico deja de acercarse (tu carro frena)
+  const hit = () => auto.cars.some(c => { const dyc = c.y - myY; return Math.abs(laneX(c.lane) - auto.x) < c.hw + myHW + 0.007 && dyc > -(c.hl + myHL) * 0.5 && dyc < c.hl + myHL + 0.03; });
+  const blocked = hit(); if (blocked) { auto.hold += step; tb -= step; place(tb); }
+  auto.stuck = blocked ? auto.stuck + dt : 0;
+  auto.cars = auto.cars.filter(c => c.y > -0.3); auto.rows = auto.rows.filter(r => r.arr > tb - 1);
+  // esquivar: mirando la fila que viene, me paso al carril libre en el golpe anterior a que llegue (o antes de que sea tarde)
+  const clearTo = l => l >= 0 && l <= 2 && !auto.cars.some(c => c.lane === l && Math.abs(c.y - myY) < c.hl + myHL + 0.018);
+  const nxt = auto.rows.find(r => r.arr > tb - 0.1);
+  if (nxt && auto.lane !== nxt.target && Math.abs(auto.x - laneX(auto.lane)) < LW * 0.3) { const to = auto.lane + Math.sign(nxt.target - auto.lane), t = nxt.arr - tb;
+    if (clearTo(to) && t <= 1.45 && (pulse.on || t <= 0.8)) auto.lane = to; }
+  if (auto.stuck > 0.25) { const o = [auto.lane - 1, auto.lane + 1].filter(clearTo); if (o.length) { auto.lane = o[0]; auto.stuck = 0; } }
+  // el cambio de carril: un resorte ágil (más rápido cuanto más rápida la canción) y el carro se inclina hacia donde va
+  const per = Math.max(0.3, tempo.period || 0.5), om = Math.max(9, Math.min(18, 5.6 / per)), tx = laneX(auto.lane);
+  auto.xv += ((tx - auto.x) * om * om - auto.xv * 1.7 * om) * dt * (db > 0 ? 1 : 0); auto.x += auto.xv * dt * (db > 0 ? 1 : 0);
+  auto.dist += step * 0.5 * (blocked ? 0.5 : 1);
   auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
   auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
-  auto.brake = Math.max(auto.brake * Math.pow(0.03, dt), hits.snare ? 1 : 0);
-  auto.U.fill(-9); auto.U.set([cx + auto.x, myY + P * 0.006, Math.max(-0.5, Math.min(0.5, auto.xv * 1.6)), 0], 0);
-  auto.cars.slice(0, 6).forEach((c, i) => auto.U.set([cx + laneX(c.lane) + Math.sin(groove * 0.4 + c.sw) * LW * 0.03, c.y, 0, c.k], (i + 1) * 4));
-  const tone = (c, l, sMin = 60) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)).map(v => v / 255); };
-  const kinds = [tone(RGB[0], 46), tone(RGB[2], 50), [0.82, 0.83, 0.86], [0.2, 0.21, 0.24], tone(RGB[1], 40)];
-  auto.K.set(tone(RGB[1], 72, 70).map(v => v * 0.85 + 0.15), 0);   // el tuyo: claro, del color de la portada
-  auto.cars.slice(0, 6).forEach((c, i) => auto.K.set(kinds[c.k], (i + 1) * 3));
+  auto.brake = Math.max(auto.brake * Math.pow(0.03, dt), hits.snare ? 1 : 0); auto.hi += (bandX(40, BANDS) - auto.hi) * (1 - Math.pow(0.02, dt));
+  auto.myBrake += ((blocked ? 1 : 0) - auto.myBrake) * (1 - Math.pow(0.001, dt));
+  const rot = Math.max(-0.17, Math.min(0.17, auto.xv * 0.9)), heroY = myY + P * 0.006, flash = state.noFlash ? 0.5 : 1;
+  const shown = auto.cars.filter(c => c.y < 1.3).sort((a, b) => a.y - b.y).slice(0, 6);
+  auto.U.fill(-9); auto.D.fill(0);
+  auto.U.set([cx + auto.x, heroY, rot, 0], 0); auto.D.set([myHW, myHL, Math.max(auto.myBrake, 0.35 + 0.5 * P * flash), 1], 0);
+  shown.forEach((c, i) => { c.px = cx + laneX(c.lane) + Math.sin(tb * 0.4 + c.sw) * LW * 0.03; auto.U.set([c.px, c.y, 0, c.k], (i + 1) * 4); auto.D.set([c.hw, c.hl, 0.3 + auto.brake * 0.7 * flash, 0], (i + 1) * 4); });
+  const tone = (c, l, sMin = 60) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5).map(Math.round)));
   const [cw, ch] = glCanvas(1), p = auto.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uRoad, cx, halfW);
-  gl.uniform1f(p.u.uDist, auto.dist % 4000); gl.uniform1f(p.u.uLW, LW); gl.uniform1f(p.u.uNight, night ? 1 : 0.15); gl.uniform1f(p.u.uP, P * (state.noFlash ? 0.5 : 1));
-  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.25) * (0.35 + 0.65 * musicGate)); gl.uniform1f(p.u.uBrake, auto.brake);
-  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 22, 7)).map(v => v / 255) : hexToRgb(hsl(hh, 16, 70)).map(v => v / 255));
-  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uC0, tone(RGB[0], 58, 75)); gl.uniform3fv(p.u.uC1, tone(RGB[1], 58, 75)); gl.uniform3fv(p.u.uC2, tone(RGB[2], 60, 75));
-  gl.uniform4fv(p.u['uCar[0]'], auto.U); gl.uniform3fv(p.u['uK[0]'], auto.K);
+  gl.uniform1f(p.u.uDist, auto.dist % 4000); gl.uniform1f(p.u.uLW, LW); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P * flash);
+  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.3) * (0.35 + 0.65 * musicGate)); gl.uniform1f(p.u.uSpd, Math.max(0, loud - 0.35) * 1.5 * musicGate); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHi, auto.hi);
+  gl.uniform3fv(p.u.uBg, (night ? hexToRgb(hsl(hh, 22, 7)) : hexToRgb(hsl(hh, 20, 62))).map(v => v / 255));
+  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uC0, tone(RGB[0], 58, 75).map(v => v / 255)); gl.uniform3fv(p.u.uC2, tone(RGB[2], 60, 75).map(v => v / 255));
+  gl.uniform4fv(p.u['uCar[0]'], auto.U); gl.uniform4fv(p.u['uDim[0]'], auto.D);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   if (night) bloom(GLX.c, 0.2 + P * 0.1);
+  // ---- los vehículos (dibujados una vez cada uno) ----
+  const cov = coverClean || coverAny, palKey = [0, 1, 2].map(i => Math.round(hexToHsl(rgbToHex(...RGB[i].map(Math.round)))[0] / 6)).join('.');
+  const sprKey = [W, H, night, palKey].join(); if (auto.sprKey !== sprKey || auto.cov !== cov) { auto.sprKey = sprKey; auto.cov = cov; auto.spr.clear(); }
+  const cols = [[tone(RGB[0], 50), tone(RGB[2], 54), tone(RGB[1], 44)], [tone(RGB[2], 56), tone(RGB[0], 60), tone(RGB[1], 52)], [[246, 194, 44], [246, 194, 44], [250, 206, 70]],
+    [[232, 233, 238], [205, 210, 220], [232, 233, 238]], [[54, 58, 70], [84, 44, 52], [40, 62, 74]], [tone(RGB[0], 46), tone(RGB[2], 46), [200, 60, 50]]];
+  const sprite = (k, tn, hero) => { const id = hero ? 'me' : k + '.' + tn; let s = auto.spr.get(id);
+    if (!s) { const [hw, hl] = dim(k); s = autoSprite(k, hero ? tone(RGB[1], 60, 85) : cols[k][tn], night, Math.round(hw * H), Math.round(hl * H), hero); auto.spr.set(id, s); } return s; };
+  const lampK = (night ? 1 : 0.3) * (0.35 + 0.65 * musicGate);
+  const drawCar = (X, Y, r, s, hw, hl, brake, hero) => { const pxX = X * H, pxY = (1 - Y) * H, bw = hw * H, bl = hl * H;
+    ctx.save(); ctx.translate(pxX, pxY); ctx.rotate(r); ctx.drawImage(s, -s.width / 2, -s.height / 2);
+    // el reflejo de la farola más cercana le recorre el techo al pasar
+    const li = Math.round((Y + auto.dist) / 0.5), dyL = li * 0.5 - auto.dist - Y, side = ((li % 2) + 2) % 2 === 0 ? -1 : 1, k = Math.exp(-Math.pow(dyL / 0.17, 2)) * lampK;
+    ctx.globalCompositeOperation = 'lighter';
+    if (k > 0.03) { ctx.save(); ctx.beginPath(); ctx.roundRect(-bw, -bl, bw * 2, bl * 2, bw * 0.6); ctx.clip();
+      const gx = side * bw * 0.45, gy = -dyL / 0.17 * bl * 0.75, g = ctx.createRadialGradient(gx, gy, 0, gx, gy, bw * 1.5); g.addColorStop(0, `rgba(255,238,205,${0.42 * k})`); g.addColorStop(1, 'rgba(255,238,205,0)');
+      ctx.fillStyle = g; ctx.fillRect(-bw, -bl, bw * 2, bl * 2); ctx.restore(); }
+    // stops que se encienden (con la caja; los tuyos con el bombo) y faros
+    for (const sg of [-1, 1]) { const gr = bw * (0.5 + 0.5 * brake), g = ctx.createRadialGradient(sg * bw * 0.58, bl * 0.95, 0, sg * bw * 0.58, bl * 0.95, gr); g.addColorStop(0, `rgba(255,70,50,${0.5 * brake})`); g.addColorStop(1, 'rgba(255,40,30,0)');
+      ctx.fillStyle = g; ctx.fillRect(sg * bw * 0.58 - gr, bl * 0.95 - gr, gr * 2, gr * 2);
+      const hr = bw * 0.5, g2 = ctx.createRadialGradient(sg * bw * 0.6, -bl * 0.96, 0, sg * bw * 0.6, -bl * 0.96, hr); g2.addColorStop(0, `rgba(255,246,220,${(night ? 0.55 : 0.25) * (hero ? 0.8 + 0.4 * P : 0.7)})`); g2.addColorStop(1, 'rgba(255,246,220,0)');
+      ctx.fillStyle = g2; ctx.fillRect(sg * bw * 0.6 - hr, -bl * 0.96 - hr, hr * 2, hr * 2); }
+    ctx.restore(); };
+  shown.slice().reverse().forEach(c => drawCar(c.px, c.y, 0, sprite(c.k, c.tone), c.hw, c.hl, 0.25 + auto.brake * 0.75 * flash, false));
+  drawCar(cx + auto.x, heroY, rot, sprite(1, 0, true), myHW, myHL, Math.max(auto.myBrake, 0.3 + 0.6 * P * flash), true);
+  // por encima pasa de vez en cuando una bandada de gaviotas (aletean al compás) con su sombra sobre el puente
+  if (!auto.flock && auto.b > 3 && Math.floor(auto.b / 16) !== auto.flockN) { auto.flockN = Math.floor(auto.b / 16); const dir = Math.random() < 0.5 ? 1 : -1;
+    auto.flock = { t0: auto.b, dir, y0: 0.35 + Math.random() * 0.4, birds: Array.from({ length: 4 + Math.floor(Math.random() * 2) }, (_, i) => ({ ox: -Math.abs(i - 2) * 0.07 - Math.random() * 0.03, oy: (i - 2) * 0.075 + (Math.random() - 0.5) * 0.03, ph: Math.random() * 2, sc: 0.85 + Math.random() * 0.3 })) }; }
+  if (auto.flock) { const F = auto.flock, t = (auto.b - F.t0) / 7, ang = F.dir > 0 ? -0.35 : Math.PI + 0.35, ca = Math.cos(ang), sa = Math.sin(ang), span = 0.05 * H, sdx = (night ? 0.02 : 0.085) * H, sdy = (night ? 0.02 : 0.04) * H;
+    if (t > 1.15) auto.flock = null;
+    else for (const pass of [0, 1]) for (const bd of F.birds) { const along = (t * 1.5 - 0.25) * (asp + 0.4) + bd.ox, X = (F.dir > 0 ? -0.2 : asp + 0.2) * H + (ca * along - sa * bd.oy) * H, Y = (1 - F.y0) * H + (sa * along + ca * bd.oy) * H;
+      const fl = Math.sin((auto.b + bd.ph) * Math.PI * 2), sp = span * bd.sc * (0.62 + 0.38 * Math.cos(fl * 1.1)), lift = fl * span * 0.16;
+      ctx.save(); ctx.translate(X + (pass ? 0 : sdx), Y + (pass ? 0 : sdy)); ctx.rotate(ang + Math.PI / 2); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.fillStyle = pass ? (night ? 'rgba(196,206,230,.95)' : '#fffaf0') : `rgba(0,0,0,${night ? 0.3 : 0.24})`;
+      for (const sg of [-1, 1]) { ctx.beginPath(); ctx.moveTo(0, -span * 0.13); ctx.quadraticCurveTo(sg * sp * 0.5, -span * 0.3 - lift * 0.5, sg * sp, lift + span * 0.02);
+        ctx.quadraticCurveTo(sg * sp * 0.55, -span * 0.04 - lift * 0.3, 0, span * 0.1); ctx.closePath(); ctx.fill(); }
+      ctx.beginPath(); ctx.ellipse(0, 0, span * 0.085 * bd.sc, span * 0.26 * bd.sc, 0, 0, 7); ctx.fill();
+      if (pass) { ctx.fillStyle = night ? 'rgba(90,100,130,.9)' : '#59606e'; for (const sg of [-1, 1]) { ctx.beginPath(); ctx.arc(sg * sp * 0.95, lift + span * 0.02, span * 0.045, 0, 7); ctx.fill(); } }
+      ctx.restore(); } }
+  ctx.restore();
 }
 
 const scenes = { autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
