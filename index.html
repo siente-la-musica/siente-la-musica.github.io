@@ -5929,7 +5929,7 @@ function faroSetup() {
       // ---- el haz: dos brazos de luz que giran, de perfil suave (sin bordes), con bruma dentro; y el destello de frente ----
       vec2 Lp = uTow + vec2(0., uTh + .026), v = p - Lp; vec3 beamC = mix(uWarm, vec3(1., .95, .82), .4); float face = 0.;
       for (int k = 0; k < 2; k++) { float a = uPh + float(k) * 3.1416, cs = cos(a), sn = sin(a), al = v.x * sign(cs), near = .5 + .5 * sn; face = max(face, pow(max(sn, 0.), 10.));
-        if (al > 0.) { float w = .012 + al * (.09 + .26 * max(sn, 0.)), prof = exp(-pow(v.y - al * .04, 2.) / (w * w)), fall = exp(-al / (asp * 1.25 * abs(cs) + .03));
+        if (al > 0.) { float w = .012 + al * (.09 + .16 * max(sn, 0.)), prof = exp(-pow(v.y - al * .04, 2.) / (w * w)), fall = exp(-al / (asp * 1.25 * abs(cs) + .03));
           col += beamC * prof * fall * (.2 + .6 * near) * uPw * (.75 + .5 * n(p * 5. + vec2(uT * .2, 0.))); } }
       // ---- el acantilado: roca con vetas, el filo de arriba bañado por la luna, hierba que se mece y espuma en la orilla ----
       float ct = cliffTop(s) + (n(vec2(p.x * 7., 1.)) - .5) * .03 + (n(vec2(p.x * 26., 2.)) - .5) * .014 + (n(vec2(p.x * 90., 2.)) - .5) * .005, wl = waterLn(s) + (n(vec2(p.x * 14., uT * .5)) - .5) * .006;
@@ -5973,7 +5973,7 @@ function faroSetup() {
       }
       // el resplandor de la linterna y, cuando el haz mira de frente, el destello
       col += beamC * (exp(-dot(v, v) / .0007) * (.35 + .4 * uP) + exp(-dot(v, v) / .01) * .12 * (.5 + uPw));
-      col += beamC * face * exp(-dot(v, v) / (.02 + .5 * face)) * .75 * uPw;
+      col += beamC * face * exp(-dot(v, v) / (.012 + .09 * face)) * .42 * uPw;
       // ---- adelante: hierba alta a contraluz que se mece, y luciérnagas ----
       float gx = p.x * 85., gb = floor(gx), gf = fract(gx) - .5, gr = h1(gb), gh = (.02 + .06 * gr * gr * gr) * (1. - smoothstep(.25, .9, abs(s - .5) * 2.) * .0);
       float bend = sin(uT * 1.4 + gb * .7) * .25 * (uv.y / max(gh, .01)) * (uv.y / max(gh, .01));
