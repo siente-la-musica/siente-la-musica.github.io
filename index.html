@@ -4583,6 +4583,20 @@ function drawAura(dt) {
     ctx.globalCompositeOperation = 'source-over';
     glowSpot(W / 2, H / 2, Math.max(W, H) * (0.4 + P * 0.06 + av * 0.12), sat(ac, 66), 0.08 + energy * 0.14 + P * 0.1 + av * 0.2);
   }
+  ctx.restore();
+  // el aura de la canción: nueve anillos que ondulan alrededor de la portada (cada uno escucha su tramo del sonido,
+  // los de dentro los graves); el golpe los abre y la voz aviva el halo del centro
+  { const R0 = MIN * 0.165 * (1 + P * 0.05), cxr = W / 2, cyr = H * (W < H ? 0.46 : 0.5); drawAura.ph = (drawAura.ph || 0) + dt * (0.05 + energy * 1.4);
+    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.lineJoin = 'round';
+    for (let k = 8; k >= 0; k--) { const lv = logo.lv[k], amp = 0.025 + lv * 0.08 + P * 0.02, col = mix(k / 8), r0 = R0 * (1.2 + k * 0.2);
+      ctx.strokeStyle = rgba(night ? col : sat(col, 56), Math.min(1, (0.62 - k * 0.045) * (0.45 + lv * 0.95 + P * 0.3))); ctx.lineWidth = R0 * (0.07 + k * 0.008) * (1 + lv * 0.5);
+      ctx.beginPath(); for (let a = 0; a <= 6.31; a += 0.07) { const r = r0 * (1 + amp * Math.sin(a * 6 + k + drawAura.ph * (k % 2 ? 1 : -1)) + P * 0.04 * (1 - k / 9)), x = cxr + Math.cos(a) * r, y = cyr + Math.sin(a) * r; a ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }
+      ctx.closePath(); ctx.stroke(); }
+    ctx.restore();
+    const img = coverClean || coverAny, rc = R0 * (1 + P * 0.06 + av * 0.05);
+    ctx.save(); ctx.shadowColor = rgba(ac, 0.85); ctx.shadowBlur = R0 * (0.45 + P * 0.6 + av * 0.4); ctx.beginPath(); ctx.arc(cxr, cyr, rc, 0, 7); ctx.fillStyle = rgba(cc, 1); ctx.fill(); ctx.shadowBlur = 0; ctx.clip();
+    if (img) { try { ctx.drawImage(img, cxr - rc, cyr - rc, rc * 2, rc * 2); } catch (e) {} } ctx.restore(); }
+  ctx.save();
   // ondas de color: cada golpe suelta un anillo del color de la luz más fuerte que entra desde el borde
   // (así el movimiento del color se ve y cae justo en el ritmo)
   const AW = drawAura.waves = drawAura.waves || [];
@@ -5866,6 +5880,18 @@ function drawLight(dt) {
   lvx.vo += (Math.min(1, voice * 1.5) - lvx.vo) * (1 - Math.pow(0.08, dt));
   lvx.syl = Math.max(lvx.syl * Math.pow(0.05, dt), hits.voice ? 1 : 0);
   const melC = melodyColor();
+  // rayos que salen del centro (cada uno escucha su tramo del sonido y gira despacio con la canción) y motas que titilan con los agudos
+  { const LR = drawLight.rays || (drawLight.rays = { ph: 0, lv: new Float32Array(16) }), Pp = Math.max(0, pulse.x); LR.ph += dt * (0.04 + energy * 0.5);
+    const tint = c => { if (night) return c; const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(90, s_), 60)); };
+    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.translate(W / 2, H / 2);
+    for (let i = 0; i < 16; i++) { const k0 = Math.floor(i / 16 * BANDS * 0.85), v = bandX(k0, k0 + 4); LR.lv[i] += (v - LR.lv[i]) * (1 - Math.pow(v > LR.lv[i] ? 0.0005 : 0.03, dt));
+      const a = i / 16 * 6.2832 + LR.ph + Math.sin(i * 1.7) * 0.08, len = Math.max(W, H) * (0.22 + LR.lv[i] * 0.62 + Pp * 0.1), wd = 0.05 + LR.lv[i] * 0.06, c = tint(mix(i / 15));
+      const g = ctx.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len); g.addColorStop(0, rgba(c, (night ? 0.5 : 0.6) * (0.25 + LR.lv[i]))); g.addColorStop(1, rgba(c, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a - wd) * len, Math.sin(a - wd) * len); ctx.lineTo(Math.cos(a + wd) * len, Math.sin(a + wd) * len); ctx.closePath(); ctx.fill(); }
+    const hiL = bandX(38, BANDS);
+    for (let i = 0; i < 46; i++) { const a = i * 2.4 + LR.ph * (0.25 + (i % 5) * 0.09), r = MIN * (0.1 + ((i * 37) % 100) / 100 * 0.62) * (1 + lightLv[0] * 0.12), tw = 0.5 + 0.5 * Math.sin(time * 3 + i * 1.9), sz = MIN * 0.0035 * (1 + hiL * 2.4 * tw + Pp * 0.6);
+      ctx.fillStyle = rgba(night ? mix((i % 7) / 6).map(q => q + (255 - q) * 0.6) : tint(mix((i % 7) / 6)), (0.25 + 0.6 * tw * (0.3 + hiL)) * musicGate); ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, sz, 0, 7); ctx.fill(); }
+    ctx.restore(); }
   ctx.save();
   if (night) {
     ctx.globalCompositeOperation = 'lighter';
