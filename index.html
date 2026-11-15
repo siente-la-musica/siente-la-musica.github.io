@@ -5883,11 +5883,16 @@ function drawLight(dt) {
   // rayos que salen del centro (cada uno escucha su tramo del sonido y gira despacio con la canción) y motas que titilan con los agudos
   { const LR = drawLight.rays || (drawLight.rays = { ph: 0, lv: new Float32Array(16) }), Pp = Math.max(0, pulse.x); LR.ph += dt * (0.04 + energy * 0.5);
     const tint = c => { if (night) return c; const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(90, s_), 60)); };
-    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.translate(W / 2, H / 2);
-    for (let i = 0; i < 16; i++) { const k0 = Math.floor(i / 16 * BANDS * 0.85), v = bandX(k0, k0 + 4); LR.lv[i] += (v - LR.lv[i]) * (1 - Math.pow(v > LR.lv[i] ? 0.0005 : 0.03, dt));
-      const a = i / 16 * 6.2832 + LR.ph + Math.sin(i * 1.7) * 0.08, len = Math.max(W, H) * (0.22 + LR.lv[i] * 0.62 + Pp * 0.1), wd = 0.05 + LR.lv[i] * 0.06, c = tint(mix(i / 15));
-      const g = ctx.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len); g.addColorStop(0, rgba(c, (night ? 0.5 : 0.6) * (0.25 + LR.lv[i]))); g.addColorStop(1, rgba(c, 0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a - wd) * len, Math.sin(a - wd) * len); ctx.lineTo(Math.cos(a + wd) * len, Math.sin(a + wd) * len); ctx.closePath(); ctx.fill(); }
+    // los rayos se pintan en un lienzo pequeño y desenfocado y de ahí se amplían: quedan como haces de luz difusos, sin bordes marcados
+    const sw = 160, sh = Math.max(2, Math.round(sw * H / W)), A = LR.a || (LR.a = document.createElement('canvas')), B = LR.b || (LR.b = document.createElement('canvas'));
+    if (A.width !== sw || A.height !== sh) { A.width = B.width = sw; A.height = B.height = sh; }
+    const ax = A.getContext('2d'), bx = B.getContext('2d'), kq = sw / W; ax.setTransform(1, 0, 0, 1, 0, 0); ax.clearRect(0, 0, sw, sh); ax.globalCompositeOperation = 'lighter'; ax.translate(sw / 2, sh / 2);
+    for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.85), v = bandX(k0, k0 + 5); LR.lv[i] += (v - LR.lv[i]) * (1 - Math.pow(v > LR.lv[i] ? 0.0005 : 0.03, dt));
+      const a = i / 12 * 6.2832 + LR.ph + Math.sin(i * 1.7) * 0.12, len = Math.max(W, H) * kq * (0.2 + LR.lv[i] * 0.6 + Pp * 0.08), wd = 0.07 + LR.lv[i] * 0.07, c = tint(mix(i / 11));
+      const g = ax.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len); g.addColorStop(0, rgba(c, 0.55 * (0.2 + LR.lv[i]))); g.addColorStop(0.5, rgba(c, 0.2 * (0.2 + LR.lv[i]))); g.addColorStop(1, rgba(c, 0));
+      ax.fillStyle = g; ax.beginPath(); ax.moveTo(0, 0); ax.lineTo(Math.cos(a - wd) * len, Math.sin(a - wd) * len); ax.lineTo(Math.cos(a + wd) * len, Math.sin(a + wd) * len); ax.closePath(); ax.fill(); }
+    bx.clearRect(0, 0, sw, sh); if (CAN_BLUR) bx.filter = 'blur(5px)'; bx.drawImage(A, 0, 0); bx.filter = 'none';
+    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.globalAlpha = night ? 0.85 : 0.7; ctx.drawImage(B, 0, 0, W, H); ctx.globalAlpha = 1; ctx.translate(W / 2, H / 2);
     const hiL = bandX(38, BANDS);
     for (let i = 0; i < 46; i++) { const a = i * 2.4 + LR.ph * (0.25 + (i % 5) * 0.09), r = MIN * (0.1 + ((i * 37) % 100) / 100 * 0.62) * (1 + lightLv[0] * 0.12), tw = 0.5 + 0.5 * Math.sin(time * 3 + i * 1.9), sz = MIN * 0.0035 * (1 + hiL * 2.4 * tw + Pp * 0.6);
       ctx.fillStyle = rgba(night ? mix((i % 7) / 6).map(q => q + (255 - q) * 0.6) : tint(mix((i % 7) / 6)), (0.25 + 0.6 * tw * (0.3 + hiL)) * musicGate); ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, sz, 0, 7); ctx.fill(); }
