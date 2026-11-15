@@ -543,6 +543,7 @@
     .sep { display: none; }
     .dock { width: calc(100% - 24px); gap: 6px; padding: 8px; border-radius: 20px; }
     .dock > .group { max-width: 100%; }
+    .dock { gap: 6px 3px; } .dock button { padding-left: 9px; padding-right: 9px; font-size: 12.5px; } .dock .group { gap: 3px; }   /* la barra cabe en dos renglones */
     .pop { position: fixed; left: 12px; right: 12px; bottom: calc(var(--dock-h, 70px) + 28px); transform: none; }
     .pop.grid #modes { grid-template-columns: repeat(3, minmax(0, 1fr)); max-height: 60vh; overflow-y: auto; }
     body:has(.song:not([hidden])) .status { display: none; }
