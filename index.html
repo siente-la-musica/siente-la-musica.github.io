@@ -10858,7 +10858,7 @@ const RUTA_AMB = {
   nochell: { top: [0.014, 0.017, 0.045], hor: [0.055, 0.05, 0.12], gnd: [0.008, 0.009, 0.018], tree: [0.006, 0.007, 0.014], cl0: [0.065, 0.065, 0.13], cl1: [0.022, 0.024, 0.055], cov: 0.4, night: 1, lamp: 1, sun: 0, rain: 1, city: 1, pink: [0.024, 0.011, 0.024], cum: 0, cab: 1 },
 };
 function rutaSetup() {
-  ruta.prog = glProgram(`uniform vec2 uRes, uPiv; uniform float uDist, uT, uNight, uLamp, uSun, uRain, uCity, uTail, uSway, uP, uHi, uWip, uGlow, uHz, uBob, uCov, uCut, uCum, uCurve;
+  ruta.prog = glProgram(`uniform vec2 uRes, uPiv; uniform float uDist, uT, uNight, uLamp, uSun, uRain, uCity, uTail, uSway, uP, uHi, uWip, uGlow, uHz, uBob, uCov, uCut, uCum, uCurve, uRoll;
     uniform vec3 uTop, uHor, uGnd, uTree, uPink, uCl0, uCl1, uC0, uC1, uC2, uMel, uCarC; uniform vec4 uOn[3], uWp; uniform vec3 uStar;
     ${GLSL_NOISE}
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
@@ -10988,6 +10988,24 @@ function rutaSetup() {
           vec3 rc = mix(vec3(.6, .62, .66), vec3(.035, .037, .05), uNight) + vec3(.14, .13, .115) * exp(-z * .08) * uNight;
           col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9)); } }
       }
+      // casitas al lado izquierdo, en la pradera y en la costa: techo a dos aguas, puerta y ventanas que de noche se encienden y titilan con los agudos
+      for (int i = 3; i >= 0; i--) { float z = (float(i) + 1. - fract(uDist / 42.)) * 42., id = float(i) + floor(uDist / 42.); if (z < 3.) continue;
+        float r1 = h1(id + 91.), r2 = h1(id + 47.); if (secT(z + uDist) < .5 || r1 < .35) continue;
+        float sc = K / z, hwid = 4.2 + r2 * 1.6, hh = 3.8 + r1 * 1.4; vec2 c = proj(vec3(-11.5 - r2 * 3.5, 0., z), asp), d = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
+        if (abs(d.x) > hwid + 1. || d.y < -.2 || d.y > hh + 3.6) continue;
+        float aa = px / sc, fg = 1. - exp(-z * fogK * 1.1), lgt = mix(1., .1, uNight);
+        vec3 wallC = mix(vec3(.96, .93, .86), vec3(.93, .8, .7), r2) * lgt * (d.x < 0. ? 1. : .86), roofC = (r1 > .68 ? vec3(.3, .42, .62) : vec3(.74, .3, .24)) * lgt;
+        float wall = smoothstep(aa, -aa, abs(d.x) - hwid) * step(0., d.y) * smoothstep(aa, -aa, d.y - hh);
+        float roof = smoothstep(aa, -aa, (d.y - hh) + abs(d.x) * (3. / (hwid + .7)) - 3.) * step(hh - .15, d.y);
+        vec3 hc = mix(wallC, roofC * (.85 + .25 * step(d.x, 0.)), roof);
+        vec2 wq = vec2(mod(d.x + hwid * .5, hwid) - hwid * .5, d.y - hh * .58); float win = smoothstep(aa, -aa, max(abs(wq.x) - .75, abs(wq.y) - .68)) * (1. - roof);
+        float lit = step(.35, h1(id * 3.1 + floor((d.x + hwid * .5) / hwid) * 7.));
+        vec3 winC = mix(mix(uTop, hazeC, .5) * .7, vec3(1., .8, .45) * (.75 + .5 * uHi), lit * max(uNight, uSun * .5));
+        winC *= 1. - .5 * max(smoothstep(.06, .02, abs(wq.x)), smoothstep(.06, .02, abs(wq.y)));
+        hc = mix(hc, winC, win);
+        hc = mix(hc, vec3(.36, .22, .16) * lgt, smoothstep(aa, -aa, max(abs(d.x - hwid * .02) - .5, d.y - 2.1)) * step(0., d.y) * (1. - win));
+        col = mix(col, mix(hc, hazeC, fg), max(wall, roof));
+        col += vec3(1., .75, .4) * win * lit * uNight * (.25 + .35 * uHi) * (1. - fg); }
       // arbolitos redondos a los dos lados (cada uno mira a la cámara): copa de bolas en tres tonos y su tronco; algunos, rosados
       for (int sd = 0; sd < 2; sd++) for (int i = 8; i >= 0; i--) {
         float z = (float(i) + 1. - fract(uDist / 7.)) * 7., id = float(i) + floor(uDist / 7.) + float(sd) * 57.; if (z < 1.2) continue;
@@ -11072,7 +11090,7 @@ function rutaSetup() {
           L += hc * (bokeh(d, r) * 1.2 + exp(-abs(d.y) / (.0025 + .02 / zo)) * exp(-abs(d.x) / (.05 + 1.6 / zo)) * .6) * fade * br * mix(.4, 1., uNight);
           L += hc * exp(-pow((d.x + wob) / (r * 1.2), 2.)) * smoothstep(g.y, g.y - .14 - .9 / zo, uv.y) * step(uv.y, g.y) * fade * br * wet * .6; } }
       // el carro de adelante (dos tonos planos, luneta, placa, stops de barra): sus luces frenan con el bombo
-      { const float zc = 8.; float sc = K / zc; vec2 c = proj(vec3(uSway, 0., zc), asp), q = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc; q.y -= .02 * uTail;
+      { const float zc = 8.; float sc = K / zc; vec2 c = proj(vec3(uSway, 0., zc), asp), q = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc; q.y -= .02 * uTail + .012 * sin(uWip * 2.); q.x += (q.y - .2) * uRoll;   // cabecea al frenar, rebota con el compás y se ladea al moverse
         if (abs(q.x) < 1.5 && q.y > -.4 && q.y < 1.8) {
           float aa = px / sc, fg = (1. - exp(-zc * fogK)) * .6;
           col *= 1. - .62 * smoothstep(1.2, .7, abs(q.x)) * smoothstep(-.16, -.02, q.y) * smoothstep(.32, .1, q.y);
@@ -11272,7 +11290,8 @@ function drawRuta(dt) {
   if (pulse.on) { ruta.tailV += 9 + pulse.k * 10; ruta.beats++; ruta.rpmV += 2.2 + pulse.k * 2; ruta.pendV += ruta.pendDir * (0.7 + pulse.k * 0.8); ruta.pendDir = -ruta.pendDir; }
   ruta.tailV += (-ruta.tail * 60 - ruta.tailV * 9) * dt; ruta.tail = Math.max(0, ruta.tail + ruta.tailV * dt);
   const swT = (voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.9 : 0) + Math.sin(groove * Math.PI / 8) * 0.3;
-  ruta.sway += (swT - ruta.sway) * (1 - Math.pow(0.3, dt));
+  const sw0 = ruta.sway; ruta.sway += (swT - ruta.sway) * (1 - Math.pow(0.3, dt));
+  ruta.roll = (ruta.roll || 0) + (Math.max(-0.12, Math.min(0.12, (ruta.sway - sw0) / Math.max(dt, 0.004) * 0.22 + curve * 45)) - (ruta.roll || 0)) * (1 - Math.pow(0.02, dt));
   // de frente: cada cuatro tiempos sale un carro del horizonte y te cruza en dos tiempos
   if (pulse.on && ruta.beats % 4 === 0 && ruta.cars.length < 3) ruta.cars.push({ z: 150, br: 0.7 + pulse.k * 0.5, k: Math.random() });
   ruta.cars.forEach(c => { c.z -= dt * (c.z > 40 ? 150 : 60 + c.z * 2.2) / (per * 2) * go; });
@@ -11297,7 +11316,7 @@ function drawRuta(dt) {
   const [cw, ch] = glCanvas(0.8)   /* la escena es pesada: se dibuja algo más pequeña (la cabina va aparte, nítida) */, p = ruta.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uPiv, Lo.pivX / H, 1 - Lo.pivY / H); gl.uniform4f(p.u.uWp, wa0, wa1, wr0, wr1);
-  gl.uniform1f(p.u.uDist, ruta.dist % 13440); gl.uniform1f(p.u.uCurve, curve); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
+  gl.uniform1f(p.u.uDist, ruta.dist % 13440); gl.uniform1f(p.u.uCurve, curve); gl.uniform1f(p.u.uRoll, ruta.roll); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
   gl.uniform1f(p.u.uSun, A.sun); gl.uniform1f(p.u.uRain, A.rain); gl.uniform1f(p.u.uCity, A.city); gl.uniform1f(p.u.uCov, A.cov);
   const tail = Math.min(1.6, ruta.tail * 0.6 + bandX(0, 10) * 0.35) * (state.noFlash ? 0.5 : 1);
   gl.uniform1f(p.u.uTail, tail); gl.uniform1f(p.u.uSway, ruta.sway); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uHi, ruta.hi); gl.uniform1f(p.u.uWip, wphi % (Math.PI * 2)); gl.uniform1f(p.u.uGlow, ruta.glow);
