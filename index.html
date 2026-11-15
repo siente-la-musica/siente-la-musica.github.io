@@ -5863,74 +5863,90 @@ function drawStars(dt) {
   ctx.restore();
 }
 
-// ================= Escena: Luz =================
-// Una luz suave en el centro, en tres capas: el halo sigue a los graves, la luz media a los
-// medios y el núcleo a los agudos. No se mueve de sitio: crece, se encoge y respira.
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
+// ================= Escena: Luz (el faro) =================
+// Un faro en el mar: su haz da una vuelta cada cuatro tiempos y destella de frente en el golpe; la linterna late con
+// el bombo y brilla con los graves. La portada es la luna (o el sol del atardecer, de día), con un halo del color de
+// la nota que se canta; su reflejo tiembla en el agua, las estrellas titilan con los agudos, la espuma rompe con la
+// caja y un velero cruza el horizonte a lo largo de la canción. Sin música, todo queda quieto.
 function drawLight(dt) {
-  const night = state.theme === 'dark';
-  [lightT[0], lightT[1], lightT[2]] = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)];   // graves, medios y agudos, con sus altos y bajos
-  if (hits.bass) lightV[0] += hits.bass * 5;
-  if (hits.mid) lightV[1] += hits.mid * 3;
-  springTo(lightLv, lightV, lightT, dt, 260, 0.45);
-  const [Lb, Lm, Lh] = [...lightLv].map(v => Math.max(0, Math.min(1.3, v)));
-  const drift = 0.5 + 0.5 * Math.sin(time * 0.05);
-  // la voz: una luz del color de la nota que respira desde el centro mientras se canta; cada sílaba la aviva
-  const lvx = drawLight.v || (drawLight.v = { vo: 0, syl: 0 });
-  lvx.vo += (Math.min(1, voice * 1.5) - lvx.vo) * (1 - Math.pow(0.08, dt));
-  lvx.syl = Math.max(lvx.syl * Math.pow(0.05, dt), hits.voice ? 1 : 0);
-  const melC = melodyColor();
-  // rayos que salen del centro (cada uno escucha su tramo del sonido y gira despacio con la canción) y motas que titilan con los agudos
-  { const LR = drawLight.rays || (drawLight.rays = { ph: 0, lv: new Float32Array(16) }), Pp = Math.max(0, pulse.x); LR.ph += dt * (0.04 + energy * 0.5);
-    const tint = c => { if (night) return c; const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(90, s_), 60)); };
-    // los rayos se pintan en un lienzo pequeño y desenfocado y de ahí se amplían: quedan como haces de luz difusos, sin bordes marcados
-    const sw = 160, sh = Math.max(2, Math.round(sw * H / W)), A = LR.a || (LR.a = document.createElement('canvas')), B = LR.b || (LR.b = document.createElement('canvas'));
-    if (A.width !== sw || A.height !== sh) { A.width = B.width = sw; A.height = B.height = sh; }
-    const ax = A.getContext('2d'), bx = B.getContext('2d'), kq = sw / W; ax.setTransform(1, 0, 0, 1, 0, 0); ax.clearRect(0, 0, sw, sh); ax.globalCompositeOperation = 'lighter'; ax.translate(sw / 2, sh / 2);
-    for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.85), v = bandX(k0, k0 + 5); LR.lv[i] += (v - LR.lv[i]) * (1 - Math.pow(v > LR.lv[i] ? 0.0005 : 0.03, dt));
-      const a = i / 12 * 6.2832 + LR.ph + Math.sin(i * 1.7) * 0.12, len = Math.max(W, H) * kq * (0.2 + LR.lv[i] * 0.6 + Pp * 0.08), wd = 0.07 + LR.lv[i] * 0.07, c = tint(mix(i / 11));
-      const g = ax.createLinearGradient(0, 0, Math.cos(a) * len, Math.sin(a) * len); g.addColorStop(0, rgba(c, 0.55 * (0.2 + LR.lv[i]))); g.addColorStop(0.5, rgba(c, 0.2 * (0.2 + LR.lv[i]))); g.addColorStop(1, rgba(c, 0));
-      ax.fillStyle = g; ax.beginPath(); ax.moveTo(0, 0); ax.lineTo(Math.cos(a - wd) * len, Math.sin(a - wd) * len); ax.lineTo(Math.cos(a + wd) * len, Math.sin(a + wd) * len); ax.closePath(); ax.fill(); }
-    bx.clearRect(0, 0, sw, sh); if (CAN_BLUR) bx.filter = 'blur(5px)'; bx.drawImage(A, 0, 0); bx.filter = 'none';
-    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.globalAlpha = night ? 0.85 : 0.7; ctx.drawImage(B, 0, 0, W, H); ctx.globalAlpha = 1; ctx.translate(W / 2, H / 2);
-    const hiL = bandX(38, BANDS);
-    for (let i = 0; i < 46; i++) { const a = i * 2.4 + LR.ph * (0.25 + (i % 5) * 0.09), r = MIN * (0.1 + ((i * 37) % 100) / 100 * 0.62) * (1 + lightLv[0] * 0.12), tw = 0.5 + 0.5 * Math.sin(time * 3 + i * 1.9), sz = MIN * 0.0035 * (1 + hiL * 2.4 * tw + Pp * 0.6);
-      ctx.fillStyle = rgba(night ? mix((i % 7) / 6).map(q => q + (255 - q) * 0.6) : tint(mix((i % 7) / 6)), (0.25 + 0.6 * tw * (0.3 + hiL)) * musicGate); ctx.beginPath(); ctx.arc(Math.cos(a) * r, Math.sin(a) * r, sz, 0, 7); ctx.fill(); }
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), vertical = W < H, u = MIN / 1000, flash = state.noFlash ? 0.45 : 1;
+  const L = drawLight.s || (drawLight.s = { b: 0, go: 0, act: 0, bass: 0, vo: 0, foam: 0, hi: 0, star: null, beats: 0 });
+  const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
+  L.act = audible ? 2.5 : Math.max(0, L.act - dt); L.go += ((L.act > 0 ? 1 : 0) - L.go) * (1 - Math.pow(0.02, dt)); L.b += dt / per * L.go;
+  L.bass += (bandX(0, 10) - L.bass) * (1 - Math.pow(0.001, dt)); L.vo += (Math.min(1, voice * 1.5) - L.vo) * (1 - Math.pow(0.08, dt));
+  L.hi += (bandX(38, BANDS) - L.hi) * (1 - Math.pow(0.02, dt)); L.foam = Math.max(L.foam * Math.pow(0.06, dt), hits.snare ? 1 : 0);
+  if (pulse.on) { L.beats++; if (night && L.beats % 8 === 5 && !L.star) L.star = { x: W * (0.08 + Math.random() * 0.4), y: H * (0.06 + Math.random() * 0.14), t: 0 }; }
+  const tone = (c, l, sMin = 55) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)); };
+  const melC = melodyColor(), hz = H * (vertical ? 0.6 : 0.62), img = coverClean || coverAny;
+  const c0 = tone(mix(0.1), night ? 6 : 40), c1 = tone(mix(0.5), night ? 15 : 58), c2 = tone(mix(0.9), night ? 30 : 76, 70), warm = night ? tone(mix(0.9), 62, 70) : [255, 226, 170];
+  ctx.save(); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  // ---- cielo (deja entrever la portada del fondo), estrellas y estrella fugaz ----
+  let g = ctx.createLinearGradient(0, 0, 0, hz); g.addColorStop(0, rgba(c0, 0.9)); g.addColorStop(0.62, rgba(c1, 0.84)); g.addColorStop(1, rgba(c2, 0.8)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, hz + 1);
+  for (let i = 0; i < 90; i++) { const sx = ((i * 0.6180339) % 1) * W, sy = ((i * 0.3819660 + (i % 7) * 0.09) % 1) * hz * 0.92, tw = 0.5 + 0.5 * Math.sin(time * (1.5 + (i % 5) * 0.5) + i * 2.1), big = i % 11 === 0;
+    ctx.fillStyle = `rgba(255,250,235,${(night ? 0.85 : 0.25) * (0.25 + 0.75 * tw * (0.35 + L.hi * 1.2))})`; const r = (big ? 2.4 : 1.2) * u * (1 + L.hi * tw * (big ? 1.6 : 0.8));
+    ctx.beginPath(); ctx.arc(sx, sy, r, 0, 7); ctx.fill();
+    if (big && night) { ctx.fillRect(sx - r * 3.2, sy - r * 0.18, r * 6.4, r * 0.36); ctx.fillRect(sx - r * 0.18, sy - r * 3.2, r * 0.36, r * 6.4); } }
+  if (L.star) { L.star.t += dt / (per * 1.5) * L.go; const t = L.star.t, x1 = L.star.x + W * 0.36 * t, y1 = L.star.y + H * 0.1 * t, k = Math.sin(Math.PI * Math.min(1, t));
+    const gs = ctx.createLinearGradient(x1 - W * 0.12 * k, y1 - H * 0.033 * k, x1, y1); gs.addColorStop(0, 'rgba(255,255,255,0)'); gs.addColorStop(1, `rgba(255,255,255,${0.9 * k})`);
+    ctx.strokeStyle = gs; ctx.lineWidth = 2.2 * u; ctx.beginPath(); ctx.moveTo(x1 - W * 0.12 * k, y1 - H * 0.033 * k); ctx.lineTo(x1, y1); ctx.stroke(); if (t >= 1) L.star = null; }
+  // ---- la luna: la portada, con su halo del color de la nota ----
+  const mx = W * (vertical ? 0.7 : 0.74), my = H * (vertical ? 0.2 : 0.24), R = MIN * (vertical ? 0.15 : 0.13) * (1 + P * 0.03 + L.vo * 0.03), haloC = melC.map((v, j) => v * 0.6 + warm[j] * 0.4);
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; glowSpot(mx, my, R * (2.6 + L.vo * 1.2 + P * 0.4), haloC, (night ? 0.3 : 0.4) + L.vo * 0.3 + P * 0.12); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.arc(mx, my, R, 0, 7); ctx.fillStyle = rgba(warm, 1); ctx.fill(); ctx.clip(); if (img) { try { ctx.drawImage(img, mx - R, my - R, R * 2, R * 2); } catch (e) {} }
+  const gm = ctx.createRadialGradient(mx - R * 0.35, my - R * 0.4, R * 0.2, mx, my, R * 1.05); gm.addColorStop(0, 'rgba(255,255,255,.16)'); gm.addColorStop(0.7, 'rgba(0,0,0,0)'); gm.addColorStop(1, 'rgba(0,0,10,.38)'); ctx.fillStyle = gm; ctx.fillRect(mx - R, my - R, R * 2, R * 2); ctx.restore();
+  ctx.strokeStyle = rgba(warm, 0.7); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.arc(mx, my, R, 0, 7); ctx.stroke();
+  // ---- el mar: degradado, el reflejo de la luna en trazos que tiemblan y el velero del horizonte ----
+  g = ctx.createLinearGradient(0, hz, 0, H); g.addColorStop(0, rgba(c2.map(v => v * (night ? 0.55 : 0.82)), 0.92)); g.addColorStop(0.35, rgba(c1.map(v => v * (night ? 0.7 : 0.8)), 0.94)); g.addColorStop(1, rgba(c0.map(v => v * (night ? 0.8 : 0.7)), 0.97)); ctx.fillStyle = g; ctx.fillRect(0, hz, W, H - hz);
+  ctx.strokeStyle = rgba(warm, 0.35); ctx.lineWidth = 1.5 * u; ctx.beginPath(); ctx.moveTo(0, hz); ctx.lineTo(W, hz); ctx.stroke();
+  for (let i = 0; i < 22; i++) { const f = (i + 0.5) / 22, y = hz + Math.pow(f, 1.5) * (H - hz), wdt = R * (0.28 + 1.5 * f) * (0.55 + 0.45 * Math.sin(time * 1.3 + i * 1.7)) * (1 + L.bass * 0.7), x = mx + Math.sin(time * 0.9 + i * 2.3) * R * 0.3 * (0.4 + f);
+    ctx.strokeStyle = rgba(haloC.map(v => v + (255 - v) * 0.45), (night ? 0.55 : 0.6) * (1 - f * 0.75) * (0.45 + L.hi * 0.9 + P * 0.25)); ctx.lineWidth = (1.6 + 5 * f) * u; ctx.beginPath(); ctx.moveTo(x - wdt, y); ctx.lineTo(x + wdt, y); ctx.stroke(); }
+  { const bxp = W * (0.06 + 0.88 * ((L.b / 96) % 1)), s = 15 * u; ctx.fillStyle = rgba(c0.map(v => v * 0.45), 0.95);
+    ctx.beginPath(); ctx.moveTo(bxp - s * 1.3, hz - s * 0.12); ctx.lineTo(bxp + s * 1.3, hz - s * 0.12); ctx.lineTo(bxp + s * 0.9, hz + s * 0.25); ctx.lineTo(bxp - s * 0.9, hz + s * 0.25); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(bxp, hz - s * 2.2); ctx.lineTo(bxp + s * 1.05, hz - s * 0.3); ctx.lineTo(bxp, hz - s * 0.3); ctx.closePath(); ctx.fill(); ctx.beginPath(); ctx.moveTo(bxp - s * 0.12, hz - s * 1.8); ctx.lineTo(bxp - s * 0.12, hz - s * 0.3); ctx.lineTo(bxp - s * 0.85, hz - s * 0.3); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = `rgba(255,214,140,${0.6 + 0.4 * P})`; ctx.beginPath(); ctx.arc(bxp + s * 0.2, hz - s * 0.02, 1.8 * u, 0, 7); ctx.fill(); }
+  // ---- el islote y el faro ----
+  const tx = W * (vertical ? 0.3 : 0.26), by = hz + H * 0.07, th = H * (vertical ? 0.3 : 0.38), bw = MIN * 0.05, tw_ = MIN * 0.032, ly = by - th - MIN * 0.03, lx = tx;
+  const rockC = c0.map(v => v * (night ? 0.5 : 0.42));
+  ctx.fillStyle = rgba(rockC, 1); ctx.beginPath(); ctx.moveTo(-10, by + H * 0.085); ctx.quadraticCurveTo(tx - W * 0.2, by - H * 0.012, tx - bw * 1.6, by - H * 0.012); ctx.lineTo(tx + bw * 1.9, by - H * 0.006);
+  ctx.quadraticCurveTo(tx + W * 0.24, by + H * 0.012, tx + W * 0.4, by + H * 0.09); ctx.lineTo(tx + W * 0.4, by + H * 0.13); ctx.lineTo(-10, by + H * 0.13); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = rgba(warm, night ? 0.22 : 0.4); ctx.lineWidth = 2 * u; ctx.beginPath(); ctx.moveTo(tx - W * 0.16, by - H * 0.004); ctx.quadraticCurveTo(tx - W * 0.06, by - H * 0.014, tx - bw * 1.6, by - H * 0.012); ctx.stroke();
+  const acc = tone(RGB[0], night ? 40 : 52, 65), wall = night ? [200, 205, 222] : [250, 244, 232];
+  const towerPath = () => { ctx.beginPath(); ctx.moveTo(tx - bw, by); ctx.lineTo(tx - tw_, by - th); ctx.lineTo(tx + tw_, by - th); ctx.lineTo(tx + bw, by); ctx.closePath(); };
+  ctx.save(); towerPath(); ctx.fillStyle = rgba(wall, 1); ctx.fill(); ctx.clip();
+  ctx.fillStyle = rgba(acc, 1); for (const f of [0.14, 0.48, 0.82]) ctx.fillRect(tx - bw, by - th * (f + 0.14), bw * 2, th * 0.14);
+  const sh = ctx.createLinearGradient(tx - bw, 0, tx + bw, 0); sh.addColorStop(0, `rgba(0,0,20,${night ? 0.5 : 0.08})`); sh.addColorStop(0.35, `rgba(0,0,20,${night ? 0.3 : 0})`); sh.addColorStop(1, `rgba(0,0,20,${night ? 0.72 : 0.38})`); ctx.fillStyle = sh; ctx.fillRect(tx - bw, by - th, bw * 2, th);
+  ctx.restore();
+  ctx.fillStyle = `rgba(255,214,140,${night ? 0.85 : 0.5})`; for (const f of [0.3, 0.63]) { ctx.beginPath(); ctx.roundRect(tx - bw * 0.14, by - th * f, bw * 0.28, th * 0.045, bw * 0.1); ctx.fill(); }
+  ctx.fillStyle = rgba(rockC.map(v => v * 0.7), 1); ctx.beginPath(); ctx.roundRect(tx - bw * 0.22, by - th * 0.07, bw * 0.44, th * 0.07, [bw * 0.2, bw * 0.2, 0, 0]); ctx.fill();
+  ctx.fillStyle = rgba(rockC.map(v => v * 0.8), 1); ctx.fillRect(tx - tw_ * 1.5, by - th - MIN * 0.006, tw_ * 3, MIN * 0.01);                                     // la baranda
+  const lg = 0.55 + 0.3 * Math.min(1, L.bass * 1.5) + 0.3 * P * flash;
+  ctx.fillStyle = `rgba(255,236,180,${Math.min(1, lg)})`; ctx.fillRect(tx - tw_ * 0.95, by - th - MIN * 0.055, tw_ * 1.9, MIN * 0.05);
+  ctx.strokeStyle = rgba(rockC, 1); ctx.lineWidth = 2.5 * u; for (const k of [-0.95, -0.32, 0.32, 0.95]) { ctx.beginPath(); ctx.moveTo(tx + tw_ * k, by - th - MIN * 0.055); ctx.lineTo(tx + tw_ * k, by - th - MIN * 0.006); ctx.stroke(); }
+  ctx.fillStyle = rgba(acc.map(v => v * 0.8), 1); ctx.beginPath(); ctx.moveTo(tx - tw_ * 1.25, by - th - MIN * 0.055); ctx.lineTo(tx, by - th - MIN * 0.1); ctx.lineTo(tx + tw_ * 1.25, by - th - MIN * 0.055); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.arc(tx, by - th - MIN * 0.103, MIN * 0.006, 0, 7); ctx.fill();
+  // ---- el haz: dos brazos de luz que giran (una vuelta cada cuatro tiempos), pintados difusos, y el destello de frente ----
+  { const sw = 180, shh = Math.max(2, Math.round(sw * H / W)), A = L.a || (L.a = document.createElement('canvas')), B = L.bb || (L.bb = document.createElement('canvas'));
+    if (A.width !== sw || A.height !== shh) { A.width = B.width = sw; A.height = B.height = shh; }
+    const ax = A.getContext('2d'), bx = B.getContext('2d'), kq = sw / W, ph = L.b * Math.PI / 2, pw = (0.3 + 0.7 * Math.min(1, L.bass * 1.4 + 0.25)) * (0.4 + 0.6 * L.go);
+    ax.setTransform(1, 0, 0, 1, 0, 0); ax.clearRect(0, 0, sw, shh); ax.globalCompositeOperation = 'lighter';
+    let face = 0;
+    for (const o of [0, Math.PI]) { const cs = Math.cos(ph + o), sn = Math.sin(ph + o), len = Math.max(W, H) * 1.1 * Math.abs(cs) * kq, spr = len * (0.07 + 0.22 * Math.max(0, sn)) + sw * 0.01, dir = Math.sign(cs) || 1, near = 0.5 + 0.5 * sn;
+      face = Math.max(face, Math.pow(Math.max(0, sn), 10));
+      if (len < 2) continue; const x0 = lx * kq, y0 = ly * kq, x1 = x0 + dir * len, y1 = y0 - len * 0.05;
+      const gb = ax.createLinearGradient(x0, y0, x1, y1); gb.addColorStop(0, rgba(warm, 0.85 * pw * (0.45 + 0.55 * near))); gb.addColorStop(0.3, rgba(warm, 0.42 * pw * (0.45 + 0.55 * near))); gb.addColorStop(0.65, rgba(warm, 0.12 * pw * (0.45 + 0.55 * near))); gb.addColorStop(0.9, rgba(warm, 0));
+      ax.fillStyle = gb; ax.beginPath(); ax.moveTo(x0, y0 - sw * 0.006); ax.lineTo(x1, y1 - spr); ax.lineTo(x1, y1 + spr); ax.lineTo(x0, y0 + sw * 0.006); ax.closePath(); ax.fill(); }
+    bx.clearRect(0, 0, sw, shh); if (CAN_BLUR) bx.filter = 'blur(2.2px)'; bx.drawImage(A, 0, 0); bx.filter = 'none';
+    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'screen'; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.globalAlpha = night ? 0.95 : 0.7; ctx.drawImage(B, 0, 0, W, H); ctx.globalAlpha = 1;
+    glowSpot(lx, ly, MIN * (0.07 + 0.05 * P + 0.05 * L.bass), warm, Math.min(1, 0.55 + 0.4 * P));
+    if (face > 0.01) glowSpot(lx, ly, MIN * (0.25 + 1.1 * face), warm.map(v => v + (255 - v) * 0.4), face * 0.6 * flash * (0.5 + 0.5 * L.go));
+    // el brillo del faro en el agua
+    for (let i = 0; i < 9; i++) { const f = (i + 0.5) / 9, y = by + H * 0.13 + f * (H - by - H * 0.13), wdt = bw * (0.8 + 2.4 * f) * (0.6 + 0.4 * Math.sin(time * 1.6 + i * 1.3));
+      ctx.strokeStyle = rgba(warm, 0.3 * (1 - f * 0.7) * (0.5 + P * 0.5 + face)); ctx.lineWidth = (2 + 4 * f) * u; ctx.beginPath(); ctx.moveTo(lx - wdt, y); ctx.lineTo(lx + wdt, y); ctx.stroke(); }
     ctx.restore(); }
-  ctx.save();
-  if (night) {
-    ctx.globalCompositeOperation = 'lighter';
-    glowSpot(W / 2, H / 2, MIN * (0.15 + lvx.vo * 0.7 + lvx.syl * 0.15), melC, lvx.vo * 0.3 + lvx.syl * 0.16);
-    // Halo: de pequeño a casi toda la pantalla según los graves
-    glowSpot(W / 2, H / 2, MIN * (0.25 + Lb * 1.1 + beat * 0.2), mix(drift), 0.12 + Lb * 0.55);
-    glowSpot(W / 2, H / 2, MIN * (0.12 + Lm * 0.5), mix(1 - drift), 0.1 + Lm * 0.6);
-    // Núcleo discreto: solo brilla de verdad con los agudos
-    glowSpot(W / 2, H / 2, MIN * (0.03 + Lh * 0.12), mix(drift).map(x => x + (255 - x) * 0.6), 0.15 + Lh * 0.6);
-  } else {
-    // De día: tres lóbulos de color que giran alrededor del centro y laten con su banda. Se pintan
-    // luminosos y encima del blanco (no 'multiply'): al cruzarse se mezclan sin oscurecerse.
-    const sat = (c, l) => { const [h, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h, Math.max(92, s_), l)); };
-    const P = Math.max(0, pulse.x), L3 = [Lb, Lm, Lh];
-    drawLight.rot = (drawLight.rot || 0) + dt * (0.35 + energy * 0.8);   // el giro se acumula: más rápido con más energía, sin saltos
-    // el blanco entero se tiñe con la música y respira con cada golpe
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = rgba(sat(mix(drift), 80), 0.14 + energy * 0.2 + P * 0.12); ctx.fillRect(0, 0, W, H);
-    ctx.globalCompositeOperation = 'source-over';
-    for (let k = 0; k < 3; k++) {
-      const a = drawLight.rot + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
-      const gx = W / 2 + Math.cos(a) * off, gy = H / 2 + Math.sin(a) * off;
-      glowSpot(gx, gy, MIN * (0.24 + L3[k] * 1.1 + beat * 0.25), sat(RGB[k], 58), Math.min(1, 0.55 + L3[k] * 0.5));   // de día, colores grandes e intensos
-    }
-    // un velo de tinta encima da profundidad sin ensuciar los cruces
-    ctx.globalCompositeOperation = 'multiply';
-    for (let k = 0; k < 3; k++) {
-      const a = drawLight.rot + k * Math.PI * 2 / 3, off = MIN * (0.04 + L3[k] * 0.16 + beat * 0.05);
-      glowSpot(W / 2 + Math.cos(a) * off, H / 2 + Math.sin(a) * off, MIN * (0.1 + L3[k] * 0.55), sat(RGB[k], 52), 0.26 + L3[k] * 0.28);
-    }
-    ctx.globalCompositeOperation = 'source-over';
-    if (lvx.vo > 0.02 || lvx.syl > 0.02) glowSpot(W / 2, H / 2, MIN * (0.12 + lvx.vo * 0.6 + lvx.syl * 0.12), sat(melC, 64), Math.min(0.8, lvx.vo * 0.45 + lvx.syl * 0.2));
-    glowSpot(W / 2, H / 2, MIN * (0.04 + Lh * 0.1 + P * 0.04), sat(mix(drift), 66).map(x => x + (255 - x) * 0.25), Math.min(1, 0.45 + Lh * 0.55));
-  }
+  // ---- la espuma contra las rocas (rompe con la caja) ----
+  ctx.strokeStyle = `rgba(255,255,255,${0.25 + 0.6 * L.foam})`; ctx.lineWidth = (2.5 + 4 * L.foam) * u; ctx.beginPath();
+  for (let i = 0; i <= 40; i++) { const x = -10 + (tx + W * 0.42) * i / 40, y = by + H * 0.128 + Math.sin(i * 0.9 + time * 2.2) * 3 * u - L.foam * 5 * u * Math.abs(Math.sin(i * 1.7)); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); } ctx.stroke();
   ctx.restore();
 }
 
