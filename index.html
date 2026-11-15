@@ -4339,13 +4339,20 @@ function drawRecOverlay() {
     const zone = LYRIC_LOW.has(state.mode) ? 0 : LYRIC_HIGH.has(state.mode) ? 2 : 1;
     let yV = [0.745, 0.64, 0.43][zone], yH = [0.88, 0.8, 0.36][zone];
     if (state.mode === 'ruta') { yV = 0.33; yH = 0.24; }   // en la Ruta, la letra va en el cielo del parabrisas
+    // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
+    { const lx = vertical ? W * 0.45 : W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.5 : W * 0.46), rh_ = (vertical ? 150 : 120) * u, dk = state.theme === 'dark';
+      ctx.save(); ctx.shadowBlur = 0; ctx.translate(lx, ly_); ctx.scale(1, rh_ / rw_); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw_);
+      g.addColorStop(0, dk ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.55)'); g.addColorStop(0.55, dk ? 'rgba(0,0,0,.28)' : 'rgba(255,255,255,.3)'); g.addColorStop(1, dk ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(-rw_, -rw_, rw_ * 2, rw_ * 2); ctx.restore(); }
+    ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.92)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 11 * u;   // sombra corta y densa: hace de contorno suave
     drawLyricStyled(ly, (vertical ? 64 : 58) * u, vertical ? W * 0.45 : W / 2, H * (vertical ? yV : yH), vertical ? W * 0.7 : W * 0.8);
   }
   // Firma discreta
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
   // la firma: el aura viva y el usuario de TikTok, como en el perfil
-  { const inCar = state.mode === 'ruta' && vertical, fk = inCar ? 0.78 : 1; ctx.font = `500 ${30 * u * fk}px ${FONT_BRAND}`; const tag = '@sientelamusicaco', tw = ctx.measureText(tag).width, lr = 28 * u * fk, gap = 14 * u * fk;
-    const y = H * (inCar ? 0.548 : vertical ? 0.245 : 0.94), x0 = inCar ? W * 0.075 : W / 2 - (lr * 2 + gap + tw) / 2, xc = inCar ? x0 + (lr * 2 + gap + tw) / 2 : W / 2;   // en vertical, dentro de la zona segura (bajo el título)
+  { const inCar = state.mode === 'ruta' && vertical, fk = vertical ? 0.78 : 1; ctx.font = `500 ${30 * u * fk}px ${FONT_BRAND}`; const tag = '@sientelamusicaco', tw = ctx.measureText(tag).width, lr = 28 * u * fk, gap = 14 * u * fk;
+    const y = inCar ? H * 0.548 : vertical ? H * 0.165 + 116 * u : H * 0.94,   // en vertical, pegada bajo el título (un solo bloque arriba a la izquierda, sin tapar la figura)
+      x0 = vertical ? W * 0.07 : W / 2 - (lr * 2 + gap + tw) / 2, xc = vertical ? x0 + (lr * 2 + gap + tw) / 2 : W / 2;   // en vertical, dentro de la zona segura (bajo el título)
     ctx.save(); ctx.beginPath(); ctx.arc(x0 + lr, y, lr, 0, 7); ctx.clip(); ctx.drawImage(logo.cv, x0, y - lr, lr * 2, lr * 2); ctx.restore();
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y);
     // y la página, debajo y más discreta, para quien quiera la app
