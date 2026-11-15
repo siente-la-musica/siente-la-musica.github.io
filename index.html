@@ -770,6 +770,7 @@
       <label class="row-set" for="coverGray"><span>Portada en blanco y negro <small>El fondo en grises; las animaciones siguen tomando los colores de la portada</small></span> <input type="checkbox" id="coverGray"></label>
       <label class="row-set" for="wakeLock"><span>No bloquear la pantalla <small>Mientras la página está abierta, la pantalla no se apaga ni se bloquea</small></span> <input type="checkbox" id="wakeLock"></label>
       <label class="row-set" for="lyricFx"><span>La letra se ve <small>Si la canción habla de fuego, lluvia, amor, estrellas… aparece en la animación</small></span> <input type="checkbox" id="lyricFx"></label>
+      <label class="row-set" for="camOn"><span>Cámara viva <small>La imagen se acerca despacio y da un golpe con cada bombo (también al grabar)</small></span> <input type="checkbox" id="camOn"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
       <div class="row-set" id="installRow" hidden><span>Instalar como app <small id="installNote">Ábrela desde el escritorio o la pantalla de inicio, sin barra del navegador</small></span> <button class="primary keep" id="btnInstall">Instalar</button></div>
       <div class="row-set"><span>Ambiente de la Ruta <small>El modo del carro: en Auto sigue el tema (de noche, noche lluviosa; de día, atardecer)</small></span>
@@ -820,7 +821,7 @@ const state = {
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
-  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), lyricFx: store.get('lyricFx', true), coverBg: store.get('coverBg', true), liveBg: store.get('liveBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'palette'), ruta: store.get('ruta', 'auto'), via: store.get('via', 1), auto: store.get('auto', false),
+  sens: store.get('sens', 1), lyricStyle: store.get('lyricStyle', 'karaoke'), noFlash: store.get('noFlash', false), lyricFx: store.get('lyricFx', true), coverBg: store.get('coverBg', true), liveBg: store.get('liveBg', true), coverGray: store.get('coverGray', true), wake: store.get('wake', true), strobe: store.get('strobe', 'palette'), ruta: store.get('ruta', 'auto'), via: store.get('via', 1), cam: store.get('cam', true), auto: store.get('auto', false),
 };
 
 // ================= Lienzos =================
@@ -1106,6 +1107,7 @@ document.addEventListener('visibilitychange', wakeSync);
 addEventListener('pointerdown', wakeSync, { once: true });   // algunos navegadores lo piden tras tocar la página
 wakeSync();
 noFlashEl.onchange = () => { state.noFlash = noFlashEl.checked; store.set('noFlash', state.noFlash); };
+{ const ce = document.getElementById('camOn'); ce.checked = state.cam !== false; ce.onchange = () => { state.cam = ce.checked; store.set('cam', state.cam); }; }
 { const lf = document.getElementById('lyricFx'); lf.checked = state.lyricFx; lf.onchange = () => { state.lyricFx = lf.checked; store.set('lyricFx', state.lyricFx); }; }
 // Instalar como app (PWA): Chrome y Edge avisan con beforeinstallprompt; en iPhone se explica cómo
 let installEv = null;
@@ -4428,7 +4430,7 @@ function liveUI() {
   const nowU = performance.now(), dtU = Math.min(0.1, (nowU - (live.t || nowU)) / 1000); live.t = nowU;
   live.p = Math.max(Math.max(0, pulse.x), (live.p || 0) * Math.pow(0.05, dtU));
   const calm = calmUI(), p = live.p * (calm ? 0.35 : 1), lv = Math.min(1, energy * 1.2);
-  const sc = calm || state.mode === 'strobe' ? 1 : 1 + p * 0.012;
+  const sc = calm || state.mode === 'strobe' || (state.cam !== false && !CAM_OFF.has(state.mode)) ? 1 : 1 + p * 0.012;   // con la cámara viva el golpe ya va dentro de la imagen
   const tf = sc === 1 ? '' : `scale(${sc.toFixed(4)})`;
   if (canvas.style.transform !== tf) canvas.style.transform = tf;
   if (!live.targets) live.targets = [document.getElementById('dock'), songEl, statusEl, intro];
@@ -11797,6 +11799,7 @@ function adapt(dt) {
   else if (fastFor > 30 && coolDown <= 0 && drops_ < 2 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
 }
 
+const cam = { z: 0, v: 0, t: 0, g: 0 }, CAM_OFF = new Set(['strobe', 'lyrics', 'artist', 'livecover', 'cover', 'ruta']);   // escenas con encuadre propio o con capas de página encima
 let frameErrors = 0;
 function frame(now) {
   requestAnimationFrame(frame);   // se programa primero: un fallo no puede parar la animación
@@ -11834,9 +11837,17 @@ function render(now) {
   ctx.fillRect(0, 0, W, H);
   colorTick(dt);
   liveBgTick(dt);
+  // Cámara viva: toda la escena se acerca despacio (un vaivén largo, con una inclinación mínima), da un golpe de
+  // zoom con cada bombo y, al empezar a grabar, entra con un acercamiento rápido. Mantiene la mirada en el video.
+  const camOn = state.cam !== false && !CAM_OFF.has(state.mode);
+  if (camOn) { cam.v += (pulse.on ? (0.5 + pulse.k) * 1.1 : 0) + (-cam.z * 130 - cam.v * 15) * dt; cam.z += cam.v * dt; cam.t += dt * musicGate;
+    cam.g += (Math.min(1, musicGate * 1.6) - cam.g) * (1 - Math.pow(0.1, dt));
+    const intro = recording ? Math.pow(Math.max(0, 1 - (now - recT0) / 900), 3) * 0.2 : 0;
+    const sc = Math.max(1, 1 + (0.05 + 0.03 * Math.sin(cam.t * 0.33)) * cam.g + Math.max(-0.4, Math.min(1, cam.z)) * 0.016 * (state.noFlash ? 0.4 : 1) + intro);
+    ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(Math.sin(cam.t * 0.21) * 0.006 * cam.g); ctx.scale(sc, sc); ctx.translate(-W / 2, -H / 2); }
   if (state.mode !== 'strobe') drawBackdrop(dt);
   const tScene = performance.now();
-  (scenes[state.mode] || drawBars)(dt);
+  try { (scenes[state.mode] || drawBars)(dt); } finally { if (camOn) ctx.restore(); }
   lyricFxTick(dt);
   logoTick(dt);
   liquidTick(dt); lvFrame(); arFrame();
