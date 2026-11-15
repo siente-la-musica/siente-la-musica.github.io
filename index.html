@@ -5936,7 +5936,7 @@ function drawLight(dt) {
       if (len < 2) continue; const x0 = lx * kq, y0 = ly * kq, x1 = x0 + dir * len, y1 = y0 - len * 0.05;
       const gb = ax.createLinearGradient(x0, y0, x1, y1); gb.addColorStop(0, rgba(warm, 0.85 * pw * (0.45 + 0.55 * near))); gb.addColorStop(0.3, rgba(warm, 0.42 * pw * (0.45 + 0.55 * near))); gb.addColorStop(0.65, rgba(warm, 0.12 * pw * (0.45 + 0.55 * near))); gb.addColorStop(0.9, rgba(warm, 0));
       ax.fillStyle = gb; ax.beginPath(); ax.moveTo(x0, y0 - sw * 0.006); ax.lineTo(x1, y1 - spr); ax.lineTo(x1, y1 + spr); ax.lineTo(x0, y0 + sw * 0.006); ax.closePath(); ax.fill(); }
-    bx.clearRect(0, 0, sw, shh); if (CAN_BLUR) bx.filter = 'blur(2.2px)'; bx.drawImage(A, 0, 0); bx.filter = 'none';
+    bx.clearRect(0, 0, sw, shh); if (CAN_BLUR) bx.filter = 'blur(4.5px)'; bx.drawImage(A, 0, 0); bx.filter = 'none';
     ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'screen'; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.globalAlpha = night ? 0.95 : 0.7; ctx.drawImage(B, 0, 0, W, H); ctx.globalAlpha = 1;
     glowSpot(lx, ly, MIN * (0.07 + 0.05 * P + 0.05 * L.bass), warm, Math.min(1, 0.55 + 0.4 * P));
     if (face > 0.01) glowSpot(lx, ly, MIN * (0.25 + 1.1 * face), warm.map(v => v + (255 - v) * 0.4), face * 0.6 * flash * (0.5 + 0.5 * L.go));
