@@ -4349,7 +4349,7 @@ function drawRecOverlay() {
     const zone = LYRIC_LOW.has(state.mode) ? 0 : LYRIC_HIGH.has(state.mode) ? 2 : 1;
     let yV = [0.745, 0.64, 0.43][zone], yH = [0.88, 0.8, 0.36][zone];
     if (state.mode === 'ruta') { yV = 0.33; yH = 0.24; }
-    if (state.mode === 'bust') { yV = 0.31; yH = 0.16; }   // la silueta ocupa casi toda la mitad de abajo: la letra va en el aire, sobre la cabeza   // en la Ruta, la letra va en el cielo del parabrisas
+    if (state.mode === 'bust') { yV = 0.76; yH = 0.86; }   // la letra va sobre el torso: deja libres la cabeza y el cuello   // en la Ruta, la letra va en el cielo del parabrisas
     // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
     { const lx = vertical ? W * 0.45 : W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.5 : W * 0.46), rh_ = (vertical ? 150 : 120) * u, dk = state.theme === 'dark';
       ctx.save(); ctx.shadowBlur = 0; ctx.translate(lx, ly_); ctx.scale(1, rh_ / rw_); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw_);
