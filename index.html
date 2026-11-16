@@ -4348,7 +4348,8 @@ function drawRecOverlay() {
     // figura abajo (barras, fuego, montañas…) sube al centro. Siempre dentro de la zona segura de TikTok.
     const zone = LYRIC_LOW.has(state.mode) ? 0 : LYRIC_HIGH.has(state.mode) ? 2 : 1;
     let yV = [0.745, 0.64, 0.43][zone], yH = [0.88, 0.8, 0.36][zone];
-    if (state.mode === 'ruta') { yV = 0.33; yH = 0.24; }   // en la Ruta, la letra va en el cielo del parabrisas
+    if (state.mode === 'ruta') { yV = 0.33; yH = 0.24; }
+    if (state.mode === 'bust') { yV = 0.31; yH = 0.16; }   // la silueta ocupa casi toda la mitad de abajo: la letra va en el aire, sobre la cabeza   // en la Ruta, la letra va en el cielo del parabrisas
     // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
     { const lx = vertical ? W * 0.45 : W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.5 : W * 0.46), rh_ = (vertical ? 150 : 120) * u, dk = state.theme === 'dark';
       ctx.save(); ctx.shadowBlur = 0; ctx.translate(lx, ly_); ctx.scale(1, rh_ / rw_); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw_);
@@ -6013,9 +6014,15 @@ function faroSetup() {
             sky = mix(sky, cc, cm * (.9 - fk * .15) * (.25 + .75 * smoothstep(R * 1.05, R * 2.3, md))); } }
         col = sky;
         // cabos lejanos entre la bruma, con las luces de un pueblo
-        float hx = p.x * 2.4, hh = (.012 + .03 * n(vec2(hx, 3.)) + .01 * n(vec2(hx * 4., 9.))) * smoothstep(.95, .45, s);
-        float hm = smoothstep(hh + px, hh - px, uv.y - uHy);
-        col = mix(col, mix(uC0 * .9, sky, .55), hm);
+        float dyh = uv.y - uHy, hm = 0.;
+        for (int k = 0; k < 2; k++) { float fk = float(k), hx = p.x * (1.8 + fk * 1.3) + fk * 7.;
+          float hh = ((.016 + .034 * n(vec2(hx, 3. + fk))) * (1. - fk * .45) + .007 * n(vec2(hx * 6., 9.)) + .004 * pow(n(vec2(hx * 30., 2.)), 2.)) * smoothstep(.98, .5, s);
+          float m = smoothstep(hh + px * 2., hh - px * 2., dyh) * step(-.002, dyh); if (k == 0) hm = m;
+          vec3 hc = mix(uC0 * .95, sky, mix(.62, .4, fk)) * (.9 + .12 * n(vec2(hx * 9., dyh * 300.)));
+          hc += (uHalo * .35 + moonL * .25) * exp(-max(hh - dyh, 0.) * 900.) * .5 * (1. - fk * .5);                    // el filo de la cresta que mira a la luna
+          hc = mix(hc, sky, smoothstep(hh * .2, 0., dyh) * .45);                                                         // la bruma que se apoya en el agua
+          col = mix(col, hc, m); }
+        col = mix(col, sky * 1.05 + uHalo * .04, smoothstep(.024, .0, dyh) * (.35 + .25 * n(vec2(p.x * 3. - uT * .02, 4.))) * .7);   // un velo de bruma baja sobre el horizonte
         vec2 vg = vec2(p.x * 160., (uv.y - uHy) * 400.); float vl = h(floor(vg));
         col += uWarm * step(.9, vl) * smoothstep(.4, .1, length(fract(vg) - .5)) * hm * step(s, .8) * (.5 + .5 * sin(uT * 2. + vl * 30.)) * (.4 + uHi) * mix(.9, .25, 1. - uNight);
       } else {
@@ -6044,9 +6051,12 @@ function faroSetup() {
         if (t.a > .01) { vec3 rk = mix(rockSh, rockLit, t.r) * (.4 + .6 * smoothstep(0., .075, uv.y - wl)) + beamC * exp(-dot(v, v) / .02) * .14 * uPw;
           vec3 gc = grassC * (.5 + 1.2 * t.g) + moonL * .06;
           col = mix(col, mix(rk, gc, t.b), t.a * smoothstep(0., .012 + .012 * n(vec2(p.x * 30., 2.)), uv.y - wl)); } }
-      { float ca = texture(uCliff, vec2(s / .9, (wl + .014 - (uHy - .2)) / .3)).a, fm = exp(-abs(uv.y - wl) * 95.) * smoothstep(.3, .7, n(vec2(p.x * 40. - uT * .6, uv.y * 30. + uT * .8)));
-        col += vec3(.9, .95, 1.) * fm * ca * (.35 + .9 * uFoam) * mix(.7, 1., uNight);
-        col += vec3(.95, .97, 1.) * uFoam * ca * exp(-max(uv.y - wl, 0.) * 40.) * step(wl, uv.y) * smoothstep(.5, .78, n(vec2(p.x * 60., uv.y * 40. - uT * 3.))) * .5; }
+      { float ca = 0.; for (int k = -2; k <= 2; k++) ca += texture(uCliff, vec2(s / .9 + float(k) * .012, (wl + .016 - (uHy - .2)) / .3)).a; ca /= 5.;   // hay roca en esta orilla (suavizado)
+        float fy = uv.y - wl, mist = ca * exp(-abs(fy - .006) / .022) * (.45 + .55 * fbm(vec2(p.x * 6. - uT * .05, fy * 30. + uT * .03)));
+        col = mix(col, mix(sky, vec3(.85, .9, 1.), .25) * mix(.95, 1.1, uNight), mist * mix(.32, .42, uNight));             // la neblina que levanta el mar, suave y viva
+        float foam = ca * exp(-pow(fy / .0035, 2.)) * (.55 + .45 * n(vec2(p.x * 26. - uT * .5, 3.)));
+        col += vec3(.92, .96, 1.) * foam * (.22 + .65 * uFoam) * mix(.7, 1., uNight);                                    // la línea de espuma
+        col += vec3(.95, .97, 1.) * uFoam * ca * exp(-max(fy, 0.) * 55.) * step(0., fy) * smoothstep(.55, .8, fbm(vec2(p.x * 22., fy * 50. - uT * 2.))) * .35; }   // y la salpicadura con la caja
       // ---- el faro: torre redonda (luz de luna por un lado, sombra por el otro, rebote cálido de la linterna), franjas, balcón, linterna y cúpula ----
       vec2 q = p - uTow; float kq = clamp(q.y / uTh, 0., 1.), hw = mix(.03, .019, kq);
       if (abs(q.x) < .06 && q.y > -.01 && q.y < uTh + .09) {
@@ -6095,7 +6105,8 @@ function faroCliff() {
   const shapes = [
     { top: [[0, .036], [.06, .046], [.14, .05], [.3, .05], [.41, .05], [.46, .043], [.5, .02], [.53, -.012], [.56, -.05], [.6, -.085], [.63, -.118], [.665, -.16]], k: 1, grass: [0, .47] },
     { top: [[0, -.028], [.07, -.012], [.13, -.018], [.2, -.04], [.25, -.062], [.3, -.1], [.345, -.13], [.385, -.165]], k: 0.66, grass: null },
-    { top: [[.735, -.165], [.745, -.11], [.757, -.07], [.772, -.045], [.787, -.05], [.8, -.085], [.812, -.13], [.822, -.165]], k: 0.9, grass: [.757, .787] }];
+    { top: [[.72, -.165], [.728, -.13], [.738, -.1], [.75, -.078], [.764, -.066], [.778, -.064], [.79, -.074], [.8, -.094], [.81, -.125], [.82, -.165]], k: 0.9, grass: null },
+    { top: [[.81, -.165], [.818, -.142], [.83, -.13], [.843, -.134], [.852, -.15], [.858, -.165]], k: 0.7, grass: null }];
   for (const sh of shapes) { const pts = sh.top, path = c => { c.beginPath(); c.moveTo(X(pts[0][0]), Y(-.2)); for (const [a, b] of pts) c.lineTo(X(a), Y(b)); c.lineTo(X(pts[pts.length - 1][0]), Y(-.2)); c.closePath(); };
     const x0 = X(pts[0][0]), x1 = X(pts[pts.length - 1][0]), yT = Y(Math.max(...pts.map(q => q[1]))), G = l => { const q = Math.max(0, Math.min(255, Math.round(255 * l * sh.k))); return `rgb(${q},${q},${q})`; };
     r.save(); path(r); r.fillStyle = G(.5); r.fill(); r.clip();
@@ -10438,12 +10449,15 @@ function drawDisco(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
   // gira al compás: una vuelta cada 16 golpes, y en silencio se detiene despacio
   const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5;
-  disco.rot += dt * (Math.PI * 2 / (16 * per)) * Math.min(1, energy * 3 + 0.05);
+  disco.rot += dt * (Math.PI * 2 / (16 * per)) * Math.min(1, energy * 3 + 0.45 * musicGate);   // también gira en las partes suaves (piano, voz sola)
   // los focos: cada uno con su parte del sonido, encendidos de golpe y apagándose suave
   const tgt = [bandX(0, 10), bandX(12, 34) * 0.7 + voice * 0.6, bandX(34, BANDS)];
-  for (let k = 0; k < 3; k++) { if (pulse.on && k === 0) disco.beam[k] = Math.min(1.6, disco.beam[k] + 0.6 + pulse.k * 0.6); if (hits.snare && k === 1) disco.beam[k] = Math.min(1.5, disco.beam[k] + 0.6);
+  // cada foco salta con sus golpes: el de graves con el bombo y los bajos; el del medio con la caja, el piano, las guitarras y cada sílaba
+  // cantada; el de agudos con los platillos y la percusión
+  const kick = [pulse.on ? 0.6 + pulse.k * 0.6 : hits.bass ? 0.35 + hits.bass * 0.4 : 0, (hits.snare ? 0.6 : 0) + (hits.mid ? 0.25 + hits.mid * 0.35 : 0) + (hits.voice ? 0.35 : 0), (hits.hat ? 0.35 : 0) + (hits.perc ? 0.3 : 0) + (hits.high ? hits.high * 0.4 : 0)];
+  for (let k = 0; k < 3; k++) { if (kick[k]) disco.beam[k] = Math.min(1.6, disco.beam[k] + kick[k]);
     disco.beam[k] += (tgt[k] - disco.beam[k]) * (1 - Math.pow(tgt[k] > disco.beam[k] ? 0.01 : 0.12, dt)); }
-  disco.spark = Math.max(disco.spark * Math.pow(0.03, dt), hits.hat ? 1 : 0, hits.high ? hits.high : 0);
+  disco.spark = Math.max(disco.spark * Math.pow(0.03, dt), hits.hat ? 1 : 0, hits.high ? hits.high : 0, hits.perc ? 0.7 : 0, hits.voice ? 0.45 : 0);
   disco.sway += dt * (0.2 + energy * 0.6);
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), l)).map(v => v / 255); };
   const melC = melodyColor().map(v => v / 255), av = Math.min(1, voice * 1.4);
