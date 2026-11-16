@@ -11118,6 +11118,11 @@ function rutaSetup() {
       float D = a * a - 4. * uCurve * xs; if (D < 0.) return -1.; float sq = sqrt(D), z1 = (a - sq) / (2. * uCurve), z2 = (a + sq) / (2. * uCurve), z = min(z1 > 0. ? z1 : 1e9, z2 > 0. ? z2 : 1e9); return z < 1e8 ? z : -1.; }
     // el paisaje cambia por tramos de 32 tiempos: bosque, pradera abierta y costa (el mar a la derecha)
     float secT(float zz) { return mod(floor(zz / 448.), 3.); }
+    float bx(float v, float lo, float hi, float a) { return smoothstep(lo - a, lo + a, v) * smoothstep(hi + a, hi - a, v); }
+    // una ventana sobre su pared (u, v: metros desde su centro): marco, vidrio encendido o apagado y la cruz
+    vec3 winC(vec3 wall, vec2 q, float a, float on, vec3 warm, vec3 dark) { float fr = bx(q.x, -.82, .82, a) * bx(q.y, -.9, .9, a), gl = bx(q.x, -.64, .64, a) * bx(q.y, -.72, .72, a);
+      vec3 c = mix(wall, wall * 1.7 + .012, fr); vec3 g = mix(dark, warm * (.78 + .22 * smoothstep(-.7, .6, q.y)), on);
+      g = mix(g, wall * .6, max(smoothstep(.085, .04, abs(q.x)), smoothstep(.085, .04, abs(q.y))) * .9); return mix(c, g, gl); }
     // la luz sobre una bola de follaje (para que cada copa tenga volumen y no parezca recortada)
     float sphL(vec2 d, vec2 c, float r, vec3 L) { vec2 q = (d - c) / r; float rr = dot(q, q); return rr < 1. ? dot(vec3(q, sqrt(1. - rr)), L) : -9.; }
     float sdBox(vec2 q, vec2 b, float r) { vec2 d = abs(q) - b + r; return length(max(d, 0.)) + min(max(d.x, d.y), 0.) - r; }
@@ -11234,39 +11239,42 @@ function rutaSetup() {
           vec3 rc = mix(vec3(.6, .62, .66), vec3(.035, .037, .05), uNight) + vec3(.14, .13, .115) * exp(-z * .08) * uNight;
           col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9)); } }
       }
-      // casas al lado izquierdo (de noche, en la pradera y la costa): fachada con su tejado de alero ancho bañado por la luna, un cuerpo
-      // lateral, chimenea con humo, ventanas con marco y su luz cálida (titila con los agudos) y un farol en la puerta
-      for (int i = 3; i >= 0; i--) { float z = (float(i) + 1. - fract(uDist / 42.)) * 42., id = float(i) + floor(uDist / 42.); if (z < 3.) continue;
-        float r1 = h1(id + 91.), r2 = h1(id + 47.); if (uNight < .9 || secT(z + uDist) < .5 || r1 < .35) continue;
-        float sc = K / z, hwid = 4.2 + r2 * 1.6, hh = 3.8 + r1 * 1.4; vec2 c = proj(vec3(-11.5 - r2 * 3.5, 0., z), asp), d = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
-        if (abs(d.x) > hwid * 2.2 || d.y < -.3 || d.y > hh + 6.5) continue;
-        float aa = px / sc, fg = 1. - exp(-z * fogK * 1.1); vec3 moon = mix(uTop, hazeC, .5) * 2.2 + vec3(.02, .028, .05);
-        // cuerpo lateral (más bajo, a la derecha) y fachada
-        float side = smoothstep(aa, -aa, max(abs(d.x - hwid * 1.25) - hwid * .55, d.y - hh * .72)) * step(0., d.y);
-        float sroof = smoothstep(aa, -aa, max(abs(d.x - hwid * 1.25) - hwid * .68, abs(d.y - hh * .8) - hh * .1 - (hwid * 1.9 - d.x) * .04));
-        float wall = smoothstep(aa, -aa, abs(d.x) - hwid) * step(0., d.y) * smoothstep(aa, -aa, d.y - hh);
-        float rf = (d.y - hh) + abs(d.x) * (3. / (hwid + .9)) - 3., roof = smoothstep(aa, -aa, rf) * step(hh - .22, d.y);
-        float chim = smoothstep(aa, -aa, max(abs(d.x - hwid * .45) - .32, abs(d.y - hh - 2.1) - 1.1));
-        vec3 wallC = vec3(.05, .055, .075) + moon * .25 + vec3(.012) * n(vec2(d.x * 3., d.y * 9.)), roofC = moon * (.55 + .25 * step(d.x, 0.)) * (.85 + .15 * sin(d.y * 14.)) + vec3(.012, .014, .02);
-        vec3 hc = wallC * (d.x < 0. ? 1. : .8);
-        hc = mix(hc, wallC * .62, side * (1. - wall)); hc = mix(hc, roofC * .8, sroof * (1. - wall));
-        hc = mix(hc, wallC * .7, chim * (1. - roof)); hc = mix(hc, roofC, roof);
-        hc = mix(hc, roofC * 1.5 + moon * .15, roof * smoothstep(.18, .0, -rf) * .7);                                  // el filo del alero
-        // ventanas (dos en la fachada, una en el cuerpo lateral) con marco en cruz, y la puerta con su farol
-        float lightK = 0.; vec3 warmW = vec3(1., .74, .4);
-        for (int k = 0; k < 3; k++) { vec2 wc = k == 0 ? vec2(-hwid * .45, hh * .56) : k == 1 ? vec2(hwid * .45, hh * .56) : vec2(hwid * 1.3, hh * .4); float on = step(.3, h1(id * 3.1 + float(k) * 7.));
-          vec2 wq = d - wc; float wm = smoothstep(aa, -aa, max(abs(wq.x) - .7, abs(wq.y) - .78)), fr = max(smoothstep(.09, .04, abs(wq.x)), smoothstep(.09, .04, abs(wq.y)));
-          vec3 wcol = mix(moon * .35, warmW * (.8 + .5 * uHi) * (.75 + .25 * smoothstep(-.8, .6, wq.y)), on); wcol = mix(wcol, wallC * .5, fr * .85);
-          hc = mix(hc, wallC * 1.6 + moon * .1, smoothstep(aa, -aa, max(abs(wq.x) - .86, abs(wq.y) - .94)) * (1. - wm) * (1. - roof));     // el marco
-          hc = mix(hc, wcol, wm * (1. - roof)); lightK += on * exp(-dot(wq, wq) / 3.2); }
-        float door = smoothstep(aa, -aa, max(abs(d.x) - .55, d.y - 2.1)) * step(0., d.y); hc = mix(hc, vec3(.03, .022, .02) + moon * .06, door);
-        vec2 lq = d - vec2(.95, 2.3); hc += warmW * exp(-dot(lq, lq) / .05) * 1.2;
-        float hm = max(max(wall, roof), max(max(side, sroof), chim));
-        col = mix(col, mix(hc, hazeC, fg), hm);
-        col += warmW * (lightK * .16 * (.6 + .5 * uHi) + exp(-dot(lq, lq) / 1.4) * .16) * (1. - fg);                           // la luz que sale de las ventanas y del farol
-        if (uv.y < uHz) { vec2 gp = vec2(gX - (-11.5 - r2 * 3.5) - 1., (gz - z + 2.5) * .5); col += warmW * exp(-dot(gp, gp) / 7.) * .09; }   // y cae sobre el pasto
-        vec2 sq = d - vec2(hwid * .45 + sin(uT * .6 + d.y * .35 + id) * (d.y - hh - 3.2) * .16, hh + 3.2); float sm = exp(-sq.x * sq.x / (.25 + max(sq.y, 0.) * .5)) * smoothstep(0., .6, sq.y) * exp(-max(sq.y, 0.) * .35);
-        col = mix(col, moon * 1.3 + .03, sm * .3 * (.6 + .4 * n(vec2(d.x * 2., d.y * 1.5 - uT * .8))) * (1. - fg)); }
+      // casas al lado izquierdo (de noche, en la pradera y la costa), en tres dimensiones de verdad: la fachada con su hastial, la pared que
+      // mira a la vía y el tejado, cada cara en su plano (por eso giran al pasar y no parecen recortadas). Las ventanas van sobre su pared;
+      // las encendidas dan luz cálida que titila con los agudos, y hay un farol junto a la puerta. Quedan bien retiradas de la carretera.
+      for (int i = 3; i >= 0; i--) { float z0 = (float(i) + 1. - fract(uDist / 42.)) * 42., id = float(i) + floor(uDist / 42.); if (z0 < 1.5) continue;
+        float r1 = h1(id + 91.), r2 = h1(id + 47.); if (uNight < .9 || secT(z0 + uDist) < .5 || r1 < .35) continue;
+        float x1 = -9.5 - r2 * 3., x0 = x1 - 7., xm = x1 - 3.5, z1 = z0 + 9., hh = 3.1 + r1, rh = 2.5, b_ = -(uHz - uv.y) / K, cz = uCurve * (z0 + 4.5) * (z0 + 4.5);
+        vec3 moon = mix(uTop, hazeC, .5) * 2.2 + vec3(.02, .028, .05), warmW = vec3(1., .74, .4) * (.85 + .45 * uHi), darkW = moon * .3;
+        vec3 wallA = vec3(.06, .065, .09) + moon * .34, wallB = vec3(.04, .044, .062) + moon * .16; float hit = 0., zh = z0; vec3 hc = vec3(0.);
+        // el tejado (el agua que mira a la vía), con sus hileras de tejas y el alero
+        { float k_ = rh / 3.5, zr = (hh + k_ * (x1 + cz) - HC) / (b_ + k_ * pa_), X = pa_ * zr - cz, a = zr / K * px;
+          if (zr > 0.) { float m = bx(zr, z0 - .35, z1 + .35, a) * bx(X, xm, x1 + .55, a);
+            if (m > 0.) { vec3 rc = moon * (.62 + .1 * sin((x1 - X) * 9.)) * (.9 + .1 * step(.5, fract(zr * 1.3 + floor((x1 - X) * 1.43) * .5))) + vec3(.012, .014, .02);
+              rc = mix(rc, rc * .55, smoothstep(.12, .0, X - x1 - .43) + smoothstep(.1, 0., abs(zr - z0 + .3)) * .5); hc = rc; hit = m; zh = zr; } } }
+        // la pared que mira a la vía: puerta y dos ventanas
+        { float zs = planeZ(pa_, x1), Y = HC + b_ * zs, a = zs / K * px;
+          if (zs > 0.) { float m = bx(zs, z0, z1, a) * bx(Y, 0., hh, a);
+            if (m > 0.) { float u = zs - z0; vec3 wc = wallB * (.9 + .1 * n(vec2(u * 2., Y * 6.))) * (.75 + .25 * smoothstep(0., hh, Y));
+              wc = mix(wc, wallB * .5 + vec3(.02, .013, .01), bx(u, 1.5, 2.6, a) * bx(Y, 0., 2.15, a));
+              for (int k = 0; k < 2; k++) { vec2 q = vec2(u - (4.5 + 2.6 * float(k)), Y - hh * .56); if (abs(q.x) < 1. && abs(q.y) < 1.1) wc = winC(wc, q, a, step(.4, h1(id * 3.1 + float(k) * 7.)), warmW, darkW); }
+              wc = mix(wc, wallB * .5, smoothstep(.12, .0, hh - Y) * .6);                                                    // la sombra del alero
+              hc = mix(hc, wc, m); hit = max(hit, m); zh = zs; } } }
+        // la fachada, de frente: pared con hastial, una ventana y el ojo de buey del desván
+        { float X = pa_ * z0 - uCurve * z0 * z0, Y = HC + b_ * z0, a = z0 / K * px, top = hh + rh * (1. - abs(X - xm) / 3.5);
+          float m = bx(X, x0, x1, a) * bx(Y, 0., top, a);
+          if (m > 0.) { vec3 wc = wallA * (.9 + .1 * n(vec2(X * 2., Y * 6.))) * (.78 + .22 * smoothstep(0., hh, Y));
+            vec2 q = vec2(X - xm, Y - hh * .56); if (abs(q.x) < 1. && abs(q.y) < 1.1) wc = winC(wc, q, a, step(.3, h1(id * 5.7)), warmW, darkW);
+            float ob = length(vec2(X - xm, Y - hh - rh * .42)); wc = mix(wc, wallA * 1.7, smoothstep(.5 + a, .5 - a, ob)); wc = mix(wc, mix(darkW, warmW, step(.6, h1(id * 9.3))), smoothstep(.36 + a, .36 - a, ob));
+            wc = mix(wc, moon * .5 + .02, smoothstep(.3, .22, top - Y) * step(hh - .2, Y));                               // el borde del tejado sobre el hastial
+            hc = mix(hc, wc, m); hit = max(hit, m); zh = z0; } }
+        float fg = 1. - exp(-zh * fogK * 1.1);
+        col = mix(col, mix(hc, hazeC, fg), hit);
+        // la luz que sale de las ventanas encendidas y del farol de la puerta
+        for (int k = 0; k < 3; k++) { vec3 wp = k < 2 ? vec3(x1 + .05, hh * .56, z0 + 4.5 + 2.6 * float(k)) : vec3(xm, hh * .56, z0 - .05); float on = k < 2 ? step(.4, h1(id * 3.1 + float(k) * 7.)) : step(.3, h1(id * 5.7));
+          vec2 sp = proj(wp, asp), dd = vec2((uv.x - sp.x) * asp, uv.y - sp.y) * wp.z / K; col += warmW * on * exp(-dot(dd, dd) / 2.6) * .13 * (1. - fg); }
+        { vec3 lp = vec3(x1 + .25, 2.35, z0 + 3.); vec2 sp = proj(lp, asp), dd = vec2((uv.x - sp.x) * asp, uv.y - sp.y) * lp.z / K; col += vec3(1., .78, .45) * (exp(-dot(dd, dd) / .02) * 1.1 + exp(-dot(dd, dd) / 1.1) * .16) * (1. - fg);
+          if (uv.y < uHz) { vec2 gp = vec2(gX - lp.x - .8, (gz - lp.z) * .6); col += vec3(1., .74, .4) * exp(-dot(gp, gp) / 5.) * .08; } } }
       // arbolitos redondos a los dos lados (cada uno mira a la cámara): copa de bolas en tres tonos y su tronco; algunos, rosados
       for (int sd = 0; sd < 2; sd++) for (int i = 8; i >= 0; i--) {
         float z = (float(i) + 1. - fract(uDist / 7.)) * 7., id = float(i) + floor(uDist / 7.) + float(sd) * 57.; if (z < 1.2) continue;
