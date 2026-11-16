@@ -11234,24 +11234,39 @@ function rutaSetup() {
           vec3 rc = mix(vec3(.6, .62, .66), vec3(.035, .037, .05), uNight) + vec3(.14, .13, .115) * exp(-z * .08) * uNight;
           col = mix(col, mix(rc * (.72 + .28 * smoothstep(.56, .68, Y)), hazeC, 1. - exp(-z * fogK)), max(rail, post * .9)); } }
       }
-      // casitas al lado izquierdo, en la pradera y en la costa: techo a dos aguas, puerta y ventanas que de noche se encienden y titilan con los agudos
+      // casas al lado izquierdo (de noche, en la pradera y la costa): fachada con su tejado de alero ancho bañado por la luna, un cuerpo
+      // lateral, chimenea con humo, ventanas con marco y su luz cálida (titila con los agudos) y un farol en la puerta
       for (int i = 3; i >= 0; i--) { float z = (float(i) + 1. - fract(uDist / 42.)) * 42., id = float(i) + floor(uDist / 42.); if (z < 3.) continue;
-        float r1 = h1(id + 91.), r2 = h1(id + 47.); if (uNight < .9 || secT(z + uDist) < .5 || r1 < .35) continue;   // solo de noche: una silueta con sus ventanas encendidas
+        float r1 = h1(id + 91.), r2 = h1(id + 47.); if (uNight < .9 || secT(z + uDist) < .5 || r1 < .35) continue;
         float sc = K / z, hwid = 4.2 + r2 * 1.6, hh = 3.8 + r1 * 1.4; vec2 c = proj(vec3(-11.5 - r2 * 3.5, 0., z), asp), d = vec2((uv.x - c.x) * asp, uv.y - c.y) / sc;
-        if (abs(d.x) > hwid + 1. || d.y < -.2 || d.y > hh + 3.6) continue;
-        float aa = px / sc, fg = 1. - exp(-z * fogK * 1.1), lgt = mix(1., .1, uNight);
-        vec3 wallC = mix(vec3(.96, .93, .86), vec3(.93, .8, .7), r2) * lgt * (d.x < 0. ? 1. : .86), roofC = (r1 > .68 ? vec3(.3, .42, .62) : vec3(.74, .3, .24)) * lgt;
+        if (abs(d.x) > hwid * 2.2 || d.y < -.3 || d.y > hh + 6.5) continue;
+        float aa = px / sc, fg = 1. - exp(-z * fogK * 1.1); vec3 moon = mix(uTop, hazeC, .5) * 2.2 + vec3(.02, .028, .05);
+        // cuerpo lateral (más bajo, a la derecha) y fachada
+        float side = smoothstep(aa, -aa, max(abs(d.x - hwid * 1.25) - hwid * .55, d.y - hh * .72)) * step(0., d.y);
+        float sroof = smoothstep(aa, -aa, max(abs(d.x - hwid * 1.25) - hwid * .68, abs(d.y - hh * .8) - hh * .1 - (hwid * 1.9 - d.x) * .04));
         float wall = smoothstep(aa, -aa, abs(d.x) - hwid) * step(0., d.y) * smoothstep(aa, -aa, d.y - hh);
-        float roof = smoothstep(aa, -aa, (d.y - hh) + abs(d.x) * (3. / (hwid + .7)) - 3.) * step(hh - .15, d.y);
-        vec3 hc = mix(wallC, roofC * (.85 + .25 * step(d.x, 0.)), roof);
-        vec2 wq = vec2(mod(d.x + hwid * .5, hwid) - hwid * .5, d.y - hh * .58); float win = smoothstep(aa, -aa, max(abs(wq.x) - .75, abs(wq.y) - .68)) * (1. - roof);
-        float lit = step(.35, h1(id * 3.1 + floor((d.x + hwid * .5) / hwid) * 7.));
-        vec3 winC = mix(mix(uTop, hazeC, .5) * .7, vec3(1., .8, .45) * (.75 + .5 * uHi), lit * max(uNight, uSun * .5));
-        winC *= 1. - .5 * max(smoothstep(.06, .02, abs(wq.x)), smoothstep(.06, .02, abs(wq.y)));
-        hc = mix(hc, winC, win);
-        hc = mix(hc, vec3(.36, .22, .16) * lgt, smoothstep(aa, -aa, max(abs(d.x - hwid * .02) - .5, d.y - 2.1)) * step(0., d.y) * (1. - win));
-        col = mix(col, mix(hc, hazeC, fg), max(wall, roof));
-        col += vec3(1., .75, .4) * win * lit * uNight * (.25 + .35 * uHi) * (1. - fg); }
+        float rf = (d.y - hh) + abs(d.x) * (3. / (hwid + .9)) - 3., roof = smoothstep(aa, -aa, rf) * step(hh - .22, d.y);
+        float chim = smoothstep(aa, -aa, max(abs(d.x - hwid * .45) - .32, abs(d.y - hh - 2.1) - 1.1));
+        vec3 wallC = vec3(.05, .055, .075) + moon * .25 + vec3(.012) * n(vec2(d.x * 3., d.y * 9.)), roofC = moon * (.55 + .25 * step(d.x, 0.)) * (.85 + .15 * sin(d.y * 14.)) + vec3(.012, .014, .02);
+        vec3 hc = wallC * (d.x < 0. ? 1. : .8);
+        hc = mix(hc, wallC * .62, side * (1. - wall)); hc = mix(hc, roofC * .8, sroof * (1. - wall));
+        hc = mix(hc, wallC * .7, chim * (1. - roof)); hc = mix(hc, roofC, roof);
+        hc = mix(hc, roofC * 1.5 + moon * .15, roof * smoothstep(.18, .0, -rf) * .7);                                  // el filo del alero
+        // ventanas (dos en la fachada, una en el cuerpo lateral) con marco en cruz, y la puerta con su farol
+        float lightK = 0.; vec3 warmW = vec3(1., .74, .4);
+        for (int k = 0; k < 3; k++) { vec2 wc = k == 0 ? vec2(-hwid * .45, hh * .56) : k == 1 ? vec2(hwid * .45, hh * .56) : vec2(hwid * 1.3, hh * .4); float on = step(.3, h1(id * 3.1 + float(k) * 7.));
+          vec2 wq = d - wc; float wm = smoothstep(aa, -aa, max(abs(wq.x) - .7, abs(wq.y) - .78)), fr = max(smoothstep(.09, .04, abs(wq.x)), smoothstep(.09, .04, abs(wq.y)));
+          vec3 wcol = mix(moon * .35, warmW * (.8 + .5 * uHi) * (.75 + .25 * smoothstep(-.8, .6, wq.y)), on); wcol = mix(wcol, wallC * .5, fr * .85);
+          hc = mix(hc, wallC * 1.6 + moon * .1, smoothstep(aa, -aa, max(abs(wq.x) - .86, abs(wq.y) - .94)) * (1. - wm) * (1. - roof));     // el marco
+          hc = mix(hc, wcol, wm * (1. - roof)); lightK += on * exp(-dot(wq, wq) / 3.2); }
+        float door = smoothstep(aa, -aa, max(abs(d.x) - .55, d.y - 2.1)) * step(0., d.y); hc = mix(hc, vec3(.03, .022, .02) + moon * .06, door);
+        vec2 lq = d - vec2(.95, 2.3); hc += warmW * exp(-dot(lq, lq) / .05) * 1.2;
+        float hm = max(max(wall, roof), max(max(side, sroof), chim));
+        col = mix(col, mix(hc, hazeC, fg), hm);
+        col += warmW * (lightK * .16 * (.6 + .5 * uHi) + exp(-dot(lq, lq) / 1.4) * .16) * (1. - fg);                           // la luz que sale de las ventanas y del farol
+        if (uv.y < uHz) { vec2 gp = vec2(gX - (-11.5 - r2 * 3.5) - 1., (gz - z + 2.5) * .5); col += warmW * exp(-dot(gp, gp) / 7.) * .09; }   // y cae sobre el pasto
+        vec2 sq = d - vec2(hwid * .45 + sin(uT * .6 + d.y * .35 + id) * (d.y - hh - 3.2) * .16, hh + 3.2); float sm = exp(-sq.x * sq.x / (.25 + max(sq.y, 0.) * .5)) * smoothstep(0., .6, sq.y) * exp(-max(sq.y, 0.) * .35);
+        col = mix(col, moon * 1.3 + .03, sm * .3 * (.6 + .4 * n(vec2(d.x * 2., d.y * 1.5 - uT * .8))) * (1. - fg)); }
       // arbolitos redondos a los dos lados (cada uno mira a la cámara): copa de bolas en tres tonos y su tronco; algunos, rosados
       for (int sd = 0; sd < 2; sd++) for (int i = 8; i >= 0; i--) {
         float z = (float(i) + 1. - fract(uDist / 7.)) * 7., id = float(i) + floor(uDist / 7.) + float(sd) * 57.; if (z < 1.2) continue;
@@ -11261,9 +11276,14 @@ function rutaSetup() {
         if (uv.y < uHz) { vec2 gs = vec2(gX - X, (gz - z) * .55); col *= 1. - .34 * exp(-dot(gs, gs) / (R * R * 1.3)) * (1. - uNight); }   // su sombra en el pasto
         if (abs(d.x) > R * 2.1 || d.y > R * 2.6 || d.y < -(th + R)) continue;
         float aa = px / sc, fg = 1. - exp(-z * fogK * 1.2);
-        vec3 bark = mix(vec3(.34, .22, .15), vec3(.02, .016, .02), uNight) * (.8 + .4 * step(d.x, 0.));
-        float tr = max(smoothstep(aa, -aa, abs(d.x) - .15 - .1 * smoothstep(-th, -(th + R * .75), d.y)) * step(d.y, -R * .3) * step(-(th + R * .75), d.y),
-          max(smoothstep(aa, -aa, sdSeg(d, vec2(0., -R * .75), vec2(-.42, -.05) * R) - .08), smoothstep(aa, -aa, sdSeg(d, vec2(0., -R * .6), vec2(.4, .05) * R) - .07)));
+        // el tronco: se abre en la raíz, tiene bulto (un lado con luz, otro en sombra), vetas y surcos de corteza, la sombra de la copa
+        // arriba, y tres ramas que entran al follaje
+        float gy = d.y + th + R * .75, tw = .14 + .13 * exp(-max(gy, 0.) * 2.6) + .02 * sin(gy * 5. + id), lxT = mix(-1., sd == 0 ? 1. : -1., uSun);
+        float tr = smoothstep(aa, -aa, abs(d.x + .03 * sin(gy * 2.3 + id)) - tw) * step(0., gy) * step(d.y, -R * .25);
+        tr = max(tr, max(smoothstep(aa, -aa, sdSeg(d, vec2(0., -R * .82), vec2(-.5, -.1) * R) - .075), max(smoothstep(aa, -aa, sdSeg(d, vec2(0., -R * .62), vec2(.46, 0.) * R) - .065), smoothstep(aa, -aa, sdSeg(d, vec2(0., -R * .7), vec2(.06, .2) * R) - .07))));
+        vec3 bark = mix(vec3(.4, .27, .18), vec3(.03, .024, .03), uNight) * (.55 + .6 * smoothstep(-.9, .8, clamp(d.x / tw, -1., 1.) * lxT));
+        bark *= (.78 + .4 * n(vec2(d.x * 16., d.y * 2.2 + id))) * (1. - .32 * smoothstep(.035, 0., abs(n(vec2(d.x * 9. + id, d.y * 1.3)) - .5)));
+        bark *= .5 + .5 * smoothstep(-R * .3, -R * 1.15, d.y);
         col = mix(col, mix(bark, hazeC, fg), tr);
         // la copa, pintada: silueta de follaje irregular (no círculos) y manchas de hojas en cuatro tonos, del verde azulado
         // de la sombra al verde amarillo donde le da la luz
@@ -11278,7 +11298,8 @@ function rutaSetup() {
           cj.x += sin(uT * 1.4 + id * 2.1 + fj) * .05 * R * (1. + pf.y) + par * (dp - .5) * R * .4;
           vec2 q = (d - cj) / rj; if (abs(q.x) > 1.15 || abs(q.y) > 1.15) continue;
           float ang = atan(q.y, q.x), rad = 1. + .055 * sin(ang * 9. + fj * 2. + id) + .035 * sin(ang * 17. - fj + uT * 1.2), r2q = dot(q, q) / (rad * rad); if (r2q > 1.) continue;
-          float li = dot(normalize(vec3(q / rad, sqrt(1. - r2q))), Ld) + (n((d + id * 7.3) * 2.6) - .5) * .3;
+          float li = dot(normalize(vec3(q / rad, sqrt(1. - r2q))), Ld) + (n((d + id * 7.3) * 2.6) - .5) * .25;
+          li += (n((d - cj * .5 + id * 3.) * 5.2) - .5) * .55 + (n((d + id) * 11.) - .5) * .28;                           // textura de hojas: manchas irregulares claras y oscuras
           vec3 pc = mix(t0, tb, smoothstep(-.2 - e, -.2 + e, li)); pc = mix(pc, t2, smoothstep(.3 - e, .3 + e, li)); pc = mix(pc, t3, smoothstep(.68 - e, .68 + e, li));
           col = mix(col, mix(pc * mix(.64, 1., dp), hazeC, fg), smoothstep(1., 1. - 2.5 * aa / rj, sqrt(r2q))); } }
       // postes de luz a la derecha, con sus tres cables que cuelgan de poste a poste: pasan a contratiempo
