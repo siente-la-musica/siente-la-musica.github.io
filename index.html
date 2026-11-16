@@ -5884,6 +5884,8 @@ function auroraSetup() {
     ${GLSL_NOISE}
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
     float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
+    float meteor(vec2 pq, vec2 hd, vec2 dir, float len) { vec2 dn_ = normalize(dir), v_ = pq - hd; float t = clamp(dot(v_, -dn_) / max(len, 1e-4), 0., 1.), dd = length(v_ + dn_ * t * len);
+      return smoothstep(mix(.0042, .0006, t), 0., dd) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003) * 1.2 + exp(-dot(v_, v_) / .0005) * .25; }
     float ridge(float x) { return .018 + .1 * (1. - 2. * abs(n(vec2(x * 3.2 + 2., 1.)) - .5)) * (.45 + .55 * n(vec2(x * .9, 8.))) + .03 * (1. - 2. * abs(n(vec2(x * 9., 3.)) - .5)) + .008 * n(vec2(x * 30., 5.)); }   // picos, no lomas
     // todo lo que hay sobre el horizonte (también se usa, dado vuelta, para el reflejo del lago)
     vec3 above(vec2 p, float asp, out vec3 glow) {
@@ -5894,7 +5896,7 @@ function auroraSetup() {
       vec2 sgp = p * 95., sg = floor(sgp); float st = h(sg), sd_ = length(fract(sgp) - .5 - (vec2(h(sg + 5.), h(sg + 9.)) - .5) * .6), tw = .5 + .5 * sin(uT * (2. + st * 3.) + st * 40.), big = step(.992, st);
       float dust = smoothstep(.45, .8, fbm(vec2(p.x * 2. + p.y * 1.4, p.y * 2.2 - p.x * .9) + 4.)) * smoothstep(.15, .6, ty);
       col += (vec3(.85, .9, 1.) * step(.93, st) * (smoothstep(.16 + big * .1, 0., sd_) + exp(-sd_ * sd_ * 60.) * .5 * big) * (.3 + .7 * tw * (.4 + uHi * 1.3)) + vec3(.1, .13, .24) * dust) * uNight * smoothstep(R * 1.1, R * 2.2, md);
-      if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2), hd = uStar.xy + dir * uStar.z, tl = hd - dir * .28 * sin(3.1416 * uStar.z); col += vec3(.95, .97, 1.) * smoothstep(.0035, 0., sdSeg(p, tl, hd)) * sin(3.1416 * uStar.z); }
+      if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2); col += vec3(.95, .97, 1.) * meteor(p, uStar.xy + dir * uStar.z, dir, .2 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z); }
       // las tres cortinas de la aurora: base ondulante, rayos hacia arriba con sus estrías y el filo de abajo más vivo
       glow = vec3(0.);
       for (int k = 0; k < 3; k++) { float fk = float(k), lv = k == 0 ? uLv.x : k == 1 ? uLv.y : uLv.z, x = p.x / asp * (2.4 + .7 * fk) + fk * 3.1;
@@ -5991,6 +5993,8 @@ function faroSetup() {
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
     float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
     // el borde de arriba del acantilado y la línea donde lo toca el agua
+    float meteor(vec2 pq, vec2 hd, vec2 dir, float len) { vec2 dn_ = normalize(dir), v_ = pq - hd; float t = clamp(dot(v_, -dn_) / max(len, 1e-4), 0., 1.), dd = length(v_ + dn_ * t * len);
+      return smoothstep(mix(.0042, .0006, t), 0., dd) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003) * 1.2 + exp(-dot(v_, v_) / .0005) * .25; }
     float cliffTop(float s) { return uHy + .055 - .01 * sin(s * 9.) - .2 * pow(smoothstep(.4, .68, s), 1.25); }   // meseta y, a la derecha, la caída al mar
     float waterLn(float s) { return uHy - .15 + .05 * s; }
     void main() {
@@ -6010,7 +6014,7 @@ function faroSetup() {
         float star = step(.94, st) * (smoothstep(.16 + big * .1, 0., sd_) + exp(-sd_ * sd_ * 60.) * .5 * big) * (.3 + .7 * tw * (.4 + uHi * 1.3));
         float dust = smoothstep(.45, .8, fbm(vec2(p.x * 2. + p.y * 1.3, p.y * 2.2 - p.x * .8) + 4.)) * smoothstep(.2, .6, ty);
         sky += (vec3(.85, .9, 1.) * star + uC1 * dust * .5 + vec3(.8, .85, 1.) * dust * step(.8, st) * smoothstep(.2, 0., sd_) * .5) * uNight * smoothstep(R * 1.2, R * 2.4, md);
-        if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2), hd = uStar.xy + dir * uStar.z, tl = hd - dir * .28 * sin(3.1416 * uStar.z); sky += vec3(.95, .97, 1.) * smoothstep(.0035, 0., sdSeg(p, tl, hd)) * sin(3.1416 * uStar.z) * uNight; }
+        if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2); sky += vec3(.95, .97, 1.) * meteor(p, uStar.xy + dir * uStar.z, dir, .2 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * uNight; }
         // nubes pintadas en dos capas: cuerpo oscuro y el borde que mira a la luna, plateado
         for (int k = 0; k < 2; k++) { float fk = float(k); vec2 cp = vec2(p.x * (1.1 + fk * .5) + uT * (.006 + fk * .005) + fk * 7., ty * (3.2 + fk * 1.4) + fk * 3.);
           float cd = fbm(vec2(cp.x * 1.5, cp.y * 3.2)), cov = mix(.5, .56, fk), cm = smoothstep(cov, cov + .14, cd) * smoothstep(0., .1, ty) * (1. - smoothstep(.75, 1., ty) * .6);
@@ -6047,7 +6051,7 @@ function faroSetup() {
       // planos de luz y de sombra, grietas, estratos, el pie mojado y oscuro, hierba que cuelga del borde y espuma que rompe con la caja ----
       float wl = waterLn(s) + (n(vec2(p.x * 14., uT * .5)) - .5) * .006, mside = uMoon.x > uTow.x ? 1. : -1.;
       vec3 rockLit = mix(uC1 * .5 + moonL * .2, vec3(.56, .4, .32), 1. - uNight), rockSh = mix(uC0 * .55, vec3(.2, .13, .17), 1. - uNight), grassC = mix(vec3(.04, .14, .11), vec3(.3, .46, .16), 1. - uNight);
-      for (int Lk = 0; Lk < 3; Lk++) { float fl = float(Lk), top, base = wl - fl * .028, gk = 0.;
+      for (int Lk = 0; Lk < 3; Lk++) { float fl = float(Lk), top, base = wl - (Lk == 1 ? .028 * smoothstep(.52, .3, s) : 0.), gk = 0.;
         if (Lk == 0) { top = cliffTop(s) + (n(vec2(p.x * 7., 1.)) - .5) * .03 + (n(vec2(p.x * 26., 2.)) - .5) * .014; gk = smoothstep(.56, .44, s); }
         else if (Lk == 1) top = uHy - .04 + .07 * (1. - 2. * abs(n(vec2(p.x * 5. + 3., 4.)) - .5)) - .24 * smoothstep(.3, .55, s) + (n(vec2(p.x * 30., 6.)) - .5) * .014;
         else { float dx = (s - .77) / .05; top = abs(dx) < 1. ? uHy - .155 + .12 * (1. - pow(abs(dx), 2.4)) + (n(vec2(p.x * 40., 8.)) - .5) * .014 : -1.; base = uHy - .17 + (n(vec2(p.x * 14., uT * .5 + 3.)) - .5) * .006; gk = .9 * smoothstep(.55, .25, abs(dx)); }
@@ -6061,14 +6065,14 @@ function faroSetup() {
           vec3 rk = mix(rockSh, rockLit, lit) * (.84 + .3 * n(vec2(p.x * 90., uv.y * 60.)));
           rk *= 1. - .22 * smoothstep(.06, .0, abs(n(vec2(p.x * 30. + fl * 4., uv.y * 7.)) - .5));                       // hendiduras suaves
           rk *= .93 + .07 * sin(uv.y * 250. + n(vec2(p.x * 12., 1.)) * 9.);                                             // estratos
-          rk *= .42 + .58 * smoothstep(0., .08, uv.y - base);                                                           // el pie, mojado y oscuro
+          rk *= .42 + .58 * smoothstep(0., .08, uv.y - base); m *= smoothstep(0., .012, top - base);                                                           // el pie, mojado y oscuro
           rk += (uHalo * .4 + moonL * .45) * exp(-max(dep, 0.) * 75.) * .3 * (1. - gk * .7);                           // el filo que recibe la luz
           rk += beamC * exp(-dot(v, v) / .02) * .14 * uPw;
           col = mix(col, rk, m); }
         if (gm > 0.) { vec3 gc = grassC * (.7 + .6 * n(vec2(p.x * 70., uv.y * 90.))) + moonL * .07; gc = mix(gc * .75, gc * 1.45, smoothstep(top - gdep, gtop, uv.y));
           { vec2 fq = vec2(p.x * 260., uv.y * 260.); gc = mix(gc, mix(vec3(1., .92, .6), vec3(1., .72, .82), h(floor(fq) + 3.)), step(.9, h(floor(fq))) * smoothstep(.4, .15, length(fract(fq) - .5)) * mix(.3, .85, 1. - uNight)); }   // florecitas redondas
           col = mix(col, gc, gm); }
-        float fm = exp(-abs(uv.y - base) * 100.) * smoothstep(.3, .7, n(vec2(p.x * 40. - uT * .6, uv.y * 30. + uT * .8 + fl)));
+        float fm = exp(-abs(uv.y - base) * 100.) * smoothstep(.3, .7, n(vec2(p.x * 40. - uT * .6, uv.y * 30. + uT * .8 + fl))) * smoothstep(0., .03, top - base);
         col += vec3(.9, .95, 1.) * fm * (.3 + .9 * uFoam) * mix(.7, 1., uNight);
         col += vec3(.95, .97, 1.) * uFoam * m * exp(-max(uv.y - base, 0.) * 42.) * smoothstep(.5, .78, n(vec2(p.x * 60., uv.y * 40. - uT * 3.))) * .55; }      // la salpicadura sube por la roca
       // ---- el faro: torre redonda (luz de luna por un lado, sombra por el otro, rebote cálido de la linterna), franjas, balcón, linterna y cúpula ----
@@ -11106,6 +11110,7 @@ function rutaSetup() {
     ${GLSL_NOISE}
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
     const float HC = 1.25, K = .55, SP = 14.;
+    const vec3 PF[8] = vec3[8](vec3(-.58, .08, .6), vec3(.58, .02, .62), vec3(.02, .5, .6), vec3(-.32, -.22, .56), vec3(.36, -.28, .56), vec3(-.66, -.42, .42), vec3(.66, -.44, .42), vec3(0., -.02, .64));   // las matas de cada copa: x, y, radio (de atrás hacia adelante)
     // la vía hace curvas suaves: todo se corre de lado con el cuadrado de la distancia
     vec2 proj(vec3 w, float asp) { return vec2(.5 + (w.x + uCurve * w.z * w.z) * K / (w.z * asp), uHz - (HC - w.y) * K / w.z); }
     // a qué distancia corta la mirada un plano vertical paralelo a la vía (con su curva)
@@ -11119,6 +11124,8 @@ function rutaSetup() {
     float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
     // un punto de luz desenfocado (como se ve una luz a través de un vidrio): disco suave + halo
     float bokeh(vec2 d, float r) { float q = length(d) / r; return smoothstep(1., .72, q) * .75 + exp(-q * q * .55) * .5; }
+    float meteor(vec2 pq, vec2 hd, vec2 dir, float len) { vec2 dn_ = normalize(dir), v_ = pq - hd; float t = clamp(dot(v_, -dn_) / max(len, 1e-4), 0., 1.), dd = length(v_ + dn_ * t * len);
+      return smoothstep(mix(.0042, .0006, t), 0., dd) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003) * 1.2 + exp(-dot(v_, v_) / .0005) * .25; }
     float cloudD(vec2 cp) { return fbm(vec2(cp.x * 1.5, cp.y * 3.4)); }
     vec3 scene(vec2 uv, float foc) {
       float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec3 col;
@@ -11137,8 +11144,7 @@ function rutaSetup() {
         // la estela de un avión y, de noche, una estrella fugaz de vez en cuando
         { vec2 pq = vec2(uv.x * asp, dy0), a = vec2(.12 * asp, .2), b = vec2(.8 * asp, .37); float tt = clamp(dot(pq - a, b - a) / dot(b - a, b - a), 0., 1.);
           col = mix(col, uCl0, smoothstep(.003 + .007 * (1. - tt), 0., sdSeg(pq, a, b)) * tt * .5 * (1. - uRain) * (1. - uNight * (1. - uSun)));
-          if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2), hd = uStar.xy + dir * uStar.z, tl = hd - dir * .3 * sin(3.1416 * uStar.z);
-            col += vec3(.9, .95, 1.) * smoothstep(.0035, 0., sdSeg(pq, tl, hd)) * sin(3.1416 * uStar.z) * uNight * (1. - uSun) * (1. - uRain); } }
+          if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2); col += vec3(.9, .95, 1.) * meteor(pq, uStar.xy + dir * uStar.z, dir, .2 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * uNight * (1. - uSun) * (1. - uRain); } }
         float mn = uNight * (1. - uSun) * (1. - uRain * .85);
         vec2 mp = vec2((uv.x - .4) * asp, dy0 - .31); float md = length(mp);
         col += vec3(.75, .82, 1.) * mn * (exp(-md * md * 220.) * .3 + exp(-md * md * 25.) * .1);
@@ -11193,7 +11199,7 @@ function rutaSetup() {
         vec3 gnd = uGnd * (.8 + .45 * n(vec2(X * .5, zz * .3))) * (.9 + .3 * n(vec2(X * 2.6, zz * .9))) + uGnd * beam * 2.;
         // flores a la orilla (blancas, amarillas y rosadas)
         { vec2 fc = vec2(X, zz) * 1.5, fi = floor(fc); float fr = h(fi);
-          float dot_ = smoothstep(.3, .14, length(fract(fc) - .5 - (vec2(h(fi + 3.), h(fi + 7.)) - .5) * .55)) * step(.58, fr) * smoothstep(45., 5., z) * smoothstep(3., 3.4, abs(X + .9));
+          float dot_ = smoothstep(.2, .1, length(fract(fc) - .5 - (vec2(h(fi + 3.), h(fi + 7.)) - .5) * .55)) * step(.66, fr) * smoothstep(45., 5., z) * smoothstep(3., 3.4, abs(X + .9));
           gnd = mix(gnd, (fr > .87 ? vec3(1., .62, .78) : fr > .73 ? vec3(1., .88, .35) : vec3(1., .99, .94)) * mix(1., .07, uNight), dot_ * .92); }
         if (secT(zz) > 1.5 && X > 2.75) {                                                  // la costa: el mar hasta el horizonte, con sus brillos
           gnd = mix(hazeC, uTop, .42) * mix(1., .8, uNight) * (.92 + .16 * n(vec2(X * .08, zz * .5 + uT * .3)));
@@ -11221,11 +11227,6 @@ function rutaSetup() {
           vec3 bc = uTree * 1.45 * mix(vec3(.55, .68, .8), vec3(1.35, 1.3, .9), smoothstep(-.1, .1, bv));
           { vec2 fq = vec2(zz * 3.2, Y * 5.); bc = mix(bc, uPink * 1.15, step(.78, h(floor(fq))) * smoothstep(.36, .2, length(fract(fq) - .5)) * step(.05, bv) * .95); }
           col = mix(col, mix(bc, hazeC, 1. - exp(-z * fogK)), smoothstep(bh + aa, bh - aa, Y) * step(-.02, Y)); } }
-        // pasto alto a la orilla, que se mece
-        { float z = planeZ(pa_, sg * (edge + .95));
-          if (z > 0. && z < 70.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
-          float sw_ = zz + sin(uT * 2.2 + zz * .7) * .2 * Y, bl = (.2 + .34 * h1(floor(sw_ * 7.))) * (1. - abs(fract(sw_ * 7.) - .5) * 2.) * (secT(zz) > 1.5 && sd == 1 ? 0. : 1.);
-          col = mix(col, mix(uGnd * mix(1.4, 2.5, clamp(Y / .5, 0., 1.)), hazeC, 1. - exp(-z * fogK)), smoothstep(bl + aa, bl - aa, Y) * step(-.01, Y)); } }
         { float z = planeZ(pa_, sg * (edge + .55));
           if (z > 0. && z < 300.) { float Y = HC - (uHz - uv.y) * z / K, zz = z + uDist, aa = z / K * px;
           float rail = smoothstep(.1 + aa, .1 - aa, abs(Y - .6));
@@ -11266,23 +11267,20 @@ function rutaSetup() {
         col = mix(col, mix(bark, hazeC, fg), tr);
         // la copa, pintada: silueta de follaje irregular (no círculos) y manchas de hojas en cuatro tonos, del verde azulado
         // de la sombra al verde amarillo donde le da la luz
-        d.x -= sin(uT * 1.4 + id * 2.1) * .07 * max(d.y + R * .75, 0.) / R + sin(uT * 2.3 + id) * .02 * max(d.y, 0.) / R;   // la copa se mece con el viento
-        float tall = r2 > .66 ? 1. : 0.; d = vec2(d.x * (1. + .7 * tall), (d.y - tall * R * .55) / (1. + .55 * tall));   // unos son altos y delgados (álamos)
-        vec2 dn = d + id * 7.3 + vec2(sin(uT * 1.9 + id), cos(uT * 1.6 + id * 1.3)) * .07;   // las hojas tiemblan
-        float sdc = min(min(length(d * vec2(1., 1.12)) - R * .95, length(d - vec2(-.7, -.4) * R) - R * .66), min(length(d - vec2(.72, -.36) * R) - R * .68, length(d - vec2(.2, .5) * R) - R * .58));
-        sdc += (n(dn * 1.1) - .5) * R * .7 + (n(dn * 3.1) - .5) * R * .3 + (n(dn * 7.) - .5) * R * .12;
-        float lx = mix(-1., sd == 0 ? 1. : -1., uSun);
-        vec3 Ld = normalize(vec3(lx * .6, .62, .5));
-        float vol = max(max(sphL(d, vec2(0.), R * .95, Ld), sphL(d, vec2(-.7, -.4) * R, R * .66, Ld)), max(sphL(d, vec2(.72, -.36) * R, R * .68, Ld), sphL(d, vec2(.2, .5) * R, R * .58, Ld))); if (vol < -5.) vol = -.3;
-        float v = vol * 1.05 + (n(dn * .9 + 5.) - .5) * 1.0 + (n(dn * 2.6 + 9.) - .5) * .65 + (n(dn * 6.5) - .5) * .35 - .25 * smoothstep(-.1, -.8, d.y / R);
+        // la copa: ocho matas redondas en tres planos (las de atrás, más oscuras), cada una con su luz, su sombra y el borde festoneado de
+        // hojas; se mecen por separado y se corren un poco entre sí según desde dónde se las mira: tienen bulto, no parecen recortadas
         vec3 tb = r1 > .74 ? uPink : uTree * (1.25 + .45 * r2) * mix(vec3(1.), vec3(1.12, 1., .8), r2);
-        vec3 t0 = tb * vec3(.5, .62, .78) * .75, t2 = tb * vec3(1.35, 1.3, .95) + tb.g * vec3(.1, .08, 0.), t3 = t2 * vec3(1.22, 1.2, 1.) + tb.g * vec3(.14, .12, .02);
-        float e = .05 + aa * 1.5;
-        vec3 tc = mix(t0, tb, smoothstep(-.42 - e, -.42 + e, v)); tc = mix(tc, t2, smoothstep(.12 - e, .12 + e, v)); tc = mix(tc, t3, smoothstep(.62 - e, .62 + e, v));
+        vec3 t0 = tb * vec3(.5, .62, .78) * .7, t2 = tb * vec3(1.35, 1.3, .95) + tb.g * vec3(.1, .08, 0.), t3 = t2 * vec3(1.22, 1.2, 1.) + tb.g * vec3(.14, .12, .02);
         t2 = mix(t2, t2 * .7 + vec3(1., .55, .22) * .3, uSun); t3 = mix(t3, vec3(1., .74, .36) * .82, uSun * .85);
-        tc = mix(t0, tb, smoothstep(-.42 - e, -.42 + e, v)); tc = mix(tc, t2, smoothstep(.12 - e, .12 + e, v)); tc = mix(tc, t3, smoothstep(.62 - e, .62 + e, v));
-        float hole = smoothstep(.7, .74, n(dn * 1.9 + 20.)) * smoothstep(-.12 * R, -.4 * R, sdc) * step(d.y, R * .15);     // claros por donde se ve el cielo
-        col = mix(col, mix(tc, hazeC, fg), smoothstep(aa, -aa, sdc) * (1. - hole)); }
+        float lx = mix(-1., sd == 0 ? 1. : -1., uSun), par = (c.x - .5) * 1.5, e = .04 + aa; vec3 Ld = normalize(vec3(lx * .6, .62, .5));
+        for (int j = 0; j < 8; j++) { vec3 pf = PF[j]; float fj = float(j), dp = fj / 7., rj = pf.z * R * (.92 + .16 * h1(id + fj * 3.7));
+          vec2 cj = (pf.xy + (vec2(h1(id + fj), h1(id + fj + 20.)) - .5) * .14) * R;
+          cj.x += sin(uT * 1.4 + id * 2.1 + fj) * .05 * R * (1. + pf.y) + par * (dp - .5) * R * .4;
+          vec2 q = (d - cj) / rj; if (abs(q.x) > 1.15 || abs(q.y) > 1.15) continue;
+          float ang = atan(q.y, q.x), rad = 1. + .055 * sin(ang * 9. + fj * 2. + id) + .035 * sin(ang * 17. - fj + uT * 1.2), r2q = dot(q, q) / (rad * rad); if (r2q > 1.) continue;
+          float li = dot(normalize(vec3(q / rad, sqrt(1. - r2q))), Ld) + (n((d + id * 7.3) * 2.6) - .5) * .3;
+          vec3 pc = mix(t0, tb, smoothstep(-.2 - e, -.2 + e, li)); pc = mix(pc, t2, smoothstep(.3 - e, .3 + e, li)); pc = mix(pc, t3, smoothstep(.68 - e, .68 + e, li));
+          col = mix(col, mix(pc * mix(.64, 1., dp), hazeC, fg), smoothstep(1., 1. - 2.5 * aa / rj, sqrt(r2q))); } }
       // postes de luz a la derecha, con sus tres cables que cuelgan de poste a poste: pasan a contratiempo
       { for (int k = 0; k < 3; k++) {
           float xw = 3.8 + float(k - 1) * .55, z = planeZ(pa_, xw); if (z < 0.) continue; float Y = HC - (uHz - uv.y) * z / K, f = fract((z + uDist) / SP - .5);
@@ -11785,7 +11783,7 @@ function autoSprite(kind, col, night, hw, hl, hero) {
   const css = (v, k = 1, a = 1) => `rgba(${Math.min(255, v[0] * k) | 0},${Math.min(255, v[1] * k) | 0},${Math.min(255, v[2] * k) | 0},${a})`;
   const lit = (v, t) => v.map(q => q + (255 - q) * t), ow = Math.max(1.5, hw * 0.075);
   const band = v => { const g = x.createLinearGradient(-hw, 0, hw, 0), a = css(lit(v, 0.3)), b = css(v), d = css(v, 0.64);
-    g.addColorStop(0, a); g.addColorStop(0.27, a); g.addColorStop(0.31, b); g.addColorStop(0.7, b); g.addColorStop(0.74, d); g.addColorStop(1, d); return g; };
+    g.addColorStop(0, css(v, 0.8)); g.addColorStop(0.16, a); g.addColorStop(0.34, css(lit(v, 0.12))); g.addColorStop(0.6, b); g.addColorStop(1, d); return g; };
   const glass = () => { const g = x.createLinearGradient(0, -hl, 0, hl); g.addColorStop(0, '#2a3c52'); g.addColorStop(0.4, '#0e151f'); g.addColorStop(1, '#17212e'); return g; };
   const bodyPath = () => { x.beginPath(); x.moveTo(0, -hl); x.bezierCurveTo(hw * 0.62, -hl, hw * 0.97, -hl * 0.93, hw * 0.97, -hl * 0.6); x.lineTo(hw, hl * 0.55); x.bezierCurveTo(hw, hl * 0.92, hw * 0.78, hl, 0, hl);
     x.bezierCurveTo(-hw * 0.78, hl, -hw, hl * 0.92, -hw, hl * 0.55); x.lineTo(-hw * 0.97, -hl * 0.6); x.bezierCurveTo(-hw * 0.97, -hl * 0.93, -hw * 0.62, -hl, 0, -hl); x.closePath(); };
@@ -11808,12 +11806,12 @@ function autoSprite(kind, col, night, hw, hl, hero) {
     // vidrios (parabrisas, ventanas y luneta en una sola pieza) y, encima, el techo
     x.beginPath(); x.roundRect(-hw * 0.82, -hl * o.g0, hw * 1.64, hl * (o.g0 + o.g1), [hw * 0.46, hw * 0.46, hw * 0.3, hw * 0.3]); x.fillStyle = glass(); x.fill();
     x.save(); x.clip(); glint(0.82, -hl * o.g0, hl * o.g1); x.restore();
-    x.beginPath(); x.roundRect(-hw * 0.62, -hl * o.r0, hw * 1.24, hl * (o.r0 + o.r1), hw * 0.26); x.fillStyle = band(lit(col, 0.14)); x.fill();
+    x.beginPath(); x.roundRect(-hw * 0.68, -hl * o.r0, hw * 1.36, hl * (o.r0 + o.r1), hw * 0.3); x.fillStyle = band(lit(col, 0.14)); x.fill();
+    { const gl2 = x.createLinearGradient(-hw * 0.6, 0, -hw * 0.2, 0); gl2.addColorStop(0, 'rgba(255,255,255,0)'); gl2.addColorStop(0.5, 'rgba(255,255,255,.22)'); gl2.addColorStop(1, 'rgba(255,255,255,0)'); x.save(); x.clip(); x.fillStyle = gl2; x.fillRect(-hw, -hl, hw * 2, hl * 2); x.restore(); }
     if (o.stripes) { x.save(); x.clip(); x.fillStyle = 'rgba(255,255,255,.92)'; x.fillRect(-hw * 0.3, -hl, hw * 0.2, hl * 2); x.fillRect(hw * 0.1, -hl, hw * 0.2, hl * 2); x.restore(); }
     x.strokeStyle = css(col, 0.45); x.lineWidth = ow * 0.6; x.stroke();
     x.strokeStyle = css(col, 0.85); x.lineWidth = ow * 0.9;
-    for (const s of [-1, 1]) { x.beginPath(); x.moveTo(s * hw * 0.56, -hl * o.r0 + hw * 0.1); x.lineTo(s * hw * 0.76, -hl * o.g0 + hw * 0.2); x.moveTo(s * hw * 0.56, hl * o.r1 - hw * 0.1); x.lineTo(s * hw * 0.78, hl * o.g1 - hw * 0.12);
-      x.moveTo(s * hw * 0.62, hl * (o.r1 - o.r0) * 0.5); x.lineTo(s * hw * 0.82, hl * (o.r1 - o.r0) * 0.5); x.stroke(); }
+    for (const s of [-1, 1]) { x.beginPath(); x.moveTo(s * hw * 0.68, hl * (o.r1 - o.r0) * 0.5); x.lineTo(s * hw * 0.82, hl * (o.r1 - o.r0) * 0.5); x.stroke(); }
     x.strokeStyle = css(col, 0.55); x.lineWidth = ow * 0.5; for (const sx of [-1, 1]) for (const yy of [-o.g0 + 0.16, (o.g1 - o.g0) * 0.5, o.g1 - 0.1]) { x.beginPath(); x.moveTo(sx * hw * 0.84, hl * yy); x.lineTo(sx * hw * 0.97, hl * yy); x.stroke(); }
     if (o.rails) { x.strokeStyle = css(col, 0.4); x.lineWidth = ow * 0.8; for (const s of [-1, 1]) { x.beginPath(); x.moveTo(s * hw * 0.46, -hl * o.r0 + hw * 0.2); x.lineTo(s * hw * 0.46, hl * o.r1 - hw * 0.2); x.stroke(); } }
     if (o.sign) { x.fillStyle = '#fffbe8'; x.beginPath(); x.roundRect(-hw * 0.34, hl * (o.r1 - o.r0) * 0.5 - hl * 0.045, hw * 0.68, hl * 0.09, hl * 0.02); x.fill(); x.strokeStyle = 'rgba(40,30,0,.7)'; x.lineWidth = ow * 0.5; x.stroke(); }
