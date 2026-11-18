@@ -683,6 +683,7 @@
         <button data-mode="ruta">Ruta</button>
         <button data-mode="autopista">Autopista</button>
         <button data-mode="light">Luz</button>
+        <button data-mode="mirador">Mirador</button>
         <button data-mode="aurora">Aurora</button>
         <button data-mode="bars">Barras</button>
         <button data-mode="lava">Lava</button>
@@ -3862,7 +3863,7 @@ function recAudioTrack() {
 async function pickVideoConfig(w, h) {
   for (const codec of ['avc1.640033', 'avc1.640032', 'avc1.4d0033', 'avc1.42e033'])
     for (const hardwareAcceleration of ['prefer-hardware', 'no-preference']) {
-      const c = { codec, width: w, height: h, framerate: recFps, bitrate: recFps > 30 ? 28e6 : 18e6, bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration, avc: { format: 'avc' } };
+      const c = { codec, width: w, height: h, framerate: recFps, bitrate: recFps > 30 ? 40e6 : 26e6, bitrateMode: 'variable', latencyMode: 'quality', hardwareAcceleration, avc: { format: 'avc' } };
       try { if ((await VideoEncoder.isConfigSupported(c)).supported) return c; } catch (e) {}
     }
   return null;
@@ -3927,7 +3928,7 @@ function startRecording(prep) {
     .find(t => MediaRecorder.isTypeSupported(t)) || '';
   // calidad variable: en los golpes de luz y los cambios bruscos (lo más difícil de comprimir) el codificador puede gastar
   // más en ese instante en vez de pixelar; en lo tranquilo gasta menos
-  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: recFps > 30 ? 45e6 : 30e6, audioBitsPerSecond: 256e3, bitrateMode: 'variable', videoKeyFrameIntervalDuration: 2000 }); }
+  try { recorder = new MediaRecorder(stream, { mimeType: recMime, videoBitsPerSecond: recFps > 30 ? 60e6 : 42e6, audioBitsPerSecond: 256e3, bitrateMode: 'variable', videoKeyFrameIntervalDuration: 2000 }); }
   catch (e) { recorder = new MediaRecorder(stream); recMime = recorder.mimeType; }
   recChunks = [];
   recorder.ondataavailable = e => e.data.size && recChunks.push(e.data);
@@ -4349,6 +4350,7 @@ function drawRecOverlay() {
     const zone = LYRIC_LOW.has(state.mode) ? 0 : LYRIC_HIGH.has(state.mode) ? 2 : 1;
     let yV = [0.745, 0.64, 0.43][zone], yH = [0.88, 0.8, 0.36][zone];
     if (state.mode === 'ruta') { yV = 0.33; yH = 0.24; }
+    if (state.mode === 'mirador') { yV = 0.8; yH = 0.87; }   // la letra sobre el lomo oscuro de la colina, bajo la persona: el cielo queda libre
     if (state.mode === 'bust') { yV = 0.76; yH = 0.86; }   // la letra va sobre el torso: deja libres la cabeza y el cuello   // en la Ruta, la letra va en el cielo del parabrisas
     // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
     { const lx = vertical ? W * 0.45 : W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.5 : W * 0.46), rh_ = (vertical ? 150 : 120) * u, dk = state.theme === 'dark';
@@ -5079,16 +5081,30 @@ void main() {
   vL = vUv - vec2(texel.x, 0.); vR = vUv + vec2(texel.x, 0.); vT = vUv + vec2(0., texel.y); vB = vUv - vec2(0., texel.y);
   gl_Position = vec4(aPos, 0., 1.);
 }`;
+// Compila un programa de dibujo. Con GL_DEFER (calentamiento en segundo plano) no espera a que el navegador termine:
+// la revisión y la lista de parámetros se hacen la primera vez que se usa, cuando ya está listo y no congela nada.
+let GL_DEFER = false;
 function glProgram(fs) {
-  const gl = GLX.gl, mk = (t, src) => { const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh); if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(sh)); return sh; };
-  const pr = gl.createProgram();
-  gl.attachShader(pr, mk(gl.VERTEX_SHADER, GL_VS));
-  gl.attachShader(pr, mk(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp sampler2D;\nin vec2 vUv, vL, vR, vT, vB;\nout vec4 o;\n' + fs));
-  gl.linkProgram(pr);
-  if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(pr));
-  const u = {}; const n = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS);
-  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(pr, i).name; u[name] = gl.getUniformLocation(pr, name); }
-  return { pr, u };
+  const gl = GLX.gl, mk = (t, src) => { const sh = gl.createShader(t); gl.shaderSource(sh, src); gl.compileShader(sh); return sh; };
+  const pr = gl.createProgram(), vs = mk(gl.VERTEX_SHADER, GL_VS), fsh = mk(gl.FRAGMENT_SHADER, '#version 300 es\nprecision highp float; precision highp sampler2D;\nin vec2 vUv, vL, vR, vT, vB;\nout vec4 o;\n' + fs);
+  gl.attachShader(pr, vs); gl.attachShader(pr, fsh); gl.linkProgram(pr);
+  const o = { pr, _u: null, get u() {
+    if (this._u) return this._u;
+    if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error(gl.getShaderInfoLog(fsh) || gl.getProgramInfoLog(pr));
+    const u = {}, n = gl.getProgramParameter(pr, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(pr, i).name; u[name] = gl.getUniformLocation(pr, name); }
+    return (this._u = u); } };
+  if (!GL_DEFER) void o.u;
+  return o;
+}
+function glWarmup() {
+  if (glWarmup.done) return; glWarmup.done = true;
+  if (!GLX.gl && !glInit()) return;
+  try { GLX.gl.getExtension('KHR_parallel_shader_compile'); } catch (e) {}
+  const jobs = [() => { if (!ruta.prog) rutaSetup(); if (!ruta.treeAtlas) ruta.treeAtlas = rutaTreeAtlas(); }, () => { if (!mir.prog) miradorSetup(); }, () => { if (!faro.prog) faroSetup(); if (!faro.cliffCanvas) faro.cliffCanvas = faroCliff(); },
+    () => { if (!auto.prog) autoSetup(); }, () => { if (!aur.prog) auroraSetup(); }];
+  const next = () => { const j = jobs.shift(); if (!j) return; GL_DEFER = true; try { j(); } catch (e) { console.warn(e); } GL_DEFER = false; (window.requestIdleCallback || (f => setTimeout(f, 400)))(next, { timeout: 1500 }); };
+  setTimeout(next, 1200);
 }
 function glFBO(w, h) {
   const gl = GLX.gl, t = gl.createTexture();
@@ -5861,6 +5877,216 @@ function drawStars(dt) {
 }
 
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
+// ================= Escena: Mirador =================
+// Alguien sentado solo en lo alto de una colina, abrazando las rodillas, mira un cielo enorme: la Vía Láctea, miles de
+// estrellas, nubes finas iluminadas desde abajo y la luna (la portada). Abajo, en el valle, el pueblo encendido y un tren
+// que cruza a lo lejos; a su lado, la bicicleta; un poste con sus cables atraviesa el cielo. Todo a contraluz.
+// La música: las estrellas y las luces del pueblo titilan con los agudos, la Vía Láctea respira con los graves, la hierba
+// se mece con la energía, las luciérnagas se encienden con la voz, cada ocho tiempos cruza una estrella fugaz y en lo
+// fuerte llegan más; el tren pasa cada 32 tiempos. Con el tema claro es la misma colina a la hora azul, recién caída la tarde.
+const mir = { prog: null, lv: new Float32Array(3), v: new Float32Array(3), t: new Float32Array(3), vo: 0, wind: 0, go: 0, act: 0, b: 0, beats: 0, star: null, sil: null, silKey: '' };
+const MIR_GEO = { v: { hz: 0.36, r0: 0.17, r1: 0.12, rc: 0.42, rw: 0.5, fs: 0.385, fh: 0.15, ps: 0.9, ph: 0.42 }, h: { hz: 0.33, r0: 0.12, r1: 0.15, rc: 0.4, rw: 0.42, fs: 0.37, fh: 0.2, ps: 0.84, ph: 0.55 } };
+function mirRidge(G, s) { return G.r0 + G.r1 * Math.exp(-Math.pow((s - G.rc) / G.rw, 2)); }
+function miradorSetup() {
+  mir.prog = glProgram(`uniform vec2 uRes; uniform float uT, uNight, uP, uVo, uWind, uHz, uFire; uniform vec3 uLv, uMoon, uTop, uMid, uHor, uWarm, uHalo, uStar, uTrain; uniform vec4 uR;
+    ${GLSL_NOISE}
+    float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+    float meteor(vec2 pq, vec2 hd, vec2 dir, float len) { vec2 dn_ = normalize(dir), v_ = pq - hd; float t = clamp(dot(v_, -dn_) / max(len, 1e-4), 0., 1.), dd = length(v_ + dn_ * t * len);
+      return smoothstep(mix(.0038, .0005, t), 0., dd) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003) * 1.2 + exp(-dot(v_, v_) / .0005) * .22; }
+    float ridge(float s) { return uR.x + uR.y * exp(-pow((s - uR.z) / uR.w, 2.)); }
+    // una capa de estrellas como en el cielo de verdad: casi todas diminutas y tenues, pocas brillantes. El brillo sigue una
+    // curva empinada (no todas iguales, que es lo que parece spray), el punto es una mancha suave del tamaño de un píxel y solo
+    // las más brillantes llevan un resplandor y un destello muy tenue
+    vec3 stars(vec2 p, float sc, float thr, float px_) {
+      vec2 g = p * sc, id = floor(g), f = (fract(g) - .5 - (vec2(h(id + 5.), h(id + 9.)) - .5) * .8) / sc; float r = h(id);
+      if (r < thr) return vec3(0.);
+      float b = pow((r - thr) / (1. - thr), 4.), d2 = dot(f, f), w = px_ * px_ * (1. + 2.5 * b);
+      float tw = 1. + .35 * sin(uT * (1.1 + 2.5 * h(id + 2.)) + r * 60.) * (.3 + uLv.z);
+      vec3 c = mix(vec3(1., .86, .72), vec3(.78, .86, 1.), h(id + 3.)); c = mix(c, vec3(1.), .5);
+      float core = exp(-d2 / w) * (.25 + 1.6 * b), halo = exp(-d2 / (w * 30.)) * .18 * b * b;
+      float flare = b * b * b * .25 * (exp(-abs(f.x) / (px_ * .6)) * exp(-abs(f.y) / (px_ * 9.)) + exp(-abs(f.y) / (px_ * .6)) * exp(-abs(f.x) / (px_ * 9.)));
+      return c * (core + halo + flare) * tw; }
+    void main() {
+      float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y); float s = uv.x;
+      float ty = clamp((uv.y - uHz) / (1. - uHz), 0., 1.), md = length(p - uMoon.xy), R = uMoon.z;
+      // ---- el cielo: tres tonos, el resplandor del pueblo y de la tarde que se fue en el horizonte, el halo de la luna ----
+      vec3 col = mix(uHor, uMid, smoothstep(0., .42, ty)); col = mix(col, uTop, smoothstep(.3, 1., ty));
+      col += uHor * exp(-ty * 7.) * .22 + uWarm * exp(-ty * 14.) * .1 * uNight;
+      col += uHalo * (exp(-md * md / (R * R * 6.)) * .32 + exp(-md / (R * 5.)) * .1) * (1. + uVo * .6);
+      // ---- la Vía Láctea: una banda en diagonal con su núcleo cálido, nubes de polvo oscuro y muchas más estrellas dentro ----
+      vec2 mc = vec2(.5 * asp, .74), dir = normalize(vec2(1., -.62)), nr = vec2(-dir.y, dir.x); float mt = dot(p - mc, dir), mdd = dot(p - mc, nr) + .03 * sin(mt * 3.);
+      float band = exp(-mdd * mdd / .014) * (.5 + .5 * fbm(vec2(mt * 2.4, mdd * 7.) + 3.)), core = exp(-mdd * mdd / .0022) * (.55 + .45 * fbm(vec2(mt * 5., mdd * 15.) + 7.));
+      float dust = smoothstep(.48, .72, fbm(vec2(mt * 4.5 + 2., mdd * 16.) + 11.)) * exp(-mdd * mdd / .006);
+      float skyK = smoothstep(.02, .2, ty) * smoothstep(R * 1.4, R * 3.2, md);
+      vec3 mw = mix(mix(vec3(.45, .52, .95), uMid * 2.2 + .1, .35), vec3(1., .86, .72), core * .8);
+      col += mw * (band * .3 + core * .22) * (1. - dust * .85) * uNight * skyK * smoothstep(.0, .35, ty) * (.75 + .5 * uLv.x);
+      // ---- estrellas en tres tamaños (más densas dentro de la Vía Láctea); en la hora azul, solo las más brillantes ----
+      float dens = band * .25 + core * .2, ppx = 1.6 / uRes.y;
+      vec3 st = stars(p, 230., .945 - dens * .45, ppx * 1.1) * .42 + stars(p + 1.3, 95., .966 - dens * .2, ppx * 1.35) * .85 + stars(p + 3.7, 34., .975, ppx * 1.6);
+      st *= .55 + .45 * smoothstep(.0, .35, ty);                                                                                     // cerca del horizonte la atmósfera las apaga
+      col += st * skyK * mix(.18, 1., uNight) * mix(smoothstep(.6, 1.2, length(st)), 1., uNight);
+      if (uStar.z > 0.) { vec2 sd = vec2(.5, -.24); col += vec3(.95, .97, 1.) * meteor(p, uStar.xy + sd * uStar.z, sd, .22 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * skyK; }
+      // ---- nubes finas y largas sobre el horizonte, iluminadas por abajo (el pueblo de noche, la tarde en la hora azul) ----
+      { vec2 cp = vec2(p.x * .9 + uT * .004, ty * 6.); float cd = fbm(vec2(cp.x * 1.4, cp.y * .9) + 5.) + .2 * fbm(vec2(cp.x * 5., cp.y * 3.));
+        float cm = smoothstep(.62, .82, cd) * exp(-ty * 2.6) * smoothstep(.03, .1, ty);
+        float under = smoothstep(.0, .12, cd - fbm(vec2(cp.x * 1.4, (cp.y + .25) * .9) + 5.) - .2 * fbm(vec2(cp.x * 5., (cp.y + .25) * 3.)));
+        vec3 cc = mix(mix(uTop, uMid, .6) * .9, mix(uHor * 1.3, uWarm, .3 * uNight) + .04, under * .8);
+        col = mix(col, cc, cm * mix(.55, .8, 1. - uNight)); }
+      // ---- montañas lejanas en dos planos (la más lejana se pierde en la bruma) y el valle con el pueblo ----
+      for (int k = 0; k < 2; k++) { float fk = float(k), x = p.x * (1.3 + fk * 1.1) + fk * 4.;
+        float rdg = 1. - abs(2. * n(vec2(x * 1.6, 1. + fk)) - 1.);
+        float mh = uHz + (.025 + .085 * rdg * rdg * (.5 + .5 * n(vec2(x * .5, 6. + fk))) + .02 * (1. - 2. * abs(n(vec2(x * 4.4, 4.)) - .5)) + .005 * n(vec2(x * 18., 2.))) * (1. - fk * .5);
+        float m = smoothstep(px * 1.5, -px * 1.5, uv.y - mh);
+        vec3 mcol = mix(uHor * .9 + uHalo * .05, uMid * .55 + uTop * .2, .45 + fk * .3) * mix(1., .75, fk);
+        mcol += uHalo * exp(-max(mh - uv.y, 0.) * 500.) * .1 * (1. - fk);
+        mcol *= 1. - .18 * smoothstep(.4, .7, n(vec2(x * 7. + uv.y * 30., uv.y * 9.))) * (1. - fk * .5);                    // laderas: luces y sombras de los valles                                              // la cresta, rozada por la luna
+        mcol = mix(mcol, uHor, smoothstep(.04, 0., uv.y - uHz) * .45);
+        col = mix(col, mcol, m); }
+      if (uv.y < uHz) { float dv = uHz - uv.y;
+        vec3 val = mix(uHor * .55 + uMid * .25, uTop * .5 + uMid * .2, smoothstep(0., .1, dv));
+        val = mix(val, uHor * .8, exp(-dv * 60.) * .5);                                                                   // la bruma sobre el valle
+        // las luces del pueblo: más pequeñas y apretadas cuanto más lejos, unas cálidas y otras blancas, titilan con los agudos
+        vec2 g = vec2(p.x * 150., pow(dv, .7) * 160.), id = floor(g), f = fract(g) - .5 - (vec2(h(id + 4.), h(id + 6.)) - .5) * .5; float r = h(id);
+        float town = smoothstep(.12, .0, abs(s - .55) - .32) * smoothstep(.0, .012, dv) * smoothstep(.09, .03, dv);
+        float on = step(.72 - town * .3, r) * town, d = length(f) / (.6 + 2. * dv);
+        vec3 lc = mix(uWarm, vec3(.9, .95, 1.), step(.8, h(id + 8.))) * (.6 + .4 * sin(uT * (1. + 2. * h(id + 1.)) + r * 40.) * (.3 + uLv.z));
+        val += lc * on * (smoothstep(.16, .0, d) * 1.2 + exp(-d * d * 20.) * .25) * mix(.7, 1., uNight);
+        val += uWarm * town * exp(-dv * 25.) * .07 * mix(.6, 1., uNight);                                                // el resplandor del pueblo
+        // el tren: una fila de ventanas encendidas que cruza el valle, con su luz delantera
+        if (uTrain.z > 0.) { float ty2 = uHz - .022, tl = .26 * asp, tx = uTrain.x * (asp + tl + .2) - tl - .1;
+          float inT = step(tx, p.x) * step(p.x, tx + tl) * smoothstep(.006, .0035, abs(uv.y - ty2));
+          float wins = smoothstep(.3, .15, abs(fract((p.x - tx) * 140.) - .5)) * smoothstep(.003, .0015, abs(uv.y - ty2 - .0005));
+          val = mix(val, uTop * .3, inT * .9); val += uWarm * wins * inT * 1.3 * uTrain.z;
+          vec2 hd = p - vec2(tx + tl, ty2); val += vec3(1., .95, .8) * (exp(-dot(hd, hd) / .00002) + exp(-hd.y * hd.y / .00003) * exp(-max(hd.x, 0.) / .03) * step(0., hd.x) * .5) * uTrain.z; }
+        col = mix(col, val, smoothstep(px, -px, uv.y - uHz + .0005)); }
+      // ---- luciérnagas cerca de la colina: flotan despacio y se encienden con la voz y los medios ----
+      for (int i = 0; i < 12; i++) { float fi = float(i); vec2 fp = vec2((.12 + .76 * h1(fi + 1.)) * asp + sin(uT * (.13 + .07 * h1(fi)) + fi * 2.) * .05, ridge(.12 + .76 * h1(fi + 1.)) + .02 + .14 * h1(fi + 4.) + sin(uT * (.3 + .2 * h1(fi + 7.)) + fi) * .02);
+        float fl = pow(.5 + .5 * sin(uT * (1.2 + h1(fi + 2.)) + fi * 2.7), 3.); vec2 dq = p - fp;
+        col += mix(vec3(.85, 1., .55), uWarm, .35) * (exp(-dot(dq, dq) / .000012) * 1.4 + exp(-dot(dq, dq) / .0005) * .12) * fl * uFire; }
+      // ---- la colina: su lomo oscuro con textura, la hierba fina del borde que se mece, el filo iluminado por la luna ----
+      float rr = ridge(s), gx = p.x * 420., gb = floor(gx), gf = fract(gx) - .5, gh = (.004 + .011 * pow(h1(gb), 2.) + .005 * n(vec2(p.x * 9., 1.))) ;
+      float above = uv.y - rr, bend = sin(uT * 1.6 + gb * .21 + p.x * 4.) * uWind * 1.6 * max(above, 0.) / max(gh, .001);
+      float blade = smoothstep(.5 * (1. - above / gh) + .06, 0., abs(gf - bend * .6)) * step(0., above) * step(above, gh);
+      float hill = max(smoothstep(px, -px, above), blade);
+      if (hill > 0.) { float dep = rr - uv.y;
+        vec3 hc = mix(uTop * .4 + uMid * .08, uTop * .16, smoothstep(0., .22, dep));
+        float gr = n(vec2(p.x * 260. + sin(uv.y * 40.) * 3., uv.y * 22. + uT * .2 * uWind)) * n(vec2(p.x * 90., uv.y * 9.));
+        hc *= .78 + .5 * gr;                                                                                                                   // hierba: hebras finas
+        hc += (uHalo * .25 + uMid * .08) * exp(-dep * 14.) * smoothstep(.0, .5, (s - uR.z) * 2. + .5) * .35;                                // la luz de la luna resbala por la ladera
+        hc += (uHalo * .55 + uHor * .25) * (exp(-max(dep, 0.) * 220.) * .45 + blade * smoothstep(gh * .3, gh, above) * .55);    // el filo y las puntas de la hierba, con luz
+        col = mix(col, hc, hill); }
+      col *= 1. - .32 * smoothstep(.5, 1.12, length((vUv - vec2(.5, .55)) * vec2(1., .9)) * 1.25);
+      col += (h(gl_FragCoord.xy) - .5) * .018;
+      o = vec4(col, 1.);
+    }`);
+}
+// las siluetas (la persona, la bici y el poste) se dibujan una vez por tamaño: limpias, a contraluz, con un filo de luz
+// del lado de la luna. La persona tiene el pelo aparte, para que se lo mueva el viento.
+// una luna de verdad, pintada una vez: mares oscuros suaves, cráteres apenas marcados y el borde un poco más oscuro.
+// Reemplaza a la portada como luna: con portadas muy coloridas se veía pegada. La portada sigue en el título y el reproductor.
+function paintedMoon() {
+  if (paintedMoon.c) return paintedMoon.c;
+  const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const x = c.getContext('2d'), r = S / 2;
+  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  x.beginPath(); x.arc(r, r, r - 1, 0, 7); x.clip();
+  const g = x.createRadialGradient(r * .82, r * .78, r * .1, r, r, r); g.addColorStop(0, '#fbf7ec'); g.addColorStop(.7, '#ece6d6'); g.addColorStop(1, '#bdb7ab'); x.fillStyle = g; x.fillRect(0, 0, S, S);
+  x.filter = 'blur(6px)'; for (const [mx, my, mr, a] of [[.36, .34, .2, .22], [.55, .4, .14, .2], [.62, .58, .17, .18], [.4, .62, .1, .16], [.3, .5, .08, .14], [.7, .3, .07, .12]]) { x.fillStyle = `rgba(120,118,128,${a})`; x.beginPath(); x.ellipse(mx * S, my * S, mr * S, mr * S * .8, rnd() * 3, 0, 7); x.fill(); }
+  x.filter = 'blur(1px)'; for (let i = 0; i < 22; i++) { const cx = rnd() * S, cy = rnd() * S, cr = (2 + rnd() * 7); x.strokeStyle = 'rgba(110,108,118,.18)'; x.lineWidth = 1.5; x.beginPath(); x.arc(cx, cy, cr, 0, 7); x.stroke(); x.fillStyle = 'rgba(255,255,255,.12)'; x.beginPath(); x.arc(cx - cr * .3, cy - cr * .3, cr * .5, 0, 7); x.fill(); }
+  x.filter = 'none'; const lg = x.createRadialGradient(r, r, r * .55, r, r, r); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(1, 'rgba(40,40,60,.32)'); x.fillStyle = lg; x.fillRect(0, 0, S, S);
+  return (paintedMoon.c = c);
+}
+function drawMoon(X, Y, R, halo, night) {
+  const hc = halo.map(v => Math.min(255, v * 255 + 70));
+  ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+  const gh = ctx.createRadialGradient(X, Y, R * .9, X, Y, R * 2.6); gh.addColorStop(0, rgba(hc, night ? .3 : .22)); gh.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = gh; ctx.fillRect(X - R * 2.6, Y - R * 2.6, R * 5.2, R * 5.2); ctx.restore();
+  ctx.save(); ctx.globalAlpha = night ? 1 : .9; ctx.drawImage(paintedMoon(), X - R, Y - R, R * 2, R * 2); ctx.restore();
+  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const ge = ctx.createRadialGradient(X, Y, R * .95, X, Y, R * 1.12); ge.addColorStop(0, rgba(hc, 0)); ge.addColorStop(.4, rgba(hc, .22)); ge.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = ge; ctx.fillRect(X - R * 1.2, Y - R * 1.2, R * 2.4, R * 2.4); ctx.restore();
+}
+function mirSilhouettes(G, ink, rim) {
+  const c = mir.sil || (mir.sil = document.createElement('canvas')); c.width = W; c.height = H;
+  const x = c.getContext('2d'); x.clearRect(0, 0, W, H); x.lineJoin = x.lineCap = 'round';
+  const u = MIN / 1000, FH = G.fh * H, fx = G.fs * W, fy = (1 - mirRidge(G, G.fs)) * H + FH * 0.008;
+  // la persona sigue la inclinación de la loma (así los dos pies y la cadera tocan el suelo)
+  const sl = (mirRidge(G, G.fs + 0.06) - mirRidge(G, G.fs - 0.02)) * H / (0.08 * W), ang = -Math.atan(sl);
+  const P = (a, b) => [fx + (a * Math.cos(ang) - b * Math.sin(ang)) * FH, fy - (a * Math.sin(ang) + b * Math.cos(ang)) * FH];
+  // una pieza del cuerpo: un tubo que se adelgaza de un extremo al otro (muslo, canilla, brazo…)
+  const tube = (a, b, ra, rb) => { const [ax, ay] = P(...a), [bx, by] = P(...b), d = Math.hypot(bx - ax, by - ay), t = Math.atan2(by - ay, bx - ax), RA = ra * FH, RB = rb * FH, k = Math.asin(Math.max(-1, Math.min(1, (RA - RB) / d)));
+    x.moveTo(ax + Math.cos(t + Math.PI / 2 + k) * RA, ay + Math.sin(t + Math.PI / 2 + k) * RA); x.arc(ax, ay, RA, t + Math.PI / 2 + k, t - Math.PI / 2 - k); x.arc(bx, by, RB, t - Math.PI / 2 - k, t + Math.PI / 2 + k); x.closePath(); };
+  const blob = pts => { const q = pts.map(v => P(...v)); x.moveTo(...q[0]); for (let i = 1; i < q.length - 1; i += 2) x.quadraticCurveTo(...q[i], ...q[i + 1]); x.closePath(); };
+  // de perfil, sentado abrazando las rodillas, mirando al cielo: piezas de atrás (la pierna y el brazo del otro lado) y de adelante
+  const back = () => { x.beginPath(); tube([.012, .1], [.325, .405], .082, .056); tube([.33, .405], [.425, .07], .055, .036); tube([.11, .49], [.29, .35], .045, .036); tube([.29, .35], [.43, .3], .036, .03); };
+  const torso = () => { x.beginPath(); blob([[-.115, .02], [-.16, .06], [-.15, .2], [-.145, .38], [-.08, .52], [-.04, .575], [.02, .585], [.1, .575], [.15, .52], [.18, .45], [.14, .33], [.1, .2], [.08, .06], [.03, .01], [-.115, .02]]);   };                                                                                     // la capucha caída
+  const head = () => { x.beginPath(); tube([.04, .55], [.085, .625], .052, .048);                                                                                  // el cuello
+    blob([[.02, .66], [.0, .74], [.06, .79], [.1, .815], [.15, .785], [.185, .76], [.188, .73], [.205, .715], [.19, .7], [.192, .685], [.178, .673], [.16, .63], [.11, .625], [.05, .615], [.02, .66]]);   // la cara mirando arriba
+    const hair = [[.008, .672], [-.006, .702], [.0, .724], [.004, .75], [.022, .768], [.03, .79], [.052, .8], [.068, .818], [.09, .816], [.11, .826], [.128, .812], [.148, .806], [.158, .79], [.174, .78]];
+    x.moveTo(...P(.03, .64)); for (const q of hair) x.lineTo(...P(...q)); x.lineTo(...P(.15, .75)); x.lineTo(...P(.06, .7)); x.closePath(); };
+  const front = () => { x.beginPath(); tube([.0, .095], [.31, .385], .092, .062); tube([.315, .385], [.4, .055], .062, .04);                                      // muslo y canilla
+    blob([[.37, .055], [.37, .0], [.43, .0], [.5, -.002], [.535, .012], [.53, .045], [.47, .06], [.42, .075], [.37, .055]]); };                                // el tenis
+  const arm = () => { x.beginPath(); tube([.1, .48], [.28, .315], .052, .042); tube([.28, .315], [.425, .265], .042, .034); x.moveTo(...P(.425, .265)); x.arc(...P(.432, .262), .042 * FH, 0, 7); };   // el brazo de este lado y la mano
+  // cada pieza: primero en el color de la luz, luego en tinta corrida hacia abajo a la izquierda (queda un filo iluminado arriba y a la derecha)
+  const rd = Math.max(1.4, 2.6 * u), part = (fn, a = 1) => { x.save(); fn(); x.fillStyle = rim; x.globalAlpha = a; x.fill(); x.clip(); x.globalAlpha = 1; x.translate(-rd, rd); fn(); x.fillStyle = ink; x.fill(); x.restore(); };
+  // la sombra suave en la hierba
+  { const [sx, sy] = P(.18, 0), g = x.createRadialGradient(sx, sy, 0, sx, sy, FH * .45); g.addColorStop(0, 'rgba(0,0,0,.45)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.save(); x.translate(sx, sy); x.scale(1, .18); x.translate(-sx, -sy); x.fillStyle = g; x.fillRect(sx - FH * .5, sy - FH * .5, FH, FH); x.restore(); }
+  part(back, .4); part(torso); part(head); part(front); part(arm);
+  // el poste, más lejos y detrás de la loma (la loma le tapa la base); solo se ve de la loma para arriba
+  const px0 = G.ps * W, py0 = (1 - mirRidge(G, G.ps)) * H + G.ph * H * 0.22, ph = G.ph * H, pw = Math.max(2.5, 7 * u);
+  x.save(); x.beginPath(); x.moveTo(0, 0); x.lineTo(W, 0); for (let i = 40; i >= 0; i--) { const ss = i / 40; x.lineTo(ss * W, (1 - mirRidge(G, ss)) * H); } x.closePath(); x.clip();
+  const pole = (col_, dx, dy) => { x.fillStyle = col_; x.save(); x.translate(dx, dy); x.beginPath(); x.moveTo(px0 - pw, py0); x.lineTo(px0 - pw * .7, py0 - ph); x.lineTo(px0 + pw * .7, py0 - ph); x.lineTo(px0 + pw, py0); x.closePath(); x.fill();
+    x.fillRect(px0 - ph * .15, py0 - ph * .9, ph * .3, pw * 1.1); x.fillRect(px0 - ph * .1, py0 - ph * .79, ph * .2, pw * .9);
+    for (const k of [-.13, 0, .13]) x.fillRect(px0 + ph * k - pw * .35, py0 - ph * .9 - pw * 1.4, pw * .7, pw * 1.4); x.restore(); };
+  pole(rim, rd * .7, -rd * .7); pole(ink, 0, 0); x.restore();
+  return { FH, P, wires: [[px0 - ph * .13, py0 - ph * .9 - pw * 1.4], [px0, py0 - ph * .9 - pw * 1.4], [px0 + ph * .13, py0 - ph * .9 - pw * 1.4]] };
+}
+function drawMirador(dt) {
+  if (!glInit()) { drawInfinity(dt); return; }
+  if (!mir.prog) miradorSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), vertical = W < H, asp = W / H, M = mir, gl = GLX.gl, G = vertical ? MIR_GEO.v : MIR_GEO.h, u = MIN / 1000;
+  const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
+  [M.t[0], M.t[1], M.t[2]] = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)]; springTo(M.lv, M.v, M.t, dt, 140, 0.7);
+  M.act = audible ? 2.5 : Math.max(0, M.act - dt); M.go += ((M.act > 0 ? 1 : 0) - M.go) * (1 - Math.pow(0.02, dt)); M.b += dt / per * M.go;
+  M.vo += (Math.min(1, voice * 1.5) - M.vo) * (1 - Math.pow(0.08, dt)); M.wind += ((0.25 + Math.min(1, energy * 2.5)) * M.go - M.wind) * (1 - Math.pow(0.15, dt));
+  if (pulse.on) { M.beats++; if (!M.star && (M.beats % 8 === 4 || (P > 0.7 && M.beats % 4 === 2))) M.star = { x: (0.1 + Math.random() * 0.5) * asp, y: 0.78 + Math.random() * 0.16, t: 0.001 }; }
+  if (M.star) { M.star.t += dt / (per * 1.4) * M.go; if (M.star.t >= 1) M.star = null; }
+  const trainPh = (M.b % 32) / 12, train = trainPh < 1 ? Math.sin(Math.PI * Math.min(1, trainPh * 6)) * Math.sin(Math.PI * Math.min(1, (1 - trainPh) * 6)) : 0;
+  // los colores: los de la portada, llevados a un cielo de noche (o de hora azul) que siempre se vea bonito
+  const tone = (c, l, sMin = 50) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, Math.min(85, s_)), l)).map(v => v / 255); };
+  const blend = (a, b, k) => a.map((v, j) => v * (1 - k) + b[j] * k);
+  const top = night ? blend(tone(mix(0.15), 6), [0.008, 0.014, 0.05], 0.6) : blend(tone(mix(0.15), 24), [0.07, 0.1, 0.32], 0.5);
+  const mid = night ? blend(tone(mix(0.5), 16), [0.05, 0.08, 0.22], 0.55) : blend(tone(mix(0.5), 46), [0.36, 0.3, 0.62], 0.45);
+  const hor = night ? blend(tone(mix(0.9), 30, 60), [0.2, 0.14, 0.32], 0.5) : blend(tone(mix(0.9), 66, 70), [1, 0.62, 0.48], 0.45);
+  const warm = [1, 0.72, 0.42], melC = melodyColor().map(v => v / 255), halo = melC.map((v, j) => v * 0.4 * (0.4 + M.vo) + (night ? [0.55, 0.65, 1] : [1, 0.75, 0.6])[j] * 0.55);
+  const mR = vertical ? 0.065 * asp : 0.075, mx = (vertical ? 0.76 : 0.8) * asp, my = vertical ? 0.84 : 0.8;
+  const [cw, ch] = glCanvas(1), p = mir.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, night ? 1 : 0.4);
+  gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uVo, M.vo); gl.uniform1f(p.u.uWind, M.wind); gl.uniform1f(p.u.uHz, G.hz); gl.uniform1f(p.u.uFire, (night ? 1 : 0.5) * (0.25 + 0.5 * M.vo + 0.6 * Math.min(1, M.lv[1])) * M.go);
+  gl.uniform3f(p.u.uLv, ...[0, 1, 2].map(k => Math.max(0, Math.min(1.3, M.lv[k])))); gl.uniform3f(p.u.uMoon, mx, my, mR);
+  gl.uniform3fv(p.u.uTop, top); gl.uniform3fv(p.u.uMid, mid); gl.uniform3fv(p.u.uHor, hor); gl.uniform3fv(p.u.uWarm, warm); gl.uniform3fv(p.u.uHalo, halo);
+  gl.uniform3f(p.u.uStar, M.star ? M.star.x : 0, M.star ? M.star.y : 0, M.star ? M.star.t : 0); gl.uniform3f(p.u.uTrain, Math.min(1, trainPh), 0, train);
+  gl.uniform4f(p.u.uR, G.r0, G.r1, G.rc, G.rw);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  bloom(GLX.c, night ? 0.32 + P * 0.08 : 0.18);
+  drawMoon(mx * H, (1 - my) * H, mR * H, halo, night);
+  // las siluetas, a contraluz
+  const ink = rgba(top.map(v => v * 255 * 0.45 + 2), 1), rim = rgba(halo.map((v, j) => Math.min(255, (v * 0.7 + hor[j] * 0.3) * 255 * (night ? 0.75 : 1))), 1);
+  const key = [W, H, night, ink, rim].join();
+  if (M.silKey !== key) { M.silKey = key; M.geo = mirSilhouettes(G, ink, rim); }
+  const S = M.geo;
+  // los cables del poste: cuelgan hasta el otro poste, fuera de la pantalla, y se mecen un poco con el viento
+  ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1, 1.6 * u); ctx.globalAlpha = 0.9;
+  S.wires.forEach(([wx, wy], i) => { const ex = -0.06 * W, ey = H * (vertical ? 0.13 : 0.1) + i * 9 * u, sag = H * (0.07 + 0.012 * i) + Math.sin(time * 0.7 + i) * 2 * u * M.wind;
+    ctx.beginPath(); ctx.moveTo(wx, wy); ctx.quadraticCurveTo((wx + ex) / 2, (wy + ey) / 2 + sag, ex, ey); ctx.stroke(); });
+  ctx.globalAlpha = 1;
+  ctx.drawImage(M.sil, 0, 0);
+  // en primer plano, unas hierbas altas en las esquinas, muy oscuras y algo desenfocadas: dan profundidad
+  { ctx.save(); ctx.filter = CAN_BLUR ? `blur(${Math.max(1, 2.5 * u)}px)` : 'none'; ctx.strokeStyle = rgba(top.map(v => v * 255 * 0.25), 1); ctx.lineCap = 'round';
+    for (let i = 0; i < 26; i++) { const left = i < 13, k = (i % 13) / 13, bx = left ? W * (0.0 + k * 0.2) : W * (0.8 + k * 0.22), len = H * (0.06 + 0.1 * ((i * 37) % 11) / 11) * (1 - k * 0.3), sw = Math.sin(time * 1.5 + i) * M.wind * len * 0.12;
+      ctx.lineWidth = (5 + 4 * ((i * 13) % 5) / 5) * u; ctx.beginPath(); ctx.moveTo(bx, H + 4); ctx.quadraticCurveTo(bx + sw * 0.4 + (left ? 1 : -1) * len * 0.1, H - len * 0.6, bx + sw + (left ? 1 : -1) * len * 0.25, H - len); ctx.stroke(); }
+    ctx.restore(); }
+  ctx.restore();
+}
+
 // ================= Escena: Aurora (boreal, sobre un lago) =================
 // Una noche pintada: tres cortinas de aurora que ondulan sobre montañas nevadas y se reflejan en un lago. Cada
 // cortina escucha su parte del sonido (graves, medios, agudos): crece y se enciende con ella; cada bombo manda una
@@ -5960,12 +6186,7 @@ function drawAurora(dt) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   bloom(GLX.c, 0.32 + P * 0.1);
-  { const img = coverClean || coverAny, X = mx * H, Y = (1 - my) * H, R = mR * H * (1 + P * 0.025);
-    ctx.save(); ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.clip();
-    if (img) { try { ctx.drawImage(img, X - R, Y - R, R * 2, R * 2); } catch (e) {} } else { ctx.fillStyle = '#e9e4d6'; ctx.fillRect(X - R, Y - R, R * 2, R * 2); }
-    const gm = ctx.createRadialGradient(X - R * 0.3, Y - R * 0.35, R * 0.15, X, Y, R * 1.02); gm.addColorStop(0, 'rgba(255,255,255,.14)'); gm.addColorStop(0.62, 'rgba(0,0,0,0)'); gm.addColorStop(1, 'rgba(6,10,40,.5)'); ctx.fillStyle = gm; ctx.fillRect(X - R, Y - R, R * 2, R * 2); ctx.restore();
-    const hc = haloC.map(v => Math.min(255, v * 255 + 70)), ge = ctx.createRadialGradient(X, Y, R * 0.9, X, Y, R * 1.12); ge.addColorStop(0, rgba(hc, 0)); ge.addColorStop(0.45, rgba(hc, 0.38)); ge.addColorStop(1, rgba(hc, 0));
-    ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = ge; ctx.fillRect(X - R * 1.2, Y - R * 1.2, R * 2.4, R * 2.4); }
+  drawMoon(mx * H, (1 - my) * H, mR * H * (1 + P * 0.025), haloC, true);   // una luna pintada (no la portada)
   ctx.restore();
 }
 
@@ -6150,18 +6371,12 @@ function drawLight(dt) {
   gl.uniform3f(p.u.uMoon, mx, my, mR * (1 + P * 0.025)); const cool = (c, nv, k) => night ? c.map((v, j) => v * (1 - k) + nv[j] * k) : c;   // de noche los tonos de la portada se enfrían hacia el azul profundo
   gl.uniform3fv(p.u.uC0, cool(tone(mix(0.1), night ? 5 : 34), [0.012, 0.02, 0.06], 0.6)); gl.uniform3fv(p.u.uC1, cool(tone(mix(0.5), night ? 11 : 56), [0.04, 0.07, 0.19], 0.6)); gl.uniform3fv(p.u.uC2, cool(tone(mix(0.9), night ? 20 : 74, 70), [0.1, 0.16, 0.36], 0.55));
   gl.uniform3fv(p.u.uWarm, warm); gl.uniform3fv(p.u.uHalo, haloC); gl.uniform3fv(p.u.uAcc, tone(RGB[0], 42, 70)); gl.uniform3f(p.u.uStar, L.star ? L.star.x : 0, L.star ? L.star.y : 0, L.star ? L.star.t : 0);
-  if (!L.cliffTex) { L.cliffTex = gl.createTexture(); glUpload(L.cliffTex, faroCliff()); }
+  if (!L.cliffTex) { L.cliffTex = gl.createTexture(); glUpload(L.cliffTex, L.cliffCanvas || faroCliff()); }
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, L.cliffTex); gl.uniform1i(p.u.uCliff, 6); gl.activeTexture(gl.TEXTURE0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   bloom(GLX.c, night ? 0.3 + P * 0.1 : 0.14);
-  // la luna es la portada: con el borde difuminado en su halo y la sombra suave de una esfera
-  { const img = coverClean || coverAny, X = mx * H, Y = (1 - my) * H, R = mR * H * (1 + P * 0.025);
-    ctx.save(); ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.clip();
-    if (img) { try { ctx.drawImage(img, X - R, Y - R, R * 2, R * 2); } catch (e) {} } else { ctx.fillStyle = rgba(warm.map(v => v * 255), 1); ctx.fillRect(X - R, Y - R, R * 2, R * 2); }
-    const gm = ctx.createRadialGradient(X - R * 0.3, Y - R * 0.35, R * 0.15, X, Y, R * 1.02); gm.addColorStop(0, 'rgba(255,255,255,.14)'); gm.addColorStop(0.62, 'rgba(0,0,0,0)'); gm.addColorStop(1, `rgba(${night ? '6,10,40' : '90,30,10'},.5)`); ctx.fillStyle = gm; ctx.fillRect(X - R, Y - R, R * 2, R * 2); ctx.restore();
-    const hc = haloC.map(v => Math.min(255, v * 255 + 70)), ge = ctx.createRadialGradient(X, Y, R * 0.9, X, Y, R * 1.12); ge.addColorStop(0, rgba(hc, 0)); ge.addColorStop(0.45, rgba(hc, night ? 0.38 : 0.6)); ge.addColorStop(1, rgba(hc, 0));
-    ctx.globalCompositeOperation = night ? 'lighter' : 'source-over'; ctx.fillStyle = ge; ctx.fillRect(X - R * 1.2, Y - R * 1.2, R * 2.4, R * 2.4); }
+  drawMoon(mx * H, (1 - my) * H, mR * H * (1 + P * 0.025), haloC, night);   // una luna pintada (no la portada)
   ctx.restore();
 }
 
@@ -7072,11 +7287,14 @@ function glCoverBind(p, unit = 5) {
 // al grabar: si el equipo no llega a 30 cuadros por segundo, las capas de luz suave (que no tienen bordes nítidos)
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0;
+const REC_SHARP = new Set(['ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'capsules', 'columns', 'icons', 'tubos', 'circles']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
   if (ms > budget * 0.8) { recSlow += dt; recFast = 0; } else if (ms < budget * 0.42) { recFast += dt; recSlow = 0; }
-  if (recSlow > 0.7 && recGL > 0.55) { recGL = Math.max(0.55, recGL - 0.1); recSlow = 0; }
+  const floor = REC_SHARP.has(state.mode) ? 1 : 0.8;   // las escenas con detalle fino (bordes, texto, figuras) no se ablandan: se verían pixeladas
+  if (recGL < floor) recGL = floor;
+  if (recSlow > 0.7 && recGL > floor) { recGL = Math.max(floor, recGL - 0.1); recSlow = 0; }
   else if (recFast > 4 && recGL < 1) { recGL = Math.min(1, recGL + 0.1); recFast = 0; }
 }
 function glCanvas(q) {
@@ -11616,7 +11834,7 @@ function drawRuta(dt) {
   const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];
   const hor = A.hor || sat(warm, 62).map((v, i) => v * 0.9 + [0.1, 0.03, 0][i]);
   const hz = 0.58, wphi = groove * Math.PI / 2, wa0 = -1.42, wa1 = 0.14, wr1 = Lo.wl / H, wr0 = wr1 * 0.42;
-  const [cw, ch] = glCanvas(0.8)   /* la escena es pesada: se dibuja algo más pequeña (la cabina va aparte, nítida) */, p = ruta.prog;
+  const [cw, ch] = glCanvas(recording ? 1 : 0.8)   /* la escena es pesada: en pantalla se dibuja algo más pequeña (la cabina va aparte, nítida); al grabar, completa */, p = ruta.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uPiv, Lo.pivX / H, 1 - Lo.pivY / H); gl.uniform4f(p.u.uWp, wa0, wa1, wr0, wr1);
   gl.uniform1f(p.u.uDist, ruta.dist % 13440); gl.uniform1f(p.u.uCurve, curve); gl.uniform1f(p.u.uRoll, ruta.roll); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
@@ -11630,7 +11848,7 @@ function drawRuta(dt) {
   if (ruta.star) { ruta.star.t += dt / (per * 1.6) * go; if (ruta.star.t >= 1) ruta.star = null; }
   gl.uniform3f(p.u.uStar, ruta.star ? ruta.star.x : 0, ruta.star ? ruta.star.y : 0, ruta.star ? ruta.star.t : 0);
   gl.uniform4fv(p.u['uOn[0]'], ruta.on);
-  if (!ruta.treeTex) { ruta.treeTex = gl.createTexture(); glUpload(ruta.treeTex, rutaTreeAtlas()); }
+  if (!ruta.treeTex) { ruta.treeTex = gl.createTexture(); glUpload(ruta.treeTex, ruta.treeAtlas || rutaTreeAtlas()); }
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, ruta.treeTex); gl.uniform1i(p.u.uTreeTex, 6); gl.activeTexture(gl.TEXTURE0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -12031,7 +12249,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
@@ -12123,6 +12341,7 @@ function render(now) {
   liveUI();
 }
 requestAnimationFrame(frame);
+setTimeout(glWarmup, 1500);   // prepara en segundo plano las escenas pesadas: al abrirlas ya no se traba
 </script>
 </body>
 </html>
