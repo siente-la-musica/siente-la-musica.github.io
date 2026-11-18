@@ -791,7 +791,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 153</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 154</div>
     </div>
   </div>
   <div class="group">
@@ -5983,7 +5983,7 @@ function drawDunas(dt) {
 // sonido (su luz interior crece con ella), cada golpe manda una ola desde el centro que las enciende, y los colores giran despacio
 // con la canción (quietos en silencio). ----------
 PAI.dot = { wave: 9 };
-const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave, uVo, uGo, uHi, uIr; uniform vec3 uLv, uPal[6]; uniform float uBand[24];
+const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave, uVo, uGo, uHi, uIr, uBn, uEn; uniform vec3 uLv, uPal[6]; uniform float uBand[24];
   ${GLSL_NOISE}
   ${GLSL_COVER}
   vec3 pal(float t) { t = abs(fract(t * .5) * 2. - 1.) * 4.999; int i = int(t);   // va y vuelve por la paleta: nunca salta del último color al primero
@@ -5997,15 +5997,15 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
     float hsh = h(id * 1.37 + 3.1), hsh2 = h(id * 2.11 + 7.7);
     int bi = int(mod(id.x * 5. + id.y * 3., 24.)); float lv = uBand[bi], dc = length(cc - vec2(asp * .5, .5));
     float wv = exp(-pow((dc - uWave) / .14, 2.)) * uP;                                             // la ola del golpe
-    float hs = cell * (.455 + .02 * lv * uGo + .018 * wv), rr = hs * .34, sd = sdRB(f, vec2(hs), rr);   // cada pieza se hincha un poco con su parte y con la ola
+    float hs = cell * (.45 + .025 * lv * uGo + .04 * wv), rr = hs * .34, sd = sdRB(f, vec2(hs), rr);   // cada pieza se hincha con su parte y con la ola del golpe
     // la luz que hay detrás (la portada, muy clara): se ve por las rendijas y entra por los bordes de cada pieza
     vec3 back = uCovK > 0. ? texture(uCov, (vUv - uCovR.xy) / uCovR.zw).rgb : vec3(1.);
     vec3 bl = mix(vec3(1., .97, .98), back, .3);
-    float bk = .3 + 1.1 * lv * uGo + .8 * wv + .25 * uVo;   // en lo suave entra poca luz; con su parte del sonido, se encienden                                          // cuánta luz entra: su parte del sonido y la ola
+    float bk = .25 + 1.2 * lv * uGo + 1.3 * wv + .25 * uVo;   // en lo suave entra poca luz; con su parte del sonido, se encienden                                          // cuánta luz entra: su parte del sonido y la ola
     // los colores de la pieza: dos o tres tonos vecinos, vivos, en un degradado que se tuerce despacio
     float c0 = hsh + uIr * .2 + float(int(id.x + id.y * 2.)) * .19;
     vec3 cA = pal(c0), cB = pal(c0 + .12), cC = pal(c0 + .24);
-    vec2 u = f / hs; float an = hsh2 * 6.2832 + uIr * .5; vec2 dir = vec2(cos(an), sin(an));
+    vec2 u = f / hs; float an = hsh2 * 6.2832 + uIr * 1.6; vec2 dir = vec2(cos(an), sin(an));   // el degradado gira con la canción
     float t = dot(u, dir);   // un degradado limpio (la ondulación marcaba rayitas)
     float m1 = smoothstep(-.9, .2, t), m2 = smoothstep(.1, 1., t) * .7;
     vec3 vm = mix(mix(cA, cB, m1), cC, m2); float vk = 1. + .9 * (m1 * (1. - m1) + m2 * (1. - m2)), vl = dot(vm, vec3(.3, .59, .11));
@@ -6021,6 +6021,11 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
       vec3 c = mix(deep, vivid, smoothstep(.0, 1., lightSide * .8 + .2 * e));
       c = mix(c, mix(vivid * 1.3 + .05, bl, .5), e * (.35 + .5 * bk));
       c *= .78 + .3 * min(bk, 1.2);                                                                   // la pieza entera se enciende con la música                               // el borde, luminoso y pastel
+      // la luz de adentro: una mancha clara que salta a un lugar nuevo en cada golpe (y se aviva con su parte del sonido)
+      float kb = floor(uBn), fb = fract(uBn); fb = fb * fb * (3. - 2. * fb);
+      vec2 q0 = vec2(h(id + kb * 1.71), h(id * 1.3 + kb * 2.37)) * 1.1 - .55, q1 = vec2(h(id + (kb + 1.) * 1.71), h(id * 1.3 + (kb + 1.) * 2.37)) * 1.1 - .55;
+      vec2 lp = mix(q0, q1, fb); float spot = exp(-dot(u - lp, u - lp) * 1.9);
+      c = mix(c, mix(vivid * 1.2, vec3(1.), .55), clamp(spot * (.1 + .75 * lv * uGo + .5 * wv), 0., .65));
       c += vivid * exp(-s / (hs * .035)) * .35 * bk;                                                 // un filo de color puro, encendido
       c = min(c, vec3(1.));
       float a_ = smoothstep(px, -px, sd);
@@ -6039,14 +6044,15 @@ function drawPuntosSuave(dt) {
   S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.3) * S.go; S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.03, dt)); }
   if (pulse.on) S.wave = 0; S.wave += dt * 0.8;
   S.hi = Math.max((S.hi || 0) * Math.pow(0.02, dt), hits.hat ? 1 : 0, Math.min(1, S.lv[2]) * 0.6);
-  S.ir = (S.ir || 0) + dt * S.go * (0.02 + 0.18 * S.en) + (pulse.on ? 0.02 : 0);   // los colores giran con la canción (quietos en silencio)
-  // la paleta: los tres colores de la portada y tres vecinos (corridos en el círculo de color), vivos y luminosos
-  const hues = []; [0.1, 0.5, 0.9].forEach(t => { const [h_, s_] = hexToHsl(rgbToHex(...mix(t).map(Math.round))); hues.push([h_, s_], [h_ + 34, s_]); });
-  hues.forEach(x => x[0] = ((x[0] % 360) + 360) % 360); hues.sort((a, b) => a[0] - b[0]);   // ordenados por tono: vecinos que combinan
-  const pal = new Float32Array(18); hues.forEach(([hh, s_], k) => pal.set(hexToRgb(hsl(hh, Math.max(82, Math.min(100, s_ + 15)), night ? 50 : 54)).map(v => v / 255), k * 3));
+  S.ir = (S.ir || 0) + dt * S.go * (0.03 + 0.3 * S.en) + (pulse.on ? 0.05 : 0);
+  if (pulse.on && S.go > 0.3) { S.bn = Math.floor(S.bn || 0) + 1; S.bt = 0; } S.bt = Math.min(1, (S.bt ?? 1) + dt / (S.per * 0.55));   // la luz de adentro salta en cada golpe   // los colores giran con la canción (quietos en silencio)
+  // la paleta de la referencia (rojo, naranja, magenta, morado, azul y un verde azulado profundo), cada tono con su propia
+  // luminosidad para que ninguno sea chillón; la portada la tiñe un poco y la luz de atrás es la portada misma
+  const cov0 = mix(0.5).map(v => v / 255), REF = [[352, 92, 50], [24, 95, 52], [322, 85, 52], [272, 75, 54], [214, 88, 50], [172, 80, 34]];
+  const pal = new Float32Array(18); REF.forEach(([hh, ss, ll], k) => { const c = hexToRgb(hsl(hh, ss, ll - (night ? 4 : 0))).map(v => v / 255); pal.set(c.map((v, j) => v * 0.85 + cov0[j] * 0.15), k * 3); });
   paiRun(S, PUNTOS_FS, (gl, p) => { glCoverBind(p); gl.uniform3fv(p.u['uPal[0]'], pal);
     gl.uniform1fv(p.u['uBand[0]'], S.bl); gl.uniform1f(p.u.uWave, S.wave); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.wave / 1.6)); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uGo, S.go);
-    gl.uniform1f(p.u.uHi, S.hi); gl.uniform1f(p.u.uIr, S.ir); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
+    gl.uniform1f(p.u.uHi, S.hi); gl.uniform1f(p.u.uIr, S.ir); gl.uniform1f(p.u.uBn, Math.floor(S.bn || 0) - 1 + S.bt); gl.uniform1f(p.u.uEn, S.en); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
 // ---------- Anillo: un aro de luz fino sobre un cielo limpio que deja ver la portada; adentro, el mismo cielo un poco más hondo.
