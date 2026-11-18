@@ -2576,7 +2576,7 @@ function liveBgTick(dt) {
 function makeCoverColor(img) {
   const c = document.createElement('canvas'); c.width = c.height = 320;
   const x = c.getContext('2d'); x.imageSmoothingQuality = 'high';
-  if (CAN_BLUR) x.filter = 'blur(2.5px) saturate(1.15)';   // apenas suave: la portada se reconoce
+  if (CAN_BLUR) x.filter = 'blur(5px) saturate(1.15)';   // suave: la portada se reconoce, pero sin líneas marcadas al ampliarla
   x.drawImage(img, -8, -8, 336, 336); x.filter = 'none';
   return c;
 }
@@ -5272,8 +5272,8 @@ function fluidSetup() {
         if (uLiquid > .5) {
           // degradado líquido, liso como un mapa de calor: se suaviza la tinta (sin grano), y su intensidad recorre
           // una escala de colores de la canción (del fondo hondo al núcleo encendido) en anillos que se funden
-          vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 2.; vec3 sm = vec3(0.); float wsum = 0.;
-          for (int i = -2; i <= 2; i++) for (int j = -2; j <= 2; j++) { float w = exp(-float(i * i + j * j) * .35); sm += texture(uTexture, vUv + vec2(i, j) * tx).rgb * w; wsum += w; }
+          vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 1.1; vec3 sm = vec3(0.); float wsum = 0.;   // paso de ~1 texel: suave y sin rejilla
+          for (int i = -3; i <= 3; i++) for (int j = -3; j <= 3; j++) { float w = exp(-float(i * i + j * j) * .16); sm += texture(uTexture, vUv + vec2(i, j) * tx).rgb * w; wsum += w; }
           c = sm / wsum;
           float m = max(c.r, max(c.g, c.b)), t = 1. - exp(-m * 1.75);   // la escala se llena despacio: hay matices antes del blanco
           vec3 ink = c / max(m, 1e-4);
@@ -5957,153 +5957,184 @@ function drawDunas(dt) {
     gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uFlow, 0.5 + S.en); });
 }
 
-// ================= Abstractas suaves (Puntos, Anillo, Bailarín, Arco) =================
-// Mismo cuidado que los paisajes: luz suave, degradados largos, un brillo fino en el borde, desenfoque y el punteado de papel.
+// ================= Abstractas suaves (Cuencos, Anillo, Bailarín, Arco) =================
+// Las cuatro dejan ver el fondo vivo con la portada (como el resto) y responden fuerte y claro a la canción.
 
-// ---------- Puntos: una cuadrícula de círculos hundidos (como cuencos) sobre un campo de color que fluye con los colores de la
-// portada. Cada círculo escucha su parte del sonido y se hunde y se enciende con ella; cada golpe manda una onda desde el centro. ----------
+// ---------- Cuencos: gotas de vidrio líquido sobre la portada. Cada lente refracta y amplía lo que tiene detrás, con el borde
+// de luz, la dispersión de color y la sombra suave del vidrio. Cada gota escucha su parte del sonido y se hincha con ella; cada
+// golpe manda una ola desde el centro que las infla una tras otra, y la voz les enciende un brillo de color por dentro. ----------
 PAI.dot = { wave: 9 };
-const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave; uniform vec3 uLv, uC0, uC1, uC2, uBg; uniform float uBand[24];
+const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave, uVo, uGo; uniform vec3 uLv, uC0, uC1, uC2; uniform float uBand[24];
   ${GLSL_NOISE}
-  vec3 field(vec2 p) { float a = fbm(p * 1.3 + vec2(uT * .04, -uT * .03)), b = fbm(p * 1.1 + 7. - vec2(uT * .03, uT * .05));
-    vec3 c = mix(uC0, uC1, smoothstep(.3, .7, a)); return mix(c, uC2, smoothstep(.45, .75, b) * .8); }
+  ${GLSL_COVER}
+  vec3 cov(vec2 q) { return uCovK > 0. ? texture(uCov, (q - uCovR.xy) / uCovR.zw).rgb : mix(uC0, uC1, q.y); }
   void main() {
     float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y);
-    float cols = asp < 1. ? 7. : 12., cell = asp / cols; vec2 g = p / cell, id = floor(g), f = fract(g) - .5;
+    float cols = asp < 1. ? 4. : 7., cell = asp / cols; vec2 g = p / cell, id = floor(g), f = fract(g) - .5;
     vec2 cc = (id + .5) * cell; float dc = length(cc - vec2(asp * .5, .5));
-    int bi = int(mod(id.x * 3. + id.y * 5., 24.)); float lv = uBand[bi];
-    float wv = exp(-pow((dc - uWave) / .08, 2.)) * uP;                                                // la onda del golpe
-    float k = clamp(.25 + .7 * lv + .5 * wv, 0., 1.4);
-    vec3 base = field(cc * 1.2), bg = mix(uBg, field(p * 1.2), .3);
-    float r = .41, d = length(f) - r, aa = 1.5 / (cell * uRes.y);
-    vec3 col = bg;
-    // la sombra que el borde proyecta afuera (suave) y el cuenco por dentro: oscuro arriba a la izquierda, claro abajo a la derecha
-    if (d < aa) { vec2 n2 = f / r; float z = sqrt(max(0., 1. - dot(n2, n2)));
-      // hundido: la pared de arriba queda en sombra y la de abajo recibe la luz; el fondo del cuenco se enciende con su sonido
-      float wall = smoothstep(.55, 1., length(n2)), l = clamp(.5 + .5 * dot(normalize(vec3(n2, z * 1.6)), normalize(vec3(-.45, .55, .7))), 0., 1.);
-      vec3 floorC = mix(bg * .9, base * (.9 + .35 * k) + .05 * k, .35 + .6 * min(k, 1.));
-      vec3 inner = mix(floorC, mix(bg * .62, bg * 1.08, l), wall);
-      inner *= 1. - .22 * smoothstep(.0, 1., (n2.y + .2)) * (1. - wall * .5) * (1. - .3 * k);              // la sombra que el borde de arriba deja adentro
-      inner += vec3(1.) * smoothstep(.014, .0, abs(d + .006)) * smoothstep(-.1, .6, -f.y - f.x * .3) * .22;   // el filo de luz del borde de abajo
-      col = mix(col, inner, smoothstep(aa, -aa, d)); }
-    col *= 1. - uNight * .2;
-    ${PAI_GRAIN}
-    o = vec4(col, 1.);
+    int bi = int(mod(id.x * 5. + id.y * 3., 24.)); float lv = uBand[bi];
+    float wv = exp(-pow((dc - uWave) / .1, 2.)) * uP;                                           // la ola del golpe
+    float r = .3 + .12 * lv + .07 * wv + .02 * uLv.x, d = length(f) - r, aa = 1.2 / (cell * uRes.y);
+    vec4 o_ = vec4(0.);
+    // la sombra del vidrio sobre la portada: suave, corrida hacia abajo
+    float sh = smoothstep(.16, -.05, length(f - vec2(0., -.05)) - r) * .28;
+    o_ = vec4(vec3(0.), sh * (1. - smoothstep(aa, -aa, d)));
+    if (d < aa) {
+      vec2 n2 = f / r; float rr = dot(n2, n2), z = sqrt(max(0., 1. - rr));
+      // refracción: amplía el centro y dobla los bordes hacia afuera, cada color un poco distinto (dispersión)
+      vec2 base = vec2((cc.x + f.x * cell * .45) / asp, cc.y + f.y * cell * .45), bend = n2 * (1. - z) * cell * .35 * vec2(1. / asp, 1.);
+      vec3 c = vec3(cov(base - bend * 1.06).r, cov(base - bend).g, cov(base - bend * .94).b);
+      c = c * 1.04 + .02;                                                             // el vidrio aclara un poco
+      vec3 tint = mix(uC0, uC2, fract(id.x * .37 + id.y * .21));
+      c += tint * (.04 + .55 * lv * uGo + .3 * wv) * smoothstep(.2, 1., rr) * (1. - .5 * uNight * 0.);   // el color del sonido se junta en el borde
+      c += mix(tint, vec3(1.), .5) * exp(-rr * 3.) * uVo * .25;                                     // la voz: un brillo adentro
+      float fres = pow(rr, 3.);                                                                  // el borde (fresnel) brilla
+      c = mix(c, vec3(1.), fres * .22);
+      c += vec3(1.) * smoothstep(.02, .0, abs(d + .012)) * (.35 + .4 * smoothstep(-.2, .6, -n2.x * .5 + n2.y)) * (.7 + .5 * wv);   // el filo de luz
+      vec2 sp = n2 - vec2(-.38, .42); c += vec3(1.) * exp(-dot(sp, sp) * 26.) * .55;              // el reflejo de la ventana
+      c *= 1. - .18 * smoothstep(.0, 1., -n2.y) * rr;                                              // abajo, un poco más hondo
+      float a = smoothstep(aa, -aa, d);
+      o_ = vec4(c * a + o_.rgb * (1. - a), a + o_.a * (1. - a));
+    }
+    vec3 col = o_.rgb; ${PAI_GRAIN}
+    o = vec4(col * step(.001, o_.a), o_.a);
   }`;
 function drawPuntosSuave(dt) {
   if (!glInit()) { drawSakura(dt); return; }
-  const S = PAI.dot, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
-  S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = bandX(k0, k0 + 3); S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.002 : 0.08, dt)); }
-  if (pulse.on) S.wave = 0; S.wave += dt * 0.55;
-  const c = k => paiTone(mix([0.12, 0.5, 0.88][k % 3]), night ? 46 : 60, 55, 90);
-  paiRun(S, PUNTOS_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform3fv(p.u.uBg, night ? [0.06, 0.06, 0.09] : [0.93, 0.92, 0.95]);
-    gl.uniform1fv(p.u['uBand[0]'], S.bl); gl.uniform1f(p.u.uWave, S.wave); gl.uniform1f(p.u.uP, Math.min(1, S.wave < 1.5 ? 1 - S.wave / 1.5 : 0)); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
+  const S = PAI.dot, night = state.theme === 'dark'; paiLevels(S, dt);
+  S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.25); S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.04, dt)); }
+  if (pulse.on) S.wave = 0; S.wave += dt * 0.9;
+  const c = k => paiTone(mix([0.12, 0.5, 0.88][k % 3]), night ? 62 : 58, 60, 95);
+  paiRun(S, PUNTOS_FS, (gl, p) => { glCoverBind(p); gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2));
+    gl.uniform1fv(p.u['uBand[0]'], S.bl); gl.uniform1f(p.u.uWave, S.wave); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.wave / 1.6)); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uGo, S.go); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
-// ---------- Anillo: un aro de luz fino sobre un cielo limpio; adentro el mismo cielo, un poco más hondo. Su borde se enciende en
-// arcoíris (con los colores de la portada) que gira con la canción; el golpe lo aviva y la voz baña de luz el espacio de abajo. ----------
-PAI.ring = { rot: 0 };
-const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2;
+// ---------- Anillo: un eclipse de luz sobre la portada. Adentro, la portada en sombra; el aro, fino y blanco, con su corona de
+// rayos que se estira con la energía y un borde de arcoíris (los colores de la portada) que gira con la melodía. Cada golpe lo
+// enciende y suelta ondas de luz que se abren hacia afuera, con un destello horizontal como de lente. ----------
+PAI.ring = { rot: 0, echo: [9, 9, 9], ei: 0 };
+const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn, uFl; uniform vec3 uLv, uC0, uC1, uC2, uEcho;
   ${GLSL_NOISE}
   void main() {
-    float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, asp < 1. ? .58 : .55);
-    vec3 col = mix(uSky1, uSky0, smoothstep(0., 1., uv.y));
-    float R = min(asp, 1.) * .31 * (1. + .015 * uP + .01 * uLv.x), d = length(p - c), a = atan(p.y - c.y, p.x - c.x);
-    col += mix(uC1, vec3(1.), .5) * exp(-pow((p.y - c.y + R * 1.1) / (R * .9), 2.)) * exp(-pow((p.x - c.x) / (R * .9), 2.)) * (.12 + .3 * uVo);   // la luz que cae abajo
-    // el borde de colores: un arcoíris suave que da la vuelta, más fuerte abajo y a la derecha
+    float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, .55);
+    float R = min(asp, 1.) * .3 * (1. + .07 * uLv.x + .04 * uP), d = length(p - c), a = atan(p.y - c.y, p.x - c.x);
     float t = fract((a + uRot) / 6.2832);
     vec3 rb = t < .33 ? mix(uC0, uC1, t * 3.) : t < .66 ? mix(uC1, uC2, (t - .33) * 3.) : mix(uC2, uC0, (t - .66) * 3.);
-    float side = .35 + .65 * smoothstep(.3, -.9, sin(a) * .8 + cos(a) * -.4);
-    col += mix(rb, vec3(1.), .25) * exp(-pow((d - R) / (R * .09), 2.)) * side * (.55 + .5 * uP + .3 * uLv.y);
-    col += mix(rb, vec3(1.), .5) * exp(-max(d - R, 0.) / (R * .25)) * step(R, d) * side * .22;
-    if (d < R) col = mix(col, col * .92 + uSky0 * .06, smoothstep(R, R * .9, d));                          // adentro, el cielo un poco más hondo
-    col += vec3(1.) * exp(-pow((d - R) / (1.6 * px), 2.)) * (.65 + .35 * uP);                               // el filo blanco, muy fino
-    col += vec3(1.) * exp(-pow((d - R * .985) / (1.2 * px), 2.)) * .25;
-    col *= 1. - .25 * smoothstep(.55, 1.15, length((vUv - .5) * vec2(1., .9)) * 1.25);
+    // la sombra: un velo sobre la portada que se hace hondo adentro del aro (de noche más)
+    float veil = mix(uNight > .5 ? .35 : .15, uNight > .5 ? .88 : .7, smoothstep(R * 1.02, R * .9, d));
+    veil = max(veil, .5 * smoothstep(.5, 1.2, length((vUv - .5) * vec2(1., .9)) * 1.3));
+    vec3 L = vec3(0.);
+    // la corona: rayos finos que salen del aro, más largos con la energía
+    float ray = .55 + .45 * n(vec2(a * 9. + uRot * 2., uT * .3)) * n(vec2(a * 23. - uRot, 3.));
+    L += mix(rb, vec3(1.), .35) * exp(-max(d - R, 0.) / (R * (.06 + .35 * uEn * ray))) * step(R, d) * (.35 + .6 * uP + .4 * uLv.y);
+    // el borde de colores y el aro blanco, finísimo
+    L += mix(rb, vec3(1.), .2) * exp(-pow((d - R) / (R * (.04 + .03 * uLv.x)), 2.)) * (.9 + .9 * uP);
+    L += vec3(1.) * exp(-pow((d - R) / (1.4 * px), 2.)) * (.8 + .6 * uP);
+    L += vec3(1.) * exp(-max(R - d, 0.) / (R * .04)) * step(d, R) * .25 * (1. + uP);
+    // las ondas del golpe
+    for (int i = 0; i < 3; i++) { float e = uEcho[i]; if (e > 1.) continue; float re = R * (1. + e * 1.6);
+      L += mix(rb, vec3(1.), .5) * exp(-pow((d - re) / (R * (.02 + .05 * e)), 2.)) * (1. - e) * (1. - e) * .9; }
+    // el destello de lente: una raya horizontal que cruza el aro en el golpe
+    L += mix(rb, vec3(1.), .6) * exp(-pow((p.y - c.y) / (px * (2. + 6. * uFl)), 2.)) * exp(-abs(p.x - c.x) / (asp * .35)) * uFl * .8 * smoothstep(R * .97, R * 1.08, d);   // por fuera del disco (adentro queda en sombra)
+    L += mix(uC1, vec3(1.), .5) * exp(-d * d / (R * R * 1.4)) * uVo * .18;                          // la voz: un resplandor que llena el centro
+    vec3 col = L; float al = veil;
     ${PAI_GRAIN}
-    o = vec4(col, 1.);
+    o = vec4(col, al);
   }`;
 function drawAnillo(dt) {
   if (!glInit()) { drawEclipse(dt); return; }
   const S = PAI.ring, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
-  S.rot += dt * (0.1 + 0.5 * S.en); S.k = Math.max((S.k || 0) * Math.pow(0.05, dt), pulse.on ? 1 : 0);
-  const sky = night ? [[0.06, 0.12, 0.3], [0.02, 0.04, 0.12]] : [[0.1, 0.45, 0.78], [0.42, 0.7, 0.9]];
-  const c = k => paiTone(mix([0.12, 0.5, 0.88][k % 3]), 66, 70, 95);
-  paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(sky[0], paiTone(mix(0.4), night ? 22 : 45), 0.2)); gl.uniform3fv(p.u.uSky1, paiBl(sky[1], paiTone(mix(0.7), night ? 12 : 70), 0.2));
-    gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform1f(p.u.uP, S.k * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
+  S.rot += dt * (0.08 + 0.9 * S.en) * S.go; S.k = Math.max((S.k || 0) * Math.pow(0.03, dt), pulse.on ? pulse.k || 1 : 0);
+  if (pulse.on) { S.echo[S.ei++ % 3] = 0; S.fl = 1; } S.fl = (S.fl || 0) * Math.pow(0.004, dt);
+  for (let i = 0; i < 3; i++) S.echo[i] += dt / (S.per * 1.6);
+  const c = k => paiTone(mix([0.1, 0.5, 0.9][k]), 64, 75, 100);
+  paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform3fv(p.u.uEcho, S.echo);
+    const nf = state.noFlash ? 0.5 : 1; gl.uniform1f(p.u.uP, S.k * nf); gl.uniform1f(p.u.uFl, S.fl * nf); gl.uniform1f(p.u.uEn, S.en); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
-// ---------- Bailarín: una figura desenfocada, como vista a través de un vidrio esmerilado, que baila con la canción. El cuerpo es
-// del color cálido (o del de la portada) y la cabeza más oscura; cada golpe cambia de paso, los graves la hacen rebotar y la voz
-// le sube los brazos. ----------
+// ---------- Bailarín: una figura desenfocada que baila delante de la portada, como tras un vidrio esmerilado. Brazos y piernas
+// bien separados del cuerpo, manos y pies con forma; cada golpe cambia de paso, el ritmo la mece de lado a lado, los graves la
+// hacen rebotar y la voz le sube los brazos. Deja una estela suave. ----------
 PAI.dan = { pose: 0, from: null, to: null, ph: 1, c: null };
-const DANCE = [   // [cadera x, y], torso inclinación, brazos (hombro, codo) izq y der, piernas (cadera, rodilla) izq y der — en radianes
-  { hip: [0, 0], lean: 0.12, la: [2.2, 0.6], ra: [-0.5, -0.9], ll: [-0.25, 0.5], rl: [0.35, -0.4] },
-  { hip: [0.06, -0.03], lean: -0.15, la: [3.4, -0.4], ra: [-1.9, -0.8], ll: [-0.45, 0.2], rl: [0.2, 0.7] },
-  { hip: [-0.05, -0.05], lean: 0.25, la: [1.6, 1.2], ra: [-0.2, -1.4], ll: [-0.1, 0.9], rl: [0.5, -0.2] },
-  { hip: [0.02, 0.02], lean: -0.05, la: [2.8, 0.3], ra: [-2.6, -0.3], ll: [-0.35, 0.35], rl: [0.3, 0.35] },
-  { hip: [-0.06, -0.02], lean: 0.18, la: [0.6, 1.5], ra: [-1.2, -1.2], ll: [-0.6, 0.6], rl: [0.15, -0.1] }];
+const DANCE = [   // cadera [x,y], inclinación del torso, brazos [hombro, codo] izq/der, piernas [cadera, rodilla] izq/der (radianes; 0 = hacia abajo)
+  { hip: [0, 0], lean: 0.1, la: [2.3, 0.5], ra: [-1.3, -0.6], ll: [-0.3, 0.4], rl: [0.35, -0.5] },
+  { hip: [0.08, -0.04], lean: -0.18, la: [1.3, 0.9], ra: [-2.2, -0.4], ll: [-0.5, 0.15], rl: [0.15, 0.8] },
+  { hip: [-0.06, -0.08], lean: 0.22, la: [1.0, 1.3], ra: [-1.0, -1.3], ll: [-0.2, 0.9], rl: [0.55, -0.15] },
+  { hip: [0.02, 0.03], lean: -0.04, la: [2.1, -0.5], ra: [-2.1, 0.5], ll: [-0.38, 0.3], rl: [0.38, -0.3] },
+  { hip: [-0.07, -0.02], lean: 0.2, la: [1.6, -0.4], ra: [-1.9, 1.0], ll: [-0.65, 0.5], rl: [0.2, 0.05] },
+  { hip: [0.05, -0.06], lean: -0.25, la: [2.0, 1.2], ra: [-0.7, -0.9], ll: [-0.15, 0.2], rl: [0.6, 0.6] }];
 function drawBailarin(dt) {
   const S = PAI.dan, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
   if (!S.to) { S.from = DANCE[0]; S.to = DANCE[1]; }
-  if (pulse.on && S.go > 0.3) { S.from = blendPose(S.from, S.to, Math.min(1, S.ph)); S.pose = (S.pose + 1 + Math.floor(Math.random() * 3)) % DANCE.length; S.to = DANCE[S.pose]; S.ph = 0; }
-  S.ph += dt / (S.per * 0.55) * S.go; const e = 1 - Math.pow(1 - Math.min(1, S.ph), 3), pz = blendPose(S.from, S.to, e);
-  S.bounce = (S.bounce || 0) * Math.pow(0.02, dt) + (pulse.on ? 1 : 0) * 0.6;
-  // se dibuja en un lienzo pequeño y se amplía con desenfoque: así queda borroso, suave y liviano
+  if (pulse.on && S.go > 0.3) { S.from = blendPose(S.from, S.to, Math.min(1, S.ph)); S.pose = (S.pose + 1 + Math.floor(Math.random() * (DANCE.length - 1))) % DANCE.length; S.to = DANCE[S.pose]; S.ph = 0; }
+  S.ph += dt / (S.per * 0.4) * S.go; const e = 1 - Math.pow(1 - Math.min(1, S.ph), 3), pz = blendPose(S.from, S.to, e);
+  S.bounce = Math.max((S.bounce || 0) * Math.pow(0.01, dt), pulse.on ? 0.6 + 0.6 * Math.min(1, S.lv[0]) : 0);
   const cw = 200, ch = Math.round(cw * H / W), c = S.c || (S.c = document.createElement('canvas')); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
-  const x = c.getContext('2d'), bg = night ? [12, 11, 14] : [222, 216, 214], body = night ? paiTone(mix(0.3), 58, 70).map(v => v * 255) : [235, 72, 40], head = night ? [40, 14, 16] : [40, 14, 12];
-  x.fillStyle = rgba(bg, S.ghost ? 0.45 : 1); x.fillRect(0, 0, cw, ch); S.ghost = 1;   // sin borrar del todo: queda una estela suave del paso anterior
-  { const u0 = Math.min(cw * 0.3, ch * 0.13), fl = x.createRadialGradient(cw * 0.5, ch * 0.56 + u0 * 1.9, 0, cw * 0.5, ch * 0.56 + u0 * 1.9, u0 * 2.2); fl.addColorStop(0, rgba(body, 0.1 + 0.15 * S.en)); fl.addColorStop(1, rgba(body, 0)); x.fillStyle = fl; x.fillRect(0, 0, cw, ch); }
-  const U = Math.min(cw * 0.3, ch * 0.13), cx = cw * 0.5 + pz.hip[0] * U, cy = ch * 0.56 + pz.hip[1] * U + Math.sin(S.b * Math.PI) * U * 0.03 * S.go - S.bounce * U * 0.04;
-  const up = S.vo * 0.6, seg = (ax, ay, len, ang) => [ax + Math.sin(ang) * len, ay + Math.cos(ang) * len];
-  const neck = [cx + Math.sin(pz.lean) * U * 1.05, cy - Math.cos(pz.lean) * U * 1.05], sh = U * 0.32;
-  const shL = [neck[0] - sh, neck[1] + U * 0.08], shR = [neck[0] + sh, neck[1] + U * 0.08];
-  const limb = (a, b, w0, w1) => { x.lineCap = 'round'; x.lineWidth = w0; x.beginPath(); x.moveTo(...a); x.lineTo(...b); x.stroke(); };
+  const x = c.getContext('2d');
+  x.globalCompositeOperation = 'destination-out'; x.fillStyle = `rgba(0,0,0,${S.ghost ? 0.5 : 1})`; x.fillRect(0, 0, cw, ch); x.globalCompositeOperation = 'source-over'; S.ghost = 1;   // la estela del paso anterior
+  const body = night ? paiTone(mix(0.3), 66, 75).map(v => v * 255) : paiTone(mix(0.3), 46, 75).map(v => v * 255), head = body.map(v => v * (night ? 0.55 : 0.5));
+  const U = Math.min(cw * 0.32, ch * 0.145), sway = Math.sin(S.b * Math.PI) * 0.06 * S.go;
+  const cx = cw * 0.5 + (pz.hip[0] + sway) * U * 1.4, cy = ch * 0.58 + pz.hip[1] * U - S.bounce * U * 0.12 + Math.abs(Math.cos(S.b * Math.PI)) * U * 0.05 * S.go;
+  { const fl = x.createRadialGradient(cw * 0.5, ch * 0.58 + U * 1.95, 0, cw * 0.5, ch * 0.58 + U * 1.95, U * 2.4); fl.addColorStop(0, rgba(body, 0.18 + 0.3 * S.en + 0.2 * S.bounce)); fl.addColorStop(1, rgba(body, 0)); x.fillStyle = fl; x.fillRect(0, 0, cw, ch); }
+  const up = S.vo * 0.5, lean = pz.lean + sway * 1.5, seg = (ax, ay, len, ang) => [ax + Math.sin(ang) * len, ay + Math.cos(ang) * len];
+  const neck = [cx + Math.sin(lean) * U * 1.08, cy - Math.cos(lean) * U * 1.08], sh = U * 0.34;
+  const shL = [neck[0] - sh, neck[1] + U * 0.1], shR = [neck[0] + sh, neck[1] + U * 0.1];
+  const limb = (a, b, w) => { x.lineCap = 'round'; x.lineJoin = 'round'; x.lineWidth = w; x.beginPath(); x.moveTo(...a); x.lineTo(...b); x.stroke(); };
+  const dot = (p_, r) => { x.beginPath(); x.arc(p_[0], p_[1], r, 0, 7); x.fill(); };
   x.strokeStyle = rgba(body, 1); x.fillStyle = rgba(body, 1);
-  // piernas
-  for (const [s, L] of [[-1, pz.ll], [1, pz.rl]]) { const hp = [cx + s * U * 0.18, cy], kn = seg(hp[0], hp[1], U * 0.95, L[0]), ft = seg(kn[0], kn[1], U * 0.95, L[0] + L[1] * 0.6 - 0.1 * s); limb(hp, kn, U * 0.34); limb(kn, ft, U * 0.26); }
-  // torso: de la cadera al cuello, ancho en los hombros
-  x.beginPath(); x.moveTo(cx - U * 0.32, cy + U * 0.1); x.quadraticCurveTo(cx - U * 0.36, cy - U * 0.5, shL[0] - U * 0.05, shL[1]); x.lineTo(shR[0] + U * 0.05, shR[1]); x.quadraticCurveTo(cx + U * 0.36, cy - U * 0.5, cx + U * 0.32, cy + U * 0.1); x.closePath(); x.fill();
-  // brazos (la voz los sube)
-  for (const [s, A, h0] of [[-1, pz.la, shL], [1, pz.ra, shR]]) { const a0 = A[0] + s * up, el = seg(h0[0], h0[1], U * 0.62, a0), hd = seg(el[0], el[1], U * 0.58, a0 + A[1]); limb(h0, el, U * 0.2); limb(el, hd, U * 0.16); }
-  // cuello y cabeza, más oscuros
-  limb([neck[0], neck[1] + U * 0.05], [neck[0] + Math.sin(pz.lean) * U * 0.2, neck[1] - U * 0.2], U * 0.17); x.fillStyle = rgba(head.map((v, j) => v * 0.75 + body[j] * 0.25), 1);
-  x.beginPath(); x.ellipse(neck[0] + Math.sin(pz.lean) * U * 0.3, neck[1] - U * 0.42, U * 0.21, U * 0.26, pz.lean, 0, 7); x.fill();
-  // a pantalla, ampliado y desenfocado, más el punteado
-  // el desenfoque se hace en un lienzo intermedio pequeño (barato a cualquier resolución, también al grabar) y luego se amplía
+  for (const [s, L] of [[-1, pz.ll], [1, pz.rl]]) { const hp = [cx + s * U * 0.17, cy], kn = seg(hp[0], hp[1], U * 0.92, L[0]), ft = seg(kn[0], kn[1], U * 0.9, L[0] + L[1] * 0.7);
+    limb(hp, kn, U * 0.3); limb(kn, ft, U * 0.22); x.beginPath(); x.ellipse(ft[0] + s * U * 0.08, ft[1] + U * 0.02, U * 0.16, U * 0.07, 0, 0, 7); x.fill(); }
+  // torso: cadera estrecha, cintura y hombros anchos
+  x.beginPath(); x.moveTo(cx - U * 0.26, cy + U * 0.08); x.quadraticCurveTo(cx - U * 0.2, cy - U * 0.45, shL[0] - U * 0.04, shL[1] + U * 0.02); x.quadraticCurveTo(neck[0], neck[1] - U * 0.04, shR[0] + U * 0.04, shR[1] + U * 0.02);
+  x.quadraticCurveTo(cx + U * 0.2, cy - U * 0.45, cx + U * 0.26, cy + U * 0.08); x.closePath(); x.fill();
+  // brazos con codo y mano, siempre abiertos hacia su lado (no se pegan al cuerpo)
+  for (const [s, A, h0] of [[-1, pz.la, shL], [1, pz.ra, shR]]) { const a0 = A[0] * (s < 0 ? 1 : 1) + (s < 0 ? up : -up), el = seg(h0[0], h0[1], U * 0.62, a0), hd = seg(el[0], el[1], U * 0.56, a0 + A[1] * 0.8);
+    limb(h0, el, U * 0.17); limb(el, hd, U * 0.13); dot(seg(hd[0], hd[1], U * 0.08, a0 + A[1] * 0.8), U * 0.1); }
+  limb([neck[0], neck[1] + U * 0.04], [neck[0] + Math.sin(lean) * U * 0.16, neck[1] - U * 0.16], U * 0.15);
+  x.fillStyle = rgba(head, 1); x.beginPath(); x.ellipse(neck[0] + Math.sin(lean) * U * 0.28, neck[1] - U * 0.38, U * 0.19, U * 0.23, lean, 0, 7); x.fill();
+  // desenfoque en un lienzo intermedio (barato a cualquier resolución) y a pantalla, sobre la portada
   const bw = 270, bh = Math.round(bw * H / W), bc = S.bc || (S.bc = document.createElement('canvas')); if (bc.width !== bw || bc.height !== bh) { bc.width = bw; bc.height = bh; }
-  const bx = bc.getContext('2d'); bx.imageSmoothingQuality = 'high'; bx.filter = CAN_BLUR ? `blur(${(Math.min(bw, bh) * (0.024 + 0.008 * (1 - S.en))).toFixed(1)}px)` : 'none'; bx.drawImage(c, -bw * 0.03, -bh * 0.03, bw * 1.06, bh * 1.06); bx.filter = 'none';
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bc, 0, 0, W, H);
+  const bx = bc.getContext('2d'); bx.clearRect(0, 0, bw, bh); bx.imageSmoothingQuality = 'high'; bx.filter = CAN_BLUR ? `blur(${(Math.min(bw, bh) * (0.018 + 0.01 * (1 - S.en))).toFixed(1)}px)` : 'none'; bx.drawImage(c, 0, 0, bw, bh); bx.filter = 'none';
+  ctx.save(); ctx.fillStyle = night ? 'rgba(4,4,10,.45)' : 'rgba(255,255,255,.3)'; ctx.fillRect(0, 0, W, H);   // el vidrio esmerilado delante de la portada
+  if (night) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.25 + 0.4 * S.k_; }
+  ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bc, 0, 0, W, H);
+  if (night) { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.drawImage(bc, 0, 0, W, H); }
   ctx.globalAlpha = night ? 0.05 : 0.07; ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); ctx.restore();
+  S.k_ = Math.max((S.k_ || 0) * Math.pow(0.05, dt), P);
 }
 function blendPose(a, b, t) { const L = (u, v) => u + (v - u) * t, L2 = (u, v) => [L(u[0], v[0]), L(u[1], v[1])];
   return { hip: L2(a.hip, b.hip), lean: L(a.lean, b.lean), la: L2(a.la, b.la), ra: L2(a.ra, b.ra), ll: L2(a.ll, b.ll), rl: L2(a.rl, b.rl) }; }
 
-// ---------- Arco: un arco de color que sube desde abajo, en anillos suaves con los colores de la portada (claro en el centro). Respira
-// con los graves, los colores giran con la melodía y cada golpe manda un anillo hacia afuera. ----------
-PAI.arc = { ring: 9 };
-const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, uHue, uVo; uniform vec3 uLv, uC0, uC1, uC2, uC3, uBg;
+// ---------- Arco: un arco de color que nace abajo, sobre la portada. Sus anillos salen hacia afuera al ritmo de la canción
+// (más rápido cuando sube la energía), crece y se encoge con los graves, cada golpe lanza un anillo de luz y la voz lo aviva. ----------
+PAI.arc = { ring: 9, ph: 0, grow: 0 };
+const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, uPh, uVo, uGrow; uniform vec3 uLv, uC0, uC1, uC2, uC3;
   ${GLSL_NOISE}
   void main() {
-    float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, -.05);
-    float R = max(asp, .9) * (.62 + .05 * uLv.x + .03 * uVo), d = length((p - c) * vec2(1., 1.08)) / R;
-    d += (fbm(p * 2. + uT * .05) - .5) * .06;                                                             // el borde no es un círculo perfecto: respira
-    float t = fract(d * .9 + uHue);
-    vec3 a = mix(uC3, uC0, smoothstep(.0, .35, d)); a = mix(a, uC1, smoothstep(.3, .6, d)); a = mix(a, uC2, smoothstep(.55, .85, d));
-    float m = smoothstep(1.05, .7, d);
-    vec3 col = mix(uBg, a, m);
-    col += mix(uC2, vec3(1.), .5) * exp(-pow((d - uRing) / .05, 2.)) * uP * .35 * m;                        // el anillo del golpe
+    float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, -.04);
+    float R = max(asp, .75) * (.42 + .4 * uGrow + .06 * uP), d = length((p - c) * vec2(1., 1.05)) / R;
+    d += (fbm(p * 2. + vec2(uPh * .3, 0.)) - .5) * .05;
+    float t = fract(d * 2.2 - uPh);                                                                // los anillos que salen hacia afuera
+    vec3 a = t < .25 ? mix(uC3, uC0, t * 4.) : t < .5 ? mix(uC0, uC1, (t - .25) * 4.) : t < .75 ? mix(uC1, uC2, (t - .5) * 4.) : mix(uC2, uC3, (t - .75) * 4.);
+    a = mix(a, vec3(1.), exp(-d * d * 8.) * .5);                                                  // el centro, claro
+    float m = smoothstep(1.05, .8, d);
+    vec3 col = a * (1. + .25 * uLv.x + .3 * uVo);
+    float rg = exp(-pow((d - uRing) / .045, 2.)) * max(0., 1. - uRing * .8);
+    col += vec3(1.) * rg * uP * .9;                                                                // el anillo del golpe
+    float al = max(m, rg * uP * .8);
+    col += vec3(1.) * exp(-pow((d - 1.) / .03, 2.)) * (.15 + .4 * uP);                              // el borde de luz
     ${PAI_GRAIN}
-    o = vec4(col, 1.);
+    o = vec4(col * al, al);
   }`;
 function drawArco(dt) {
   if (!glInit()) { drawAura(dt); return; }
   const S = PAI.arc, night = state.theme === 'dark'; paiLevels(S, dt);
-  if (pulse.on) S.ring = 0.15; S.ring += dt * 0.6;
-  S.hue = (S.hue || 0) + dt * 0.02 * S.go;
-  const c = (k, l) => paiTone(mix([0.12, 0.5, 0.88][k % 3]), l, 65, 95);
-  paiRun(S, ARCO_FS, (gl, p) => { gl.uniform3fv(p.u.uC3, paiBl(c(2, 70), [0.4, 0.75, 1], 0.4)); gl.uniform3fv(p.u.uC0, c(0, 60)); gl.uniform3fv(p.u.uC1, c(1, 62)); gl.uniform3fv(p.u.uC2, paiBl(c(2, 70), [1, 0.65, 0.35], 0.35));
-    gl.uniform3fv(p.u.uBg, night ? [0.04, 0.035, 0.05] : [0.97, 0.96, 0.97]); gl.uniform1f(p.u.uRing, S.ring); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.ring)); gl.uniform1f(p.u.uHue, S.hue); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
+  if (pulse.on) S.ring = 0.15; S.ring += dt / (S.per * 1.3);
+  S.ph += dt * S.go * (0.12 + 0.8 * S.en + 0.3 * Math.min(1, S.lv[0])) + (pulse.on ? 0.08 : 0);
+  const gt = Math.min(1, 0.15 + 0.55 * S.lv[0] + 0.45 * S.en) * S.go; S.grow += (gt - S.grow) * (1 - Math.pow(gt > S.grow ? 0.003 : 0.15, dt));
+  const c = (k, l) => paiTone(mix(k), l, 70, 100);
+  paiRun(S, ARCO_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0.1, 58)); gl.uniform3fv(p.u.uC1, c(0.5, 60)); gl.uniform3fv(p.u.uC2, c(0.9, 64)); gl.uniform3fv(p.u.uC3, paiBl(c(0.3, 66), [1, 0.8, 0.5], 0.35));
+    gl.uniform1f(p.u.uRing, S.ring); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.ring)); gl.uniform1f(p.u.uPh, S.ph); gl.uniform1f(p.u.uGrow, S.grow); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
 // ================= Escena: Lago =================
@@ -6471,11 +6502,11 @@ function drawMirador(dt) {
   gl.uniform1f(p.u.uBake, 0); glBind(7, M.bake); gl.uniform1i(p.u.uSky, 7); gl.activeTexture(gl.TEXTURE0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
-  bloom(GLX.c, night ? 0.32 + P * 0.08 : 0.18);
+  const lb = Math.min(1, M.lv[0]) * M.go; bloom(GLX.c, night ? 0.26 + 0.32 * lb + P * 0.16 : 0.14 + 0.2 * lb + P * 0.1);   // el resplandor respira con los graves y cada golpe se nota
   { const k = [W, H, night, G.hz].join(); if (M.starKey !== k) { M.starKey = k; M.stars = mirStars(G, night); }
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.9; ctx.drawImage(M.stars.dim, 0, 0);
-    ctx.globalAlpha = Math.min(1, 0.6 + 0.25 * Math.sin(time * 1.3) + 0.5 * Math.min(1, M.lv[2])); ctx.drawImage(M.stars.bright, 0, 0); ctx.restore(); }
-  drawMoon(mx * H, (1 - my) * H, mR * H, halo, night);
+    ctx.globalAlpha = Math.min(1, 0.4 + 0.15 * Math.sin(time * 1.3) + 0.8 * Math.min(1, M.lv[2]) * M.go + 0.25 * P); ctx.drawImage(M.stars.bright, 0, 0); ctx.restore(); }
+  drawMoon(mx * H, (1 - my) * H, mR * H, halo.map(v => v * (0.85 + 0.35 * lb + 0.2 * M.vo)), night);
   // las siluetas, a contraluz
   const ink = rgba(top.map(v => v * 255 * 0.45 + 2), 1), rimBase = (night ? [0.55, 0.65, 1] : [1, 0.75, 0.6]).map(v => v * 0.6), rim = rgba(rimBase.map((v, j) => Math.round(Math.min(255, (v * 0.7 + hor[j] * 0.3) * 255 * (night ? 0.75 : 1)) / 4) * 4), 1);   // fijo (no depende de la voz): la capa de siluetas se pinta una sola vez
   const key = [W, H, night, ink, rim].join();
@@ -6987,10 +7018,10 @@ function drawGlass(dt) {
   glassBackground(night);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(glass.bg, 0, 0, W, H); ctx.restore();
   const P = Math.max(0, pulse.x), glow = beatSoft * 0.05 + P * 0.24 + bandX(0, BANDS) * 0.12;
-  if (glow > 0.01) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), glow * (night ? 1 : 1.8)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // la luz tras el vidrio late con cada golpe
+  if (glow > 0.01) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; ctx.fillStyle = rgba(mix(0.5), glow * (night ? 0.5 : 1.8)); ctx.fillRect(0, 0, W, H); ctx.restore(); }   // (de noche más contenida: no se quema a blanco) la luz tras el vidrio late con cada golpe
   // la voz: detrás del vidrio se enciende una luz del color de la nota, como una ventana iluminada al fondo
   const gv = drawGlass.v = (drawGlass.v || 0) + (Math.min(1, voice * 1.5) - (drawGlass.v || 0)) * (1 - Math.pow(0.1, dt));
-  if (gv > 0.02) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; glowSpot(W * (0.5 + 0.2 * Math.sin(time * 0.05)), H * 0.42, MIN * (0.35 + gv * 0.3), melodyColor(), gv * (night ? 0.35 : 0.5)); ctx.restore(); }
+  if (gv > 0.02) { ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'soft-light'; glowSpot(W * (0.5 + 0.2 * Math.sin(time * 0.05)), H * 0.42, MIN * (0.35 + gv * 0.3), melodyColor(), gv * (night ? 0.2 : 0.5)); ctx.restore(); }
   const u = MIN / 1000;
   // el vidrio limpio por los rastros de las gotas: lo de detrás se ve nítido y se vuelve a empañar en unos segundos
   if (!glass.wet || glass.wet.width !== glass.sharp.width || glass.wet.height !== glass.sharp.height) {
@@ -7809,7 +7840,7 @@ function drawLava(dt) {
   if (hits.mid > 0.25) { const b = B[Math.floor(Math.random() * n)]; b.vx += (Math.random() - 0.5) * 0.08 * hits.mid; }
   if (hits.voice) { const b = B[Math.floor(Math.random() * n)]; b.heat = Math.min(1.5, b.heat + 0.1 * (0.5 + hits.voice)); }   // cada sílaba calienta una gota: la voz también las hace subir
   if (dropHit) for (const b of B) { b.vx += (Math.random() - 0.5) * 0.35; b.vy += 0.08 + Math.random() * 0.2; b.heat += 0.4; }
-  lava.shim += dt * (0.2 + high * 3);
+  lava.shim += dt * (0.2 * musicGate + high * 3);
   const fire = 0.1 + energy * 0.45;   // con la música fuerte, el fuego de abajo calienta más
   // se tocan y se funden, pero no se apilan todas en un solo montón: un leve empuje las separa
   for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
@@ -9078,7 +9109,7 @@ function drawCrystal(dt) {
     const m = b.r * 0.9;   // paredes blandas: ninguna gota se sale del cuadro
     if (b.x < m) b.vx += (m - b.x) * 6 * dt; if (b.x > asp - m) b.vx -= (b.x - asp + m) * 6 * dt;
     if (b.y < m) b.vy += (m - b.y) * 6 * dt; if (b.y > 1 - m) b.vy -= (b.y - 1 + m) * 6 * dt;
-    b.vx *= Math.pow(0.4, dt); b.vy *= Math.pow(0.4, dt); b.x += b.vx * dt; b.y += b.vy * dt;
+    const damp = Math.pow(0.4 * musicGate + 0.015 * (1 - musicGate), dt); b.vx *= damp; b.vy *= damp; b.x += b.vx * dt;   // en silencio se aquietan del todo b.y += b.vy * dt;
     const k0 = Math.floor(i / n * BANDS * 0.8), k1 = Math.min(BANDS, k0 + Math.max(3, Math.floor(BANDS / n)));   // cada gota escucha su tramo del espectro
     const gt = (i === 0 ? voice * 0.6 : 0) + bandX(k0, k1) * 0.6;
     b.g += (gt - b.g) * (1 - Math.pow(gt > b.g ? 0.0005 : 0.01, dt));   // la primera es la gota de la voz
