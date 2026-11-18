@@ -791,7 +791,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 154</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 155</div>
     </div>
   </div>
   <div class="group">
@@ -6038,6 +6038,21 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
     col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .012;
     o = vec4(col * al, al);
   }`;
+// el tono «bonito» para cada color del círculo: [matiz, saturación, luz] de anclaje, interpolados
+const CU_ANCH = [[0, 90, 50], [24, 95, 52], [48, 92, 50], [75, 70, 40], [140, 65, 34], [175, 78, 36], [205, 85, 46], [228, 88, 52], [268, 72, 54], [300, 80, 52], [330, 86, 52], [360, 90, 50]];
+function cuTone(hh) { hh = ((hh % 360) + 360) % 360; let k = 0; while (CU_ANCH[k + 1][0] < hh) k++; const a = CU_ANCH[k], b = CU_ANCH[k + 1], t = (hh - a[0]) / (b[0] - a[0]);
+  return [hh, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+function cuencosPal(night) {
+  const key = [night, ...[0.1, 0.5, 0.9].map(t => mix(t).map(Math.round).join())].join('|'); if (cuencosPal.k === key) return cuencosPal.v;
+  const cs = [0.1, 0.5, 0.9].map(t => hexToHsl(rgbToHex(...mix(t).map(Math.round)))), sat = cs.reduce((s, c) => s + c[1], 0) / 3;
+  let tones;
+  if (sat < 14) tones = [[352, 92, 50], [24, 95, 52], [322, 85, 52], [272, 75, 54], [214, 88, 50], [172, 80, 34]];
+  else { const hs = cs.map(c => c[0]), avg = Math.atan2(hs.reduce((s, x) => s + Math.sin(x * Math.PI / 180), 0), hs.reduce((s, x) => s + Math.cos(x * Math.PI / 180), 0)) * 180 / Math.PI;
+    tones = [hs[0], hs[0] + 28, hs[1], hs[1] - 28, hs[2], avg + 180].map(cuTone); }   // los de la portada, un vecino de cada uno y un acento opuesto
+  tones.forEach(t => t[0] = ((t[0] % 360) + 360) % 360); tones.sort((a, b) => a[0] - b[0]);   // ordenados por matiz: los vecinos combinan
+  const v = new Float32Array(18); tones.forEach(([hh, ss, ll], k) => v.set(hexToRgb(hsl(hh, ss, ll - (night ? 4 : 0))).map(x => x / 255), k * 3));
+  cuencosPal.k = key; return (cuencosPal.v = v);
+}
 function drawPuntosSuave(dt) {
   if (!glInit()) { drawSakura(dt); return; }
   const S = PAI.dot, night = state.theme === 'dark'; paiLevels(S, dt);
@@ -6046,10 +6061,10 @@ function drawPuntosSuave(dt) {
   S.hi = Math.max((S.hi || 0) * Math.pow(0.02, dt), hits.hat ? 1 : 0, Math.min(1, S.lv[2]) * 0.6);
   S.ir = (S.ir || 0) + dt * S.go * (0.03 + 0.3 * S.en) + (pulse.on ? 0.05 : 0);
   if (pulse.on && S.go > 0.3) { S.bn = Math.floor(S.bn || 0) + 1; S.bt = 0; } S.bt = Math.min(1, (S.bt ?? 1) + dt / (S.per * 0.55));   // la luz de adentro salta en cada golpe   // los colores giran con la canción (quietos en silencio)
-  // la paleta de la referencia (rojo, naranja, magenta, morado, azul y un verde azulado profundo), cada tono con su propia
-  // luminosidad para que ninguno sea chillón; la portada la tiñe un poco y la luz de atrás es la portada misma
-  const cov0 = mix(0.5).map(v => v / 255), REF = [[352, 92, 50], [24, 95, 52], [322, 85, 52], [272, 75, 54], [214, 88, 50], [172, 80, 34]];
-  const pal = new Float32Array(18); REF.forEach(([hh, ss, ll], k) => { const c = hexToRgb(hsl(hh, ss, ll - (night ? 4 : 0))).map(v => v / 255); pal.set(c.map((v, j) => v * 0.85 + cov0[j] * 0.15), k * 3); });
+  // la paleta nace de la portada (cada canción tiene la suya), pero con las reglas que la hacen elegante, como en la referencia:
+  // cada tono con su propia luz y saturación (verdes y turquesas profundos, rojos y azules intensos, nada neón), un vecino por
+  // cada color de la portada y un acento de contraste. Si la portada casi no tiene color, se usa la paleta de la referencia.
+  const pal = cuencosPal(night);
   paiRun(S, PUNTOS_FS, (gl, p) => { glCoverBind(p); gl.uniform3fv(p.u['uPal[0]'], pal);
     gl.uniform1fv(p.u['uBand[0]'], S.bl); gl.uniform1f(p.u.uWave, S.wave); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.wave / 1.6)); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uGo, S.go);
     gl.uniform1f(p.u.uHi, S.hi); gl.uniform1f(p.u.uIr, S.ir); gl.uniform1f(p.u.uBn, Math.floor(S.bn || 0) - 1 + S.bt); gl.uniform1f(p.u.uEn, S.en); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
