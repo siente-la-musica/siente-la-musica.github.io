@@ -5974,10 +5974,11 @@ function drawLago(dt) {
   L.vo += (Math.min(1, voice * 1.5) - L.vo) * (1 - Math.pow(0.08, dt));
   const hz = vertical ? 0.47 : 0.42, boatY = vertical ? 0.3 : 0.24;
   // cada golpe, un empujón: la barca acelera, la pértiga se inclina y en el agua nace un anillo donde entra la pértiga
-  if (pulse.on && L.go > 0.3) { L.beats++; L.vx += (0.012 + 0.012 * pulse.k) * asp; L.push = 1;
-    L.rings.push({ x: L.x * asp - 0.03, y: boatY - 0.006, r: 0.004, a: 0.9 }); if (L.rings.length > 4) L.rings.shift();
+  if (pulse.on && L.go > 0.3) { L.beats++;
+    if (L.beats % 2 === 0) L.rings.push({ x: L.x * asp + (Math.random() - 0.5) * 0.06, y: boatY - 0.006, r: 0.004, a: 0.45 });   // el agua alrededor de la barca, apenas if (L.rings.length > 4) L.rings.shift();
     if (night && L.beats % 8 === 5 && !L.star) L.star = { x: (0.08 + Math.random() * 0.4) * asp, y: 0.82 + Math.random() * 0.12, t: 0.001 }; }
-  L.vx *= Math.pow(0.35, dt); L.x -= L.vx * dt / asp * L.go; if (L.x < -0.15) L.x = 1.15;                                                        // la barca va hacia la izquierda y vuelve a entrar
+  L.x = 0.5;   // la barca se queda quieta en el camino de luz
+  L.lamp = (L.lamp || 0.5) + ((0.45 + 0.4 * Math.min(1, L.lv[0] * 1.1) + 0.25 * L.vo) * (0.4 + 0.6 * L.go) - (L.lamp || 0.5)) * (1 - Math.pow(0.12, dt));   // la luz de adentro respira con la música, suave
   L.push = Math.max(0, L.push - dt / (per * 0.9));
   L.rings.forEach(r => { r.r += dt * 0.05 * (1 + r.r * 4); r.a *= Math.pow(0.35, dt); }); L.rings = L.rings.filter(r => r.a > 0.03);
   L.R.fill(0); L.rings.forEach((r, i) => L.R.set([r.x, r.y, r.r, r.a], i * 4));
@@ -6002,13 +6003,14 @@ function drawLago(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   if (night) bloom(GLX.c, 0.16 + P * 0.06);
   // la barca: su estela, su reflejo (temblando) y ella encima, a contraluz
-  const S = (vertical ? 0.24 : 0.16) * W, BX = L.x * W, BY = (1 - boatY) * H, ink = rgba(mt1.map(v => v * 255 * 0.45 + 3), 1), bob = Math.sin(time * 1.6) * S * 0.008;
+  const S = (vertical ? 0.24 : 0.16) * W, BX = L.x * W, BY = (1 - boatY) * H, ink = rgba(mt1.map((v, j) => (v * 0.6 + mist[j] * 0.22) * 255), 1), bob = Math.sin(time * 0.9) * S * 0.004;
   { const g = ctx.createLinearGradient(BX + S * 0.6, 0, BX + S * 2.6, 0); g.addColorStop(0, rgba(mist.map(v => v * 255), 0.35)); g.addColorStop(1, rgba(mist.map(v => v * 255), 0));
     ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, 1.6 * u); ctx.beginPath(); ctx.moveTo(BX + S * 0.62, BY + S * 0.06); ctx.lineTo(BX + S * 2.6, BY + S * 0.02); ctx.moveTo(BX + S * 0.62, BY + S * 0.09); ctx.lineTo(BX + S * 2.6, BY + S * 0.16); ctx.stroke(); }
-  const glow = 0.55 + 0.35 * Math.min(1, L.lv[0] * 1.2) + 0.5 * L.push * (state.noFlash ? 0.4 : 1), warm = [255, 196, 120];
+  const glow = L.lamp, warm = [255, 196, 120];
   ctx.save(); ctx.globalAlpha = 0.32; ctx.translate(0, BY * 2 + S * 0.15); ctx.scale(1, -1); if (CAN_BLUR) ctx.filter = `blur(${Math.max(1, 1.5 * u)}px)`;
   lagoDrawBoat(ctx, BX + Math.sin(time * 2.3) * S * 0.01, BY - bob, S, ink, null); ctx.restore();
-  lagoDrawBoat(ctx, BX, BY + bob, S, ink, rgba(warm, 0.9 * glow));
+  { const rim = rgba(bl(mist, pal.disc, 0.5).map(v => v * 255), 0.55); ctx.save(); ctx.translate(-S * 0.006, -S * 0.006); lagoDrawBoat(ctx, BX, BY + bob, S, rim, null); ctx.restore(); }   // un filo de luz arriba, del lado del sol
+  ctx.save(); if (CAN_BLUR) ctx.filter = `blur(${Math.max(0.6, 0.9 * u)}px)`; lagoDrawBoat(ctx, BX, BY + bob, S, ink, rgba(warm, 0.9 * glow)); ctx.restore();
   // el farol: su luz en el aire y su reflejo largo en el agua
   { const fx = BX + S * 0.56, fy = BY + bob - S * 0.205, r = S * 0.026;
     ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
@@ -6031,7 +6033,7 @@ const mir = { prog: null, lv: new Float32Array(3), v: new Float32Array(3), t: ne
 const MIR_GEO = { v: { hz: 0.36, r0: 0.17, r1: 0.12, rc: 0.42, rw: 0.5, fs: 0.385, fh: 0.15, ps: 0.9, ph: 0.42 }, h: { hz: 0.33, r0: 0.12, r1: 0.15, rc: 0.4, rw: 0.42, fs: 0.37, fh: 0.2, ps: 0.84, ph: 0.55 } };
 function mirRidge(G, s) { return G.r0 + G.r1 * Math.exp(-Math.pow((s - G.rc) / G.rw, 2)); }
 function miradorSetup() {
-  mir.prog = glProgram(`uniform vec2 uRes; uniform float uT, uNight, uP, uVo, uWind, uHz, uFire; uniform vec3 uLv, uMoon, uTop, uMid, uHor, uWarm, uHalo, uStar, uTrain; uniform vec4 uR;
+  mir.prog = glProgram(`uniform vec2 uRes; uniform float uT, uNight, uP, uVo, uWind, uHz, uFire; uniform vec3 uLv, uMoon, uTop, uMid, uHor, uWarm, uHalo, uStar, uTrain; uniform vec4 uR; uniform float uBake; uniform sampler2D uSky;
     ${GLSL_NOISE}
     float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
     float meteor(vec2 pq, vec2 hd, vec2 dir, float len) { vec2 dn_ = normalize(dir), v_ = pq - hd; float t = clamp(dot(v_, -dn_) / max(len, 1e-4), 0., 1.), dd = length(v_ + dn_ * t * len);
@@ -6052,25 +6054,25 @@ function miradorSetup() {
     void main() {
       float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y); float s = uv.x;
       float ty = clamp((uv.y - uHz) / (1. - uHz), 0., 1.), md = length(p - uMoon.xy), R = uMoon.z;
-      // ---- el cielo: tres tonos, el resplandor del pueblo y de la tarde que se fue en el horizonte, el halo de la luna ----
+      // lo que no cambia (el cielo, la Vía Láctea, las estrellas, las nubes, los cerros y el valle) se pinta una vez en una textura;
+      // cada cuadro solo le suma lo que se mueve. Así la escena es liviana y el equipo no tiene que bajar la resolución (eso pixelaba).
+      if (uBake > .5) {
       vec3 col = mix(uHor, uMid, smoothstep(0., .42, ty)); col = mix(col, uTop, smoothstep(.3, 1., ty));
       col += uHor * exp(-ty * 7.) * .22 + uWarm * exp(-ty * 14.) * .1 * uNight;
-      col += uHalo * (exp(-md * md / (R * R * 6.)) * .32 + exp(-md / (R * 5.)) * .1) * (1. + uVo * .6);
       // ---- la Vía Láctea: una banda en diagonal con su núcleo cálido, nubes de polvo oscuro y muchas más estrellas dentro ----
       vec2 mc = vec2(.5 * asp, .74), dir = normalize(vec2(1., -.62)), nr = vec2(-dir.y, dir.x); float mt = dot(p - mc, dir), mdd = dot(p - mc, nr) + .03 * sin(mt * 3.);
       float band = exp(-mdd * mdd / .014) * (.5 + .5 * fbm(vec2(mt * 2.4, mdd * 7.) + 3.)), core = exp(-mdd * mdd / .0022) * (.55 + .45 * fbm(vec2(mt * 5., mdd * 15.) + 7.));
       float dust = smoothstep(.48, .72, fbm(vec2(mt * 4.5 + 2., mdd * 16.) + 11.)) * exp(-mdd * mdd / .006);
       float skyK = smoothstep(.02, .2, ty) * smoothstep(R * 1.4, R * 3.2, md);
       vec3 mw = mix(mix(vec3(.45, .52, .95), uMid * 2.2 + .1, .35), vec3(1., .86, .72), core * .8);
-      col += mw * (band * .3 + core * .22) * (1. - dust * .85) * uNight * skyK * smoothstep(.0, .35, ty) * (.75 + .5 * uLv.x);
+      col += mw * (band * .3 + core * .22) * (1. - dust * .85) * uNight * skyK * smoothstep(.0, .35, ty) * 1.;
       // ---- estrellas en tres tamaños (más densas dentro de la Vía Láctea); en la hora azul, solo las más brillantes ----
-      float dens = band * .25 + core * .2, ppx = 1.6 / uRes.y;
+      float dens = band * .25 + core * .2, ppx = max(1.6 / uRes.y, .0016);   // las estrellas nunca más finas que un punto suave: si la imagen se dibuja más pequeña y se amplía, no se ven cuadradas
       vec3 st = stars(p, 230., .945 - dens * .45, ppx * 1.1) * .42 + stars(p + 1.3, 95., .966 - dens * .2, ppx * 1.35) * .85 + stars(p + 3.7, 34., .975, ppx * 1.6);
       st *= .55 + .45 * smoothstep(.0, .35, ty);                                                                                     // cerca del horizonte la atmósfera las apaga
-      col += st * skyK * mix(.18, 1., uNight) * mix(smoothstep(.6, 1.2, length(st)), 1., uNight);
-      if (uStar.z > 0.) { vec2 sd = vec2(.5, -.24); col += vec3(.95, .97, 1.) * meteor(p, uStar.xy + sd * uStar.z, sd, .22 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * skyK; }
+      st *= 0.;
       // ---- nubes finas y largas sobre el horizonte, iluminadas por abajo (el pueblo de noche, la tarde en la hora azul) ----
-      { vec2 cp = vec2(p.x * .9 + uT * .004, ty * 6.); float cd = fbm(vec2(cp.x * 1.4, cp.y * .9) + 5.) + .2 * fbm(vec2(cp.x * 5., cp.y * 3.));
+      { vec2 cp = vec2(p.x * .9, ty * 6.); float cd = fbm(vec2(cp.x * 1.4, cp.y * .9) + 5.) + .2 * fbm(vec2(cp.x * 5., cp.y * 3.));
         float cm = smoothstep(.62, .82, cd) * exp(-ty * 2.6) * smoothstep(.03, .1, ty);
         float under = smoothstep(.0, .12, cd - fbm(vec2(cp.x * 1.4, (cp.y + .25) * .9) + 5.) - .2 * fbm(vec2(cp.x * 5., (cp.y + .25) * 3.)));
         vec3 cc = mix(mix(uTop, uMid, .6) * .9, mix(uHor * 1.3, uWarm, .3 * uNight) + .04, under * .8);
@@ -6088,6 +6090,14 @@ function miradorSetup() {
       if (uv.y < uHz) { float dv = uHz - uv.y;
         vec3 val = mix(uHor * .55 + uMid * .25, uTop * .5 + uMid * .2, smoothstep(0., .1, dv));
         val = mix(val, uHor * .8, exp(-dv * 60.) * .5);                                                                   // la bruma sobre el valle
+        col = mix(col, val, smoothstep(px, -px, uv.y - uHz + .0005)); }
+        o = vec4(col, clamp(length(st) * skyK * .7, 0., 1.)); return; }
+      vec4 bk = texture(uSky, vUv); vec3 col = bk.rgb;
+      col += uHalo * (exp(-md * md / (R * R * 6.)) * .32 + exp(-md / (R * 5.)) * .1) * (1. + uVo * .6);   // el halo de la luna, que respira con la voz
+      { vec2 mc = vec2(.5 * asp, .74), dir = normalize(vec2(1., -.62)); float mdd = dot(p - mc, vec2(-dir.y, dir.x)); col += uMid * exp(-mdd * mdd / .01) * .06 * uLv.x * uNight * step(uHz, uv.y); }   // la Vía Láctea respira con los graves
+      float skyK = smoothstep(.02, .2, ty) * smoothstep(R * 1.4, R * 3.2, md);
+      if (uStar.z > 0.) { vec2 sd = vec2(.5, -.24); col += vec3(.95, .97, 1.) * meteor(p, uStar.xy + sd * uStar.z, sd, .22 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * skyK; }
+      if (uv.y < uHz) { float dv = uHz - uv.y; vec3 val = vec3(0.);
         // las luces del pueblo: más pequeñas y apretadas cuanto más lejos, unas cálidas y otras blancas, titilan con los agudos
         vec2 g = vec2(p.x * 150., pow(dv, .7) * 160.), id = floor(g), f = fract(g) - .5 - (vec2(h(id + 4.), h(id + 6.)) - .5) * .5; float r = h(id);
         float town = smoothstep(.12, .0, abs(s - .55) - .32) * smoothstep(.0, .012, dv) * smoothstep(.09, .03, dv);
@@ -6095,13 +6105,8 @@ function miradorSetup() {
         vec3 lc = mix(uWarm, vec3(.9, .95, 1.), step(.8, h(id + 8.))) * (.6 + .4 * sin(uT * (1. + 2. * h(id + 1.)) + r * 40.) * (.3 + uLv.z));
         val += lc * on * (smoothstep(.16, .0, d) * 1.2 + exp(-d * d * 20.) * .25) * mix(.7, 1., uNight);
         val += uWarm * town * exp(-dv * 25.) * .07 * mix(.6, 1., uNight);                                                // el resplandor del pueblo
-        // el tren: una fila de ventanas encendidas que cruza el valle, con su luz delantera
-        if (uTrain.z > 0.) { float ty2 = uHz - .022, tl = .26 * asp, tx = uTrain.x * (asp + tl + .2) - tl - .1;
-          float inT = step(tx, p.x) * step(p.x, tx + tl) * smoothstep(.006, .0035, abs(uv.y - ty2));
-          float wins = smoothstep(.3, .15, abs(fract((p.x - tx) * 140.) - .5)) * smoothstep(.003, .0015, abs(uv.y - ty2 - .0005));
-          val = mix(val, uTop * .3, inT * .9); val += uWarm * wins * inT * 1.3 * uTrain.z;
-          vec2 hd = p - vec2(tx + tl, ty2); val += vec3(1., .95, .8) * (exp(-dot(hd, hd) / .00002) + exp(-hd.y * hd.y / .00003) * exp(-max(hd.x, 0.) / .03) * step(0., hd.x) * .5) * uTrain.z; }
-        col = mix(col, val, smoothstep(px, -px, uv.y - uHz + .0005)); }
+        col += val * smoothstep(px, -px, uv.y - uHz + .0005);
+      }
       // ---- luciérnagas cerca de la colina: flotan despacio y se encienden con la voz y los medios ----
       for (int i = 0; i < 12; i++) { float fi = float(i); vec2 fp = vec2((.12 + .76 * h1(fi + 1.)) * asp + sin(uT * (.13 + .07 * h1(fi)) + fi * 2.) * .05, ridge(.12 + .76 * h1(fi + 1.)) + .02 + .14 * h1(fi + 4.) + sin(uT * (.3 + .2 * h1(fi + 7.)) + fi) * .02);
         float fl = pow(.5 + .5 * sin(uT * (1.2 + h1(fi + 2.)) + fi * 2.7), 3.); vec2 dq = p - fp;
@@ -6139,11 +6144,10 @@ function paintedMoon() {
   return (paintedMoon.c = c);
 }
 function drawMoon(X, Y, R, halo, night) {
-  const hc = halo.map(v => Math.min(255, v * 255 + 70));
+  const hc = halo.map(v => Math.min(255, v * 200 + 55));
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  const gh = ctx.createRadialGradient(X, Y, R * .9, X, Y, R * 2.6); gh.addColorStop(0, rgba(hc, night ? .3 : .22)); gh.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = gh; ctx.fillRect(X - R * 2.6, Y - R * 2.6, R * 5.2, R * 5.2); ctx.restore();
-  ctx.save(); ctx.globalAlpha = night ? 1 : .9; ctx.drawImage(paintedMoon(), X - R, Y - R, R * 2, R * 2); ctx.restore();
-  ctx.save(); ctx.globalCompositeOperation = 'lighter'; const ge = ctx.createRadialGradient(X, Y, R * .95, X, Y, R * 1.12); ge.addColorStop(0, rgba(hc, 0)); ge.addColorStop(.4, rgba(hc, .22)); ge.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = ge; ctx.fillRect(X - R * 1.2, Y - R * 1.2, R * 2.4, R * 2.4); ctx.restore();
+  const gh = ctx.createRadialGradient(X, Y, R * .95, X, Y, R * 3.2); gh.addColorStop(0, rgba(hc, night ? .22 : .16)); gh.addColorStop(.35, rgba(hc, night ? .07 : .05)); gh.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = gh; ctx.fillRect(X - R * 3.2, Y - R * 3.2, R * 6.4, R * 6.4); ctx.restore();
+  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.clip(); ctx.globalAlpha = night ? .96 : .85; ctx.drawImage(paintedMoon(), X - R, Y - R, R * 2, R * 2); ctx.restore();
 }
 function mirSilhouettes(G, ink, rim) {
   const c = mir.sil || (mir.sil = document.createElement('canvas')); c.width = W; c.height = H;
@@ -6180,6 +6184,27 @@ function mirSilhouettes(G, ink, rim) {
   pole(rim, rd * .7, -rd * .7); pole(ink, 0, 0); x.restore();
   return { FH, P, wires: [[px0 - ph * .13, py0 - ph * .9 - pw * 1.4], [px0, py0 - ph * .9 - pw * 1.4], [px0 + ph * .13, py0 - ph * .9 - pw * 1.4]] };
 }
+// las estrellas, dibujadas a la resolución real de la pantalla como puntos redondos y suaves (en la tarjeta gráfica salían de uno o
+// dos píxeles y se veían cuadradas). Casi todas pequeñas y tenues, pocas brillantes; más apretadas dentro de la Vía Láctea.
+// Dos capas: las tenues, quietas, y las brillantes, que titilan con los agudos.
+function mirStars(G, night) {
+  const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }, dim = mk(), bright = mk(), d = dim.getContext('2d'), b = bright.getContext('2d');
+  let seed = 9; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647, asp = W / H, u = MIN / 1000;
+  const dir = [1 / Math.hypot(1, .62), -.62 / Math.hypot(1, .62)];
+  const N = Math.round(1500 * (W * H) / (1080 * 1920) + 500);
+  for (let i = 0; i < N; i++) {
+    let x = rnd() * asp, y = rnd(); const inBand = rnd() < .45;
+    if (inBand) { const t = (rnd() - .5) * 2.4, o = (rnd() + rnd() + rnd() - 1.5) * .09; x = .5 * asp + dir[0] * t - dir[1] * o; y = .74 + dir[1] * t + dir[0] * o; }
+    const ty = (y - G.hz) / (1 - G.hz); if (y < G.hz + .12 || y > 1 || x < 0 || x > asp) continue;
+    const fade = Math.min(1, (y - G.hz - .12) / .12) * (.55 + .45 * Math.min(1, ty / .35));
+    const m = Math.pow(rnd(), 5), r = (.55 + 1.7 * m) * u * 1.15, a = (.25 + .75 * m) * fade * (night ? 1 : .45);
+    if (!night && m < .4) continue;                                                   // en la hora azul solo se ven las más brillantes
+    const X = x * H, Y = (1 - y) * H, warm = rnd(), col = warm < .3 ? '255,226,200' : warm > .75 ? '205,222,255' : '255,250,242', c = m > .35 ? b : d;
+    if (m > .35) { const g = c.createRadialGradient(X, Y, 0, X, Y, r * 6); g.addColorStop(0, `rgba(${col},${a * .35})`); g.addColorStop(1, `rgba(${col},0)`); c.fillStyle = g; c.fillRect(X - r * 6, Y - r * 6, r * 12, r * 12); }
+    c.fillStyle = `rgba(${col},${a})`; c.beginPath(); c.arc(X, Y, Math.max(.6, r), 0, 7); c.fill();
+  }
+  return { dim, bright };
+}
 function drawMirador(dt) {
   if (!glInit()) { drawInfinity(dt); return; }
   if (!mir.prog) miradorSetup();
@@ -6198,7 +6223,7 @@ function drawMirador(dt) {
   const mid = night ? blend(tone(mix(0.5), 16), [0.05, 0.08, 0.22], 0.55) : blend(tone(mix(0.5), 46), [0.36, 0.3, 0.62], 0.45);
   const hor = night ? blend(tone(mix(0.9), 30, 60), [0.2, 0.14, 0.32], 0.5) : blend(tone(mix(0.9), 66, 70), [1, 0.62, 0.48], 0.45);
   const warm = [1, 0.72, 0.42], melC = melodyColor().map(v => v / 255), halo = melC.map((v, j) => v * 0.4 * (0.4 + M.vo) + (night ? [0.55, 0.65, 1] : [1, 0.75, 0.6])[j] * 0.55);
-  const mR = vertical ? 0.065 * asp : 0.075, mx = (vertical ? 0.76 : 0.8) * asp, my = vertical ? 0.84 : 0.8;
+  const mR = vertical ? 0.05 * asp : 0.055, mx = (vertical ? 0.76 : 0.8) * asp, my = vertical ? 0.84 : 0.8;
   const [cw, ch] = glCanvas(1), p = mir.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, night ? 1 : 0.4);
@@ -6207,9 +6232,21 @@ function drawMirador(dt) {
   gl.uniform3fv(p.u.uTop, top); gl.uniform3fv(p.u.uMid, mid); gl.uniform3fv(p.u.uHor, hor); gl.uniform3fv(p.u.uWarm, warm); gl.uniform3fv(p.u.uHalo, halo);
   gl.uniform3f(p.u.uStar, M.star ? M.star.x : 0, M.star ? M.star.y : 0, M.star ? M.star.t : 0); gl.uniform3f(p.u.uTrain, Math.min(1, trainPh), 0, train);
   gl.uniform4f(p.u.uR, G.r0, G.r1, G.rc, G.rw);
+  // el fondo quieto se vuelve a pintar solo si cambia el tamaño, el tema o el color (como mucho dos veces por segundo)
+  const bkey = [cw, ch, night, ...top, ...mid, ...hor].map(v => typeof v === 'number' ? Math.round(v * 40) : v).join();
+  if (!M.bake || M.bake.w !== cw || M.bake.h !== ch) { if (M.bake) { gl.deleteTexture(M.bake.t); gl.deleteFramebuffer(M.bake.f); }
+    const t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, cw, ch, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+    const f = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, f); gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t, 0);
+    M.bake = { t, f, w: cw, h: ch }; M.bkey = ''; }
+  if (M.bkey !== bkey && performance.now() - (M.bt || 0) > 500) { M.bkey = bkey; M.bt = performance.now(); gl.uniform1f(p.u.uBake, 1); gl.uniform1i(p.u.uSky, 7); gl.disable(gl.BLEND); gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, null); gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, null); glBlit(M.bake); }
+  gl.uniform1f(p.u.uBake, 0); glBind(7, M.bake); gl.uniform1i(p.u.uSky, 7); gl.activeTexture(gl.TEXTURE0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   bloom(GLX.c, night ? 0.32 + P * 0.08 : 0.18);
+  { const k = [W, H, night, G.hz].join(); if (M.starKey !== k) { M.starKey = k; M.stars = mirStars(G, night); }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.9; ctx.drawImage(M.stars.dim, 0, 0);
+    ctx.globalAlpha = Math.min(1, 0.6 + 0.25 * Math.sin(time * 1.3) + 0.5 * Math.min(1, M.lv[2])); ctx.drawImage(M.stars.bright, 0, 0); ctx.restore(); }
   drawMoon(mx * H, (1 - my) * H, mR * H, halo, night);
   // las siluetas, a contraluz
   const ink = rgba(top.map(v => v * 255 * 0.45 + 2), 1), rim = rgba(halo.map((v, j) => Math.min(255, (v * 0.7 + hor[j] * 0.3) * 255 * (night ? 0.75 : 1))), 1);
