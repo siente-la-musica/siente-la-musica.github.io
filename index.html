@@ -5951,23 +5951,18 @@ function lagoSetup() {
       o = vec4(col, 1.);
     }`);
 }
-// la barca con su barquero, de perfil, pintada a tamaño de pantalla: casco curvo, el barquero de pie con sombrero y la pértiga
-function lagoDrawBoat(c, X, Y, S, push, col_) {
+// la barca sola, de perfil (como un sampán): casco largo y curvo con la proa levantada, un techo de bambú arqueado en el medio y,
+// colgando de una vara a popa, un farol. Todo con formas suaves; el farol se dibuja aparte porque brilla.
+function lagoDrawBoat(c, X, Y, S, col_, lit) {
   const x = c; x.save(); x.translate(X, Y); x.fillStyle = col_; x.strokeStyle = col_; x.lineCap = x.lineJoin = 'round';
-  // el casco
-  x.beginPath(); x.moveTo(-S * .62, -S * .07); x.quadraticCurveTo(-S * .5, S * .07, -S * .3, S * .085); x.lineTo(S * .34, S * .085); x.quadraticCurveTo(S * .56, S * .06, S * .66, -S * .1);
-  x.quadraticCurveTo(S * .4, -S * .02, 0, -S * .02); x.quadraticCurveTo(-S * .4, -S * .02, -S * .62, -S * .07); x.closePath(); x.fill();
-  // el barquero, de pie atrás, inclinado al empujar
-  const lean = .08 + .14 * push, hx = -S * .3, fy = -S * .02;
-  x.save(); x.translate(hx, fy); x.rotate(-lean);
-  x.beginPath(); x.moveTo(-S * .035, 0); x.lineTo(-S * .03, -S * .2); x.quadraticCurveTo(-S * .035, -S * .3, -S * .015, -S * .33); x.lineTo(S * .03, -S * .33); x.quadraticCurveTo(S * .045, -S * .28, S * .035, -S * .2); x.lineTo(S * .04, 0); x.closePath(); x.fill();   // cuerpo
-  x.beginPath(); x.arc(S * .008, -S * .37, S * .032, 0, 7); x.fill();                                                                          // cabeza
-  x.beginPath(); x.moveTo(-S * .085, -S * .375); x.quadraticCurveTo(S * .008, -S * .45, S * .1, -S * .375); x.quadraticCurveTo(S * .008, -S * .39, -S * .085, -S * .375); x.fill();   // el sombrero
-  // la pértiga: va de las manos al fondo del agua, por detrás de la barca
-  const a = -1.15 - .3 * push; x.lineWidth = Math.max(1.2, S * .012);
-  x.beginPath(); x.moveTo(S * .03, -S * .24); x.lineTo(S * .03 + Math.cos(a) * -S * .62, -S * .24 - Math.sin(a) * -S * .62); x.stroke();
-  x.lineWidth = Math.max(1.5, S * .022); x.beginPath(); x.moveTo(S * .01, -S * .27); x.quadraticCurveTo(S * .05, -S * .25, S * .035, -S * .22); x.stroke();      // el brazo
-  x.restore(); x.restore();
+  x.beginPath(); x.moveTo(-S * .66, -S * .1); x.bezierCurveTo(-S * .55, -S * .02, -S * .45, S * .07, -S * .25, S * .075);   // el casco
+  x.lineTo(S * .3, S * .075); x.bezierCurveTo(S * .5, S * .07, S * .6, S * .0, S * .68, -S * .13);
+  x.bezierCurveTo(S * .6, -S * .06, S * .45, -S * .035, S * .3, -S * .03); x.lineTo(-S * .3, -S * .03); x.bezierCurveTo(-S * .45, -S * .035, -S * .58, -S * .06, -S * .66, -S * .1); x.closePath(); x.fill();
+  x.beginPath(); x.moveTo(-S * .2, -S * .03); x.lineTo(-S * .21, -S * .1); x.bezierCurveTo(-S * .12, -S * .19, S * .12, -S * .19, S * .21, -S * .1); x.lineTo(S * .2, -S * .03); x.closePath(); x.fill();   // el techo
+  if (lit) { x.fillStyle = lit; x.beginPath(); x.roundRect(-S * .12, -S * .085, S * .24, S * .03, S * .012); x.fill(); x.fillStyle = col_; for (const k of [-.04, .04]) x.fillRect(S * k - S * .004, -S * .088, S * .008, S * .036); }   // la ventana encendida, con sus dos travesaños
+  x.lineWidth = Math.max(1.2, S * .012); x.beginPath(); x.moveTo(S * .42, -S * .04); x.quadraticCurveTo(S * .45, -S * .2, S * .56, -S * .27); x.stroke();   // la vara del farol
+  x.lineWidth = Math.max(1, S * .006); x.beginPath(); x.moveTo(S * .56, -S * .27); x.lineTo(S * .56, -S * .22); x.stroke();
+  x.restore();
 }
 function drawLago(dt) {
   if (!glInit()) { drawInfinity(dt); return; }
@@ -6007,12 +6002,21 @@ function drawLago(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   if (night) bloom(GLX.c, 0.16 + P * 0.06);
   // la barca: su estela, su reflejo (temblando) y ella encima, a contraluz
-  const S = (vertical ? 0.2 : 0.14) * W, BX = L.x * W, BY = (1 - boatY) * H, ink = rgba(mt1.map(v => v * 255 * 0.45 + 3), 1), bob = Math.sin(time * 1.6) * S * 0.008;
+  const S = (vertical ? 0.24 : 0.16) * W, BX = L.x * W, BY = (1 - boatY) * H, ink = rgba(mt1.map(v => v * 255 * 0.45 + 3), 1), bob = Math.sin(time * 1.6) * S * 0.008;
   { const g = ctx.createLinearGradient(BX + S * 0.6, 0, BX + S * 2.6, 0); g.addColorStop(0, rgba(mist.map(v => v * 255), 0.35)); g.addColorStop(1, rgba(mist.map(v => v * 255), 0));
     ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, 1.6 * u); ctx.beginPath(); ctx.moveTo(BX + S * 0.62, BY + S * 0.06); ctx.lineTo(BX + S * 2.6, BY + S * 0.02); ctx.moveTo(BX + S * 0.62, BY + S * 0.09); ctx.lineTo(BX + S * 2.6, BY + S * 0.16); ctx.stroke(); }
-  ctx.save(); ctx.globalAlpha = 0.32; ctx.translate(0, BY * 2 + S * 0.17); ctx.scale(1, -1); if (CAN_BLUR) ctx.filter = `blur(${Math.max(1, 1.5 * u)}px)`;
-  lagoDrawBoat(ctx, BX + Math.sin(time * 2.3) * S * 0.01, BY - bob, S, L.push, ink); ctx.restore();
-  lagoDrawBoat(ctx, BX, BY + bob, S, L.push, ink);
+  const glow = 0.55 + 0.35 * Math.min(1, L.lv[0] * 1.2) + 0.5 * L.push * (state.noFlash ? 0.4 : 1), warm = [255, 196, 120];
+  ctx.save(); ctx.globalAlpha = 0.32; ctx.translate(0, BY * 2 + S * 0.15); ctx.scale(1, -1); if (CAN_BLUR) ctx.filter = `blur(${Math.max(1, 1.5 * u)}px)`;
+  lagoDrawBoat(ctx, BX + Math.sin(time * 2.3) * S * 0.01, BY - bob, S, ink, null); ctx.restore();
+  lagoDrawBoat(ctx, BX, BY + bob, S, ink, rgba(warm, 0.9 * glow));
+  // el farol: su luz en el aire y su reflejo largo en el agua
+  { const fx = BX + S * 0.56, fy = BY + bob - S * 0.205, r = S * 0.026;
+    ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
+    let g = ctx.createRadialGradient(fx, fy, 0, fx, fy, S * 0.3); g.addColorStop(0, rgba(warm, (night ? 0.7 : 0.45) * glow)); g.addColorStop(0.35, rgba(warm, (night ? 0.18 : 0.1) * glow)); g.addColorStop(1, rgba(warm, 0)); ctx.fillStyle = g; ctx.fillRect(fx - S * 0.3, fy - S * 0.3, S * 0.6, S * 0.6);
+    ctx.save(); ctx.translate(fx, BY + S * 0.1); ctx.scale(1, 4.5); g = ctx.createRadialGradient(0, 0, 0, 0, 0, S * 0.06); g.addColorStop(0, rgba(warm, 0.35 * glow)); g.addColorStop(1, rgba(warm, 0)); ctx.fillStyle = g; ctx.fillRect(-S * 0.06, -S * 0.06, S * 0.12, S * 0.12); ctx.restore();
+    ctx.restore();
+    ctx.fillStyle = ink; ctx.beginPath(); ctx.roundRect(fx - r * 0.9, fy - r * 1.5, r * 1.8, r * 3, r * 0.6); ctx.fill();
+    ctx.fillStyle = rgba(warm.map(v => Math.min(255, v + 40)), Math.min(1, 0.6 + 0.4 * glow)); ctx.beginPath(); ctx.roundRect(fx - r * 0.6, fy - r * 1.1, r * 1.2, r * 2.2, r * 0.4); ctx.fill(); }
   ctx.restore();
 }
 
