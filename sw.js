@@ -1,7 +1,7 @@
 // Permite instalar la página como app y abrirla sin conexión.
 // La página se pide primero a la red (así siempre llega la última versión) y, si no hay
 // conexión, se usa la copia guardada. Las imágenes se sirven desde la copia y se renuevan por detrás.
-const CACHE = 'siente-v148';
+const CACHE = 'siente-v149';
 const CORE = ['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -14,7 +14,8 @@ self.addEventListener('fetch', e => {
   const req = e.request, url = new URL(req.url);
   if (req.method !== 'GET' || url.origin !== location.origin) return;   // Spotify, letras, etc.: siempre a la red
   if (req.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname === '/') {
-    e.respondWith(fetch(req).then(r => { const copy = r.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return r; })
+    e.respondWith(fetch(req, { cache: 'no-cache' }).then(r => {   // siempre se confirma con el servidor (sin la copia de 10 min del navegador)
+       const copy = r.clone(); caches.open(CACHE).then(c => c.put(req, copy)); return r; })
       .catch(() => caches.match(req).then(r => r || caches.match('./'))));
     return;
   }

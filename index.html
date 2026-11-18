@@ -792,6 +792,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 149</div>
     </div>
   </div>
   <div class="group">
@@ -1123,7 +1124,12 @@ let installEv = null;
 const installRow = document.getElementById('installRow'), installNote = document.getElementById('installNote'), btnInstall = document.getElementById('btnInstall');
 const standalone = () => matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches || navigator.standalone;
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && isSecureContext && location.protocol !== 'file:') {
+  // cuando llega una versión nueva, la página se recarga sola (salvo si está grabando) y se busca al volver a la pestaña
+  const hadCtl = !!navigator.serviceWorker.controller; let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (!hadCtl || reloaded) return; const go = () => { if (typeof recording !== 'undefined' && recording) return setTimeout(go, 3000); reloaded = true; location.reload(); }; go(); });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(reg => { reg.update(); document.addEventListener('visibilitychange', () => { if (!document.hidden) reg.update(); }); }).catch(() => {});
+}
 addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEv = e; installRow.hidden = standalone(); });
 addEventListener('appinstalled', () => { installRow.hidden = true; installEv = null; });
 if (isIOS && !standalone()) { installRow.hidden = false; btnInstall.hidden = true; installNote.textContent = 'En Safari pulsa Compartir (el cuadrado con la flecha) y luego «Añadir a pantalla de inicio».'; }
