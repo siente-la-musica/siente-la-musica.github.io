@@ -683,6 +683,7 @@
         <button data-mode="ruta">Ruta</button>
         <button data-mode="autopista">Autopista</button>
         <button data-mode="light">Luz</button>
+        <button data-mode="lago">Lago</button>
         <button data-mode="mirador">Mirador</button>
         <button data-mode="aurora">Aurora</button>
         <button data-mode="bars">Barras</button>
@@ -4350,6 +4351,7 @@ function drawRecOverlay() {
     const zone = LYRIC_LOW.has(state.mode) ? 0 : LYRIC_HIGH.has(state.mode) ? 2 : 1;
     let yV = [0.745, 0.64, 0.43][zone], yH = [0.88, 0.8, 0.36][zone];
     if (state.mode === 'ruta') { yV = 0.33; yH = 0.24; }
+    if (state.mode === 'lago') { yV = 0.84; yH = 0.9; }   // la letra en el agua de adelante, bajo la barca
     if (state.mode === 'mirador') { yV = 0.8; yH = 0.87; }   // la letra sobre el lomo oscuro de la colina, bajo la persona: el cielo queda libre
     if (state.mode === 'bust') { yV = 0.76; yH = 0.86; }   // la letra va sobre el torso: deja libres la cabeza y el cuello   // en la Ruta, la letra va en el cielo del parabrisas
     // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
@@ -5101,7 +5103,7 @@ function glWarmup() {
   if (glWarmup.done) return; glWarmup.done = true;
   if (!GLX.gl && !glInit()) return;
   try { GLX.gl.getExtension('KHR_parallel_shader_compile'); } catch (e) {}
-  const jobs = [() => { if (!ruta.prog) rutaSetup(); if (!ruta.treeAtlas) ruta.treeAtlas = rutaTreeAtlas(); }, () => { if (!mir.prog) miradorSetup(); }, () => { if (!faro.prog) faroSetup(); if (!faro.cliffCanvas) faro.cliffCanvas = faroCliff(); },
+  const jobs = [() => { if (!ruta.prog) rutaSetup(); if (!ruta.treeAtlas) ruta.treeAtlas = rutaTreeAtlas(); }, () => { if (!mir.prog) miradorSetup(); }, () => { if (!lago.prog) lagoSetup(); }, () => { if (!faro.prog) faroSetup(); if (!faro.cliffCanvas) faro.cliffCanvas = faroCliff(); },
     () => { if (!auto.prog) autoSetup(); }, () => { if (!aur.prog) auroraSetup(); }];
   const next = () => { const j = jobs.shift(); if (!j) return; GL_DEFER = true; try { j(); } catch (e) { console.warn(e); } GL_DEFER = false; (window.requestIdleCallback || (f => setTimeout(f, 400)))(next, { timeout: 1500 }); };
   setTimeout(next, 1200);
@@ -5877,6 +5879,143 @@ function drawStars(dt) {
 }
 
 const lightLv = new Float32Array(3), lightV = new Float32Array(3), lightT = new Float32Array(3);
+// ================= Escena: Lago =================
+// Un lago quieto entre cerros, en el estilo de las ilustraciones planas: capas de montañas con degradado y bruma entre
+// ellas, un sol (o una luna) grande y plano detrás, el reflejo de todo en el agua y un grano fino encima. En el medio, una
+// barca con alguien de pie que empuja con una pértiga. De noche es la luna sobre un lago azul; con el tema claro, el sol rojo
+// del amanecer. La música: cada golpe es un empujón de la pértiga (la barca avanza y deja anillos en el agua), el halo del
+// sol respira con los graves y toma el color de la nota que se canta, el camino de luz en el agua brilla con los agudos y la
+// bruma se mueve con los medios. Sin música, la barca se queda quieta.
+const lago = { prog: null, lv: new Float32Array(3), v: new Float32Array(3), t: new Float32Array(3), vo: 0, go: 0, act: 0, b: 0, x: 0.62, vx: 0, push: 0, rings: [], R: new Float32Array(16), beats: 0, star: null, sil: null };
+function lagoSetup() {
+  lago.prog = glProgram(`uniform vec2 uRes; uniform float uT, uNight, uP, uHi, uMist, uHz, uVo; uniform vec3 uSun, uTop, uMid, uHor, uDisc, uHalo, uMt0, uMt1, uMist0, uStar; uniform vec4 uRing[4];
+    ${GLSL_NOISE}
+    float h1(float x) { return fract(sin(x * 127.1) * 43758.5453); }
+    float sdSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; return length(pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0., 1.)); }
+    // el perfil de cada capa de cerros: lomas redondas y suaves; las de adelante se abren en el centro para dejar ver el sol
+    float ridge(float x, float k, float asp) {
+      float s = x / asp, f = mix(2.2, 3.4, k / 3.), base = mix(.02, .0, k / 3.), amp = mix(.07, .2, k / 3.);
+      float r = base + amp * pow(n(vec2(x * f + k * 7.3, k * 3.1)), 2.2) * 1.5 + amp * .12 * n(vec2(x * f * 2.7, k + 9.));
+      return r * mix(1., mix(.05, 1., smoothstep(.08, .4, abs(s - uSun.x / asp))), smoothstep(.5, 2.5, k)); }
+    vec3 above(vec2 p, float asp, out float mtM) {
+      float ty = clamp((p.y - uHz) / (1. - uHz), 0., 1.), sd = length(p - uSun.xy), R = uSun.z; mtM = 0.;
+      vec3 col = mix(uHor, uMid, smoothstep(0., .45, ty)); col = mix(col, uTop, smoothstep(.35, 1., ty));
+      col += uHalo * (exp(-sd * sd / (R * R * 3.2)) * .55 + exp(-sd / (R * 2.4)) * .22) * (1. + uP * .25 + uVo * .4);
+      // estrellas pocas y finas (solo de noche, arriba)
+      vec2 g = p * 70., id = floor(g), f = (fract(g) - .5 - (vec2(h(id + 5.), h(id + 9.)) - .5) * .8) / 70.; float r = h(id);
+      if (r > .93) { float b = pow((r - .93) / .07, 3.), w = 2.5 / (uRes.y * uRes.y) * (1. + 2. * b); col += vec3(.9, .95, 1.) * exp(-dot(f, f) / w) * (.3 + 1.2 * b) * (.7 + .3 * sin(uT * 2. + r * 50.) * (.3 + uHi)) * uNight * smoothstep(.25, .7, ty) * smoothstep(R * 1.5, R * 3., sd); }
+      if (uStar.z > 0.) { vec2 sdir = vec2(.5, -.22), hd = uStar.xy + sdir * uStar.z, v_ = p - hd, dn = normalize(sdir); float t = clamp(dot(v_, -dn) / .2, 0., 1.);
+        col += vec3(.95, .97, 1.) * (smoothstep(mix(.003, .0005, t), 0., length(v_ + dn * t * .2)) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003)) * sin(3.1416 * uStar.z) * uNight; }
+      // el sol o la luna: un disco plano con un degradado suave (más claro abajo, donde toca la bruma)
+      float disc = smoothstep(R + 1.5 / uRes.y, R - 1.5 / uRes.y, sd);
+      col = mix(col, mix(uDisc, uDisc * 1.06 + .06, smoothstep(R, -R, p.y - uSun.y)), disc);
+      // las capas de cerros, de la más lejana a la más cercana; cada una se funde en la bruma por abajo
+      for (int k = 0; k < 4; k++) { float fk = float(k), top = uHz + ridge(p.x, fk, asp), dy = top - p.y;
+        if (dy < 0.) continue;
+        float m = smoothstep(0., 1.5 / uRes.y, dy); mtM = max(mtM, m);
+        vec3 mc = mix(uMt0, uMt1, fk / 3.);
+        mc = mix(mc, mc * 1.18 + uHalo * .1, exp(-dy * 30.) * .5);                                                  // la cresta, más clara
+        mc += uHalo * exp(-dy * 120.) * exp(-pow((p.x - uSun.x) / (R * 3.), 2.)) * .35 * (1. - fk / 4.);              // rozada por el sol
+        float mist = exp(-(p.y - uHz) / (.02 + .045 * (1. - fk / 3.))) * (.75 + .35 * n(vec2(p.x * 2.5 - uT * .03 * (1. + fk), fk * 3. + uT * .02)) * (.6 + .8 * uMist));
+        mc = mix(mc, uMist0, clamp(mist, 0., 1.));
+        col = mix(col, mc, m); }
+      // la bruma que flota sobre el horizonte, delante del sol
+      col = mix(col, uMist0, exp(-max(p.y - uHz, 0.) / .035) * (.3 + .2 * n(vec2(p.x * 1.6 - uT * .04, 2.))) * (.7 + .4 * uMist));
+      return col;
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y); float mtM; vec3 col;
+      if (uv.y >= uHz) col = above(p, asp, mtM);
+      else {
+        float d = uHz - uv.y, dd = pow(d, .5);
+        // el reflejo: lo de arriba visto en el agua, con un temblor horizontal suave que crece hacia adelante
+        float rip = (n(vec2(p.x * 3. / (.2 + d * 4.), dd * 55. - uT * .35)) - .5) * (.004 + d * .03);
+        for (int i = 0; i < 4; i++) { vec4 rg = uRing[i]; if (rg.w <= 0.) continue; vec2 q = vec2(p.x - rg.x, (p.y - rg.y) * 3.6); float e = length(q);
+          rip += sin((e - rg.z) * 160.) * exp(-pow((e - rg.z) / (.006 + rg.z * .12), 2.)) * .004 * rg.w; }
+        col = above(vec2(p.x + rip, uHz + d * 1.15), asp, mtM);
+        vec3 deep = mix(uTop, uMid, .3) * .8;
+        col = mix(col * vec3(.82, .88, .95), deep, smoothstep(.0, .55, d) * .55);                                          // el agua se oscurece hacia adelante
+        // el camino de luz del sol: una columna suave y destellos horizontales que brillan con los agudos
+        float col_ = exp(-pow((p.x - uSun.x) / (uSun.z * (.7 + d * 1.6)), 2.));
+        float ln = fract(dd * 70. - uT * .25), spk = smoothstep(.12, .0, abs(ln - .5) - .06 - .1 * (1. - d)) * smoothstep(.62, .8, n(vec2(p.x * 9. / (.3 + d * 2.), floor(dd * 70. - uT * .25))));
+        col += mix(uDisc, uHalo, .4) * col_ * (.22 + spk * (.35 + uHi * .8 + uP * .15));
+        col += uHalo * col_ * .12 * (1. + uVo * .5);
+        // los anillos que deja la pértiga en el agua
+        for (int i = 0; i < 4; i++) { vec4 rg = uRing[i]; if (rg.w <= 0.) continue; float e = length(vec2(p.x - rg.x, (p.y - rg.y) * 3.6));
+          col += mix(uDisc, uMist0, .5) * exp(-pow((e - rg.z) / (.0025 + rg.z * .04), 2.)) * .22 * rg.w; }
+        col = mix(col, uMist0, exp(-d / .035) * .3 * (.7 + .4 * uMist));                                                  // la bruma al ras del agua
+      }
+      { vec3 a_ = above(vec2(p.x, uHz + .003), asp, mtM); col = mix(col, a_, exp(-pow((uv.y - uHz) / .006, 2.)) * .6); }   // el horizonte, sin línea dura
+      col *= 1. - .3 * smoothstep(.55, 1.15, length((vUv - vec2(.5, .5)) * vec2(1., .9)) * 1.25);
+      col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .05;                                                          // el grano fino de la ilustración
+      o = vec4(col, 1.);
+    }`);
+}
+// la barca con su barquero, de perfil, pintada a tamaño de pantalla: casco curvo, el barquero de pie con sombrero y la pértiga
+function lagoDrawBoat(c, X, Y, S, push, col_) {
+  const x = c; x.save(); x.translate(X, Y); x.fillStyle = col_; x.strokeStyle = col_; x.lineCap = x.lineJoin = 'round';
+  // el casco
+  x.beginPath(); x.moveTo(-S * .62, -S * .07); x.quadraticCurveTo(-S * .5, S * .07, -S * .3, S * .085); x.lineTo(S * .34, S * .085); x.quadraticCurveTo(S * .56, S * .06, S * .66, -S * .1);
+  x.quadraticCurveTo(S * .4, -S * .02, 0, -S * .02); x.quadraticCurveTo(-S * .4, -S * .02, -S * .62, -S * .07); x.closePath(); x.fill();
+  // el barquero, de pie atrás, inclinado al empujar
+  const lean = .08 + .14 * push, hx = -S * .3, fy = -S * .02;
+  x.save(); x.translate(hx, fy); x.rotate(-lean);
+  x.beginPath(); x.moveTo(-S * .035, 0); x.lineTo(-S * .03, -S * .2); x.quadraticCurveTo(-S * .035, -S * .3, -S * .015, -S * .33); x.lineTo(S * .03, -S * .33); x.quadraticCurveTo(S * .045, -S * .28, S * .035, -S * .2); x.lineTo(S * .04, 0); x.closePath(); x.fill();   // cuerpo
+  x.beginPath(); x.arc(S * .008, -S * .37, S * .032, 0, 7); x.fill();                                                                          // cabeza
+  x.beginPath(); x.moveTo(-S * .085, -S * .375); x.quadraticCurveTo(S * .008, -S * .45, S * .1, -S * .375); x.quadraticCurveTo(S * .008, -S * .39, -S * .085, -S * .375); x.fill();   // el sombrero
+  // la pértiga: va de las manos al fondo del agua, por detrás de la barca
+  const a = -1.15 - .3 * push; x.lineWidth = Math.max(1.2, S * .012);
+  x.beginPath(); x.moveTo(S * .03, -S * .24); x.lineTo(S * .03 + Math.cos(a) * -S * .62, -S * .24 - Math.sin(a) * -S * .62); x.stroke();
+  x.lineWidth = Math.max(1.5, S * .022); x.beginPath(); x.moveTo(S * .01, -S * .27); x.quadraticCurveTo(S * .05, -S * .25, S * .035, -S * .22); x.stroke();      // el brazo
+  x.restore(); x.restore();
+}
+function drawLago(dt) {
+  if (!glInit()) { drawInfinity(dt); return; }
+  if (!lago.prog) lagoSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), vertical = W < H, asp = W / H, L = lago, gl = GLX.gl, u = MIN / 1000;
+  const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
+  [L.t[0], L.t[1], L.t[2]] = [bandX(0, 10), bandX(10, 38), bandX(38, BANDS)]; springTo(L.lv, L.v, L.t, dt, 120, 0.75);
+  L.act = audible ? 2.5 : Math.max(0, L.act - dt); L.go += ((L.act > 0 ? 1 : 0) - L.go) * (1 - Math.pow(0.02, dt)); L.b += dt / per * L.go;
+  L.vo += (Math.min(1, voice * 1.5) - L.vo) * (1 - Math.pow(0.08, dt));
+  const hz = vertical ? 0.47 : 0.42, boatY = vertical ? 0.3 : 0.24;
+  // cada golpe, un empujón: la barca acelera, la pértiga se inclina y en el agua nace un anillo donde entra la pértiga
+  if (pulse.on && L.go > 0.3) { L.beats++; L.vx += (0.012 + 0.012 * pulse.k) * asp; L.push = 1;
+    L.rings.push({ x: L.x * asp - 0.03, y: boatY - 0.006, r: 0.004, a: 0.9 }); if (L.rings.length > 4) L.rings.shift();
+    if (night && L.beats % 8 === 5 && !L.star) L.star = { x: (0.08 + Math.random() * 0.4) * asp, y: 0.82 + Math.random() * 0.12, t: 0.001 }; }
+  L.vx *= Math.pow(0.35, dt); L.x -= L.vx * dt / asp * L.go; if (L.x < -0.15) L.x = 1.15;                                                        // la barca va hacia la izquierda y vuelve a entrar
+  L.push = Math.max(0, L.push - dt / (per * 0.9));
+  L.rings.forEach(r => { r.r += dt * 0.05 * (1 + r.r * 4); r.a *= Math.pow(0.35, dt); }); L.rings = L.rings.filter(r => r.a > 0.03);
+  L.R.fill(0); L.rings.forEach((r, i) => L.R.set([r.x, r.y, r.r, r.a], i * 4));
+  if (L.star) { L.star.t += dt / (per * 1.4) * L.go; if (L.star.t >= 1) L.star = null; }
+  // los colores: el cielo de cada hora con un toque de los colores de la portada (no más: así siempre se ve armónico)
+  const tone = (c, l, sMin = 45) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, Math.min(80, s_)), l)).map(v => v / 255); };
+  const bl = (a, b, k) => a.map((v, j) => v * (1 - k) + b[j] * k), cov = k => tone(mix(k), night ? 30 : 60);
+  const pal = night ? { top: [0.01, 0.03, 0.18], mid: [0.04, 0.16, 0.5], hor: [0.42, 0.62, 0.9], disc: [0.86, 0.9, 0.96], mt0: [0.16, 0.2, 0.5], mt1: [0.03, 0.04, 0.14], mist: [0.36, 0.52, 0.82] }
+    : { top: [0.32, 0.55, 0.9], mid: [0.72, 0.72, 0.9], hor: [1, 0.84, 0.72], disc: [0.98, 0.42, 0.34], mt0: [0.5, 0.48, 0.8], mt1: [0.16, 0.18, 0.46], mist: [0.86, 0.86, 0.96] };
+  const kc = 0.28;
+  const top = bl(pal.top, cov(0.1), kc * 0.6), mid = bl(pal.mid, cov(0.5), kc), hor = bl(pal.hor, cov(0.9), kc * 0.8), mt0 = bl(pal.mt0, cov(0.4), kc), mt1 = bl(pal.mt1, cov(0.2), kc * 0.7), mist = bl(pal.mist, cov(0.7), kc * 0.6);
+  const melC = melodyColor().map(v => v / 255), halo = bl(night ? [0.55, 0.72, 1] : [1, 0.62, 0.45], melC, 0.25 + 0.35 * L.vo).map(v => v * (0.75 + 0.5 * Math.min(1, L.lv[0])));
+  const sR = vertical ? 0.2 * asp : 0.13, sx = 0.5 * asp, sy = hz + sR * (vertical ? 0.75 : 0.55);
+  const [cw, ch] = glCanvas(1), p = lago.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uHi, Math.min(1.2, L.lv[2])); gl.uniform1f(p.u.uMist, Math.min(1.2, L.lv[1])); gl.uniform1f(p.u.uHz, hz); gl.uniform1f(p.u.uVo, L.vo);
+  gl.uniform3f(p.u.uSun, sx, sy, sR); gl.uniform3fv(p.u.uTop, top); gl.uniform3fv(p.u.uMid, mid); gl.uniform3fv(p.u.uHor, hor); gl.uniform3fv(p.u.uDisc, pal.disc); gl.uniform3fv(p.u.uHalo, halo);
+  gl.uniform3fv(p.u.uMt0, mt0); gl.uniform3fv(p.u.uMt1, mt1); gl.uniform3fv(p.u.uMist0, mist); gl.uniform3f(p.u.uStar, L.star ? L.star.x : 0, L.star ? L.star.y : 0, L.star ? L.star.t : 0);
+  gl.uniform4fv(p.u['uRing[0]'], L.R);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  if (night) bloom(GLX.c, 0.16 + P * 0.06);
+  // la barca: su estela, su reflejo (temblando) y ella encima, a contraluz
+  const S = (vertical ? 0.2 : 0.14) * W, BX = L.x * W, BY = (1 - boatY) * H, ink = rgba(mt1.map(v => v * 255 * 0.45 + 3), 1), bob = Math.sin(time * 1.6) * S * 0.008;
+  { const g = ctx.createLinearGradient(BX + S * 0.6, 0, BX + S * 2.6, 0); g.addColorStop(0, rgba(mist.map(v => v * 255), 0.35)); g.addColorStop(1, rgba(mist.map(v => v * 255), 0));
+    ctx.strokeStyle = g; ctx.lineWidth = Math.max(1, 1.6 * u); ctx.beginPath(); ctx.moveTo(BX + S * 0.62, BY + S * 0.06); ctx.lineTo(BX + S * 2.6, BY + S * 0.02); ctx.moveTo(BX + S * 0.62, BY + S * 0.09); ctx.lineTo(BX + S * 2.6, BY + S * 0.16); ctx.stroke(); }
+  ctx.save(); ctx.globalAlpha = 0.32; ctx.translate(0, BY * 2 + S * 0.17); ctx.scale(1, -1); if (CAN_BLUR) ctx.filter = `blur(${Math.max(1, 1.5 * u)}px)`;
+  lagoDrawBoat(ctx, BX + Math.sin(time * 2.3) * S * 0.01, BY - bob, S, L.push, ink); ctx.restore();
+  lagoDrawBoat(ctx, BX, BY + bob, S, L.push, ink);
+  ctx.restore();
+}
+
 // ================= Escena: Mirador =================
 // Alguien sentado solo en lo alto de una colina, abrazando las rodillas, mira un cielo enorme: la Vía Láctea, miles de
 // estrellas, nubes finas iluminadas desde abajo y la luna (la portada). Abajo, en el valle, el pueblo encendido y un tren
@@ -7287,7 +7426,7 @@ function glCoverBind(p, unit = 5) {
 // al grabar: si el equipo no llega a 30 cuadros por segundo, las capas de luz suave (que no tienen bordes nítidos)
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0;
-const REC_SHARP = new Set(['ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'capsules', 'columns', 'icons', 'tubos', 'circles']);
+const REC_SHARP = new Set(['lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'capsules', 'columns', 'icons', 'tubos', 'circles']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
@@ -12249,7 +12388,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
