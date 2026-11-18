@@ -5955,13 +5955,14 @@ function lagoSetup() {
 // colgando de una vara a popa, un farol. Todo con formas suaves; el farol se dibuja aparte porque brilla.
 function lagoDrawBoat(c, X, Y, S, col_, lit) {
   const x = c; x.save(); x.translate(X, Y); x.fillStyle = col_; x.strokeStyle = col_; x.lineCap = x.lineJoin = 'round';
-  x.beginPath(); x.moveTo(-S * .66, -S * .1); x.bezierCurveTo(-S * .55, -S * .02, -S * .45, S * .07, -S * .25, S * .075);   // el casco
-  x.lineTo(S * .3, S * .075); x.bezierCurveTo(S * .5, S * .07, S * .6, S * .0, S * .68, -S * .13);
-  x.bezierCurveTo(S * .6, -S * .06, S * .45, -S * .035, S * .3, -S * .03); x.lineTo(-S * .3, -S * .03); x.bezierCurveTo(-S * .45, -S * .035, -S * .58, -S * .06, -S * .66, -S * .1); x.closePath(); x.fill();
+  // el casco: una barca de madera sencilla, baja y redondeada (proa y popa con curva suave, sin puntas), con su borde claro
+  x.beginPath(); x.moveTo(-S * .5, -S * .045); x.bezierCurveTo(-S * .5, S * .03, -S * .4, S * .07, -S * .24, S * .072);
+  x.lineTo(S * .24, S * .072); x.bezierCurveTo(S * .42, S * .07, S * .53, S * .025, S * .54, -S * .055);
+  x.bezierCurveTo(S * .5, -S * .045, S * .44, -S * .035, S * .3, -S * .03); x.lineTo(-S * .3, -S * .03); x.bezierCurveTo(-S * .42, -S * .033, -S * .47, -S * .038, -S * .5, -S * .045); x.closePath(); x.fill();
   x.beginPath(); x.moveTo(-S * .2, -S * .03); x.lineTo(-S * .21, -S * .1); x.bezierCurveTo(-S * .12, -S * .19, S * .12, -S * .19, S * .21, -S * .1); x.lineTo(S * .2, -S * .03); x.closePath(); x.fill();   // el techo
   if (lit) { x.fillStyle = lit; x.beginPath(); x.roundRect(-S * .12, -S * .085, S * .24, S * .03, S * .012); x.fill(); x.fillStyle = col_; for (const k of [-.04, .04]) x.fillRect(S * k - S * .004, -S * .088, S * .008, S * .036); }   // la ventana encendida, con sus dos travesaños
-  x.lineWidth = Math.max(1.2, S * .012); x.beginPath(); x.moveTo(S * .42, -S * .04); x.quadraticCurveTo(S * .45, -S * .2, S * .56, -S * .27); x.stroke();   // la vara del farol
-  x.lineWidth = Math.max(1, S * .006); x.beginPath(); x.moveTo(S * .56, -S * .27); x.lineTo(S * .56, -S * .22); x.stroke();
+  x.lineWidth = Math.max(1.2, S * .011); x.beginPath(); x.moveTo(S * .36, -S * .035); x.quadraticCurveTo(S * .38, -S * .17, S * .46, -S * .22); x.stroke();   // la vara del farol
+  x.lineWidth = Math.max(1, S * .006); x.beginPath(); x.moveTo(S * .46, -S * .22); x.lineTo(S * .46, -S * .18); x.stroke();
   x.restore();
 }
 function drawLago(dt) {
@@ -6012,7 +6013,7 @@ function drawLago(dt) {
   { const rim = rgba(bl(mist, pal.disc, 0.5).map(v => v * 255), 0.55); ctx.save(); ctx.translate(-S * 0.006, -S * 0.006); lagoDrawBoat(ctx, BX, BY + bob, S, rim, null); ctx.restore(); }   // un filo de luz arriba, del lado del sol
   ctx.save(); if (CAN_BLUR) ctx.filter = `blur(${Math.max(0.6, 0.9 * u)}px)`; lagoDrawBoat(ctx, BX, BY + bob, S, ink, rgba(warm, 0.9 * glow)); ctx.restore();
   // el farol: su luz en el aire y su reflejo largo en el agua
-  { const fx = BX + S * 0.56, fy = BY + bob - S * 0.205, r = S * 0.026;
+  { const fx = BX + S * 0.46, fy = BY + bob - S * 0.165, r = S * 0.024;
     ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
     let g = ctx.createRadialGradient(fx, fy, 0, fx, fy, S * 0.3); g.addColorStop(0, rgba(warm, (night ? 0.7 : 0.45) * glow)); g.addColorStop(0.35, rgba(warm, (night ? 0.18 : 0.1) * glow)); g.addColorStop(1, rgba(warm, 0)); ctx.fillStyle = g; ctx.fillRect(fx - S * 0.3, fy - S * 0.3, S * 0.6, S * 0.6);
     ctx.save(); ctx.translate(fx, BY + S * 0.1); ctx.scale(1, 4.5); g = ctx.createRadialGradient(0, 0, 0, 0, 0, S * 0.06); g.addColorStop(0, rgba(warm, 0.35 * glow)); g.addColorStop(1, rgba(warm, 0)); ctx.fillStyle = g; ctx.fillRect(-S * 0.06, -S * 0.06, S * 0.12, S * 0.12); ctx.restore();
