@@ -791,7 +791,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 152</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 153</div>
     </div>
   </div>
   <div class="group">
@@ -5997,36 +5997,37 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
     float hsh = h(id * 1.37 + 3.1), hsh2 = h(id * 2.11 + 7.7);
     int bi = int(mod(id.x * 5. + id.y * 3., 24.)); float lv = uBand[bi], dc = length(cc - vec2(asp * .5, .5));
     float wv = exp(-pow((dc - uWave) / .14, 2.)) * uP;                                             // la ola del golpe
-    float hs = cell * .475, rr = hs * .34, sd = sdRB(f, vec2(hs), rr);
+    float hs = cell * (.455 + .02 * lv * uGo + .018 * wv), rr = hs * .34, sd = sdRB(f, vec2(hs), rr);   // cada pieza se hincha un poco con su parte y con la ola
     // la luz que hay detrás (la portada, muy clara): se ve por las rendijas y entra por los bordes de cada pieza
     vec3 back = uCovK > 0. ? texture(uCov, (vUv - uCovR.xy) / uCovR.zw).rgb : vec3(1.);
     vec3 bl = mix(vec3(1., .97, .98), back, .3);
-    float bk = .75 + .45 * lv * uGo + .5 * wv + .15 * uVo;                                          // cuánta luz entra: su parte del sonido y la ola
+    float bk = .3 + 1.1 * lv * uGo + .8 * wv + .25 * uVo;   // en lo suave entra poca luz; con su parte del sonido, se encienden                                          // cuánta luz entra: su parte del sonido y la ola
     // los colores de la pieza: dos o tres tonos vecinos, vivos, en un degradado que se tuerce despacio
     float c0 = hsh + uIr * .2 + float(int(id.x + id.y * 2.)) * .19;
     vec3 cA = pal(c0), cB = pal(c0 + .12), cC = pal(c0 + .24);
     vec2 u = f / hs; float an = hsh2 * 6.2832 + uIr * .5; vec2 dir = vec2(cos(an), sin(an));
-    float t = dot(u, dir) + .25 * sin(u.x * 2.3 + u.y * 1.7 + hsh * 6. + uIr);
+    float t = dot(u, dir);   // un degradado limpio (la ondulación marcaba rayitas)
     float m1 = smoothstep(-.9, .2, t), m2 = smoothstep(.1, 1., t) * .7;
-    vec3 vivid = vivo(mix(mix(cA, cB, m1), cC, m2), 1. + .9 * (m1 * (1. - m1) + m2 * (1. - m2)));   // la mezcla de dos colores no se agrisa
+    vec3 vm = mix(mix(cA, cB, m1), cC, m2); float vk = 1. + .9 * (m1 * (1. - m1) + m2 * (1. - m2)), vl = dot(vm, vec3(.3, .59, .11));
+    vec3 vu = mix(vec3(vl), vm, vk); float mn = min(vu.r, min(vu.g, vu.b)), mx = max(vu.r, max(vu.g, vu.b));
+    vec3 vivid = mix(vm, clamp(vu, 0., 1.), smoothstep(-.12, .02, mn) * smoothstep(1.12, .98, mx));   // la mezcla no se agrisa, sin pasarse de rango (eso marcaba rayitas)
     // hondo y saturado lejos de la luz, luminoso cerca: una esquina más clara y la otra más oscura, como en la referencia
     float lightSide = .5 + .5 * dot(u, normalize(vec2(-dir.y, dir.x)) * .8);
     vec3 deep = pow(vivid, vec3(1.8)) * .8;                                                          // el tono oscuro conserva el color (no se ensucia)
     vec3 col; float al;
     if (sd < px) {
       vec2 ua = abs(u) / (1. - .02); float se = 1. - pow(pow(ua.x, 5.) + pow(ua.y, 5.), .2), s = max(se, 0.) * hs;   // distancia al borde, suave (sin aristas en diagonal)
-      float e = exp(-s / (hs * (.13 + .1 * bk)));                                                   // la luz de atrás entrando por el canto
+      float e = exp(-s / (hs * (.08 + .12 * bk)));                                                   // la luz de atrás entrando por el canto
       vec3 c = mix(deep, vivid, smoothstep(.0, 1., lightSide * .8 + .2 * e));
-      c = mix(c, mix(vivid * 1.3 + .05, bl, .5), e * (.6 + .35 * bk));                               // el borde, luminoso y pastel
+      c = mix(c, mix(vivid * 1.3 + .05, bl, .5), e * (.35 + .5 * bk));
+      c *= .78 + .3 * min(bk, 1.2);                                                                   // la pieza entera se enciende con la música                               // el borde, luminoso y pastel
       c += vivid * exp(-s / (hs * .035)) * .35 * bk;                                                 // un filo de color puro, encendido
       c = min(c, vec3(1.));
       float a_ = smoothstep(px, -px, sd);
       col = mix(bl, c, a_); al = 1.;
     } else {
-      // la rendija: luz clara que viene de atrás, teñida apenas por las piezas
-      float near = exp(-sd / (cell * .03));
-      col = mix(bl, mix(vivid, bl, .5), near * .4) * (uNight > .5 ? .75 + .25 * bk : 1.);
-      al = 1.;
+      // la rendija: luz clara y continua que viene de atrás (sin teñirla por pieza, que marcaba cuadros)
+      col = bl * (uNight > .5 ? .62 + .3 * uLv.x * uGo + .25 * uP : .92 + .08 * uLv.x * uGo); al = 1.;
     }
     if (uNight > .5) col *= mix(1., .82, 1. - smoothstep(px, -px, sd) * .3);                       // de noche, todo algo más hondo
     col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .012;
@@ -6224,7 +6225,7 @@ function drawLago(dt) {
   L.x = 0.5;   // la barca se queda quieta en el camino de luz
   L.lamp = (L.lamp || 0.5) + ((0.45 + 0.4 * Math.min(1, L.lv[0] * 1.1) + 0.25 * L.vo) * (0.4 + 0.6 * L.go) - (L.lamp || 0.5)) * (1 - Math.pow(0.12, dt));   // la luz de adentro respira con la música, suave
   L.push = Math.max(0, L.push - dt / (per * 0.9));
-  L.rings.forEach(r => { r.r += dt * 0.05 * (1 + r.r * 4); r.a *= Math.pow(0.35, dt); }); L.rings = L.rings.filter(r => r.a > 0.03);
+  L.rings.forEach(r => { r.r += dt * 0.05 * (1 + r.r * 4); r.a *= Math.pow(0.35, dt); }); L.rings = L.rings.filter(r => r.a > 0.03); while (L.rings.length > 4) L.rings.shift();   // caben 4 anillos: si hay más, el más viejo se va (antes se acumulaban y la escena fallaba)
   L.R.fill(0); L.rings.forEach((r, i) => L.R.set([r.x, r.y, r.r, r.a], i * 4));
   if (L.star) { L.star.t += dt / (per * 1.4) * L.go; if (L.star.t >= 1) L.star = null; }
   // los colores: el cielo de cada hora con un toque de los colores de la portada (no más: así siempre se ve armónico)
