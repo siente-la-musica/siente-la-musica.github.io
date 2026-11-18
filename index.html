@@ -791,7 +791,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 150</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 151</div>
     </div>
   </div>
   <div class="group">
@@ -11003,7 +11003,7 @@ function drawFan(dt) {
 // foco de arriba con su nota. Todo con un desenfoque suave, como una foto de escenario.
 const disco = { prog: null, rot: 0, rotT: 0, beam: [0.4, 0.4, 0.4], spark: 0, sway: 0 };
 function discoSetup() {
-  disco.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uRot, uR, uSpark, uNight, uP; uniform vec3 uL0, uL1, uL2, uBg; uniform vec3 uB; uniform vec2 uC; uniform float uSway;
+  disco.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uRot, uR, uSpark, uNight, uP; uniform vec3 uL0, uL1, uL2, uBg; uniform vec3 uB; uniform vec2 uC; uniform float uSway; uniform vec4 uSp[46]; uniform vec4 uSt[10];
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float h1(float n) { return fract(sin(n * 91.345) * 47453.53); }
@@ -11034,13 +11034,11 @@ function discoSetup() {
         col += lc(k) * exp(-pow(dist / w, 2.)) * smoothstep(0., .15, t) * smoothstep(1.15, .85, t) * (.04 + uB[k] * .55) * haze;
       }
       // puntos de luz que la bola lanza a la sala (giran con ella)
+      // (sus posiciones se calculan una vez por cuadro, no en cada píxel: así el Disco graba fluido)
       for (int i = 0; i < 46; i++) {
-        float fi = float(i), a = h1(fi) * 6.283 + uRot * (.9 + h1(fi + 3.) * .3), r = .32 + h1(fi + 7.) * .75;
-        vec2 sp = C + vec2(cos(a) * r * max(asp, 1.) * .62, sin(a) * r * .55);
-        float sz = .006 + h1(fi + 11.) * .014;
-        float tw = .4 + .6 * pow(.5 + .5 * sin(uTime * (2. + h1(fi + 5.) * 5.) + fi), 2.);
-        int k = int(mod(fi, 3.));
-        col += lc(k) * exp(-dot(p - sp, p - sp) / (sz * sz)) * (.06 + uB[k] * 1.1 + uSpark * .5) * tw;
+        vec4 s = uSp[i]; vec2 dd = p - C - s.xy; float q = dot(dd, dd) / (s.z * s.z); if (q > 9.) continue;
+        int k = i - 3 * (i / 3);
+        col += lc(k) * exp(-q) * (.06 + uB[k] * 1.1 + uSpark * .5) * s.w;
       }
       // la bola
       vec2 b = (p - C) / uR; float r2 = dot(b, b);
@@ -11085,9 +11083,8 @@ function discoSetup() {
       }
       // estrellas de luz sobre los destellos más fuertes (como en una foto con filtro de estrella)
       for (int i = 0; i < 10; i++) {
-        float fi = float(i), an = h1(fi * 3.1) * 6.283 + uRot * .5, rr = uR * (.35 + h1(fi + 1.7) * .55);
-        vec2 sp = C + vec2(cos(an), sin(an) * .9) * rr;
-        float life = pow(max(0., sin(uTime * (1.5 + h1(fi) * 2.) + fi * 2.1)), 6.) * (.15 + uB[int(mod(fi, 3.))] * 1.2 + uSpark);
+        float fi = float(i); vec4 s = uSt[i]; if (s.z <= 0.) continue; vec2 sp = C + s.xy * uR;
+        float life = s.z * (.15 + uB[int(mod(fi, 3.))] * 1.2 + uSpark);
         vec2 d = p - sp; float L = uR * .5 * (.6 + life * .6);
         float star = exp(-abs(d.y) / .0016) * exp(-abs(d.x) / L) + exp(-abs(d.x) / .0016) * exp(-abs(d.y) / L) + exp(-dot(d, d) / .00012);
         col += mix(lc(int(mod(fi, 3.))), vec3(1.), .7) * star * life * .55;
@@ -11121,6 +11118,13 @@ function drawDisco(dt) {
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 1000); gl.uniform1f(p.u.uRot, disco.rot); gl.uniform1f(p.u.uSpark, disco.spark * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
   gl.uniform1f(p.u.uR, Math.min(0.3, 0.3 * W / H) * (1 + P * 0.015)); gl.uniform2f(p.u.uC, 0.5, 0.52); gl.uniform1f(p.u.uSway, Math.sin(disco.sway));
+  { const h1 = n => { const v = Math.sin(n * 91.345) * 47453.53; return v - Math.floor(v); }, T = time % 1000, rot = disco.rot, asp = W / H;
+    const sp = disco.spA || (disco.spA = new Float32Array(184)), st = disco.stA || (disco.stA = new Float32Array(40));
+    for (let i = 0; i < 46; i++) { const a = h1(i) * 6.283 + rot * (0.9 + h1(i + 3) * 0.3), r = 0.32 + h1(i + 7) * 0.75;
+      sp.set([Math.cos(a) * r * Math.max(asp, 1) * 0.62, Math.sin(a) * r * 0.55, 0.006 + h1(i + 11) * 0.014, 0.4 + 0.6 * Math.pow(0.5 + 0.5 * Math.sin(T * (2 + h1(i + 5) * 5) + i), 2)], i * 4); }
+    for (let i = 0; i < 10; i++) { const an = h1(i * 3.1) * 6.283 + rot * 0.5, rr = 0.35 + h1(i + 1.7) * 0.55;
+      st.set([Math.cos(an) * rr, Math.sin(an) * 0.9 * rr, Math.pow(Math.max(0, Math.sin(T * (1.5 + h1(i) * 2) + i * 2.1)), 6), 0], i * 4); }
+    gl.uniform4fv(p.u['uSp[0]'], sp); gl.uniform4fv(p.u['uSt[0]'], st); }
   gl.uniform3fv(p.u.uL0, sat(RGB[0], 62)); gl.uniform3fv(p.u.uL1, l1); gl.uniform3fv(p.u.uL2, sat(RGB[2], 64));
   gl.uniform3fv(p.u.uB, disco.beam.map(v => v * (state.noFlash ? 0.6 : 1)));
   gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 30, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 25, 20)).map(v => v / 255));   // la sala siempre en penumbra: así brilla la luz
