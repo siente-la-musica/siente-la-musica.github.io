@@ -5958,182 +5958,178 @@ function drawDunas(dt) {
 }
 
 // ================= Abstractas suaves (Cuencos, Anillo, Bailarín, Arco) =================
-// Las cuatro dejan ver el fondo vivo con la portada (como el resto) y responden fuerte y claro a la canción.
+// Las cuatro dejan ver el fondo vivo con la portada (como el resto) y responden claro a la canción.
 
-// ---------- Cuencos: gotas de vidrio líquido sobre la portada. Cada lente refracta y amplía lo que tiene detrás, con el borde
-// de luz, la dispersión de color y la sombra suave del vidrio. Cada gota escucha su parte del sonido y se hincha con ella; cada
-// golpe manda una ola desde el centro que las infla una tras otra, y la voz les enciende un brillo de color por dentro. ----------
+// ---------- Cuencos: gotas de vidrio líquido sobre la portada, como el vidrio de los sistemas nuevos: transparentes en el centro,
+// con el borde redondeado que dobla la luz de lo que hay detrás (y la separa apenas en colores), un filo de luz fino arriba a la
+// izquierda y su reflejo más tenue abajo a la derecha. Cada gota se hincha con su parte del sonido y, al crecer, se funde con sus
+// vecinas como un líquido; cada golpe manda una ola desde el centro y los agudos encienden el filo. ----------
 PAI.dot = { wave: 9 };
-const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave, uVo, uGo; uniform vec3 uLv, uC0, uC1, uC2; uniform float uBand[24];
+const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave, uVo, uGo, uMelt, uHi; uniform vec3 uLv, uC0, uC1, uC2; uniform float uBand[24];
   ${GLSL_NOISE}
   ${GLSL_COVER}
+  float CELL; vec2 CC; float LV;
   vec3 cov(vec2 q) { return uCovK > 0. ? texture(uCov, (q - uCovR.xy) / uCovR.zw).rgb : mix(uC0, uC1, q.y); }
+  float rad(vec2 id, vec2 cc, float asp) { int bi = int(mod(id.x * 5. + id.y * 3., 24.)); float lv = uBand[bi], dc = length(cc - vec2(asp * .5, .5));
+    float wv = exp(-pow((dc - uWave) / .12, 2.)) * uP; return CELL * (.24 + .16 * lv + .07 * wv + .02 * uLv.x); }
+  float smin(float a, float b, float k) { float h_ = clamp(.5 + .5 * (b - a) / k, 0., 1.); return mix(b, a, h_) - k * h_ * (1. - h_); }
+  float sdf(vec2 p, float asp) { vec2 g = p / CELL, id0 = floor(g); float d = 1e3, k = CELL * (.04 + .16 * uMelt);
+    for (int i = -1; i <= 1; i++) for (int j = -1; j <= 1; j++) { vec2 id = id0 + vec2(i, j), cc = (id + .5) * CELL; d = smin(d, length(p - cc) - rad(id, cc, asp), k); }
+    return d; }
   void main() {
     float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y);
-    float cols = asp < 1. ? 4. : 7., cell = asp / cols; vec2 g = p / cell, id = floor(g), f = fract(g) - .5;
-    vec2 cc = (id + .5) * cell; float dc = length(cc - vec2(asp * .5, .5));
-    int bi = int(mod(id.x * 5. + id.y * 3., 24.)); float lv = uBand[bi];
-    float wv = exp(-pow((dc - uWave) / .1, 2.)) * uP;                                           // la ola del golpe
-    float r = .3 + .12 * lv + .07 * wv + .02 * uLv.x, d = length(f) - r, aa = 1.2 / (cell * uRes.y);
+    CELL = asp / (asp < 1. ? 3. : 5.);
+    float d = sdf(p, asp), px = 1. / uRes.y, aa = 1.2 * px;
     vec4 o_ = vec4(0.);
-    // la sombra del vidrio sobre la portada: suave, corrida hacia abajo
-    float sh = smoothstep(.16, -.05, length(f - vec2(0., -.05)) - r) * .28;
-    o_ = vec4(vec3(0.), sh * (1. - smoothstep(aa, -aa, d)));
+    float sd = sdf(p + vec2(0., CELL * .06), asp);                                                 // la sombra, corrida hacia abajo
+    o_ = vec4(vec3(0.), .2 * smoothstep(CELL * .14, -CELL * .04, sd));
     if (d < aa) {
-      vec2 n2 = f / r; float rr = dot(n2, n2), z = sqrt(max(0., 1. - rr));
-      // refracción: amplía el centro y dobla los bordes hacia afuera, cada color un poco distinto (dispersión)
-      vec2 base = vec2((cc.x + f.x * cell * .45) / asp, cc.y + f.y * cell * .45), bend = n2 * (1. - z) * cell * .35 * vec2(1. / asp, 1.);
-      vec3 c = vec3(cov(base - bend * 1.06).r, cov(base - bend).g, cov(base - bend * .94).b);
-      c = c * 1.04 + .02;                                                             // el vidrio aclara un poco
-      vec3 tint = mix(uC0, uC2, fract(id.x * .37 + id.y * .21));
-      c += tint * (.04 + .55 * lv * uGo + .3 * wv) * smoothstep(.2, 1., rr) * (1. - .5 * uNight * 0.);   // el color del sonido se junta en el borde
-      c += mix(tint, vec3(1.), .5) * exp(-rr * 3.) * uVo * .25;                                     // la voz: un brillo adentro
-      float fres = pow(rr, 3.);                                                                  // el borde (fresnel) brilla
-      c = mix(c, vec3(1.), fres * .22);
-      c += vec3(1.) * smoothstep(.02, .0, abs(d + .012)) * (.35 + .4 * smoothstep(-.2, .6, -n2.x * .5 + n2.y)) * (.7 + .5 * wv);   // el filo de luz
-      vec2 sp = n2 - vec2(-.38, .42); c += vec3(1.) * exp(-dot(sp, sp) * 26.) * .55;              // el reflejo de la ventana
-      c *= 1. - .18 * smoothstep(.0, 1., -n2.y) * rr;                                              // abajo, un poco más hondo
+      vec2 e = vec2(px * 2., 0.); vec2 n2 = normalize(vec2(sdf(p + e.xy, asp) - sdf(p - e.xy, asp), sdf(p + e.yx, asp) - sdf(p - e.yx, asp)) + 1e-6);   // hacia afuera
+      float s = -d, w = CELL * .2, b = 1. - clamp(s / w, 0., 1.), bend = b * b * (3. - 2. * b);                    // el bisel: plano en el centro, curvo en el borde
+      vec2 g = p / CELL, cc = (floor(g) + .5) * CELL; vec2 zoom = (p - cc) * .06;                  // un aumento muy leve
+      vec2 off = -n2 * bend * CELL * .3 - zoom;
+      vec2 q = vec2((p.x + off.x) / asp, p.y + off.y), dq = -n2 * bend * CELL * .03 * vec2(1. / asp, 1.);
+      vec3 c = vec3(cov(q + dq).r, cov(q).g, cov(q - dq).b);                                       // la luz se separa apenas en el borde
+      c = c * 1.06 + .025;                                                                          // el vidrio aclara un poquito
+      vec3 L = normalize(vec3(-.55, .65, .5)); float lit = dot(n2, L.xy);
+      float rim = smoothstep(w * .22, 0., s);                                                       // el filo
+      c += vec3(1.) * rim * (pow(max(lit, 0.), 2.) * (.75 + .5 * uHi + .4 * uP) + pow(max(-lit, 0.), 3.) * .3);
+      c += vec3(1.) * smoothstep(1.5 * px, 0., abs(d + .6 * px)) * .25;                             // la línea finísima del contorno
+      c += mix(uC0, uC2, .5) * bend * (.06 + .22 * uLv.y * uGo) ;                                    // un brillo de color en el bisel con la música
+      c *= 1. - .1 * bend * smoothstep(-.2, .8, -lit);                                              // del lado de la sombra, un poco más hondo
       float a = smoothstep(aa, -aa, d);
       o_ = vec4(c * a + o_.rgb * (1. - a), a + o_.a * (1. - a));
     }
-    vec3 col = o_.rgb; ${PAI_GRAIN}
-    o = vec4(col * step(.001, o_.a), o_.a);
+    vec3 col = o_.rgb; col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .015 * o_.a;
+    o = vec4(col, o_.a);
   }`;
 function drawPuntosSuave(dt) {
   if (!glInit()) { drawSakura(dt); return; }
   const S = PAI.dot, night = state.theme === 'dark'; paiLevels(S, dt);
-  S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.25); S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.04, dt)); }
-  if (pulse.on) S.wave = 0; S.wave += dt * 0.9;
-  const c = k => paiTone(mix([0.12, 0.5, 0.88][k % 3]), night ? 62 : 58, 60, 95);
+  S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.3) * S.go; S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.03, dt)); }
+  if (pulse.on) S.wave = 0; S.wave += dt * 0.8;
+  S.melt = (S.melt || 0) + (Math.min(1, S.en * 1.4) - (S.melt || 0)) * (1 - Math.pow(0.2, dt));
+  S.hi = Math.max((S.hi || 0) * Math.pow(0.02, dt), hits.hat ? 1 : 0, Math.min(1, S.lv[2]) * 0.6);
+  const c = k => paiTone(mix([0.12, 0.5, 0.88][k % 3]), 66, 60, 95);
   paiRun(S, PUNTOS_FS, (gl, p) => { glCoverBind(p); gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2));
-    gl.uniform1fv(p.u['uBand[0]'], S.bl); gl.uniform1f(p.u.uWave, S.wave); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.wave / 1.6)); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uGo, S.go); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
+    gl.uniform1fv(p.u['uBand[0]'], S.bl); gl.uniform1f(p.u.uWave, S.wave); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.wave / 1.6)); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uGo, S.go);
+    gl.uniform1f(p.u.uMelt, S.melt); gl.uniform1f(p.u.uHi, S.hi); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
-// ---------- Anillo: un eclipse de luz sobre la portada. Adentro, la portada en sombra; el aro, fino y blanco, con su corona de
-// rayos que se estira con la energía y un borde de arcoíris (los colores de la portada) que gira con la melodía. Cada golpe lo
-// enciende y suelta ondas de luz que se abren hacia afuera, con un destello horizontal como de lente. ----------
-PAI.ring = { rot: 0, echo: [9, 9, 9], ei: 0 };
-const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn, uFl; uniform vec3 uLv, uC0, uC1, uC2, uEcho;
+// ---------- Anillo: un aro de luz fino sobre un cielo limpio que deja ver la portada; adentro, el mismo cielo un poco más hondo.
+// Su borde se enciende en arcoíris (con los colores de la portada): con los graves el resplandor se abre, cada golpe lo enciende
+// de blanco, los medios avivan el color y la voz baña de luz el espacio de abajo. ----------
+PAI.ring = { rot: 0 };
+const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2;
   ${GLSL_NOISE}
   void main() {
-    float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, .55);
-    float R = min(asp, 1.) * .3 * (1. + .07 * uLv.x + .04 * uP), d = length(p - c), a = atan(p.y - c.y, p.x - c.x);
+    float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, asp < 1. ? .58 : .55);
+    vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., uv.y)); float al = .62;
+    float R = min(asp, 1.) * .31 * (1. + .04 * uP + .035 * uLv.x), d = length(p - c), a = atan(p.y - c.y, p.x - c.x);
+    if (d < R) { float k = smoothstep(R, R * .88, d); sky = mix(sky, uSky0 * .7, k * .5); al = mix(al, .82, k); }   // adentro, más hondo
+    vec3 L = vec3(0.);
+    L += mix(uC1, vec3(1.), .5) * exp(-pow((p.y - c.y + R * 1.1) / (R * .9), 2.)) * exp(-pow((p.x - c.x) / (R * .9), 2.)) * (.08 + .45 * uVo);   // la luz que cae abajo
     float t = fract((a + uRot) / 6.2832);
     vec3 rb = t < .33 ? mix(uC0, uC1, t * 3.) : t < .66 ? mix(uC1, uC2, (t - .33) * 3.) : mix(uC2, uC0, (t - .66) * 3.);
-    // la sombra: un velo sobre la portada que se hace hondo adentro del aro (de noche más)
-    float veil = mix(uNight > .5 ? .35 : .15, uNight > .5 ? .88 : .7, smoothstep(R * 1.02, R * .9, d));
-    veil = max(veil, .5 * smoothstep(.5, 1.2, length((vUv - .5) * vec2(1., .9)) * 1.3));
-    vec3 L = vec3(0.);
-    // la corona: rayos finos que salen del aro, más largos con la energía
-    float ray = .55 + .45 * n(vec2(a * 9. + uRot * 2., uT * .3)) * n(vec2(a * 23. - uRot, 3.));
-    L += mix(rb, vec3(1.), .35) * exp(-max(d - R, 0.) / (R * (.06 + .35 * uEn * ray))) * step(R, d) * (.35 + .6 * uP + .4 * uLv.y);
-    // el borde de colores y el aro blanco, finísimo
-    L += mix(rb, vec3(1.), .2) * exp(-pow((d - R) / (R * (.04 + .03 * uLv.x)), 2.)) * (.9 + .9 * uP);
-    L += vec3(1.) * exp(-pow((d - R) / (1.4 * px), 2.)) * (.8 + .6 * uP);
-    L += vec3(1.) * exp(-max(R - d, 0.) / (R * .04)) * step(d, R) * .25 * (1. + uP);
-    // las ondas del golpe
-    for (int i = 0; i < 3; i++) { float e = uEcho[i]; if (e > 1.) continue; float re = R * (1. + e * 1.6);
-      L += mix(rb, vec3(1.), .5) * exp(-pow((d - re) / (R * (.02 + .05 * e)), 2.)) * (1. - e) * (1. - e) * .9; }
-    // el destello de lente: una raya horizontal que cruza el aro en el golpe
-    L += mix(rb, vec3(1.), .6) * exp(-pow((p.y - c.y) / (px * (2. + 6. * uFl)), 2.)) * exp(-abs(p.x - c.x) / (asp * .35)) * uFl * .8 * smoothstep(R * .97, R * 1.08, d);   // por fuera del disco (adentro queda en sombra)
-    L += mix(uC1, vec3(1.), .5) * exp(-d * d / (R * R * 1.4)) * uVo * .18;                          // la voz: un resplandor que llena el centro
-    vec3 col = L; float al = veil;
-    ${PAI_GRAIN}
+    float side = .45 + .55 * smoothstep(.3, -.9, sin(a) * .8 + cos(a) * -.4);
+    float gw = .03 + .03 * uLv.x + .02 * uP;                                                         // el resplandor se abre con los graves
+    L += mix(rb, vec3(1.), .2) * exp(-pow((d - R) / (R * gw), 2.)) * side * (.4 + .7 * uP + .55 * uLv.y + .25 * uEn);
+    L += mix(rb, vec3(1.), .45) * exp(-max(d - R, 0.) / (R * (.2 + .25 * uLv.x))) * step(R, d) * side * (.1 + .25 * uP);
+    L += vec3(1.) * exp(-pow((d - R) / ((1.4 + 1.6 * uP) * px), 2.)) * (.6 + .8 * uP);                // el filo blanco, que se engrosa en el golpe
+    L += vec3(1.) * exp(-pow((d - R * .985) / (1.2 * px), 2.)) * .2;
+    vec3 col = sky * al + L;
+    col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .02 * al;
     o = vec4(col, al);
   }`;
 function drawAnillo(dt) {
   if (!glInit()) { drawEclipse(dt); return; }
-  const S = PAI.ring, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
-  S.rot += dt * (0.08 + 0.9 * S.en) * S.go; S.k = Math.max((S.k || 0) * Math.pow(0.03, dt), pulse.on ? pulse.k || 1 : 0);
-  if (pulse.on) { S.echo[S.ei++ % 3] = 0; S.fl = 1; } S.fl = (S.fl || 0) * Math.pow(0.004, dt);
-  for (let i = 0; i < 3; i++) S.echo[i] += dt / (S.per * 1.6);
+  const S = PAI.ring, night = state.theme === 'dark'; paiLevels(S, dt);
+  S.rot += dt * (0.05 + 0.9 * S.en + 0.4 * Math.min(1, S.lv[1])) * S.go; S.k = Math.max((S.k || 0) * Math.pow(0.02, dt), pulse.on ? Math.max(0.6, pulse.k || 1) : 0);
+  const sky = night ? [[0.05, 0.1, 0.28], [0.02, 0.03, 0.1]] : [[0.12, 0.42, 0.76], [0.45, 0.7, 0.9]];
   const c = k => paiTone(mix([0.1, 0.5, 0.9][k]), 64, 75, 100);
-  paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform3fv(p.u.uEcho, S.echo);
-    const nf = state.noFlash ? 0.5 : 1; gl.uniform1f(p.u.uP, S.k * nf); gl.uniform1f(p.u.uFl, S.fl * nf); gl.uniform1f(p.u.uEn, S.en); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
+  paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(sky[0], paiTone(mix(0.4), night ? 20 : 45), 0.3)); gl.uniform3fv(p.u.uSky1, paiBl(sky[1], paiTone(mix(0.7), night ? 10 : 70), 0.3));
+    gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform1f(p.u.uP, S.k * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uEn, S.en);
+    gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
-// ---------- Bailarín: una figura desenfocada que baila delante de la portada, como tras un vidrio esmerilado. Brazos y piernas
-// bien separados del cuerpo, manos y pies con forma; cada golpe cambia de paso, el ritmo la mece de lado a lado, los graves la
-// hacen rebotar y la voz le sube los brazos. Deja una estela suave. ----------
-PAI.dan = { pose: 0, from: null, to: null, ph: 1, c: null };
-const DANCE = [   // cadera [x,y], inclinación del torso, brazos [hombro, codo] izq/der, piernas [cadera, rodilla] izq/der (radianes; 0 = hacia abajo)
-  { hip: [0, 0], lean: 0.1, la: [2.3, 0.5], ra: [-1.3, -0.6], ll: [-0.3, 0.4], rl: [0.35, -0.5] },
-  { hip: [0.08, -0.04], lean: -0.18, la: [1.3, 0.9], ra: [-2.2, -0.4], ll: [-0.5, 0.15], rl: [0.15, 0.8] },
-  { hip: [-0.06, -0.08], lean: 0.22, la: [1.0, 1.3], ra: [-1.0, -1.3], ll: [-0.2, 0.9], rl: [0.55, -0.15] },
-  { hip: [0.02, 0.03], lean: -0.04, la: [2.1, -0.5], ra: [-2.1, 0.5], ll: [-0.38, 0.3], rl: [0.38, -0.3] },
-  { hip: [-0.07, -0.02], lean: 0.2, la: [1.6, -0.4], ra: [-1.9, 1.0], ll: [-0.65, 0.5], rl: [0.2, 0.05] },
-  { hip: [0.05, -0.06], lean: -0.25, la: [2.0, 1.2], ra: [-0.7, -0.9], ll: [-0.15, 0.2], rl: [0.6, 0.6] }];
+// ---------- Bailarín: un hombre que baila samba (movimiento real, capturado de una persona), desenfocado como tras un vidrio
+// esmerilado, delante de la portada. El baile avanza al tempo de la canción y se detiene en silencio; los graves lo hacen rebotar
+// y los brazos que pasan por delante del cuerpo se ven más claros, para que nunca se pierdan contra el torso. ----------
+const DANCE_DATA = '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r91Uirtb11jbi+tuevjIolb6gbiBZcjjgUZdkPtugenIovhllYh7kOoqgUkUkKungpkFwkgwkHxygqkBzIgZjt0EgSiH3Qf2iryQfrgnu9fLi/tadHjJtzbdldzKhWpIzrisse0Tjgt81Hj3jvtJftjtoWcUgaiHZwjhgaZalCtRhboVofiRlYh3kNoqgRkZkiuXhMkUwThVkVxhhQkUy3hBkCz0g7ih3EgmjRx+f9iSureDlivHc0l3wCbZlhyuiSpPy4jhsszWj8uI0TkAkXs5gKkaoVcegniMaajdghZElctEiBozoSimlUh1kOolgPkcktuohZkfwkhikkxyhfkpzKhWkY0HhSi13WhMj/ydf5kKwscZnbxwdFoCzWc0lfy6i3pDyzkfshzUket60RkGkntNgUkyoncqhDiVa6jbgxY3lhtTiQoqoXixlSh1kQojgOkdksvPhSkmxMhYkuyahYk6zxhVkq0vhUjA36hZkkzXfrltznb7pJz6cgqN1Oc2ldzbi8ohzVlZr7z1kvtP0tkEkgtzgOlKpDc1hwimbFjzg0ZBlUt2iOoAopislRh2kToigNkekjvug4klxsg8kwy6g/k90QhCku1OhCjH4chHky0EfUm71McOqT0zbYr71abNlYz1iroHz3lfrl0ClItA0ykgkUuSf1kmpIdDi1iKa4lpgwZNk8uTh5nJo5ijlQh3kVoggNkgkgv1gYklxzgbkvzBggk80Xgmku1VgmjY4rghk60Oe4nl1GcJqy05avsc0taLlSz5iPoQzukyrnz3lytT0OlxkRuXfXlHpFc9j2iAazm+gfaCkvubhdmto+iYlOh5kXoegNkhkgvff5kixcf9kuypgBk70AgGkv0/gDjs4af0k8zxeYnOz6bMqWzjZosDzjZQlMzihwoHy3kSrCymmNsiy8m8keuAe4mLo2cqj7h7aznEgQalkuuGhBnEo4iTlJh6kVoZgPkhkjusfkkiwofpkux2fsk5zNfskx0Lflj63pfKk2yveAmKxvacphxeZfq+yXZIlFyshWnJw3kJqGw2mCrExYnWkvtSeenOojcDj9h7awnFgQaYkxtQgooDouiZlKiBkHoVgWkokst8fWkov4fakyxFfbk6ydfakzzbfRkR26ejk1x1dxkjv3aZnwv9Y+o2w4X/k6x1hDlqvHjwoEwfl5oRxTnalAskePn/oLbtj9h6a0nGgQaak+sggZoxoliklOiGj2oSgZkrk5t/fVkxv8fVk4xKfVk8yifUk1zgfJkj2/eWk3x9dqi9v8a4lfwnYjmfxTXTkwx6g7kCu6jXlRxelakyy0mXlNsmeQoGoGb2j+h6aznGgQaYlLslgaozoeiglMiCj5oSgXktk5vZfekyxXfakyymfYkuz9fYkm07fNku4deikszfdsiRxcbYkCzHY2lBzpXgkdzXg/jJwXjKjszXk5i50ylYlFt9ecnAo2cQkIiFaynHgUaYlFuAglnjo+iUlOiDkCoTgVktk2w2fkkuy1fgkk0CfekV1ZfckK2WfQkf55exkY0+dwiNzFbFkE1OZBlJ1/X6kL0zhFi1yJjpjh1PlIi02xlck2vXellnp3cqkniqa0m/gPaRk3vfgulnp2iNlbilkGn9gPlEkuxCftkgzAfpkU0NfnkE1kfkj52hfYkM6DeykL1Md4ifz4alkw1/Y9l13HYMkA1FhQjCzKkikG2EmLji3nmpkxvjetluqEc1jojGbAlbgNavkyvqg2lmqCiUj9i8kGl0gSlVkcwQf1kNyOfykFzcfxj700fvjw1xfij05RevkC0deCiwzuaZlW1dYzmT2zYOj40chcjNzFlEkg1qnEj73En1knuye1lspUdAiZiybSkNgObHkhu4g+lqpVigiZiuj2kfgYlCkAvIf4j2xHf3jyyVf3jrzsf3jg0qfrjR4HetjxzTeKi0yJailcz8ZEme1PYhjjzRhjjUxdlCkY0Nm7jr1gnwkOtqe4lXoOc+hTiKbPkMgTbGkDtwhBlWoSivhdiAj+kdgUk/jcuaf4jTwYf4jVxmf6jWy+f6jNz7fuir3VesjdyeePijwea/lIyZZlmdzRY2jGychkjGvvkaj5ynmPjJz1nJjws9e4lfnwcyhDh6bOkNgRbFjgtBhBlqn+jFhVh5j8kbgQk8jCunf6i9wlf6jExzf8jKzKf+jD0If0iR3eetjRyteSiAw5bCkvywZ5mOzWZLi3yohniWvokGjVyllviqz6mijWtLe5lKn9c5hDh6bNkMgQbFjJtOhBlXoJi+hVh5j9kcgQk9i4v8gEi4x7gCi/zJgAjF0ggBi91ff3iN43e8jK0JeUhty/a3kd06Z2l91oZVi10AhrhuxakZjA0Rl9ig1wmoi6ugfBjxpDdBhPiMbTkKgWbEi9uhhKkWpAilhriIkBkigRlCirw4gCixy3f8i10Ff5i41df2iy2bfriI55e+i91IeJh401aYko2RYvlw3ZYDiy1Bhihkzdk7jH1xnEi13Nn7iZvbfCijp0dThViib9jigYaQiwvfhJjpp0iWiaimkBkxgQk4iewzf6ilyxfyirz/fuix1Xfriq2VfgiD50e5iw1Fd+iP1naHkl2BXilm3KWsi11HhaiF08lQja2GoSjO3GpqiJvUe+iXpxdDgNildBhLgWaiipvbhDjhptiDiYikkCk6gOkTiVv/ftiYx9flifzLfhip0ifeig1hfWh25Aezib0Wdxip1BZ6ku0FXPmR0CWbi00bhLii00lFka1nn7ka2Ppih7uee2iTpAcvfeiQeZgKgXbmisupg2jro8h2hyiDkLk5gTkJh+vYfRh8xWfHiGykfGiVz6fJiO05fKhb4Yevh6z2dehyy6ZqjRweXokrvcXgilzcgziVyiknlszMlWmzzbmmhhtzekhzoYcTfLhzeyf9gMbtiouIgYj8oghbhth4kJk+gTkDhevBexhbw+eshpyLeth/zge3h80fe/hH3+e3hNzbdTgEw3ajg5trZVh+sTZSiZyggOjFvaiimNwphkn3w/hqg+tfd+haoJbmfDhxezf5gKbviTtsfplUosgRifimjmlHgckEhDumeYhHwiedhcxuefh5zAenh6z/ezg13ZfJgnzCdbeYwFcIeWsobiezq9bzixx2flkcuTfTmOwqdbnhxpdLggtLdbhQn2bEfBhwe0fzgHbwh6tLfCmQpPemj7jLiWmEgii8g1uweHhEwqePhex0eQh8zHeRiA0Eeeg23YfSgRzPdxdIw4d0b8todQcZr9dPjPx/eqlTvPcxmQx+aynezLa0gGtVdTgin9a/e+hwe6fvgGb2h0tVelmDpZdflxiwg8owg4gJhDvKdxhdxDd5h4yNd6iSzhd7iW0eeLhT3wfLgjzneIdRx4fcbIvJfAbAtoeLjtyhdrlwwva2mjzVYont0mYrgEtwdUfsoPbVe5hxfEfngHcAiFtueDlZo8dMoPiMezqrhLcUh9vedQihxVdWi6yfdajMz1dijP0xd1iW4Ge5hmzsePesySgdb+wGgDbJvaeskkzJctmmyOZenh0DWoo01KWbguuLdIfooib7e3h1fMfggJcJ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jowbetjjyXeWjdzjeCjV03drjR12d0ju5JfMhs0Wd9eXzcf1dW02cycz1ZbOlC0ddroNyVemoP04cMof2lcQinu/fAgvpdecfAiLfHengWcIkvvCexmBpZdtnciOfYoPgTchjkwre7jZynegjRzxeKjH1GdzjC2Ed7je5YfQhe0oeLd01AfibW1fdFaT2Vb+k100djow0rdmpY2Xampn4BaOirvPffgyprfMgAiYgxdkgefCkvvVe6lxpleWneibf4ncgMdQjXwGfEjKyCetjAzNeYi10gd/iz1feCjQ46fEhO0Uendh1cfQaT1Ld4ZC1uczke0ddeoE1tchpS2zZap/36YUilupfwgSpPf0hliOiLeygVhTkfuveyldo8ennhiCgtnZgSdoizvlfUioxifDihyueuiW0BeUiZ1AeTi74cfLg50DfOdI0igOaZypfHZcyPdtj3z1dhnd0tcOmw0rYynX05XNiPuIgLgBosgXiKh1ikfHgPhpjzuPetk1odedndh0gwnNgQdhiQvUfxiKxRfhiEybfKh8zuesiD0seliq4Ifegvztf8dsyUh+b7vYhPbQuif3jMy+dtmhxbcTj7xWZ8i8xQYlhst4grfWoggyiNh0isfLgLhyi6t5e6jUoTdKnGifgCnNgZdWh9u5gHh+w0fzh0x8fXhpzMe0hw0Kerin3hfog6zKgZf5wujTeotdjGddsOiuicyEdujJuYcjgHv8bse/xCbKhMtlhDexoPhCiPhyirfNgJh0iVtYfQhHoocBlojKedl0gWc2h0u9gMh1w0fyhmx7fVhSzLe0hZ0Jeriy3YfbhNzSgkiJw2jghRtdjrgMsFjyhcyBdhfkurctdpxnc1dczOcbhDtrhLexoRhMiPhyirfNgIh2iHtafVftpabxjijBcripghaMhcvcfzhVxVfWhIyde9g4zwelhD0uebij39e8hcz2gOjUxiiyiYuOjbhUs9kAgZyvdPdUwmcGbizlccbl1QcEhLuFg8fUojhlibh0iwfZgHh8hlt9e1fdpMcIgviEaLeEgxYHgqvqeyghxleYgayweFgX0Hd2gn1EdviD4WeBhWz9fSjoxthiiOuuiwg3uQjvfVzXcpb9yLbCZj0tbSZj2Tapg2uUf8fzothXioh5ivfmgLh/gguKd1eqo5cAeZiBY/bIghYnfnvfdmfjxbdPfgypdFfn0AdCf708dAhK4UdMg2zfeLjTxNgOg/veiMf2wajHeSzpb9a7zGaBXy0qZ/Xk2CY+gBuKeuf4org2i0h9idfugQiHfIt+cxcpoxbseLh7ZBa6gSZCetvPcyevxNcjezybcffAzyckfW0tclgV4KcygOy+dhigwGe8f6wZhSfrxyiRdozlbgaey1ZSXO0JZNW71hYOfLt1dyfdongdi0h/hlf8gUi1eDtzb9bgokbNeIh3ZFa3gSZEeHu8cPeUw6cGeZyIcHekzfcQe50bcSf/32cIfmyldWg1vRfEd/wlgqd2x5hxdXzLbCafxuYxXfzhY8XR08YBectfdOe0oigXiiiDg9gOgajHdUtlbZaxoUa/eHh4ZEa4gPZDd1u7b9eIw3b2eJyFb4eKzdcCec0ZcCfx3tbie9yqdYfRwRgecWyNgeb7z4gvdOzFanapxVYNX4zdYeXw0+Xtd/tec/eHosgaiIiYhCgMgfjKc/tmbFaroOaveMh0ZDa6gNZDdnvccEd2xZb+d4ynb/d4z/cEeM07cDfj4LbVebzZdoePyohebL0Vhpao11g+dLzmahaxyQXuX60QX9Xz14XcdxuAdIdYpRgmhOi4hcfwgbjKc+uDbIbMoeareOh0Y/a9gMZAdlv+cfdtx9cbdvzLcYdy0jcWeG1fcQfb4vbeeE0LeBdY0sh3aa1yjYZe3QjbdQ0GavbFzWXkYB1CXWXz2tXBdzuhdgddpdgcgHipiKdzgZjgdMukbccJo1ateQh2Y+bAgNY/djwDdFdoyCdDdrzQc+dt0nc5eB1jcwfO40b3d40Zemct1kiKan2ck1Ze3Ql4dQ0JbRbR0IX5YI1PWxXh2yWZdyuleFdOpLgTe7iRiucEgajldZuqb+cno8a4eSh4Y9bCgOY9dmv5dqdrx3dqdpzFdldm0dded31adVfB4rcadt0TfMck1Xiza22KlwZw2qnCdS0Cb0bmzxYSYi0qW0Xz2IWTdpuaerc4pDg7e0iGjBb0gWjidfugcicdo4bJeXh7ZDbHgSY7dzvmeHd1xleEdwyzd/dq0Kd3d51Idxe74gdGdtz1fldRz6jfan0cluZh1lmcdhzkcOcbxkZCZezKYAZP0sXQdwuKfMcYo5hZe3iBjEb1gTjkdsuLdCbXpDbYeBiRZobGgZY6d9u3eYd+w1eTd4yCeNd0zaeEeA0Yd/ez31ded6y0ftd5xIjPa7yrkRZ+0Bk4dsyocgdZvGazbBxZZnbOytYhd0tcfdbkokh1e6h9jCb2gTjjdztcdTako7badriKaYaxgTZieDucegeEwZecd5xmeYdvy9eTd6z8eOeu3Ydod9yZf8elvwixb7yBi/aszMjadsyRcseJugbpcCxGakcpyVZid1tCflbQoXiCe+h6jCb3gRjjdytCdcafojbjdzh4amaqgRZseTveejeOxbehd/ynefdvz+eed409ebev4Zd1eFzfgHflxgjKcwzmjNbU0fjodtzbc0eawOapcXzDaWc70lZ3ePuCfncPo7hue3iBjEb3gTjkeJuDdebhpBb+duh/akaqgWZpegw4efeSy2egeF0Defd41aegeA2Zeeem57eJeN08gJf7z+jjdA1zkPbk2skndt07c1eGyuZmby1WZocC3BZXewvafed/p2hMeoiiiycHgOjlefvgdWdYp1cRdVifauawgMZ9eixIeheTzGekeG0Teld41pemd92peleY6NeYeO1PgRfi1lj9cw3Alhbp4QmBdm1Sc7dS0kZEae2qY2ak4XYqe5vpfdeYp/g6f6ith/d1gMi8ehvxdWd8qAcbediobIcIgKa0eowlelebyjepeOzweqd+1GeteC2GereS5rebeY07gYfH2DkEc626mpcX4Tnkdn06dBcq1TZPZr2+YfZf4rYee8vGfieypXg0hMiShRezgNihehvOdbdwpccpfsiTbbc8gPa2fCwCeme3yAeoenzNereS0ieweV1heueg5Heiey0Xgafn1GkLdM1lmqcZ22njd80RdEct0KZWZt1+ZPZa3qZTfXulfme7o6hDhoh6hHe2gPife0uodhc/pHcrfwiPbcc7gQa4fdvWekfXxUeifGygelezz2eqe001eoe74becfbzagPgvyhj1dnzKlQcc0Sl5eZzTdDdQxOZ7aszeavai1Lalftt7fneYophzhsh8hHe8gOife/t7dmb+o8c4fYicbVcvgSbAfavCeofYw+eifKyLeke7zieqe90henfG4GeZfzy9gEhowhiiefxtjldeymkreVy7dId8vabbbyyDcObqzrbtfstnfreVobiGhyh2hCe/gMieeytndvcEocdEfoiJbDcpgRbKfUwCegfQyAedfGzNehe80kerfB1jeofQ5IeZgC0Cf7i0x4hrgAzHjXfC0EkeeGz/dRdkw0bAbvzkcNbv1Qb6f1ulfbfLpHhchriChCfFgMidepundoc7pAdbfXiSbKchgRbKfaxCeZfUzBedfP0PeifO1meqfW2lepfn6LekgX1Ff4jmz+h0hU1SkIga2XlLeK1KdWcgziaLas2Rbbau3/bcgMvlfFgGp4gihCicglf2gLi2euvpdhdvp3dqe0iqb2ccgRcNffw+eafdy8effZ0KelfX1ieufg2hesf+6Fengj1Jf7jq1UiUiS2blWht3smaeJ1Udfb21uaVZJ34a3ZI5ma0gXvfe5gkpvgDhUiUfPhUgIh1epvmdoeEpwdyesiZccczgFeHfcwZeWfeyYebfczlejfY08evfi17esgO5cecgt0tfzjR1sini82ll/jF3/nBeF08dmbi2Za/Ys4ca5YP6Ga7gau7eug9pJfmhkh1eBhngMhIeeu/dzeDpKeSe+h9cWcygJeffhwNeLflyMeRfkzZedfh0vetfs1ueqge5Oefg70dfqjs0dici00wl1ib19nCeK0qdobO1KbEYk2xctX64PdVgfuvefhJpBfqh+hzdxhTgJg2eeu0dxdtpGeze6iEcdc0gHegf3v4d+f4x2eFf0zDeRfy0aehgB1Xeigw44efhKzvfYkMyFhQjWxfknjTyMmNeZ0FdibByqcHaFzUfbZw0YgvgtuYefg+ougCiqh0dqg1gKgMe1ugdccopcfbeMiadScRgHe8gZvTdvgPxQdrgHydd5gDzxeRgV0ueYhR4MeVhdy6e1kYwTfClFudh8mfuMi8emzcdYb+widAcrxdgUdAyWhvhIt9eqgjobgiiqhxdxgvgKgQfptzdHb3pmetcgiKfaZTgqgGggu8dxgUw5dkgMyFd0gLzXeUgd0Techr3refhoyfeskYv1dxl9tgf2nntPgXeqzNdccBwbcocvxrf0dOyrhIhKtve6f5oOggilhwd0gqgHgTf7tWdMb2pUebaXiXg1W7hSgifjvKeBfhxId5fiyVeJfpzneogA0hezhK36fDhBymfBj3v+eZlPuqhVmluniceJzodva4yDcQZwzSfVZo0fgjgRt4fBf/oOgmimhxdygtgJgTe0toddbFpXe+Z7iHggWpg/hheBvheTeWxdeXelyoeoe1z7fAfN00fLgM4QfpgFy2fmikwAgs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bktco4cCoYrzZgh8o3amgOr0dMu1oBc6wvn0cwx7oCclzQoXcW0NoUb53rnddgzQm3ePxujVhbydkli3zRlIbwyMpecZujqycixgsqb7zCtKeNtXn1ihqhqnf6jworhIgkprcctlpDcHoWrrZah+oyaegRrxecvjoDeJxen8d6yqoGdr0AoSdd09oLdG4eneev0Fm6fe0BjDim1ljRjr25jucszLpecIwwshb9zpuebF1GuwffuHnzjbqcqJiujbnikvgpoddouLo4crovq4ZfiOo8aZgPrvgEv8oAfsx3oBfWzCoGfA0XoHez1Vn9ed42nWgL0km3hs2MjokQ34h8lJ5RhXd8z0pYcMz6s5bd1WwAaj2pwshFuhnnj7plo+lnipmom7gbo4fKuholdspEqMZ8iqpGaSgcrvhovynxhMxtnyg2y3n2gk0Nn5gX1Lnwf+4rnCh10nm2kP2okfmo4ViknZ49hIfXz+pEdH1CsGbl2NvBah23wNituZnbk+pBoFmeiBl3nBgSo4gtuVoPfJo6p3bVigo4aJgrroibv3nIiDxznMh0y/nYhp0Vnlhf1TndhN40mvjI0rm2mS10kzpk2JjmrD1xi0gK0CoYdk0WrUcE0xudbA1Bvwjmuim9lipFn6meh5l7nCgNpBhhuXnbf0pGpadGiIova0ggrCi8vqmXirxlmjieywm2iW0FnLiW1EnFiJ4jmPkDz/m0nrzQlfqrxdllr4wQl5gwzdngeKyNqKddxztldMx9vQkDuRmjlypAogmgh6mKnEgRpOh6uNmWffp3peekifoadcgQq7jIu/l1jAw5mBi4yCmbi0zUm6i70Tm5i/3tlvkgy4m7nbwTnWoDtWpJoJsKqahLyvmufPv1ohe9vOr9esvXtokJtmmUl5owpKmah4mMm/gSpTiGthlse1qppognjxnMfVg2o9jEusltjGwml2jHxwmQjIzCmvjU0Amwjn3clvkpyRnKlGvRpqj1s+r+iysLtIhgytmMfhvVmLfevCpqfJvXrTkJtXmQl1oppVmeh2mMnAgPpUiGtMloekqmpjhalFlUgohml+i3vWlsjGxQl0jRybmJjZzvmijq0smkj54LlskhyynejLwrqhhLvEs5f0uQtpiAzrlfffxXjjfHw0m/esxOomj1t8mOlNo1oymbh5mNm9gUpWh0t6leeyp9ol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';
+let DANCE_F = null;
+function danceFrames() { if (DANCE_F) return DANCE_F; const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/', s = DANCE_DATA, v = new Float32Array(s.length / 2);
+  for (let i = 0; i < v.length; i++) v[i] = (A.indexOf(s[i * 2]) * 64 + A.indexOf(s[i * 2 + 1])) / 4095 * 2.4 - 1.2;
+  return (DANCE_F = { v, J: 22, F: v.length / 66 }); }
+PAI.dan = { tt: 0, c: null };
 function drawBailarin(dt) {
   const S = PAI.dan, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
-  if (!S.to) { S.from = DANCE[0]; S.to = DANCE[1]; }
-  if (pulse.on && S.go > 0.3) { S.from = blendPose(S.from, S.to, Math.min(1, S.ph)); S.pose = (S.pose + 1 + Math.floor(Math.random() * (DANCE.length - 1))) % DANCE.length; S.to = DANCE[S.pose]; S.ph = 0; }
-  S.ph += dt / (S.per * 0.4) * S.go; const e = 1 - Math.pow(1 - Math.min(1, S.ph), 3), pz = blendPose(S.from, S.to, e);
-  S.bounce = Math.max((S.bounce || 0) * Math.pow(0.01, dt), pulse.on ? 0.6 + 0.6 * Math.min(1, S.lv[0]) : 0);
-  const cw = 200, ch = Math.round(cw * H / W), c = S.c || (S.c = document.createElement('canvas')); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
+  const D = danceFrames(), FPS = 12;
+  S.tt += dt * FPS * (0.62 / S.per) * S.go;   // el baile va al tempo de la canción (y se queda quieto en silencio)
+  const f0 = Math.floor(S.tt) % D.F, f1 = (f0 + 1) % D.F, ft = S.tt - Math.floor(S.tt);
+  const J = j => { const a = (f0 * 22 + j) * 3, b = (f1 * 22 + j) * 3; return [D.v[a] + (D.v[b] - D.v[a]) * ft, D.v[a + 1] + (D.v[b + 1] - D.v[a + 1]) * ft, D.v[a + 2] + (D.v[b + 2] - D.v[a + 2]) * ft]; };
+  S.bounce = Math.max((S.bounce || 0) * Math.pow(0.01, dt), pulse.on ? 0.5 + 0.6 * Math.min(1, S.lv[0]) : 0);
+  const cw = 220, ch = Math.round(cw * H / W), c = S.c || (S.c = document.createElement('canvas')); if (c.width !== cw || c.height !== ch) { c.width = cw; c.height = ch; }
   const x = c.getContext('2d');
-  x.globalCompositeOperation = 'destination-out'; x.fillStyle = `rgba(0,0,0,${S.ghost ? 0.5 : 1})`; x.fillRect(0, 0, cw, ch); x.globalCompositeOperation = 'source-over'; S.ghost = 1;   // la estela del paso anterior
-  const body = night ? paiTone(mix(0.3), 66, 75).map(v => v * 255) : paiTone(mix(0.3), 46, 75).map(v => v * 255), head = body.map(v => v * (night ? 0.55 : 0.5));
-  const U = Math.min(cw * 0.32, ch * 0.145), sway = Math.sin(S.b * Math.PI) * 0.06 * S.go;
-  const cx = cw * 0.5 + (pz.hip[0] + sway) * U * 1.4, cy = ch * 0.58 + pz.hip[1] * U - S.bounce * U * 0.12 + Math.abs(Math.cos(S.b * Math.PI)) * U * 0.05 * S.go;
-  { const fl = x.createRadialGradient(cw * 0.5, ch * 0.58 + U * 1.95, 0, cw * 0.5, ch * 0.58 + U * 1.95, U * 2.4); fl.addColorStop(0, rgba(body, 0.18 + 0.3 * S.en + 0.2 * S.bounce)); fl.addColorStop(1, rgba(body, 0)); x.fillStyle = fl; x.fillRect(0, 0, cw, ch); }
-  const up = S.vo * 0.5, lean = pz.lean + sway * 1.5, seg = (ax, ay, len, ang) => [ax + Math.sin(ang) * len, ay + Math.cos(ang) * len];
-  const neck = [cx + Math.sin(lean) * U * 1.08, cy - Math.cos(lean) * U * 1.08], sh = U * 0.34;
-  const shL = [neck[0] - sh, neck[1] + U * 0.1], shR = [neck[0] + sh, neck[1] + U * 0.1];
-  const limb = (a, b, w) => { x.lineCap = 'round'; x.lineJoin = 'round'; x.lineWidth = w; x.beginPath(); x.moveTo(...a); x.lineTo(...b); x.stroke(); };
-  const dot = (p_, r) => { x.beginPath(); x.arc(p_[0], p_[1], r, 0, 7); x.fill(); };
-  x.strokeStyle = rgba(body, 1); x.fillStyle = rgba(body, 1);
-  for (const [s, L] of [[-1, pz.ll], [1, pz.rl]]) { const hp = [cx + s * U * 0.17, cy], kn = seg(hp[0], hp[1], U * 0.92, L[0]), ft = seg(kn[0], kn[1], U * 0.9, L[0] + L[1] * 0.7);
-    limb(hp, kn, U * 0.3); limb(kn, ft, U * 0.22); x.beginPath(); x.ellipse(ft[0] + s * U * 0.08, ft[1] + U * 0.02, U * 0.16, U * 0.07, 0, 0, 7); x.fill(); }
-  // torso: cadera estrecha, cintura y hombros anchos
-  x.beginPath(); x.moveTo(cx - U * 0.26, cy + U * 0.08); x.quadraticCurveTo(cx - U * 0.2, cy - U * 0.45, shL[0] - U * 0.04, shL[1] + U * 0.02); x.quadraticCurveTo(neck[0], neck[1] - U * 0.04, shR[0] + U * 0.04, shR[1] + U * 0.02);
-  x.quadraticCurveTo(cx + U * 0.2, cy - U * 0.45, cx + U * 0.26, cy + U * 0.08); x.closePath(); x.fill();
-  // brazos con codo y mano, siempre abiertos hacia su lado (no se pegan al cuerpo)
-  for (const [s, A, h0] of [[-1, pz.la, shL], [1, pz.ra, shR]]) { const a0 = A[0] * (s < 0 ? 1 : 1) + (s < 0 ? up : -up), el = seg(h0[0], h0[1], U * 0.62, a0), hd = seg(el[0], el[1], U * 0.56, a0 + A[1] * 0.8);
-    limb(h0, el, U * 0.17); limb(el, hd, U * 0.13); dot(seg(hd[0], hd[1], U * 0.08, a0 + A[1] * 0.8), U * 0.1); }
-  limb([neck[0], neck[1] + U * 0.04], [neck[0] + Math.sin(lean) * U * 0.16, neck[1] - U * 0.16], U * 0.15);
-  x.fillStyle = rgba(head, 1); x.beginPath(); x.ellipse(neck[0] + Math.sin(lean) * U * 0.28, neck[1] - U * 0.38, U * 0.19, U * 0.23, lean, 0, 7); x.fill();
-  // desenfoque en un lienzo intermedio (barato a cualquier resolución) y a pantalla, sobre la portada
+  x.globalCompositeOperation = 'destination-out'; x.fillStyle = `rgba(0,0,0,${S.ghost ? 0.55 : 1})`; x.fillRect(0, 0, cw, ch); x.globalCompositeOperation = 'source-over'; S.ghost = 1;
+  const Hf = Math.min(ch * 0.6, cw * 1.25), base = ch * 0.84, sq = 1 - S.bounce * 0.03;
+  const pt = j => { const q = J(j); return [cw * 0.5 + q[0] * 0.6 * Hf, base - q[1] * Hf * sq, q[2]]; };
+  const P_ = Array.from({ length: 22 }, (_, j) => pt(j)), body = (night ? paiTone(mix(0.3), 64, 75) : paiTone(mix(0.3), 44, 75)).map(v => v * 255);
+  { const fl = x.createRadialGradient(cw * 0.5, base, 0, cw * 0.5, base, Hf * 0.5); fl.addColorStop(0, rgba(body, 0.16 + 0.3 * S.en + 0.25 * S.bounce)); fl.addColorStop(1, rgba(body, 0)); x.fillStyle = fl; x.fillRect(0, 0, cw, ch); }
+  const U = Hf / 8, tz = (P_[0][2] + P_[2][2]) / 2;
+  const shade = z => { const k = Math.max(-1, Math.min(1, (z - tz) * 4)); return rgba(body.map(v => k > 0 ? v + (255 - v) * 0.28 * k : v * (1 + 0.3 * k)), 1); };
+  const limb = (a, b, w0, w1) => { const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1, nx = -dy / L, ny = dx / L; x.fillStyle = shade((a[2] + b[2]) / 2);
+    x.beginPath(); x.moveTo(a[0] + nx * w0, a[1] + ny * w0); x.lineTo(b[0] + nx * w1, b[1] + ny * w1); x.arc(b[0], b[1], w1, Math.atan2(ny, nx), Math.atan2(ny, nx) + Math.PI, true); x.lineTo(a[0] - nx * w0, a[1] - ny * w0); x.arc(a[0], a[1], w0, Math.atan2(-ny, -nx), Math.atan2(-ny, -nx) + Math.PI, true); x.fill(); };
+  const parts = [   // [articulación a, b, grosor a, grosor b]
+    [14, 15, 0.42, 0.32], [15, 16, 0.3, 0.2], [16, 17, 0.18, 0.12], [18, 19, 0.42, 0.32], [19, 20, 0.3, 0.2], [20, 21, 0.18, 0.12],
+    [6, 7, 0.24, 0.2], [7, 8, 0.19, 0.15], [8, 9, 0.17, 0.12], [10, 11, 0.24, 0.2], [11, 12, 0.19, 0.15], [12, 13, 0.17, 0.12], [3, 4, 0.17, 0.17]];
+  // se dibuja de atrás hacia adelante; el torso va en medio
+  const items = parts.map(pp => ({ z: (P_[pp[0]][2] + P_[pp[1]][2]) / 2, f: () => limb(P_[pp[0]], P_[pp[1]], pp[2] * U, pp[3] * U) }));
+  items.push({ z: tz, f: () => { const h = P_[0], s2 = P_[2], l = P_[6], r = P_[10], hl = P_[14], hr = P_[18]; x.fillStyle = shade(tz);
+    x.beginPath(); x.moveTo(hl[0] - U * 0.15, hl[1]); x.quadraticCurveTo((hl[0] + l[0]) / 2 - U * 0.25, (hl[1] + l[1]) / 2, l[0] - U * 0.12, l[1]); x.quadraticCurveTo(s2[0], s2[1] - U * 0.35, r[0] + U * 0.12, r[1]);
+    x.quadraticCurveTo((hr[0] + r[0]) / 2 + U * 0.25, (hr[1] + r[1]) / 2, hr[0] + U * 0.15, hr[1]); x.quadraticCurveTo(h[0], h[1] + U * 0.35, hl[0] - U * 0.15, hl[1]); x.fill(); } });
+  items.push({ z: P_[4][2], f: () => { const a = P_[4], b = P_[5]; x.fillStyle = shade(a[2]); x.beginPath(); x.ellipse((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, U * 0.36, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.62, Math.atan2(b[0] - a[0], -(b[1] - a[1])), 0, 7); x.fill(); } });
+  items.sort((a, b) => a.z - b.z).forEach(it => it.f());
   const bw = 270, bh = Math.round(bw * H / W), bc = S.bc || (S.bc = document.createElement('canvas')); if (bc.width !== bw || bc.height !== bh) { bc.width = bw; bc.height = bh; }
-  const bx = bc.getContext('2d'); bx.clearRect(0, 0, bw, bh); bx.imageSmoothingQuality = 'high'; bx.filter = CAN_BLUR ? `blur(${(Math.min(bw, bh) * (0.018 + 0.01 * (1 - S.en))).toFixed(1)}px)` : 'none'; bx.drawImage(c, 0, 0, bw, bh); bx.filter = 'none';
-  ctx.save(); ctx.fillStyle = night ? 'rgba(4,4,10,.45)' : 'rgba(255,255,255,.3)'; ctx.fillRect(0, 0, W, H);   // el vidrio esmerilado delante de la portada
-  if (night) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.25 + 0.4 * S.k_; }
+  const bx = bc.getContext('2d'); bx.clearRect(0, 0, bw, bh); bx.imageSmoothingQuality = 'high'; bx.filter = CAN_BLUR ? `blur(${(Math.min(bw, bh) * (0.011 + 0.006 * (1 - S.en))).toFixed(1)}px)` : 'none'; bx.drawImage(c, 0, 0, bw, bh); bx.filter = 'none';
+  ctx.save(); ctx.fillStyle = night ? 'rgba(4,4,10,.42)' : 'rgba(255,255,255,.28)'; ctx.fillRect(0, 0, W, H);   // el vidrio esmerilado delante de la portada
   ctx.imageSmoothingQuality = 'high'; ctx.drawImage(bc, 0, 0, W, H);
-  if (night) { ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1; ctx.drawImage(bc, 0, 0, W, H); }
+  if (night) { ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.15 + 0.35 * (S.k_ || 0); ctx.drawImage(bc, 0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   ctx.globalAlpha = night ? 0.05 : 0.07; ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); ctx.restore();
   S.k_ = Math.max((S.k_ || 0) * Math.pow(0.05, dt), P);
 }
-function blendPose(a, b, t) { const L = (u, v) => u + (v - u) * t, L2 = (u, v) => [L(u[0], v[0]), L(u[1], v[1])];
-  return { hip: L2(a.hip, b.hip), lean: L(a.lean, b.lean), la: L2(a.la, b.la), ra: L2(a.ra, b.ra), ll: L2(a.ll, b.ll), rl: L2(a.rl, b.rl) }; }
 
-// ---------- Arco: un arco de color que nace abajo, sobre la portada. Sus anillos salen hacia afuera al ritmo de la canción
-// (más rápido cuando sube la energía), crece y se encoge con los graves, cada golpe lanza un anillo de luz y la voz lo aviva. ----------
+// ---------- Arco: un arco de luz que nace abajo, sobre la portada, en un degradado largo y sereno (claro y cálido en el centro,
+// los colores de la portada hacia afuera). Crece y se encoge con los graves, su luz respira en ondas suaves que salen al ritmo y
+// cada golpe lo ilumina con un velo de luz. ----------
 PAI.arc = { ring: 9, ph: 0, grow: 0 };
-const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, uPh, uVo, uGrow; uniform vec3 uLv, uC0, uC1, uC2, uC3;
+const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, uPh, uVo, uGrow; uniform vec3 uLv, uC0, uC1, uC2;
   ${GLSL_NOISE}
   void main() {
-    float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, -.04);
-    float R = max(asp, .75) * (.42 + .4 * uGrow + .06 * uP), d = length((p - c) * vec2(1., 1.05)) / R;
-    d += (fbm(p * 2. + vec2(uPh * .3, 0.)) - .5) * .05;
-    float t = fract(d * 2.2 - uPh);                                                                // los anillos que salen hacia afuera
-    vec3 a = t < .25 ? mix(uC3, uC0, t * 4.) : t < .5 ? mix(uC0, uC1, (t - .25) * 4.) : t < .75 ? mix(uC1, uC2, (t - .5) * 4.) : mix(uC2, uC3, (t - .75) * 4.);
-    a = mix(a, vec3(1.), exp(-d * d * 8.) * .5);                                                  // el centro, claro
-    float m = smoothstep(1.05, .8, d);
-    vec3 col = a * (1. + .25 * uLv.x + .3 * uVo);
-    float rg = exp(-pow((d - uRing) / .045, 2.)) * max(0., 1. - uRing * .8);
-    col += vec3(1.) * rg * uP * .9;                                                                // el anillo del golpe
-    float al = max(m, rg * uP * .8);
-    col += vec3(1.) * exp(-pow((d - 1.) / .03, 2.)) * (.15 + .4 * uP);                              // el borde de luz
-    ${PAI_GRAIN}
+    float asp = uRes.x / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, -.06);
+    float R = max(asp, .75) * (.4 + .42 * uGrow + .04 * uP), d = length((p - c) * vec2(1., 1.05)) / R;
+    d += (fbm(p * 1.6 + vec2(uPh * .15, 0.)) - .5) * .04;
+    vec3 warm = mix(vec3(1., .93, .84), uC2, .25);
+    vec3 a = mix(warm, uC0, smoothstep(.05, .5, d));
+    a = mix(a, uC1, smoothstep(.4, .85, d));
+    a *= 1. + .07 * sin((d * 3. - uPh) * 6.2832) * smoothstep(1., .3, d);                          // ondas de luz suaves, no de color
+    a += warm * exp(-d * d * 6.) * (.15 + .35 * uVo + .25 * uP);
+    float m = smoothstep(1.03, .8, d);
+    a += vec3(1.) * exp(-pow((d - .97) / .025, 2.)) * (.18 + .3 * uP + .15 * uLv.x);                // un borde de luz fino que lo dibuja
+    float rg = exp(-pow((d - uRing) / .14, 2.)) * max(0., 1. - uRing) * uP;                          // el velo de luz del golpe
+    vec3 col = a + vec3(1.) * rg * .3;
+    float al = clamp(m * (.9 + .1 * uLv.x) + rg * .15, 0., 1.);
+    col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .02;
+    { float L_ = dot(col, vec3(.3, .59, .11)), g1 = h(floor(gl_FragCoord.xy / 1.6)); col *= 1. + (g1 - .5) * .08 * (1.25 - L_); }
     o = vec4(col * al, al);
   }`;
 function drawArco(dt) {
   if (!glInit()) { drawAura(dt); return; }
   const S = PAI.arc, night = state.theme === 'dark'; paiLevels(S, dt);
-  if (pulse.on) S.ring = 0.15; S.ring += dt / (S.per * 1.3);
-  S.ph += dt * S.go * (0.12 + 0.8 * S.en + 0.3 * Math.min(1, S.lv[0])) + (pulse.on ? 0.08 : 0);
-  const gt = Math.min(1, 0.15 + 0.55 * S.lv[0] + 0.45 * S.en) * S.go; S.grow += (gt - S.grow) * (1 - Math.pow(gt > S.grow ? 0.003 : 0.15, dt));
-  const c = (k, l) => paiTone(mix(k), l, 70, 100);
-  paiRun(S, ARCO_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0.1, 58)); gl.uniform3fv(p.u.uC1, c(0.5, 60)); gl.uniform3fv(p.u.uC2, c(0.9, 64)); gl.uniform3fv(p.u.uC3, paiBl(c(0.3, 66), [1, 0.8, 0.5], 0.35));
+  if (pulse.on) S.ring = 0.1; S.ring += dt / (S.per * 1.6);
+  S.ph += dt * S.go * (0.1 + 0.7 * S.en + 0.3 * Math.min(1, S.lv[0]));
+  const gt = Math.min(1, 0.12 + 0.6 * S.lv[0] + 0.4 * S.en) * S.go; S.grow += (gt - S.grow) * (1 - Math.pow(gt > S.grow ? 0.004 : 0.12, dt));
+  const c = (k, l) => paiTone(mix(k), l, 55, 90);
+  paiRun(S, ARCO_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0.15, night ? 62 : 66)); gl.uniform3fv(p.u.uC1, c(0.8, night ? 48 : 58)); gl.uniform3fv(p.u.uC2, c(0.5, 70));
     gl.uniform1f(p.u.uRing, S.ring); gl.uniform1f(p.u.uP, Math.max(0, 1 - S.ring)); gl.uniform1f(p.u.uPh, S.ph); gl.uniform1f(p.u.uGrow, S.grow); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uNight, night ? 1 : 0); });
 }
 
@@ -6166,7 +6162,10 @@ function lagoSetup() {
         col += vec3(.95, .97, 1.) * (smoothstep(mix(.003, .0005, t), 0., length(v_ + dn * t * .2)) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003)) * sin(3.1416 * uStar.z) * uNight; }
       // el sol o la luna: un disco plano con un degradado suave (más claro abajo, donde toca la bruma)
       float disc = smoothstep(R + 1.5 / uRes.y, R - 1.5 / uRes.y, sd);
-      col = mix(col, mix(uDisc, uDisc * 1.06 + .06, smoothstep(R, -R, p.y - uSun.y)), disc);
+      vec3 dc_ = mix(uDisc, uDisc * 1.06 + .06, smoothstep(R, -R, p.y - uSun.y));
+      if (uNight > .5) { vec2 mq = (p - uSun.xy) / R; float lmb = sqrt(max(0., 1. - dot(mq, mq)));   // de noche, una luna de verdad: manchas suaves y el borde más tenue
+        dc_ *= (.8 + .2 * lmb) * (1. - .16 * smoothstep(.45, .7, fbm(mq * 2.2 + 3.1)) - .08 * smoothstep(.5, .8, fbm(mq * 5. + 9.))) * .94; }
+      col = mix(col, dc_, disc);
       // las capas de cerros, de la más lejana a la más cercana; cada una se funde en la bruma por abajo
       for (int k = 0; k < 4; k++) { float fk = float(k), top = uHz + ridge(p.x, fk, asp), dy = top - p.y;
         if (dy < 0.) continue;
@@ -6621,8 +6620,8 @@ function drawAurora(dt) {
   const [cw, ch] = glCanvas(1), p = aur.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHy, hy); gl.uniform1f(p.u.uNight, night ? 1 : 0.82);   // con tema claro, la misma noche algo más temprana
-  gl.uniform1f(p.u.uP, P * flash); gl.uniform1f(p.u.uHi, A.hi); gl.uniform1f(p.u.uVo, A.vo); gl.uniform1f(p.u.uRip, Math.min(1.5, A.rip));
-  gl.uniform3f(p.u.uLv, ...[0, 1, 2].map(k => Math.max(0, Math.min(1.3, A.lv[k])) * (0.25 + 0.75 * A.go)));
+  gl.uniform1f(p.u.uP, Math.min(1.3, P * 1.35) * flash); gl.uniform1f(p.u.uHi, Math.min(1.2, A.hi * 1.4)); gl.uniform1f(p.u.uVo, A.vo); gl.uniform1f(p.u.uRip, Math.min(1.5, A.rip));
+  gl.uniform3f(p.u.uLv, ...[0, 1, 2].map(k => Math.max(0, Math.min(1.4, A.lv[k] * 1.35)) * (0.15 + 0.85 * A.go)));   // la aurora se aviva más con la canción
   gl.uniform3f(p.u.uMoon, mx, my, mR * (1 + P * 0.025)); gl.uniform3fv(p.u.uA0, ac(0)); gl.uniform3fv(p.u.uA1, ac(1)); gl.uniform3fv(p.u.uA2, ac(2)); gl.uniform3fv(p.u.uHalo, haloC);
   gl.uniform3f(p.u.uStar, A.star ? A.star.x : 0, A.star ? A.star.y : 0, A.star ? A.star.t : 0);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch); gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -7730,11 +7729,14 @@ function glCoverBind(p, unit = 5) {
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0;
 const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'capsules', 'columns', 'icons', 'tubos', 'circles']);
+const REC_HEAVY = new Set(['ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
   if (ms > budget * 0.8) { recSlow += dt; recFast = 0; } else if (ms < budget * 0.42) { recFast += dt; recSlow = 0; }
-  const floor = REC_SHARP.has(state.mode) ? 1 : 0.8;   // las escenas con detalle fino (bordes, texto, figuras) no se ablandan: se verían pixeladas
+  // las escenas con detalle fino no se ablandan; los paisajes pesados (cuyo texto y figuras van aparte, nítidos) pueden bajar un poco
+  // solo si el equipo de verdad no llega: un video fluido vale más que un 10 % de nitidez en el cielo
+  const floor = REC_HEAVY.has(state.mode) ? 0.86 : REC_SHARP.has(state.mode) ? 1 : 0.8;
   if (recGL < floor) recGL = floor;
   if (recSlow > 0.7 && recGL > floor) { recGL = Math.max(floor, recGL - 0.1); recSlow = 0; }
   else if (recFast > 4 && recGL < 1) { recGL = Math.min(1, recGL + 0.1); recFast = 0; }
@@ -8093,7 +8095,7 @@ function drawPuffs(dt) {
   if (pulse.on) { const big = puffs.clouds.filter(c => c.w > 0.4); const c = big[(puffs.seq = (puffs.seq || 0) + 1) % big.length]; c.glow = Math.max(c.glow, 0.45 + 0.55 * pulse.k); }
   if (dropHit) puffs.clouds.forEach(c => c.glow = 1);
   if (hits.voice) { const sm = puffs.clouds.filter(c => c.w <= 0.4); const c = sm.length ? sm[Math.floor(Math.random() * sm.length)] : null; if (c) c.glow = Math.max(c.glow, 0.5); }   // cada sílaba enciende una nube pequeña
-  if (pulse.on) puffs.clouds.forEach((c, i) => { c.bobV = (c.bobV || 0) + (i % 2 ? 0.05 : 0.035) * pulse.k; });   // y con el golpe, todas saltan apenas
+  if (pulse.on) puffs.clouds.forEach((c, i) => { c.bobV = (c.bobV || 0) + (i % 2 ? 0.08 : 0.06) * pulse.k; });   // y con el golpe, todas saltan apenas
   const list = [];
   for (const c of puffs.clouds) {
     c.glow *= Math.pow(state.noFlash ? 0.3 : 0.06, dt);
@@ -8103,7 +8105,7 @@ function drawPuffs(dt) {
     for (const l of c.lobes) {
       const lv = Math.max(0, puffs.lv[l.band]);
       // cada bulto respira despacio, crece un poco con su banda y todos se inflan con el golpe
-      const r = l.r * (0.92 + (0.006 + energy * 0.03) * Math.sin(time * 0.4 + l.ph) + lv * 0.22 + P * 0.09);
+      const r = l.r * (0.9 + (0.006 + energy * 0.03) * Math.sin(time * 0.4 + l.ph) + lv * 0.32 + P * 0.14);   // se inflan más con su parte y con el golpe
       const wob = 0.15 + energy * 1.2;
       list.push([c.x + l.dx + Math.sin(time * 0.2 + l.ph) * 0.006 * wob, c.base + (c.bob || 0) + l.dy + Math.cos(time * 0.17 + l.ph) * 0.005 * wob, r, l.c, l.z, c.layer ? 1 : 0, c.glow * (state.noFlash ? 0.4 : 1)]);
     }
@@ -10754,25 +10756,31 @@ function columnsSetup() {
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col = mix(vec3(.012), withCover(vec3(.012)), .38);
-      vec2 a = uFrame.xy, b = uFrame.zw;
-      if (p.x > a.x && p.x < b.x && p.y > a.y && p.y < b.y) {
-        vec2 f = (p - a) / (b - a); float ci = floor(f.x * uN); int i = int(ci);
-        float lv = uLv[i], y = abs(f.y - .5) * 2.;                     // 0 en el medio, 1 en los extremos
-        float reach = .18 + lv * .95 + uKick * .25;                  // hasta dónde llega la luz desde los extremos
-        float t = smoothstep(1. - reach - .25, 1. - reach + .75, y);   // la luz se funde con la penumbra en un degradado largo, como en la foto
-        float sway = .5 + .5 * sin(uPh + ci * 1.7);
-        vec3 c = mix(uC[i], uC2[i], smoothstep(.35, 1., y) * .75 + sway * .15);
-        // el medio no es negro: es la misma columna en penumbra, con la portada asomando a través
-        vec3 deep = mix(withCover(c * .05), c * .16, .55) * (uNight > .5 ? 1. : 1.6);
-        vec3 k = mix(deep, c, t);
-        k = mix(k, mix(c, vec3(1.), .35), smoothstep(.9, 1., y) * t * .4);   // el borde de arriba y abajo, más claro
-        k *= .97 + .06 * h(vec2(ci, 1.));                             // cada columna con su propio tono
-        float fx = fract(f.x * uN); k *= 1. - .22 * (smoothstep(.06, 0., fx) + smoothstep(.94, 1., fx));   // una sombra fina separa las franjas
-        col = k;
+      vec3 col = mix(vec3(.012), withCover(vec3(.012)), uNight > .5 ? .42 : .6);
+      vec2 a = uFrame.xy, b = uFrame.zw; float wc = (b.x - a.x) / uN, hh = (b.y - a.y) * .5, cy = (a.y + b.y) * .5, px = 1.5 / uRes.y;
+      vec3 glow = vec3(0.);
+      for (int i = 0; i < 6; i++) { if (float(i) >= uN) break; float lv = uLv[i];
+        float cx = a.x + (float(i) + .5) * wc; vec2 q = abs(p - vec2(cx, cy)) - vec2(wc * .38 - wc * .1, hh - wc * .1); float d = length(max(q, 0.)) + min(max(q.x, q.y), 0.) - wc * .1;   // columna con esquinas suaves
+        vec3 c = uC[i];
+        float y = abs(p.y - cy) / hh;                                  // 0 en el medio, 1 en los extremos
+        float reach = .04 + lv * 1.05 + uKick * .2;                  // hasta dónde entra la luz desde los extremos
+        float t = smoothstep(1. - reach - .3, 1. - reach + .5, y);
+        glow += c * exp(-max(d, 0.) / (wc * (.25 + .5 * lv))) * (.08 + .5 * lv + .25 * uKick) * smoothstep(-.2, 1.2, y + lv * .5);   // su luz se derrama sobre la portada
+        if (d < px) {
+          float sway = .5 + .5 * sin(uPh + float(i) * 1.7);
+          vec3 cc2 = mix(c, uC2[i], smoothstep(.35, 1., y) * .75 + sway * .15);
+          vec2 rq = vec2((p.x - cx) / (wc * .38), 0.);
+          vec3 deep = mix(withCover(cc2 * .06), cc2 * .12, .6) * (uNight > .5 ? 1. : 1.5);
+          vec3 k = mix(deep, cc2 * (1. + .25 * lv), t);
+          k = mix(k, mix(cc2, vec3(1.), .55), smoothstep(.86, 1., y) * t * (.35 + .5 * uKick));   // los extremos, encendidos
+          k += vec3(1.) * smoothstep(.9, 1., abs(rq.x)) * .08 + vec3(1.) * exp(-pow((rq.x + .55) / .12, 2.)) * .07;   // el canto y un reflejo del vidrio
+          k *= 1. - .25 * pow(abs(rq.x), 3.);                                                     // redondeada: más honda en los bordes
+          col = mix(col, k, smoothstep(px, -px, d));
+        }
       }
+      col += glow * (uNight > .5 ? 1. : .6);
       // grano de película, más notorio, y una viñeta suave
-      col += (h(gl_FragCoord.xy * .7) - .5) * .07;
+      col += (h(gl_FragCoord.xy * .7) - .5) * .05;
       col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
@@ -10783,7 +10791,7 @@ function drawColumns(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, n = asp > 1.2 ? 6 : 4;
   // cada franja sigue su banda con un resorte (como Montañas) y la parte de la canción marca cuánto se llena
   if (!colm.v) { colm.v = new Float32Array(6); colm.tg = new Float32Array(6); }
-  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.9); colm.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.floor(BANDS / n))), 0.95) * (0.5 + 0.6 * dynL); }
+  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.9); colm.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.floor(BANDS / n))), 1.6) * (0.45 + 0.75 * dynL) * musicGate; }   // más rango: lo suave se ve oscuro, lo fuerte llena la columna
   if (pulse.on) colm.v[0] += 3 + pulse.k * 4;
   springTo(colm.lv, colm.v, colm.tg, dt, 220, 0.6);
   if (pulse.on) colm.kick = Math.min(1.2, colm.kick + 0.5 + pulse.k * 0.4);
@@ -10850,7 +10858,7 @@ function drawTubos(dt) {
   if (!glInit()) { drawBars(dt); return; }
   if (!tubo.prog) tubosSetup();
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H, n = asp > 1.2 ? 9 : 5;
-  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.92); tubo.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / n))), 0.85) * (0.55 + 0.6 * dynL); }
+  for (let i = 0; i < n; i++) { const k0 = Math.floor(i / n * BANDS * 0.92); tubo.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / n))), 1.45) * (0.5 + 0.8 * dynL) * musicGate; }   // más rango: cada tubo sube y baja de verdad con su parte
   if (pulse.on) { tubo.kick = Math.min(1.2, tubo.kick + 0.5 + pulse.k * 0.4); tubo.v[0] += 4 + pulse.k * 5; tubo.v[1] += 2 + pulse.k * 3; }
   if (hits.snare) tubo.v[Math.floor(n * 0.6)] += 3;
   tubo.kick *= Math.pow(0.03, dt);
