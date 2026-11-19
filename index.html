@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 161</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 162</div>
     </div>
   </div>
   <div class="group">
@@ -4310,6 +4310,7 @@ function drawLyricStyled(ly, size, cx, cy, maxW) {
   }
   drawWordLines(ly.words, ly.shown, size, cx, cy, maxW);   // karaoke
 }
+const lyrBg = { t: 0, m: '', L: 0.5 };
 function drawRecOverlay() {
   if (!recording || state.mode === 'strobe') return;
   const u = MIN / 1080, vertical = H > W;
@@ -4373,9 +4374,14 @@ function drawRecOverlay() {
     if (state.mode === 'navidad') { yV = 0.9; yH = 0.92; }   // en la Navidad, la letra va sobre el musgo del pesebre: no tapa el árbol, la ventana ni el portal
     if (state.mode === 'bust') { yV = 0.76; yH = 0.86; }   // la letra va sobre el torso: deja libres la cabeza y el cuello   // en la Ruta, la letra va en el cielo del parabrisas
     // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
-    { const lx = vertical ? W * 0.45 : W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.5 : W * 0.46), rh_ = (vertical ? 150 : 120) * u, dk = state.theme === 'dark';
+    { const lx = vertical ? W * 0.45 : W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.5 : W * 0.46), rh_ = (vertical ? 150 : 120) * u;
+      // el velo se elige por lo que hay de verdad detrás de la letra (no por el tema): sobre una escena oscura en modo día ya no
+      // aparece un óvalo blanco como de niebla; se mide cada medio segundo, en pocos puntos
+      const tn = performance.now(); if (!lyrBg.t || tn - lyrBg.t > 500 || lyrBg.m !== state.mode) { try { const sw = Math.max(8, W * 0.4 | 0), sh = Math.max(8, 50 * u | 0), d = ctx.getImageData(Math.max(0, lx - sw / 2 | 0), Math.max(0, ly_ - sh / 2 | 0), sw, sh).data; let s = 0, n = 0;
+        for (let i = 0; i < d.length; i += 4 * 37) { s += 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; n++; } lyrBg.L = s / n / 255; } catch (e) { lyrBg.L = 0.5; } lyrBg.t = tn; lyrBg.m = state.mode; }
+      const dk = state.theme === 'dark' || lyrBg.L < 0.42, soft = state.theme !== 'dark' && dk;   // de día sobre algo oscuro: velo oscuro y más leve
       ctx.save(); ctx.shadowBlur = 0; ctx.translate(lx, ly_); ctx.scale(1, rh_ / rw_); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw_);
-      g.addColorStop(0, dk ? 'rgba(0,0,0,.5)' : 'rgba(255,255,255,.55)'); g.addColorStop(0.55, dk ? 'rgba(0,0,0,.28)' : 'rgba(255,255,255,.3)'); g.addColorStop(1, dk ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)');
+      g.addColorStop(0, dk ? `rgba(0,0,0,${soft ? 0.3 : 0.5})` : 'rgba(255,255,255,.55)'); g.addColorStop(0.55, dk ? `rgba(0,0,0,${soft ? 0.16 : 0.28})` : 'rgba(255,255,255,.3)'); g.addColorStop(1, dk ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)');
       ctx.fillStyle = g; ctx.fillRect(-rw_, -rw_, rw_ * 2, rw_ * 2); ctx.restore(); }
     ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.92)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 11 * u;   // sombra corta y densa: hace de contorno suave
     drawLyricStyled(ly, (vertical ? 64 : 58) * u, vertical ? W * 0.45 : W / 2, H * (vertical ? yV : yH), vertical ? W * 0.7 : W * 0.8);
@@ -6094,10 +6100,10 @@ const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, u
     float t = fract((a + uRot) / 6.2832);
     vec3 rb = t < .33 ? mix(uC0, uC1, t * 3.) : t < .66 ? mix(uC1, uC2, (t - .33) * 3.) : mix(uC2, uC0, (t - .66) * 3.);
     float side = .45 + .55 * smoothstep(.3, -.9, sin(a) * .8 + cos(a) * -.4);
-    float gw = .03 + .03 * uLv.x + .02 * uP;                                                         // el resplandor se abre con los graves
+    float gw = .016 + .018 * uLv.x + .014 * uP;   // fino, como te gustaba                                                         // el resplandor se abre con los graves
     L += mix(rb, vec3(1.), .2) * exp(-pow((d - R) / (R * gw), 2.)) * side * (.4 + .7 * uP + .55 * uLv.y + .25 * uEn);
     L += mix(rb, vec3(1.), .45) * exp(-max(d - R, 0.) / (R * (.2 + .25 * uLv.x))) * step(R, d) * side * (.1 + .25 * uP);
-    L += vec3(1.) * exp(-pow((d - R) / ((1.4 + 1.6 * uP) * px), 2.)) * (.6 + .8 * uP);                // el filo blanco, que se engrosa en el golpe
+    L += vec3(1.) * exp(-pow((d - R) / ((1.2 + 0.9 * uP) * px), 2.)) * (.6 + .8 * uP);                // el filo blanco, que se engrosa en el golpe
     L += vec3(1.) * exp(-pow((d - R * .985) / (1.2 * px), 2.)) * .2;
     vec3 col = sky * al + L;
     col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .02 * al;
@@ -6735,11 +6741,11 @@ function lagoSetup() {
         vec3 mc = mix(uMt0, uMt1, fk / 3.);
         mc = mix(mc, mc * 1.18 + uHalo * .1, exp(-dy * 30.) * .5);                                                  // la cresta, más clara
         mc += uHalo * exp(-dy * 120.) * exp(-pow((p.x - uSun.x) / (R * 3.), 2.)) * .35 * (1. - fk / 4.);              // rozada por el sol
-        float mist = exp(-(p.y - uHz) / (.02 + .045 * (1. - fk / 3.))) * (.75 + .35 * n(vec2(p.x * 2.5 - uT * .03 * (1. + fk), fk * 3. + uT * .02)) * (.6 + .8 * uMist));
+        float mist = .62 * exp(-pow(max(p.y - uHz, 0.) / (.045 + .07 * (1. - fk / 3.)), 1.3)) * (.75 + .35 * n(vec2(p.x * 2.5 - uT * .03 * (1. + fk), fk * 3. + uT * .02)) * (.6 + .8 * uMist));
         mc = mix(mc, uMist0, clamp(mist, 0., 1.));
         col = mix(col, mc, m); }
       // la bruma que flota sobre el horizonte, delante del sol
-      col = mix(col, uMist0, exp(-max(p.y - uHz, 0.) / .035) * (.3 + .2 * n(vec2(p.x * 1.6 - uT * .04, 2.))) * (.7 + .4 * uMist));
+      col = mix(col, uMist0, exp(-pow(max(p.y - uHz, 0.) / .07, 1.4)) * (.16 + .12 * n(vec2(p.x * 1.6 - uT * .04, 2.))) * (.7 + .4 * uMist));   // más ancha y tenue: bruma, no una línea
       return col;
     }
     void main() {
@@ -6762,7 +6768,7 @@ function lagoSetup() {
         // los anillos que deja la pértiga en el agua
         for (int i = 0; i < 4; i++) { vec4 rg = uRing[i]; if (rg.w <= 0.) continue; float e = length(vec2(p.x - rg.x, (p.y - rg.y) * 3.6));
           col += mix(uDisc, uMist0, .5) * exp(-pow((e - rg.z) / (.0025 + rg.z * .04), 2.)) * .5 * rg.w; }
-        col = mix(col, uMist0, exp(-d / .035) * .3 * (.7 + .4 * uMist));                                                  // la bruma al ras del agua
+        col = mix(col, uMist0, exp(-pow(d / .07, 1.4)) * .18 * (.7 + .4 * uMist));                                                  // la bruma al ras del agua
       }
       { vec3 a_ = above(vec2(p.x, uHz + .003), asp, mtM); col = mix(col, a_, exp(-pow((uv.y - uHz) / .006, 2.)) * .6); }   // el horizonte, sin línea dura
       col *= 1. - .3 * smoothstep(.55, 1.15, length((vUv - vec2(.5, .5)) * vec2(1., .9)) * 1.25);
@@ -7178,7 +7184,7 @@ function drawAurora(dt) {
   const tone = (c, l, sMin = 70) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)).map(v => v / 255); };
   const ac = k => tone(RGB[k], 58).map((v, j) => v * 0.6 + [0.15, 0.95, 0.55][j] * 0.4);   // el color de la portada, con el verde de la aurora
   const melC = melodyColor().map(v => v / 255), haloC = melC.map((v, j) => v * 0.45 * (0.5 + A.vo) + [0.5, 0.6, 0.95][j] * 0.55);
-  const hy = vertical ? 0.42 : 0.4, mR = vertical ? 0.13 * asp : 0.11, mx = (vertical ? 0.73 : 0.78) * asp, my = vertical ? 0.84 : 0.8;
+  const hy = vertical ? 0.42 : 0.4, mR = vertical ? 0.085 * asp : 0.08, mx = (vertical ? 0.73 : 0.78) * asp, my = vertical ? 0.84 : 0.8;
   const [cw, ch] = glCanvas(1), p = aur.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHy, hy); gl.uniform1f(p.u.uNight, night ? 1 : 0.82);   // con tema claro, la misma noche algo más temprana
@@ -7363,7 +7369,7 @@ function drawLight(dt) {
   if (L.star) { L.star.t += dt / (per * 1.5) * L.go; if (L.star.t >= 1) L.star = null; }
   const tone = (c, l, sMin = 55) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)).map(v => v / 255); };
   const melC = melodyColor().map(v => v / 255), warm = night ? [1, 0.74, 0.42] : [1, 0.7, 0.38];
-  const hy = vertical ? 0.4 : 0.38, mR = (vertical ? 0.15 * asp : 0.13) , mx = (vertical ? 0.69 : 0.74) * asp, my = vertical ? 0.79 : 0.74, tx = (vertical ? 0.3 : 0.27) * asp, th = vertical ? 0.27 : 0.3;
+  const hy = vertical ? 0.4 : 0.38, mR = (vertical ? 0.095 * asp : 0.085), mx = (vertical ? 0.69 : 0.74) * asp, my = vertical ? 0.79 : 0.74, tx = (vertical ? 0.3 : 0.27) * asp, th = vertical ? 0.27 : 0.3;
   const topY = hy + 0.047;
   const haloC = melC.map((v, j) => v * 0.45 * (0.5 + L.vo) + (night ? [0.5, 0.6, 0.95][j] : [1, 0.72, 0.42][j]) * 0.6);
   const [cw, ch] = glCanvas(1), p = faro.prog;
