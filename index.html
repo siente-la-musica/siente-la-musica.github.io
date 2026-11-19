@@ -6325,9 +6325,10 @@ function* navPaint(c, W, H, amb, out) {
     x.fillStyle = 'rgba(255,255,255,.75)'; for (let k = 0; k < 36; k++) { const a = k / 36 * 6.283; x.beginPath(); x.arc(T.cx + Math.cos(a) * T.hw * 0.72, T.base - u * 6 + Math.sin(a) * u * 26, u * 6, 0, 7); x.fill(); }   // borde de motas blancas
     x.fillStyle = '#4a2c18'; x.fillRect(T.cx - u * 9, T.base - Ht * 0.12, u * 18, Ht * 0.1); }
   // el volumen oscuro de adentro, por pisos (cada piso de ramas hace su sombra): así no se ve la pared entre ramas ni un cono liso
-  { x.save(); if (CAN_BLUR) x.filter = `blur(${u * 8}px)`; x.fillStyle = night ? 'rgba(5,11,10,.9)' : 'rgba(10,26,18,.88)';
-    for (let i = 0; i < 12; i++) { const tt = i / 11, ty = T.top + Ht * (0.05 + 0.82 * Math.pow(tt, 1.25)), tw = T.hw * (0.12 + 0.88 * Math.pow(tt, 0.85)); x.beginPath(); x.ellipse(T.cx, ty + tw * 0.22, tw * 0.62, tw * 0.24 + u * 8, 0, 0, 7); x.fill(); }
-    x.restore(); }
+  { const q = 0.125, sc = document.createElement('canvas'); sc.width = Math.ceil(W * q); sc.height = Math.ceil(H * q); const s_ = sc.getContext('2d'); s_.scale(q, q);   // pequeño y ampliado: queda suave sin el desenfoque caro
+    s_.fillStyle = night ? 'rgba(5,11,10,.9)' : 'rgba(10,26,18,.88)';
+    for (let i = 0; i < 12; i++) { const tt = i / 11, ty = T.top + Ht * (0.05 + 0.82 * Math.pow(tt, 1.25)), tw = T.hw * (0.12 + 0.88 * Math.pow(tt, 0.85)); s_.beginPath(); s_.ellipse(T.cx, ty + tw * 0.22, tw * 0.62, tw * 0.24 + u * 8, 0, 0, 7); s_.fill(); }
+    x.save(); x.imageSmoothingQuality = 'high'; x.drawImage(sc, 0, 0, W, H); x.restore(); }
   yield;
   const needleCols = night ? [[5, 14, 12], [8, 22, 17], [12, 30, 22], [17, 40, 28], [24, 52, 34], [34, 66, 42], [50, 84, 54], [160, 120, 80]]
     : amb === 'dia' ? [[12, 34, 24], [18, 48, 32], [26, 62, 40], [36, 80, 48], [50, 100, 58], [72, 122, 66], [110, 150, 84], [220, 210, 160]]
@@ -6353,7 +6354,7 @@ function* navPaint(c, W, H, amb, out) {
     }
     x.strokeStyle = night ? '#120a06' : '#2a1a10'; x.lineWidth = u * 2.6; x.lineCap = 'round'; x.stroke(twig);
     x.lineWidth = u * 1.25; B.forEach((p, k) => { x.strokeStyle = navC(needleCols[k]); x.stroke(p); });
-    if (i % 3 === 2) yield;
+    yield;   // un piso por vez: el pintado no traba la animación
   }
   // sombra general: más oscuro abajo a la izquierda, luz cálida en el borde que mira a la ventana
   { x.save(); x.globalCompositeOperation = 'source-atop'; x.restore(); }
