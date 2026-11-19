@@ -591,6 +591,51 @@
   #modes button.cat-off { display: none !important; }
   /* los ajustes, en secciones */
   .set-sec { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .55; margin: 14px 2px 4px; font-weight: 600; }
+
+  /* ===================== Computador: dock y paneles de autor ===================== */
+  @media (min-width: 900px) and (hover: hover) {
+    :root { --c1s: color-mix(in srgb, var(--c1, #8b5cf6) 70%, #fff 0%); --ring: conic-gradient(from 210deg, color-mix(in srgb, var(--c1, #8b5cf6) 85%, transparent), color-mix(in srgb, var(--c2, #06b6d4) 85%, transparent), rgba(255,255,255,.25), color-mix(in srgb, var(--c1, #8b5cf6) 85%, transparent)); }
+    /* el dock: cristal con profundidad, borde con los colores de la canción y un brillo que late con el ritmo */
+    .dock { padding: 9px 10px; gap: 6px; border-radius: 26px; border: 1px solid transparent;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--glass) 92%, #fff 8%), var(--glass)) padding-box, var(--ring) border-box;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 18px 50px rgba(0,0,0,.45), 0 0 calc(18px + var(--beat, 0) * 34px) color-mix(in srgb, var(--c1, #8b5cf6) calc(18% + var(--beat, 0) * 22%), transparent); }
+    :root[data-theme="light"] .dock { box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 18px 50px rgba(30,20,60,.18), 0 0 calc(18px + var(--beat, 0) * 34px) color-mix(in srgb, var(--c1, #8b5cf6) calc(14% + var(--beat, 0) * 18%), transparent); }
+    .dock > .group + .group, .dock > .group + .pop-wrap, .dock > .pop-wrap + .group { position: relative; margin-left: 6px; padding-left: 8px; }
+    .dock > .group + .group::before, .dock > .group + .pop-wrap::before, .dock > .pop-wrap + .group::before { content: ''; position: absolute; left: 0; top: 18%; bottom: 18%; width: 1px; background: var(--glass-line); }
+    .dock button { border-radius: 14px; transition: background .2s, transform .15s, box-shadow .2s; }
+    .dock button:hover { transform: translateY(-1px); }
+    .dock button[aria-pressed="true"]:not(.swatch) { background: linear-gradient(135deg, color-mix(in srgb, var(--c1, #8b5cf6) 78%, #000), color-mix(in srgb, var(--c2, #06b6d4) 78%, #000)); color: #fff; box-shadow: 0 4px 16px color-mix(in srgb, var(--c1, #8b5cf6) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.3); text-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    #btnMode { padding-left: 6px; gap: 8px; display: inline-flex; align-items: center; }
+    #btnMode::before { content: ''; width: 34px; height: 22px; border-radius: 7px; background: var(--th) center / cover, #000; box-shadow: 0 0 0 1px rgba(255,255,255,.18), 0 2px 8px rgba(0,0,0,.35); flex: none; }
+    /* los paneles: cristal hondo con una malla de los colores de la canción y el mismo borde */
+    .pop { border: 1px solid transparent; border-radius: 22px;
+      background: radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--c1, #8b5cf6) 16%, transparent), transparent 60%) padding-box,
+                  radial-gradient(100% 80% at 100% 100%, color-mix(in srgb, var(--c2, #06b6d4) 14%, transparent), transparent 60%) padding-box,
+                  linear-gradient(var(--pop-bg), var(--pop-bg)) padding-box, var(--ring) border-box;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 30px 80px rgba(0,0,0,.5); }
+    :root[data-theme="light"] .pop { box-shadow: inset 0 1px 0 rgba(255,255,255,.9), 0 30px 80px rgba(30,20,60,.2); }
+    .pop-title { font-family: var(--font-display); font-size: 17px; letter-spacing: -.01em; }
+    /* el menú de animaciones: una galería */
+    #popMode.pop.grid { position: fixed; left: calc(50% - var(--bar-shift, 0px)); transform: translateX(-50%); bottom: calc(100% + 16px); width: min(1120px, 92vw); max-height: calc(100dvh - var(--dock-h, 70px) - 90px); padding: 22px 22px 18px; gap: 16px; }   /* centrado en la pantalla, no en su botón */
+    #popMode::before { content: 'Animaciones'; font-family: var(--font-display); font-size: 28px; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+    .pop.grid #modes { grid-template-columns: repeat(auto-fill, minmax(196px, 1fr)); gap: 14px; }
+    .pop.grid #modes button { position: relative; padding: 0; border-radius: 16px; overflow: hidden; background: #000; border: 0; gap: 0; transition: transform .25s cubic-bezier(.2,.8,.2,1), box-shadow .25s; }
+    .pop.grid #modes img { border-radius: 0; aspect-ratio: 16 / 10; transition: transform .5s cubic-bezier(.2,.8,.2,1), filter .3s; filter: saturate(1.05); }
+    .pop.grid #modes button span { position: absolute; left: 0; right: 0; bottom: 0; padding: 26px 12px 10px; text-align: left; font-weight: 600; font-size: 14px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); background: linear-gradient(180deg, transparent, rgba(0,0,0,.72)); }
+    .pop.grid #modes button:hover { transform: translateY(-4px); box-shadow: 0 16px 34px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.18), 0 0 28px color-mix(in srgb, var(--c1, #8b5cf6) 35%, transparent); }
+    .pop.grid #modes button:hover img { transform: scale(1.06); }
+    .pop.grid #modes button[aria-pressed="true"] { box-shadow: 0 0 0 2px transparent, 0 0 0 2px var(--c1, #fff), 0 0 calc(18px + var(--beat, 0) * 26px) color-mix(in srgb, var(--c1, #8b5cf6) 55%, transparent); background: #000; }
+    .pop.grid #modes button[aria-pressed="true"] img { box-shadow: none; }
+    .pop.grid #modes button[aria-pressed="true"]::after { content: 'Sonando'; position: absolute; top: 9px; left: 9px; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: .02em; color: #fff; background: linear-gradient(135deg, color-mix(in srgb, var(--c1, #8b5cf6) 78%, #000), color-mix(in srgb, var(--c2, #06b6d4) 78%, #000)); box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+    .mode-cats { gap: 8px; margin: 0; }
+    .mode-cats button { padding: 8px 16px; font-size: 13px; font-weight: 600; transition: background .2s, color .2s, box-shadow .2s; }
+    .mode-cats button[aria-pressed="true"], [data-theme="light"] .mode-cats button[aria-pressed="true"] { background: linear-gradient(135deg, color-mix(in srgb, var(--c1, #8b5cf6) 78%, #000), color-mix(in srgb, var(--c2, #06b6d4) 78%, #000)); color: #fff; border-color: transparent; box-shadow: 0 6px 18px color-mix(in srgb, var(--c1, #8b5cf6) 40%, transparent); }
+    .favs-head .pop-title { font-size: 14px; opacity: .8; }
+    #popMode { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--c1, #888) 60%, transparent) transparent; }
+    /* ajustes y grabar: más aire */
+    #popSettings.pop.col, #popRec.pop.col { padding: 20px 22px; }
+    .set-sec { color: color-mix(in srgb, var(--c1, #8b5cf6) 70%, var(--fg)); opacity: .9; }
+  }
 </style>
 </head>
 <body>
@@ -819,7 +864,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 165</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 166</div>
     </div>
   </div>
   <div class="group">
@@ -1087,6 +1132,7 @@ function applyAll(rebuild = true) {
   document.querySelectorAll('#modes button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.mode));
   const cur = document.querySelector(`#modes button[data-mode="${state.mode}"]`);
   document.getElementById('btnMode').textContent = (cur ? cur.textContent.trim() : 'Animación') + ' ▾';
+  document.getElementById('btnMode').style.setProperty('--th', `url("previews/${state.mode}.webp")`);   // (en el PC, el botón muestra la miniatura de la animación)
   document.getElementById('btnAuto').setAttribute('aria-pressed', state.auto);
   document.querySelectorAll('[data-strobe]').forEach(b => b.setAttribute('aria-pressed', b.dataset.strobe === state.strobe));
   document.querySelectorAll('[data-ruta]').forEach(b => b.setAttribute('aria-pressed', b.dataset.ruta === (state.ruta || 'auto')));
@@ -4364,6 +4410,7 @@ function drawLyricStyled(ly, size, cx, cy, maxW) {
   drawWordLines(ly.words, ly.shown, size, cx, cy, maxW);   // karaoke
 }
 const lyrBg = { t: 0, m: '', L: 0.5 };
+const dockEl = document.getElementById('dock');
 function drawRecOverlay() {
   if (!recording || state.mode === 'strobe') return;
   const u = MIN / 1080, vertical = H > W;
@@ -13374,6 +13421,7 @@ function frame(now) {
   }
 }
 function render(now) {
+  if ((render.k = (render.k || 0) + 1) % 2 === 0 && dockEl) dockEl.style.setProperty('--beat', Math.max(0, Math.min(1, pulse.x || 0)).toFixed(2));   // el dock respira con el ritmo
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
   // El reloj de las animaciones solo corre mientras suena música: las derivas lentas, los brillos que pasean y
   // los vaivenes se detienen en silencio (y arrancan suave cuando vuelve el sonido). Nada se mueve sin música.
