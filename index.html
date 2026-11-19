@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 163</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 164</div>
     </div>
   </div>
   <div class="group">
@@ -2686,7 +2686,7 @@ async function spApi(path, opts = {}, retry = true) {
   // Spotify ahora deja pedir menos resultados de una vez en algunas listas: si rechaza el tamaño, se pide de 10 en 10
   if (r.status === 400 && retry !== 'small' && /[?&]limit=(\d+)/.test(path) && +path.match(/[?&]limit=(\d+)/)[1] > 10) return spApi(path.replace(/([?&]limit=)\d+/, '$110'), opts, 'small');
   const txt = await r.text(), d = (() => { try { return JSON.parse(txt); } catch (e) { return null; } })();
-  if (!r.ok) { const e = new Error(d?.error?.message || 'Spotify respondió ' + r.status); e.status = r.status; e.reason = d?.error?.reason; lib.lastError = `${path.split('?')[0]} → ${r.status} ${e.reason || e.message}`; throw e; }
+  if (!r.ok) { const e = new Error(d?.error?.message || 'Spotify respondió ' + r.status); e.status = r.status; e.reason = d?.error?.reason; e.path = path; lib.lastError = `${path.split('?')[0]} → ${r.status} ${e.reason || e.message}`; throw e; }
   return d;
 }
 // Mensaje claro para cada error de Spotify
@@ -2697,6 +2697,7 @@ function spErrorText(e) {
   if (e.reason === 'QUOTA_EXCEEDED' || e.status === 429) return 'Spotify pide esperar un momento (demasiadas consultas). Prueba en un minuto.';
   if (e.status === 401) return 'La sesión de Spotify caducó. Pulsa «Dar permiso» para conectarte otra vez.';
   if (e.status === 403 && /restriction/i.test(e.message)) return 'Spotify no deja reproducir eso ahora en ese dispositivo (puede estar sonando un anuncio).';
+  if ((e.status === 403 || e.status === 404) && /^\/playlists\//.test(e.path || '')) return 'Spotify no comparte las canciones de esta playlist con otras apps (pasa con las playlists hechas por Spotify y con algunas de otras personas). Puedes reproducirla entera.';
   if (e.status === 403) return 'Spotify no dio permiso para esto (' + esc(e.message) + '). Prueba «Dar permiso».';
   return 'Spotify dijo: ' + esc(e.message);
 }
@@ -2859,17 +2860,28 @@ async function spPages(path, onPage, max = 2000) {
 function openPlaylist(pl) {
   libView(pl.name, true, async () => {
     libMsg('Cargando…');
-    let path = `/playlists/${pl.id}/items?limit=50`;
-    try { await spApi(path.replace('limit=50', 'limit=1')); } catch (e) { path = `/playlists/${pl.id}/tracks?limit=50`; }
-    let first = true, any = false;
-    await spPages(path, items => {
-      if (lib.stack.length && libTitle.textContent !== pl.name) return false;   // se fue a otra vista
-      const tracks = items.map(x => x.item || x.track).filter(t => t && t.uri && t.type !== 'episode');
-      if (first) { libList.innerHTML = ''; libList.append(libRow({ title: 'Reproducir todo', sub: (pl.owner?.display_name || '') + (pl.tracks?.total ? ' · ' + pl.tracks.total + ' canciones' : ''), img: imgOf(pl), play: row => libPlay({ context_uri: pl.uri }, row) })); first = false; }
-      if (tracks.length) { any = true; libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })); }
-    });
-    if (first) libList.innerHTML = '';
-    if (!any) libList.append(libSec('Spotify no deja ver las canciones de esta playlist (las de Spotify, como Daily Mix, no se comparten con otras apps); puedes reproducirla entera'));
+    // primero, siempre, «Reproducir todo»: Spotify deja reproducir la playlist entera aunque no deje ver su lista
+    const head = () => libRow({ title: 'Reproducir todo', sub: (pl.owner?.display_name || '') + (pl.tracks?.total ? ' · ' + pl.tracks.total + ' canciones' : ''), img: imgOf(pl), play: row => libPlay({ context_uri: pl.uri }, row) });
+    // las canciones: se prueban tres caminos (Spotify ha ido cambiando cuál deja usar); si niega todos, se avisa sin error
+    const sources = [`/playlists/${pl.id}/items?limit=50`, `/playlists/${pl.id}/tracks?limit=50`];
+    let path = null;
+    for (const s of sources) { try { await spApi(s.replace('limit=50', 'limit=1')); path = s; break; } catch (e) { if (e.status && e.status !== 403 && e.status !== 404 && e.status !== 400) throw e; } }
+    libList.innerHTML = ''; libList.append(head());
+    let any = false;
+    if (path) {
+      try {
+        await spPages(path, items => {
+          if (lib.stack.length && libTitle.textContent !== pl.name) return false;   // se fue a otra vista
+          const tracks = items.map(x => x.item || x.track).filter(t => t && t.uri && t.type !== 'episode');
+          if (tracks.length) { any = true; libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })); }
+        });
+      } catch (e) { if (!any) path = null; }
+    }
+    if (!path && !any) {   // último intento: la playlist completa trae sus primeras 100 canciones
+      try { const full = await spApi(`/playlists/${pl.id}?fields=tracks.items(track(id,uri,name,type,duration_ms,artists(name,id,uri),album(name,images,uri)))`);
+        const tracks = (full?.tracks?.items || []).map(x => x.track).filter(t => t && t.uri && t.type !== 'episode'); if (tracks.length) { any = true; libList.append(...trackRows(tracks, { uri: pl.uri, img: imgOf(pl) })); } } catch (e) {}
+    }
+    if (!any) libList.append(libSec('Spotify no comparte las canciones de esta playlist con otras apps (pasa con las playlists hechas por Spotify, como los Daily Mix o el Top 50, y con algunas de otras personas). Con «Reproducir todo» suena entera igual.'));
   });
 }
 function openAlbum(al) {
