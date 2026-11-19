@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 162</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 163</div>
     </div>
   </div>
   <div class="group">
@@ -7045,9 +7045,9 @@ function drawMirador(dt) {
   // los colores: los de la portada, llevados a un cielo de noche (o de hora azul) que siempre se vea bonito
   const tone = (c, l, sMin = 50) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, Math.min(85, s_)), l)).map(v => v / 255); };
   const blend = (a, b, k) => a.map((v, j) => v * (1 - k) + b[j] * k);
-  const top = night ? blend(tone(mix(0.15), 6), [0.008, 0.014, 0.05], 0.6) : blend(tone(mix(0.15), 24), [0.07, 0.1, 0.32], 0.5);
-  const mid = night ? blend(tone(mix(0.5), 16), [0.05, 0.08, 0.22], 0.55) : blend(tone(mix(0.5), 46), [0.36, 0.3, 0.62], 0.45);
-  const hor = night ? blend(tone(mix(0.9), 30, 60), [0.2, 0.14, 0.32], 0.5) : blend(tone(mix(0.9), 66, 70), [1, 0.62, 0.48], 0.45);
+  const top = night ? blend(tone(mix(0.15), 6), [0.008, 0.014, 0.05], 0.6) : blend(tone(mix(0.15), 24), [0.08, 0.13, 0.34], 0.72);   // de día: hora azul (azul profundo arriba)
+  const mid = night ? blend(tone(mix(0.5), 16), [0.05, 0.08, 0.22], 0.55) : blend(tone(mix(0.5), 46), [0.34, 0.38, 0.66], 0.7);
+  const hor = night ? blend(tone(mix(0.9), 30, 60), [0.2, 0.14, 0.32], 0.5) : blend(tone(mix(0.9), 66, 70), [1, 0.66, 0.5], 0.65);
   const warm = [1, 0.72, 0.42], melC = melodyColor().map(v => v / 255), halo = melC.map((v, j) => v * 0.4 * (0.4 + M.vo) + (night ? [0.55, 0.65, 1] : [1, 0.75, 0.6])[j] * 0.55);
   const mR = vertical ? 0.05 * asp : 0.055, mx = (vertical ? 0.76 : 0.8) * asp, my = vertical ? 0.84 : 0.8;
   const [cw, ch] = glCanvas(1), p = mir.prog;
@@ -7071,8 +7071,8 @@ function drawMirador(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   const lb = Math.min(1, M.lv[0]) * M.go; bloom(GLX.c, night ? 0.26 + 0.32 * lb + P * 0.16 : 0.14 + 0.2 * lb + P * 0.1);   // el resplandor respira con los graves y cada golpe se nota
   { const k = [W, H, night, G.hz].join(); if (M.starKey !== k) { M.starKey = k; M.stars = mirStars(G, night); }
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.9; ctx.drawImage(M.stars.dim, 0, 0);
-    ctx.globalAlpha = Math.min(1, 0.4 + 0.15 * Math.sin(time * 1.3) + 0.8 * Math.min(1, M.lv[2]) * M.go + 0.25 * P); ctx.drawImage(M.stars.bright, 0, 0); ctx.restore(); }
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? 0.9 : 0.25; ctx.drawImage(M.stars.dim, 0, 0);   // de día casi no hay estrellas
+    ctx.globalAlpha = Math.min(1, 0.4 + 0.15 * Math.sin(time * 1.3) + 0.8 * Math.min(1, M.lv[2]) * M.go + 0.25 * P) * (night ? 1 : 0.3); ctx.drawImage(M.stars.bright, 0, 0); ctx.restore(); }
   drawMoon(mx * H, (1 - my) * H, mR * H, halo.map(v => v * (0.85 + 0.35 * lb + 0.2 * M.vo)), night);
   // las siluetas, a contraluz
   const ink = rgba(top.map(v => v * 255 * 0.45 + 2), 1), rimBase = (night ? [0.55, 0.65, 1] : [1, 0.75, 0.6]).map(v => v * 0.6), rim = rgba(rimBase.map((v, j) => Math.round(Math.min(255, (v * 0.7 + hor[j] * 0.3) * 255 * (night ? 0.75 : 1)) / 4) * 4), 1);   // fijo (no depende de la voz): la capa de siluetas se pinta una sola vez
@@ -7235,9 +7235,9 @@ function faroSetup() {
         sky += (vec3(.85, .9, 1.) * star + uC1 * dust * .5 + vec3(.8, .85, 1.) * dust * step(.8, st) * smoothstep(.2, 0., sd_) * .5) * uNight * smoothstep(R * 1.2, R * 2.4, md);
         if (uStar.z > 0.) { vec2 dir = vec2(.42, -.2); sky += vec3(.95, .97, 1.) * meteor(p, uStar.xy + dir * uStar.z, dir, .2 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * uNight; }
         // nubes pintadas en dos capas: cuerpo oscuro y el borde que mira a la luna, plateado
-        for (int k = 0; k < 2; k++) { float fk = float(k); vec2 cp = vec2(p.x * (1.1 + fk * .5) + uT * (.006 + fk * .005) + fk * 7., ty * (3.2 + fk * 1.4) + fk * 3.);
-          float cd = fbm(vec2(cp.x * 1.5, cp.y * 3.2)), cov = mix(.5, .56, fk), cm = smoothstep(cov, cov + .14, cd) * smoothstep(0., .1, ty) * (1. - smoothstep(.75, 1., ty) * .6);
-          if (cm > 0.) { vec2 ld = normalize(uMoon.xy - p); float cd2 = fbm(vec2((cp.x + ld.x * .07) * 1.5, (cp.y + ld.y * .2) * 3.2));
+        for (int k = 0; k < 2; k++) { float fk = float(k); vec2 cp = vec2(p.x * (1.1 + fk * .5) + uT * (.006 + fk * .005) + fk * 7., ty * (1.6 + fk * .8) + fk * 3.);
+          float cd = fbm(vec2(cp.x * 1.3, cp.y * 2.)) * .8 + fbm(vec2(cp.x * 3.1, cp.y * 4.)) * .2, cov = mix(.5, .56, fk), cm = smoothstep(cov, cov + .14, cd) * smoothstep(0., .1, ty) * (1. - smoothstep(.75, 1., ty) * .6);
+          if (cm > 0.) { vec2 ld = normalize(uMoon.xy - p); float cd2 = fbm(vec2((cp.x + ld.x * .07) * 1.3, (cp.y + ld.y * .2) * 2.)) * .8 + fbm(vec2((cp.x + ld.x * .07) * 3.1, (cp.y + ld.y * .2) * 4.)) * .2;
             float lit = smoothstep(.0, .09, cd - cd2) * (.25 + .75 * exp(-md / (R * 6.)));
             vec3 cc = mix(mix(uC0, uC1, .55) * mix(.8, 1.15, 1. - uNight), mix(uC2, uHalo + moonL * .35, .7), lit);
             cc = mix(cc, uWarm * mix(.5, .95, 1. - uNight) + uC2 * .4, exp(-ty * 5.) * .6);
@@ -7378,7 +7378,8 @@ function drawLight(dt) {
   gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uPh, (L.b * Math.PI / 2) % (Math.PI * 2));
   gl.uniform1f(p.u.uPw, (0.35 + 0.65 * Math.min(1, L.bass * 1.4 + 0.25)) * (0.35 + 0.65 * L.go) * (night ? 1 : 0.6) * flash); gl.uniform1f(p.u.uP, P * flash); gl.uniform1f(p.u.uHi, L.hi); gl.uniform1f(p.u.uVo, L.vo); gl.uniform1f(p.u.uFoam, L.foam);
   gl.uniform3f(p.u.uMoon, mx, my, mR * (1 + P * 0.025)); const cool = (c, nv, k) => night ? c.map((v, j) => v * (1 - k) + nv[j] * k) : c;   // de noche los tonos de la portada se enfrían hacia el azul profundo
-  gl.uniform3fv(p.u.uC0, cool(tone(mix(0.1), night ? 5 : 34), [0.012, 0.02, 0.06], 0.6)); gl.uniform3fv(p.u.uC1, cool(tone(mix(0.5), night ? 11 : 56), [0.04, 0.07, 0.19], 0.6)); gl.uniform3fv(p.u.uC2, cool(tone(mix(0.9), night ? 20 : 74, 70), [0.1, 0.16, 0.36], 0.55));
+  const dayS = (c, nat) => night ? c : c.map((v, j) => v * 0.3 + nat[j] * 0.7);   // de día, un atardecer real: azul profundo arriba, lavanda rosada al medio, durazno en el horizonte (la portada solo tiñe)
+  gl.uniform3fv(p.u.uC0, dayS(cool(tone(mix(0.1), night ? 5 : 34), [0.012, 0.02, 0.06], 0.6), [0.16, 0.24, 0.52])); gl.uniform3fv(p.u.uC1, dayS(cool(tone(mix(0.5), night ? 11 : 56), [0.04, 0.07, 0.19], 0.6), [0.62, 0.5, 0.68])); gl.uniform3fv(p.u.uC2, dayS(cool(tone(mix(0.9), night ? 20 : 74, 70), [0.1, 0.16, 0.36], 0.55), [1, 0.72, 0.5]));
   gl.uniform3fv(p.u.uWarm, warm); gl.uniform3fv(p.u.uHalo, haloC); gl.uniform3fv(p.u.uAcc, tone(RGB[0], 42, 70)); gl.uniform3f(p.u.uStar, L.star ? L.star.x : 0, L.star ? L.star.y : 0, L.star ? L.star.t : 0);
   if (!L.cliffTex) { L.cliffTex = gl.createTexture(); glUpload(L.cliffTex, L.cliffCanvas || faroCliff()); }
   gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, L.cliffTex); gl.uniform1i(p.u.uCliff, 6); gl.activeTexture(gl.TEXTURE0);
