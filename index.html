@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 159</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 160</div>
     </div>
   </div>
   <div class="group">
@@ -3888,6 +3888,7 @@ async function pickVideoConfig(w, h) {
 // Prepara la grabación (mientras corre la cuenta atrás): elige el códec y mira el formato del sonido
 async function recPrepare() {
   recSize = recFmt === 'v' ? { w: 1080, h: 1920 } : { w: 1920, h: 1080 };
+  try { if (state.mode === 'navidad') navPrebake(recSize.w, recSize.h); } catch (e) { console.warn(e); }   // la Navidad, lista antes de empezar
   // si la grabadora del navegador ya sabe hacer MP4 (Chrome y Edge recientes), se usa esa: graba la imagen y el
   // sonido seguidos aunque la animación vaya cargada. La de cuadro a cuadro queda solo de respaldo
   if (window.MediaRecorder && ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a', 'video/mp4'].some(t => MediaRecorder.isTypeSupported(t))) return null;
@@ -6251,7 +6252,7 @@ function* navPaint(c, W, H, amb, out) {
     { const cx = gx + gw / 2, cy = gy + gh / 3, R = Math.min(gw, gh) * 0.13; x.strokeStyle = navC([200, 30, 40].map(v => v * (1 - dk * 0.5))); x.lineWidth = u * 2.5; x.beginPath(); x.moveTo(cx, gy - fr * 0.5); x.lineTo(cx, cy - R); x.stroke();
       x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.arc(cx + u * 4, cy + u * 5, R * 1.1, 0, 7); x.arc(cx + u * 4, cy + u * 5, R * 0.55, 0, 7, true); x.fill();
       const wc = [[14, 40, 22], [22, 58, 30], [36, 82, 40], [64, 110, 54]].map(c_ => c_.map(v => v * (1 - dk * 0.45))), WB = wc.map(() => new Path2D());
-      for (let i = 0; i < 520; i++) { const a = rng() * 6.283, rr = R * (0.6 + rng() * 0.45), px_ = cx + Math.cos(a) * rr, py_ = cy + Math.sin(a) * rr, aa = a + Math.PI / 2 + (rng() - 0.5) * 1.6, l = u * (4 + rng() * 5), k = Math.min(3, ((rng() * 3) + (Math.sin(a) < 0 ? 1 : 0)) | 0);
+      for (let i = 0; i < 1300; i++) { const a = rng() * 6.283, rr = R * (0.55 + rng() * 0.55), px_ = cx + Math.cos(a) * rr, py_ = cy + Math.sin(a) * rr, aa = a + Math.PI / 2 + (rng() - 0.5) * 1.6, l = u * (5 + rng() * 6), k = Math.min(3, ((rng() * 3) + (Math.sin(a) < 0 ? 1 : 0)) | 0);
         WB[k].moveTo(px_, py_); WB[k].lineTo(px_ + Math.cos(aa) * l, py_ + Math.sin(aa) * l); }
       x.lineWidth = u * 1.4; WB.forEach((pp, k) => { x.strokeStyle = navC(wc[k]); x.stroke(pp); });
       for (let i = 0; i < 16; i++) { const a = rng() * 6.283, rr = R * (0.65 + rng() * 0.3); x.fillStyle = navC([210, 30, 40].map(v => v * (1 - dk * 0.5))); x.beginPath(); x.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, u * 2.6, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.6)'; x.beginPath(); x.arc(cx + Math.cos(a) * rr + u, cy + Math.sin(a) * rr - u, u * 0.8, 0, 7); x.fill(); }
@@ -6311,10 +6312,12 @@ function* navPaint(c, W, H, amb, out) {
     for (let k = 0; k < 2; k++) { const dy = cy + u * 16 + k * (ch - u * 20) / 2; x.strokeStyle = 'rgba(0,0,0,.45)'; x.lineWidth = u * 2.5; x.strokeRect(cx0 + u * 12, dy, cw - u * 24, (ch - u * 28) / 2);
       x.fillStyle = '#c9a050'; for (const kx of [0.3, 0.7]) { x.beginPath(); x.arc(cx0 + cw * kx, dy + (ch - u * 28) / 4, u * 5, 0, 7); x.fill(); } }
     x.lineWidth = u * 0.8; for (let k = 0; k < 40; k++) { const yy = cy + rng() * ch; x.strokeStyle = `rgba(${rng() < 0.5 ? '20,8,4' : '255,210,170'},.1)`; x.beginPath(); x.moveTo(cx0, yy); x.bezierCurveTo(cx0 + cw * 0.3, yy + (rng() - 0.5) * u * 8, cx0 + cw * 0.7, yy + (rng() - 0.5) * u * 8, cx0 + cw, yy); x.stroke(); }
-    // la carpeta tejida (blanca, con su borde de ondas)
-    { const dx = T.x + T.w / 2, dw = T.w * 0.62, dyy = cy - u * 6; x.fillStyle = navC(navMix([246, 240, 228], A.wall[0], dk * 0.6), 0.9);
-      x.beginPath(); x.ellipse(dx, dyy, dw, u * 13, 0, 0, 7); x.fill(); for (let k = 0; k < 28; k++) { const a = k / 28 * 6.283; x.beginPath(); x.arc(dx + Math.cos(a) * dw, dyy + Math.sin(a) * u * 13, u * 5, 0, 7); x.fill(); }
-      x.fillStyle = 'rgba(0,0,0,.12)'; for (let k = 0; k < 24; k++) { const a = k / 24 * 6.283; x.beginPath(); x.arc(dx + Math.cos(a) * dw * 0.75, dyy + Math.sin(a) * u * 9, u * 2.2, 0, 7); x.fill(); } }
+    // la carpeta tejida cuelga sobre el borde de la cómoda (en punta, con ondas y calados)
+    { const dx = T.x + T.w / 2, dw = T.w * 0.3, y0 = cy - u * 4, dep = u * 46, lc = navMix([246, 240, 228], A.wall[0], dk * 0.6);
+      x.fillStyle = 'rgba(0,0,0,.18)'; x.beginPath(); x.moveTo(dx - dw + u * 4, y0 + u * 4); x.lineTo(dx + dw + u * 4, y0 + u * 4); x.lineTo(dx + u * 4, y0 + dep + u * 5); x.closePath(); x.fill();
+      x.fillStyle = navC(lc, 0.92); x.beginPath(); x.moveTo(dx - dw, y0); x.lineTo(dx + dw, y0); x.lineTo(dx, y0 + dep); x.closePath(); x.fill();
+      for (let k = 0; k <= 10; k++) for (const d of [-1, 1]) { const t = k / 10; x.beginPath(); x.arc(dx + d * dw * (1 - t), y0 + dep * t, u * 4.2, 0, 7); x.fill(); }
+      x.fillStyle = 'rgba(0,0,0,.14)'; for (let r_ = 0; r_ < 4; r_++) for (let k = -3 + r_; k <= 3 - r_; k++) { x.beginPath(); x.arc(dx + k * dw * 0.22, y0 + u * 9 + r_ * dep * 0.2, u * 2.4, 0, 7); x.fill(); } }
     // el televisor: mueble de madera, pantalla abombada, perillas y parlante
     const tx = T.x, ty = T.y, tw = T.w, th = T.h, rr = tw * 0.06;
     x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.roundRect(tx + u * 8, ty + u * 10, tw, th, rr); x.fill();
@@ -6430,6 +6433,7 @@ function* navPaint(c, W, H, amb, out) {
   { const P = L.peb, px = P.x, py = P.y, pw = P.w, ph = P.h, gy = py + ph * 0.5;
     x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.ellipse(px + pw / 2, py + ph * 0.98, pw * 0.52, ph * 0.08, 0, 0, 7); x.fill();
     // las lomas de papel de roca (arrugado: pliegues claros y oscuros)
+    const HP = [];   // el perfil de cada loma (para apoyar casitas y luces encima)
     const hills = [[0.0, 0.42, 0.34, 0.1], [0.24, 0.5, 0.44, 0.02], [0.6, 0.38, 0.4, 0.14], [0.78, 0.46, 0.24, 0.0]];
     for (const [hx, hw, hh, hy] of hills) { const x0 = px + pw * hx, x1 = x0 + pw * hw, top = py + ph * hy, bot = gy + ph * 0.08, hp = [];
       x.save(); x.beginPath(); x.moveTo(x0, bot); const n = 14; for (let i = 0; i <= n; i++) { const t = i / n, yy = top + ph * hh * (1 - Math.sin(Math.PI * t)) * 0.9 + (rng() - 0.5) * ph * 0.05; const hy_ = Math.min(bot, yy + (1 - Math.sin(Math.PI * t)) * ph * 0.18); hp.push([x0 + (x1 - x0) * t, hy_]); x.lineTo(x0 + (x1 - x0) * t, hy_); } x.lineTo(x1, bot); x.closePath(); x.clip();
@@ -6447,13 +6451,18 @@ function* navPaint(c, W, H, amb, out) {
       for (let i = 0; i < 6; i++) { const t = 0.15 + rng() * 0.7, bx = x0 + (x1 - x0) * t, by = top + ph * hh * (1 - Math.sin(Math.PI * t)) * 0.9 + (1 - Math.sin(Math.PI * t)) * ph * 0.18 + rng() * ph * 0.1;
         for (let k = 0; k < 14; k++) { x.fillStyle = navC([[28, 54, 26], [40, 74, 32], [62, 96, 40]][k % 3].map(v => v * (1 - dk * 0.55))); x.beginPath(); x.arc(bx + (rng() - 0.5) * u * 18, by + (rng() - 0.5) * u * 10 - u * 4, u * (3 + rng() * 4), 0, 7); x.fill(); } }
       x.restore();
+      HP.push(hp);
       // el borde de arriba recibe la luz (más del lado de la ventana)
       { const rg = x.createLinearGradient(x0, 0, x1, 0); rg.addColorStop(0, 'rgba(255,236,200,0)'); rg.addColorStop(1, `rgba(255,236,200,${0.5 * (1 - dk * 0.6)})`); x.strokeStyle = rg; x.lineWidth = u * 2; x.lineJoin = 'round';
         x.beginPath(); hp.forEach(([a, b], k) => k ? x.lineTo(a, b) : x.moveTo(a, b)); x.stroke(); } }
-    // casitas en las lomas (paredes blancas, techo de teja)
-    for (const [hx, hy] of [[0.12, 0.2], [0.33, 0.1], [0.7, 0.22], [0.86, 0.12]]) { const hx_ = px + pw * hx, hy_ = py + ph * hy + ph * 0.04, s = u * 14; x.fillStyle = navC([236, 228, 214].map(v => v * (1 - dk * 0.55))); x.fillRect(hx_ - s, hy_ - s * 0.8, s * 2, s * 1.4);
+    // casitas en las lomas (paredes blancas, techo de teja), sentadas sobre la superficie de la loma
+    const surf = (k, t) => { const q = HP[k], f = t * (q.length - 1), i0 = Math.floor(f), i1 = Math.min(q.length - 1, i0 + 1), w_ = f - i0; return [q[i0][0] + (q[i1][0] - q[i0][0]) * w_, q[i0][1] + (q[i1][1] - q[i0][1]) * w_]; };
+    for (const [k, t, dd] of [[0, 0.62, 0.14], [1, 0.28, 0.12], [2, 0.66, 0.1], [3, 0.4, 0.16]]) { const [hx_, sy_] = surf(k, t), s = u * 13, hy_ = sy_ + ph * dd;   // en la ladera (no en la cresta: ahí parecían encima de los regalos)
+      x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(hx_ + s * 0.3, hy_ + s * 0.62, s * 1.3, s * 0.25, 0, 0, 7); x.fill();
+      x.fillStyle = navC([236, 228, 214].map(v => v * (1 - dk * 0.55))); x.fillRect(hx_ - s, hy_ - s * 0.8, s * 2, s * 1.4); x.fillStyle = 'rgba(0,0,0,.18)'; x.fillRect(hx_ - s, hy_ - s * 0.8, s * 0.5, s * 1.4);
       x.fillStyle = navC([170, 60, 40].map(v => v * (1 - dk * 0.5))); x.beginPath(); x.moveTo(hx_ - s * 1.3, hy_ - s * 0.7); x.lineTo(hx_, hy_ - s * 1.5); x.lineTo(hx_ + s * 1.3, hy_ - s * 0.7); x.closePath(); x.fill();
-      x.fillStyle = night ? 'rgba(255,200,110,.95)' : 'rgba(60,40,30,.8)'; x.fillRect(hx_ - s * 0.5, hy_ - s * 0.3, s * 0.4, s * 0.4); x.fillRect(hx_ + s * 0.2, hy_, s * 0.4, s * 0.6); }
+      x.fillStyle = night ? 'rgba(255,200,110,.95)' : 'rgba(60,40,30,.8)'; x.fillRect(hx_ - s * 0.5, hy_ - s * 0.3, s * 0.4, s * 0.4); x.fillRect(hx_ + s * 0.2, hy_, s * 0.4, s * 0.6);
+      for (let m = 0; m < 10; m++) { x.fillStyle = navC([[30, 58, 28], [46, 80, 34], [70, 104, 44]][m % 3].map(v => v * (1 - dk * 0.55))); x.beginPath(); x.arc(hx_ + (rng() - 0.5) * s * 2.6, hy_ + s * 0.6 + rng() * s * 0.2, u * (2 + rng() * 2.5), 0, 7); x.fill(); } }   // musgo al pie de la casita
     // el suelo de musgo, punteado (miles de puntitos de varios verdes)
     { x.save(); x.beginPath(); x.moveTo(px, py + ph * 0.98); x.quadraticCurveTo(px - pw * 0.02, gy, px + pw * 0.1, gy - ph * 0.04); x.bezierCurveTo(px + pw * 0.4, gy - ph * 0.12, px + pw * 0.7, gy - ph * 0.02, px + pw * 0.95, gy - ph * 0.06); x.quadraticCurveTo(px + pw * 1.03, gy + ph * 0.2, px + pw, py + ph * 0.98); x.closePath(); x.clip();
       const mg = x.createLinearGradient(0, gy - ph * 0.1, 0, py + ph); mg.addColorStop(0, navC([64, 98, 44].map(v => v * (1 - dk * 0.55)))); mg.addColorStop(1, navC([36, 60, 28].map(v => v * (1 - dk * 0.55)))); x.fillStyle = mg; x.fillRect(px - pw * 0.05, gy - ph * 0.2, pw * 1.1, ph * 0.8);
@@ -6481,7 +6490,7 @@ function* navPaint(c, W, H, amb, out) {
       for (let i = 0; i < 46; i++) { const a = i / 46 * 6.283; x.fillStyle = navC([[150, 140, 130], [200, 190, 176], [110, 100, 92]][i % 3].map(v => v * (1 - dk * 0.5))); x.beginPath(); x.ellipse(lx + Math.cos(a) * lw * 1.04, ly + Math.sin(a) * lh * 1.1, u * 3.2, u * 2.2, 0, 0, 7); x.fill(); }
       for (const [dx, dc] of [[-0.3, [250, 250, 245]], [0.25, [240, 200, 80]]]) { const bx = lx + lw * dx, by = ly + lh * 0.05; x.fillStyle = navC(dc.map(v => v * (1 - dk * 0.5))); x.beginPath(); x.ellipse(bx, by, u * 6, u * 3.4, 0, 0, 7); x.fill(); x.beginPath(); x.arc(bx + u * 5, by - u * 4, u * 2.6, 0, 7); x.fill(); x.fillStyle = '#e07020'; x.fillRect(bx + u * 7, by - u * 4.5, u * 3, u * 1.4); } }
     // la palmerita
-    { const tx = px + pw * 0.66, ty = gy - ph * 0.02; x.strokeStyle = navC([110, 80, 50].map(v => v * (1 - dk * 0.5))); x.lineWidth = u * 4; x.beginPath(); x.moveTo(tx, ty); x.quadraticCurveTo(tx + u * 8, ty - ph * 0.2, tx + u * 4, ty - ph * 0.36); x.stroke();
+    { const tx = px + pw * 0.64, ty = gy + ph * 0.05; x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.ellipse(tx + u * 6, ty + u * 2, u * 18, u * 4, 0, 0, 7); x.fill(); x.strokeStyle = navC([110, 80, 50].map(v => v * (1 - dk * 0.5))); x.lineWidth = u * 4; x.beginPath(); x.moveTo(tx, ty); x.quadraticCurveTo(tx + u * 8, ty - ph * 0.2, tx + u * 4, ty - ph * 0.36); x.stroke();
       for (let k = 0; k < 8; k++) { const a = -Math.PI / 2 + (k - 3.5) * 0.42, fx = tx + u * 4, fy = ty - ph * 0.36; x.strokeStyle = navC([50, 100, 40].map(v => v * (1 - dk * 0.5))); x.lineWidth = u * 3.2; x.beginPath(); x.moveTo(fx, fy); x.quadraticCurveTo(fx + Math.cos(a) * u * 30, fy + Math.sin(a) * u * 22, fx + Math.cos(a) * u * 46, fy + Math.sin(a) * u * 18 + u * 22); x.stroke(); } }
     // el portal: postes, techo de paja, adentro en penumbra
     const pcx = px + pw * 0.47, pby = gy + ph * 0.1, pwd = pw * 0.26, phh = ph * 0.42;
@@ -6540,15 +6549,21 @@ function* navPaint(c, W, H, amb, out) {
       .forEach(([fx, fy, tu, ma, be], k) => fig(px + pw * fx, gy + ph * fy, s0 * (0.5 + k * 0.05), { tunic: tu, mantle: ma, beard: be, hair: [40, 30, 24], crown: true, gift: true, trim: true }));
     // el pastor y sus ovejas
     fig(px + pw * 0.08, gy + ph * 0.08, s0 * 0.75, { tunic: [150, 120, 80], mantle: [110, 80, 50], hair: [60, 40, 26], beard: [70, 50, 34], staff: true });
-    for (let k = 0; k < 11; k++) { const sx = px + pw * (k < 7 ? 0.1 + rng() * 0.24 : 0.55 + rng() * 0.35), sy = gy + ph * (0.08 + rng() * 0.3), s = u * (10 + rng() * 4) * (0.8 + (sy - gy) / ph), dir = rng() < 0.5 ? -1 : 1;
+    const lkx = px + pw * 0.2, lky = gy + ph * 0.24, lkw = pw * 0.13, lkh = ph * 0.07, sheep = []; let tries = 0;
+    while (sheep.length < 9 && tries++ < 400) { const sx = px + pw * (0.1 + rng() * 0.26), sy = gy + ph * (0.07 + rng() * 0.12); if (((sx - lkx) / (lkw * 1.3)) ** 2 + ((sy - lky) / (lkh * 1.8)) ** 2 < 1) continue; if (sheep.some(([a, b]) => Math.hypot(a - sx, b - sy) < u * 22)) continue; sheep.push([sx, sy]); }
+    sheep.sort((a, b) => a[1] - b[1]);   // en rebaño junto al pastor, ninguna en el lago
+    for (const [sx, sy] of sheep) { const s = u * (10 + rng() * 3) * (0.8 + (sy - gy) / ph), dir = rng() < 0.5 ? -1 : 1;
       x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(sx, sy + s * 0.9, s * 1.2, s * 0.25, 0, 0, 7); x.fill();
       x.fillStyle = '#2a2420'; for (const lx of [-0.6, -0.2, 0.3, 0.7]) x.fillRect(sx + lx * s, sy + s * 0.3, s * 0.16, s * 0.6);
       for (let i = 0; i < 9; i++) { const ox = (rng() - 0.5) * s * 1.6, oy = (rng() - 0.5) * s * 0.7, g = x.createRadialGradient(sx + ox - s * 0.15, sy + oy - s * 0.2, 0, sx + ox, sy + oy, s * 0.55); g.addColorStop(0, navC(D([250, 248, 240]))); g.addColorStop(1, navC(D([190, 184, 172]))); x.fillStyle = g; x.beginPath(); x.arc(sx + ox, sy + oy, s * 0.55, 0, 7); x.fill(); }
       x.fillStyle = '#2a2420'; x.beginPath(); x.ellipse(sx + dir * s * 1.05, sy - s * 0.1, s * 0.38, s * 0.3, dir * 0.3, 0, 7); x.fill(); x.beginPath(); x.ellipse(sx + dir * s * 0.85, sy - s * 0.32, s * 0.2, s * 0.09, -dir * 0.6, 0, 7); x.fill(); }
     // las lucecitas del pesebre (cuerpos pequeños): por las lomas de atrás
-    for (let k = 0; k < 16; k++) { const t = k / 15, bx = px + pw * (0.04 + t * 0.92), by = py + ph * (0.18 + 0.14 * Math.sin(t * 7.5 + 1)); out.bulbs.push({ x: bx, y: by, r: u * 3, col: NAV_COLS[(k * 2) % 6], band: (k * 3) % 24, grp: k % 2, kind: 'p', rot: 0 }); }
+    { let k = 0; for (let hI = 0; hI < HP.length; hI++) for (const t of [0.18, 0.38, 0.62, 0.82]) { const [bx, by] = surf(hI, t); out.bulbs.push({ x: bx, y: by + u * 8, r: u * 3, col: NAV_COLS[(k * 2) % 6], band: (k * 3) % 24, grp: k % 2, kind: 'p', rot: 0 }); k++; } }   // apoyadas en el borde de las lomas
     // el borde del pesebre (la tabla de abajo, cubierta de papel)
-    x.fillStyle = navC([70, 50, 34].map(v => v * (1 - dk * 0.5))); x.fillRect(px, py + ph * 0.94, pw, ph * 0.06); }
+    { const by0 = py + ph * 0.94, bh_ = ph * 0.06, wc_ = [110, 74, 46].map(v => v * (1 - dk * 0.5)), bg_ = x.createLinearGradient(0, by0, 0, by0 + bh_); bg_.addColorStop(0, navC(wc_.map(v => v * 1.15))); bg_.addColorStop(1, navC(wc_.map(v => v * 0.55)));
+      x.fillStyle = bg_; x.fillRect(px, by0, pw, bh_); x.lineWidth = u * 0.8; for (let k = 0; k < 14; k++) { const yy = by0 + rng() * bh_; x.strokeStyle = `rgba(${rng() < 0.5 ? '20,8,4' : '255,210,170'},.14)`; x.beginPath(); x.moveTo(px, yy); x.bezierCurveTo(px + pw * 0.3, yy + (rng() - 0.5) * u * 4, px + pw * 0.7, yy + (rng() - 0.5) * u * 4, px + pw, yy); x.stroke(); }
+      x.fillStyle = 'rgba(255,225,190,.2)'; x.fillRect(px, by0, pw, u * 2);
+      for (let k = 0; k < 220; k++) { const mx = px + rng() * pw, my = by0 + rng() * u * 10 * rng(); x.fillStyle = navC([[30, 54, 26], [46, 80, 34], [70, 104, 44]][k % 3].map(v => v * (1 - dk * 0.55))); x.beginPath(); x.arc(mx, my, u * (1.5 + rng() * 3), 0, 7); x.fill(); } } }   // la tabla de adelante, con el musgo que cae por encima
   yield;
   // ---- los cuerpos de todos los bombillos (apagados: vidrio de color) ----
   for (const b of out.bulbs) navBulbBody(x, b, u, 0);
@@ -6572,6 +6587,7 @@ const NAV_SPR = NAV_COLS.map(navSprite);
 function drawNavidad(dt) {
   const N = NAV, amb = navAmb(), A = NAV_AMB[amb], night = amb === 'noche', P = Math.max(0, pulse.x); paiLevels(N, dt);
   const key = [W, H, amb].join();
+  if (N.key !== key && N.pre && N.pre.key === key) { N.job = { c: N.pre.c, out: N.pre.out, key }; N.key = key; N.pre = null; navDone(N); }   // ya pintada durante la cuenta atrás
   if (N.key !== key) { const c = document.createElement('canvas'); c.width = W; c.height = H; const out = { bulbs: [] }, job = navPaint(c, W, H, amb, out);
     N.job = { c, out, job, key }; N.key = key; if (!N.bg) { while (!job.next().done); navDone(N); } }
   if (N.job) { const t0 = performance.now(), jx = N.job.c.getContext('2d'); let r; do { r = N.job.job.next(); jx.getImageData(0, 0, 1, 1); } while (!r.done && performance.now() - t0 < 8); if (r.done) navDone(N); }
@@ -6661,6 +6677,9 @@ function navLive(dt, W, H, amb, A, night, P) {   // (W y H son las medidas del f
     tg.addColorStop(0, navC(navMix(tc, [140, 170, 255], 0.5), (night ? 0.16 : 0.06) * fl)); tg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = tg; ctx.fillRect(s.x + s.w / 2 - tr, s.y + s.h / 2 - tr, tr * 2, tr * 2); ctx.restore(); }
   ctx.save(); ctx.globalAlpha = night ? 0.05 : 0.06; ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); ctx.restore();
 }
+// al preparar una grabación (durante la cuenta atrás) la habitación se pinta entera al tamaño del video: el video empieza nítido
+function navPrebake(w, h) { const amb = navAmb(), key = [w, h, amb].join(); if (NAV.key === key || (NAV.pre && NAV.pre.key === key)) return;
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const out = { bulbs: [] }, job = navPaint(c, w, h, amb, out); while (!job.next().done); c.getContext('2d').getImageData(0, 0, 1, 1); NAV.pre = { key, c, out }; }
 function navDone(N) { N.bg = N.job.c; N.out = N.job.out; N.L = navLayout(N.bg.width, N.bg.height); N.job = null; }
 
 // ================= Escena: Lago =================
