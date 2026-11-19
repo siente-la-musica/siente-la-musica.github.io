@@ -573,6 +573,24 @@
   .song.player .cover { scale: 1; transition: scale .55s cubic-bezier(.34, 1.56, .64, 1), filter .4s; }
   .song.player.paused .cover { scale: .8; filter: saturate(.6) brightness(.92); transition-timing-function: cubic-bezier(.4, 0, .2, 1); }
   @media (prefers-reduced-motion: reduce) { .song.player .cover { transform: none; transition: none; } }
+  /* la bienvenida sola: sin el dock ni la marca repetida detrás (se ven al entrar) */
+  body:has(#intro:not([hidden])) #dock, body:has(#intro:not([hidden])) #brand, body:has(#intro:not([hidden])) #status { opacity: 0; pointer-events: none; }
+  /* en pantallas táctiles, todo lo que se toca mide al menos 44 px (el mínimo cómodo para un dedo) */
+  @media (pointer: coarse) {
+    .dock button { min-height: 42px; padding-left: 8px; padding-right: 8px; } .dock .icon, .dock .swatch { min-width: 40px; }
+    #spLike, #spFind, #spMore, #libClose, .lib .ib, .lib-tabs button, .car-nav button { min-width: 44px; min-height: 44px; }
+    .seg button { min-height: 40px; }
+    #modes button, .fav, .fav button { min-height: auto !important; padding-left: 5px; padding-right: 5px; }   /* (las miniaturas conservan su tamaño natural: si no, se encogían y se tapaban unas con otras) */
+  }
+  /* el menú de animaciones, por categorías */
+  .mode-cats { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 10px; }
+  .mode-cats button { flex: 0 0 auto; padding: 6px 12px; border-radius: 999px; font-size: 12.5px; background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.1); }
+  .mode-cats button[aria-pressed="true"] { background: #fff; color: #111; border-color: #fff; }
+  [data-theme="light"] .mode-cats button { background: rgba(0,0,0,.05); border-color: rgba(0,0,0,.08); }
+  [data-theme="light"] .mode-cats button[aria-pressed="true"] { background: #111; color: #fff; }
+  #modes button.cat-off { display: none !important; }
+  /* los ajustes, en secciones */
+  .set-sec { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; opacity: .55; margin: 14px 2px 4px; font-weight: 600; }
 </style>
 </head>
 <body>
@@ -587,6 +605,7 @@
     <div class="intro-go">
       <button class="go main" id="introAudio" type="button"><span>🎧</span>Escuchar el audio del PC</button>
       <button class="go" id="introSp" type="button"><span>♫</span>Conectar Spotify</button>
+      <button class="go" id="introMic" type="button" hidden><span>🎙</span>Usar el micrófono</button>
       <button class="go see" id="btnSee" type="button"><span>✦</span>Ver las animaciones</button>
     </div>
     <p class="hint" id="introHint">Al compartir, elige la pestaña donde suena la música (o Pantalla completa) y activa <b>Compartir audio</b>.</p>
@@ -648,7 +667,7 @@
 
 <div class="dock" id="dock">
   <div class="pop-wrap">
-    <button id="btnSource" aria-haspopup="true" aria-expanded="false" title="Elegir de dónde viene el audio">Conectar audio</button>
+    <button id="btnSource" aria-haspopup="true" aria-expanded="false" title="Elegir de dónde viene el audio">Audio</button>
     <div class="pop" id="popSource" hidden>
       <button id="btnSystem">Audio del PC</button>
       <button id="btnMic">Micrófono</button>
@@ -658,7 +677,7 @@
     </div>
   </div>
   <div class="pop-wrap">
-    <button id="btnSpotify" type="button" aria-haspopup="true" aria-expanded="false" title="De dónde sale la canción, la portada y la letra">Conectar música</button>
+    <button id="btnSpotify" type="button" aria-haspopup="true" aria-expanded="false" title="De dónde sale la canción, la portada y la letra">Música</button>
     <div class="pop col" id="popMusic" hidden>
       <div class="pop-title">Conectar tu música</div>
       <p class="pop-note" style="display:block">Para ver la canción, la portada y la letra.</p>
@@ -666,7 +685,7 @@
       <button id="btnLib" type="button" class="primary" hidden>Buscar y reproducir</button>
       <div class="row-set lf-row"><input id="lfUser" type="text" placeholder="Tu usuario de Last.fm" autocomplete="username" spellcheck="false"><button id="btnLfConnect" type="button">Last.fm</button></div>
       <p class="pop-note" id="lfNote" style="display:block">Last.fm es gratis y sin límite de personas: conecta una vez tu Spotify a Last.fm (en last.fm → Ajustes → Aplicaciones).</p>
-      <p class="pop-note" style="display:block">Con un archivo (Conectar audio → Archivo) la letra va perfectamente sincronizada.</p>
+      <p class="pop-note" style="display:block">Con un archivo (Audio → Archivo) la letra va perfectamente sincronizada.</p>
     </div>
   </div>
   <button id="btnId" hidden>¿Qué suena?</button>
@@ -679,6 +698,7 @@
         <div class="favs-head"><span class="pop-title">Favoritos</span><button class="keep fav-add" id="favAdd" title="Guarda la animación, los colores y los ajustes de ahora">＋ Guardar el de ahora</button></div>
         <div class="fav-list" id="favList"></div>
       </div>
+      <div class="mode-cats" role="group" aria-label="Categorías"><button data-cat="all" aria-pressed="true">Todas</button><button data-cat="esc">Escenas</button><button data-cat="luz">Luz y vidrio</button><button data-cat="abs">Abstractas</button><button data-cat="por">Portada y letra</button></div>
       <div class="group" role="group" aria-label="Animación" id="modes">
         <button data-mode="navidad">Navidad</button>
         <button data-mode="ruta">Ruta</button>
@@ -774,14 +794,18 @@
     <div class="pop col" id="popSettings" hidden>
       <div class="pop-title">Ajustes</div>
       <label class="row-set" for="sens">Sensibilidad a la música <input type="range" id="sens" min="0.5" max="2" step="0.1"></label>
+      <div class="set-sec">Fondo</div>
       <label class="row-set" for="coverBg"><span>Portada de fondo <small>La portada de la canción, suave detrás de la animación</small></span> <input type="checkbox" id="coverBg"></label>
       <label class="row-set" for="liveBg"><span>Fondo vivo <small>Los colores de la portada se mueven detrás de la animación, al ritmo de la canción</small></span> <input type="checkbox" id="liveBg"></label>
       <label class="row-set" for="coverGray"><span>Portada en blanco y negro <small>El fondo en grises; las animaciones siguen tomando los colores de la portada</small></span> <input type="checkbox" id="coverGray"></label>
+      <div class="set-sec">Pantalla y letra</div>
       <label class="row-set" for="wakeLock"><span>No bloquear la pantalla <small>Mientras la página está abierta, la pantalla no se apaga ni se bloquea</small></span> <input type="checkbox" id="wakeLock"></label>
       <label class="row-set" for="lyricFx"><span>La letra se ve <small>Si la canción habla de fuego, lluvia, amor, estrellas… aparece en la animación</small></span> <input type="checkbox" id="lyricFx"></label>
+      <div class="set-sec">Movimiento y luz</div>
       <label class="row-set" for="camOn"><span>Cámara viva <small>La imagen se acerca despacio y da un golpe con cada bombo (también al grabar)</small></span> <input type="checkbox" id="camOn"></label>
       <label class="row-set" for="noFlash"><span>Sin destellos <small>Para personas sensibles a la luz intermitente</small></span> <input type="checkbox" id="noFlash"></label>
       <div class="row-set" id="installRow" hidden><span>Instalar como app <small id="installNote">Ábrela desde el escritorio o la pantalla de inicio, sin barra del navegador</small></span> <button class="primary keep" id="btnInstall">Instalar</button></div>
+      <div class="set-sec">Escenas</div>
       <div class="row-set"><span>Ambiente de la Ruta <small>El modo del carro: en Auto sigue el tema (de noche, noche lluviosa; de día, atardecer)</small></span>
         <div class="seg" role="group" aria-label="Ambiente de la Ruta" style="flex-wrap:wrap"><button data-ruta="auto">Auto</button><button data-ruta="dia">Día</button><button data-ruta="tarde">Atardecer</button><button data-ruta="noche">Noche</button><button data-ruta="lluvia">Lluvia</button><button data-ruta="nochell">Noche lluviosa</button></div>
       </div>
@@ -795,7 +819,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 164</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 165</div>
     </div>
   </div>
   <div class="group">
@@ -1092,7 +1116,16 @@ bindPop('btnMode', 'popMode'); bindPop('btnSpotify', 'popMusic');
 document.getElementById('introAudio').onclick = e => { e.stopPropagation(); document.getElementById('btnSystem').click(); };
 document.getElementById('introSp').onclick = e => { e.stopPropagation(); document.getElementById('btnSpotify').click(); };
 // en el celular no se puede oír el audio de otras apps: ahí lo principal es conectar Spotify
-if (matchMedia('(pointer: coarse)').matches && !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; }
+// en un celular o tableta (pantalla táctil sin ratón) no se puede capturar el audio del equipo: Spotify va primero y el micrófono como alternativa
+if ((matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) || !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; document.getElementById('introMic').hidden = false; }
+{ const CATS = { esc: ['navidad', 'ruta', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
+    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'capsules', 'columns', 'tubos', 'circles', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
+    por: ['cover', 'livecover', 'lyrics', 'artist', 'strobe', 'vinyl'] };
+  const inCat = (m, c) => c === 'all' || (c === 'abs' ? !CATS.esc.includes(m) && !CATS.luz.includes(m) && !CATS.por.includes(m) : CATS[c].includes(m));
+  document.querySelectorAll('.mode-cats button').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.cat;
+    document.querySelectorAll('.mode-cats button').forEach(x => x.setAttribute('aria-pressed', x === b));
+    document.querySelectorAll('#modes button[data-mode]').forEach(mb => mb.classList.toggle('cat-off', !inCat(mb.dataset.mode, c))); }); }
+document.getElementById('introMic').onclick = e => { e.stopPropagation(); document.getElementById('btnMic').click(); };
 document.getElementById('btnSee').onclick = e => { e.stopPropagation(); document.getElementById('btnMode').click(); }; bindPop('btnSettings', 'popSettings'); bindPop('btnRec', 'popRec');
 // Ajustes
 const sensEl = document.getElementById('sens'), noFlashEl = document.getElementById('noFlash');
@@ -1145,7 +1178,7 @@ document.querySelectorAll('[data-strobe]').forEach(b => b.onclick = () => { stat
 document.getElementById('btnAuto').onclick = () => { state.auto = !state.auto; store.set('auto', state.auto); autoT = 0; applyAll(false); };
 function setSource(label) {
   const b = document.getElementById('btnSource');
-  b.textContent = label ? label + ' ✓' : 'Conectar audio'; b.setAttribute('aria-pressed', !!label);
+  b.textContent = label ? label + ' ✓' : 'Audio'; b.setAttribute('aria-pressed', !!label);
 }
 
 document.querySelectorAll('#modes button').forEach(b => b.onclick = () => setMode(b.dataset.mode));
@@ -1224,6 +1257,14 @@ function wake() {
   }, 3000);
 }
 addEventListener('pointermove', wake); addEventListener('pointerdown', wake);
+// deslizar el dedo a un lado sobre la animación cambia a la siguiente (o a la anterior), como en las historias
+{ let sx = 0, sy = 0, st = 0; const cv = document.getElementById('c');
+  cv.addEventListener('touchstart', e => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = performance.now(); }, { passive: true });
+  cv.addEventListener('touchend', e => { const t = e.changedTouches[0], dx = t.clientX - sx, dy = t.clientY - sy;
+    if (performance.now() - st > 600 || Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.6 || recording) return;
+    const order = [...document.querySelectorAll('#modes button[data-mode]')].filter(b => !b.classList.contains('cat-off')).map(b => b.dataset.mode), i = order.indexOf(state.mode);
+    const m = order[(i + (dx < 0 ? 1 : -1) + order.length) % order.length]; setMode(m);
+    const nm = document.querySelector(`#modes button[data-mode="${m}"] span`); try { spToast((dx < 0 ? '→ ' : '← ') + esc(nm ? nm.textContent : m)); } catch (er) {} }, { passive: true }); }
 addEventListener('keydown', e => {
   wake();
   if (e.target.tagName === 'INPUT') return;
@@ -1287,7 +1328,7 @@ function useStream(stream, label) {
   source = audioCtx.createMediaStreamSource(stream);
   source.connect(analyser); source.connect(recDest); // sin conectar a los altavoces: evita eco
   const track = stream.getAudioTracks()[0];
-  track.addEventListener('ended', () => { setStatus('Captura detenida. Pulsa Conectar audio para volver a empezar.'); analyser = null; setSource(''); document.body.classList.remove('idle'); });
+  track.addEventListener('ended', () => { setStatus('Captura detenida. Pulsa Audio para volver a empezar.'); analyser = null; setSource(''); document.body.classList.remove('idle'); });
   track.addEventListener('mute', () => setStatus('Sin señal de audio por ahora', true));
   track.addEventListener('unmute', () => setStatus(label, true));
   setStatus(label, true); statusBase = label;
@@ -2111,7 +2152,7 @@ function spSave() { store.set('sp.token', sp.token); store.set('sp.refresh', sp.
 function spButton() {
   const src = nowSource();
   btnSpotify.setAttribute('aria-pressed', !!src);
-  btnSpotify.textContent = src === 'spotify' ? 'Spotify ✓' : src === 'lastfm' ? 'Last.fm ✓' : src === 'file' ? 'Archivo ✓' : 'Conectar música';
+  btnSpotify.textContent = src === 'spotify' ? 'Spotify ✓' : src === 'lastfm' ? 'Last.fm ✓' : src === 'file' ? 'Archivo ✓' : 'Música';
   const spb = document.getElementById('btnSpConnect');
   if (spb) { spb.textContent = spotifyOn() ? 'Desconectar Spotify' : 'Spotify'; spb.setAttribute('aria-pressed', spotifyOn()); }
   const lbb = document.getElementById('btnLib'); if (lbb) lbb.hidden = !spotifyOn();
@@ -2708,7 +2749,7 @@ function libOpen() {
   libEl.hidden = false; sp.dismissed = false; sp.more = false; spRender(); libLayout();
   const missing = !hasScope('user-library-read') || !hasScope('streaming') || !hasScope('user-library-modify');
   if (missing) libNoteShow('Para ver tu biblioteca y reproducir aquí, Spotify necesita unos permisos nuevos.<br><button class="primary" id="libReauth">Dar permiso</button>');
-  else if (!analyser) libNoteShow('Consejo: pulsa <b>Conectar audio → Audio del PC</b> para que las animaciones sigan lo que pongas aquí.');
+  else if (!analyser) libNoteShow('Consejo: pulsa <b>Audio → Audio del PC</b> para que las animaciones sigan lo que pongas aquí.');
   else libNoteShow('');
   const ra = document.getElementById('libReauth'); if (ra) ra.onclick = () => spLogin();
   libDevices(); if (hasScope('streaming') && canWebPlayer) libSdk();
@@ -2796,7 +2837,7 @@ async function libPlay(body, row, track) {
       await new Promise(r => setTimeout(r, 700));
       await play();
     }
-    libNoteShow(`▶ Sonando en <b>${esc(info ? (info.web ? 'este navegador' : info.name) : 'tu Spotify')}</b>` + (analyser ? '' : ' · pulsa <b>Conectar audio → Audio del PC</b> para que las animaciones lo sigan.'));
+    libNoteShow(`▶ Sonando en <b>${esc(info ? (info.web ? 'este navegador' : info.name) : 'tu Spotify')}</b>` + (analyser ? '' : ' · pulsa <b>Audio → Audio del PC</b> para que las animaciones lo sigan.'));
     sp.dismissed = false;
     spBurst(); setTimeout(libDevices, 1500);
   } catch (e) {
@@ -3478,7 +3519,7 @@ async function syncAIStart() {
   const base = LYRICS_BACKUP || store.get('lyricsBackup', '');
   const track = recAudioTrack();
   if (!base) { spToast('Falta el servidor de letras'); return; }
-  if (!track) { spToast('Para sincronizar con IA, pulsa Conectar audio → Audio del PC'); return; }
+  if (!track) { spToast('Para sincronizar con IA, pulsa Audio → Audio del PC'); return; }
   sync.lines = syncText.value.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const mr = new MediaRecorder(new MediaStream([track.clone()]), { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '' }), ch = [];
   sync.ai = { mr, ch, t0: lyricPos() - lyOff() - 250 };
@@ -3503,7 +3544,7 @@ async function toWav16k(blob) {   // la IA entiende mejor un WAV mono de 16 kHz 
   let e = 0, pk = 0; for (let i = 0; i < n; i++) { const v = Math.abs(pcm[i]); e += v * v; if (v > pk) pk = v; }
   const rms = Math.sqrt(e / Math.max(1, n));
   if (n < 16000 * 3) throw new Error('la parte escuchada es muy corta: deja sonar al menos 5 segundos');
-  if (rms < 0.004) throw new Error('no llegó sonido de la canción. Revisa que en Conectar audio → Audio del PC compartas la pestaña o pantalla donde suena Spotify, con «Compartir audio» activado');
+  if (rms < 0.004) throw new Error('no llegó sonido de la canción. Revisa que en Audio → Audio del PC compartas la pestaña o pantalla donde suena Spotify, con «Compartir audio» activado');
   const g = Math.min(8, 0.7 / Math.max(pk, 1e-4));   // se sube el volumen si llegó bajito
   for (let i = 0; i < n; i++) pcm[i] *= g;
   const w = (o, t) => [...t].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
@@ -3729,7 +3770,7 @@ function lvTick() {
   const msg = lyricsMessage();
   if (lvMsg.dataset.msg !== msg) {
     lvMsg.dataset.msg = msg; lvMsg.textContent = msg;
-    if (msg && !spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar música'; b.onclick = e => { e.stopPropagation(); openMusic(); }; lvMsg.appendChild(b); }
+    if (msg && !spConnected()) { const b = document.createElement('button'); b.textContent = 'Música'; b.onclick = e => { e.stopPropagation(); openMusic(); }; lvMsg.appendChild(b); }
   }
   lvMsg.hidden = !msg; lvStage.hidden = !!msg;
   if (msg) { lvIndex = -2; lvCur.textContent = ''; return; }
@@ -4934,7 +4975,7 @@ function arTick() {
     const msg = !spConnected() ? 'Conecta tu música para conocer al artista que escuchas' : !sp.item ? 'Pon algo de música' : 'Los podcasts no tienen artista';
     if (arMsg.dataset.msg !== msg) {
       arMsg.dataset.msg = msg; arMsg.textContent = msg;
-      if (!spConnected()) { const b = document.createElement('button'); b.textContent = 'Conectar música'; b.onclick = e => { e.stopPropagation(); openMusic(); }; arMsg.appendChild(b); }
+      if (!spConnected()) { const b = document.createElement('button'); b.textContent = 'Música'; b.onclick = e => { e.stopPropagation(); openMusic(); }; arMsg.appendChild(b); }
     }
     return;
   }
