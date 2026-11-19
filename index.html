@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 158</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 159</div>
     </div>
   </div>
   <div class="group">
@@ -6247,9 +6247,25 @@ function* navPaint(c, W, H, amb, out) {
     const bar = (X, Y, Wd, Hd) => { const g = x.createLinearGradient(X, Y, X + Wd, Y + Hd); g.addColorStop(0, navC(navMix(mcol, [255, 255, 255], 0.2))); g.addColorStop(1, navC(mcol.map(v => v * 0.8))); x.fillStyle = g; x.fillRect(X, Y, Wd, Hd); };
     bar(gx + gw / 2 - bw / 2, gy, bw, gh); for (const f of [1 / 3, 2 / 3]) bar(gx, gy + gh * f - bw / 2, gw, bw);
     x.strokeStyle = 'rgba(0,0,0,.25)'; x.lineWidth = u * 2; x.strokeRect(gx, gy, gw, gh);
+    // la corona navideña colgada en la ventana: ramitas, bayas rojas y su moño
+    { const cx = gx + gw / 2, cy = gy + gh / 3, R = Math.min(gw, gh) * 0.13; x.strokeStyle = navC([200, 30, 40].map(v => v * (1 - dk * 0.5))); x.lineWidth = u * 2.5; x.beginPath(); x.moveTo(cx, gy - fr * 0.5); x.lineTo(cx, cy - R); x.stroke();
+      x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.arc(cx + u * 4, cy + u * 5, R * 1.1, 0, 7); x.arc(cx + u * 4, cy + u * 5, R * 0.55, 0, 7, true); x.fill();
+      const wc = [[14, 40, 22], [22, 58, 30], [36, 82, 40], [64, 110, 54]].map(c_ => c_.map(v => v * (1 - dk * 0.45))), WB = wc.map(() => new Path2D());
+      for (let i = 0; i < 520; i++) { const a = rng() * 6.283, rr = R * (0.6 + rng() * 0.45), px_ = cx + Math.cos(a) * rr, py_ = cy + Math.sin(a) * rr, aa = a + Math.PI / 2 + (rng() - 0.5) * 1.6, l = u * (4 + rng() * 5), k = Math.min(3, ((rng() * 3) + (Math.sin(a) < 0 ? 1 : 0)) | 0);
+        WB[k].moveTo(px_, py_); WB[k].lineTo(px_ + Math.cos(aa) * l, py_ + Math.sin(aa) * l); }
+      x.lineWidth = u * 1.4; WB.forEach((pp, k) => { x.strokeStyle = navC(wc[k]); x.stroke(pp); });
+      for (let i = 0; i < 16; i++) { const a = rng() * 6.283, rr = R * (0.65 + rng() * 0.3); x.fillStyle = navC([210, 30, 40].map(v => v * (1 - dk * 0.5))); x.beginPath(); x.arc(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr, u * 2.6, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.6)'; x.beginPath(); x.arc(cx + Math.cos(a) * rr + u, cy + Math.sin(a) * rr - u, u * 0.8, 0, 7); x.fill(); }
+      const bc = [200, 30, 40].map(v => v * (1 - dk * 0.5)); x.fillStyle = navC(bc); for (const d of [-1, 1]) { x.beginPath(); x.ellipse(cx + d * R * 0.32, cy + R * 0.92, R * 0.3, R * 0.17, d * 0.4, 0, 7); x.fill(); x.beginPath(); x.moveTo(cx, cy + R); x.lineTo(cx + d * R * 0.25, cy + R * 1.7); x.lineTo(cx + d * R * 0.08, cy + R * 1.6); x.closePath(); x.fill(); }
+      x.fillStyle = navC(bc.map(v => v * 0.75)); x.beginPath(); x.arc(cx, cy + R, R * 0.12, 0, 7); x.fill(); }
     // el alféizar
     x.fillStyle = navC(navMix([226, 214, 192], A.wall[0], 0.3 + dk * 0.4)); x.fillRect(gx - fr * 1.6, gy + gh + fr * 0.6, gw + fr * 3.2, u * 18);
     x.fillStyle = 'rgba(0,0,0,.28)'; x.fillRect(gx - fr * 1.6, gy + gh + fr * 0.6 + u * 18, gw + fr * 3.2, u * 8);
+    // las velitas del 7 de diciembre en el alféizar (la llama se enciende viva)
+    { const sy = gy + gh + fr * 0.6; out.candles = []; for (let k = 0; k < 3; k++) { const cx = gx + gw * (0.08 + k * 0.07), ch = u * (34 + (k % 2) * 10), cw = u * 7;
+      x.fillStyle = 'rgba(0,0,0,.25)'; x.beginPath(); x.ellipse(cx, sy, cw * 1.6, u * 3, 0, 0, 7); x.fill();
+      const cg = x.createLinearGradient(cx - cw, 0, cx + cw, 0); cg.addColorStop(0, navC([200, 190, 170].map(v => v * (1 - dk * 0.5)))); cg.addColorStop(0.6, navC([250, 244, 230].map(v => v * (1 - dk * 0.5)))); cg.addColorStop(1, navC([214, 204, 186].map(v => v * (1 - dk * 0.5))));
+      x.fillStyle = cg; x.fillRect(cx - cw, sy - ch, cw * 2, ch); x.fillStyle = navC([255, 250, 240].map(v => v * (1 - dk * 0.5))); x.beginPath(); x.ellipse(cx - cw * 0.5, sy - ch + u * 6, u * 2, u * 5, 0, 0, 7); x.fill();   // una gota de cera
+      x.strokeStyle = '#2a2018'; x.lineWidth = u * 1.2; x.beginPath(); x.moveTo(cx, sy - ch); x.lineTo(cx, sy - ch - u * 5); x.stroke(); out.candles.push([cx, sy - ch - u * 5]); } }
     // la flor de pascua en su matera
     { const px = gx + gw * 0.82, py = gy + gh + fr * 0.6; x.fillStyle = '#7a3a22'; x.beginPath(); x.moveTo(px - u * 22, py - u * 30); x.lineTo(px + u * 22, py - u * 30); x.lineTo(px + u * 16, py); x.lineTo(px - u * 16, py); x.closePath(); x.fill();
       x.fillStyle = 'rgba(255,200,150,.25)'; x.fillRect(px - u * 22, py - u * 30, u * 44, u * 5);
@@ -6291,6 +6307,7 @@ function* navPaint(c, W, H, amb, out) {
     x.fillStyle = 'rgba(0,0,0,.3)'; x.beginPath(); x.ellipse(cx0 + cw / 2, cy + ch + u * 6, cw * 0.55, u * 16, 0, 0, 7); x.fill();
     const g = x.createLinearGradient(cx0, cy, cx0 + cw, cy + ch); g.addColorStop(0, navC(wd.map(v => v * 1.1))); g.addColorStop(1, navC(wd.map(v => v * 0.65))); x.fillStyle = g; x.fillRect(cx0, cy, cw, ch);
     x.fillStyle = navC(wd.map(v => v * 1.25)); x.fillRect(cx0 - u * 8, cy - u * 8, cw + u * 16, u * 10);   // la tapa
+    { const tg_ = x.createLinearGradient(cx0, 0, cx0 + cw, 0); tg_.addColorStop(0, 'rgba(255,235,210,0)'); tg_.addColorStop(0.7, 'rgba(255,235,210,.35)'); tg_.addColorStop(1, 'rgba(255,235,210,.05)'); x.fillStyle = tg_; x.fillRect(cx0 - u * 8, cy - u * 8, cw + u * 16, u * 2.5); }   // el canto barnizado
     for (let k = 0; k < 2; k++) { const dy = cy + u * 16 + k * (ch - u * 20) / 2; x.strokeStyle = 'rgba(0,0,0,.45)'; x.lineWidth = u * 2.5; x.strokeRect(cx0 + u * 12, dy, cw - u * 24, (ch - u * 28) / 2);
       x.fillStyle = '#c9a050'; for (const kx of [0.3, 0.7]) { x.beginPath(); x.arc(cx0 + cw * kx, dy + (ch - u * 28) / 4, u * 5, 0, 7); x.fill(); } }
     x.lineWidth = u * 0.8; for (let k = 0; k < 40; k++) { const yy = cy + rng() * ch; x.strokeStyle = `rgba(${rng() < 0.5 ? '20,8,4' : '255,210,170'},.1)`; x.beginPath(); x.moveTo(cx0, yy); x.bezierCurveTo(cx0 + cw * 0.3, yy + (rng() - 0.5) * u * 8, cx0 + cw * 0.7, yy + (rng() - 0.5) * u * 8, cx0 + cw, yy); x.stroke(); }
@@ -6308,6 +6325,9 @@ function* navPaint(c, W, H, amb, out) {
     x.fillStyle = '#16120f'; x.beginPath(); x.roundRect(sx - u * 6, sy - u * 6, sw + u * 12, shh + u * 12, tw * 0.07); x.fill();
     const scg = x.createRadialGradient(sx + sw * 0.4, sy + shh * 0.4, 0, sx + sw / 2, sy + shh / 2, sw * 0.7); scg.addColorStop(0, '#3a4448'); scg.addColorStop(1, '#141819'); x.fillStyle = scg; x.beginPath(); x.roundRect(sx, sy, sw, shh, tw * 0.09); x.fill();
     out.scr = { x: sx, y: sy, w: sw, h: shh, r: tw * 0.09 };
+    { const cg = x.createLinearGradient(sx, sy - u * 6, sx + sw, sy + shh); cg.addColorStop(0, 'rgba(230,230,230,.75)'); cg.addColorStop(0.5, 'rgba(120,120,120,.6)'); cg.addColorStop(1, 'rgba(220,220,220,.7)');
+      x.strokeStyle = cg; x.lineWidth = u * 2.2; x.beginPath(); x.roundRect(sx - u * 7, sy - u * 7, sw + u * 14, shh + u * 14, tw * 0.075); x.stroke(); }   // el marco cromado
+    { const sh_ = x.createLinearGradient(0, ty, 0, ty + th * 0.25); sh_.addColorStop(0, 'rgba(255,230,200,.22)'); sh_.addColorStop(1, 'rgba(255,230,200,0)'); x.fillStyle = sh_; x.beginPath(); x.roundRect(tx, ty, tw, th * 0.25, [rr, rr, 0, 0]); x.fill(); }   // el brillo del barniz arriba
     const px0 = tx + tw * 0.76, pw = tw * 0.2; x.fillStyle = navC(navMix([180, 170, 150], A.wall[0], dk * 0.5)); x.beginPath(); x.roundRect(px0, sy, pw, shh, u * 6); x.fill();
     for (let k = 0; k < 2; k++) { const kx = px0 + pw / 2, ky = sy + shh * (0.18 + k * 0.28), kr = pw * 0.32; const kg = x.createRadialGradient(kx - kr * 0.3, ky - kr * 0.3, 0, kx, ky, kr); kg.addColorStop(0, '#5a524a'); kg.addColorStop(1, '#1a1612'); x.fillStyle = kg; x.beginPath(); x.arc(kx, ky, kr, 0, 7); x.fill();
       x.strokeStyle = 'rgba(255,255,255,.3)'; x.lineWidth = u * 2; x.beginPath(); x.moveTo(kx, ky); x.lineTo(kx + kr * 0.7 * Math.cos(-1 + k), ky + kr * 0.7 * Math.sin(-1 + k)); x.stroke(); }
@@ -6371,6 +6391,12 @@ function* navPaint(c, W, H, amb, out) {
       const g = x.createRadialGradient(px + r * 0.35, by - r * 0.35, r * 0.1, px, by, r * 1.1); g.addColorStop(0, navC(navMix(c0, [255, 255, 255], 0.55))); g.addColorStop(0.45, navC(c0)); g.addColorStop(1, navC(c0.map(v => v * 0.3)));
       x.fillStyle = g; x.beginPath(); x.arc(px, by, r, 0, 7); x.fill(); x.fillStyle = 'rgba(255,255,255,.7)'; x.beginPath(); x.ellipse(px + r * 0.35, by - r * 0.4, r * 0.18, r * 0.1, -0.6, 0, 7); x.fill();
       x.fillStyle = '#b8a060'; x.fillRect(px - r * 0.25, by - r * 1.15, r * 0.5, r * 0.3); } }
+  // moños rojos, como en los árboles de casa
+  { const pts = tipPts.filter(p => p[2] > 0.4 && p[3] > 1).sort(() => rng() - 0.5).slice(0, 9);
+    for (const [bx, by] of pts) { const s = u * 9, c0 = [196, 28, 38].map(v => v * (1 - dk * 0.5)); x.fillStyle = navC(c0.map(v => v * 0.7));
+      x.beginPath(); x.moveTo(bx, by); x.lineTo(bx - s * 0.5, by + s * 1.4); x.lineTo(bx - s * 0.2, by + s * 1.2); x.closePath(); x.fill(); x.beginPath(); x.moveTo(bx, by); x.lineTo(bx + s * 0.6, by + s * 1.3); x.lineTo(bx + s * 0.25, by + s * 1.25); x.closePath(); x.fill();
+      for (const d of [-1, 1]) { const g = x.createRadialGradient(bx + d * s * 0.6, by - s * 0.3, 0, bx + d * s * 0.6, by, s); g.addColorStop(0, navC(navMix(c0, [255, 255, 255], 0.35))); g.addColorStop(1, navC(c0.map(v => v * 0.6))); x.fillStyle = g; x.beginPath(); x.ellipse(bx + d * s * 0.62, by - s * 0.05, s * 0.62, s * 0.38, d * 0.35, 0, 7); x.fill(); }
+      x.fillStyle = navC(c0.map(v => v * 0.8)); x.beginPath(); x.arc(bx, by, s * 0.24, 0, 7); x.fill(); } }
   // los bombillos del árbol (los cuerpos; la luz se pinta viva)
   { const pts = tipPts.filter(p => p[2] > -0.1).sort(() => rng() - 0.5).slice(0, L.P ? 54 : 60);
     pts.forEach(([px, py], i) => out.bulbs.push({ x: px, y: py + u * 4, r: u * 5.2, col: NAV_COLS[i % 6], band: (i * 7) % 24, grp: i % 2, kind: 'tree', rot: (rng() - 0.5) * 0.6 })); }
@@ -6382,7 +6408,12 @@ function* navPaint(c, W, H, amb, out) {
   { const gc = [[190, 40, 50], [40, 120, 70], [220, 180, 70], [50, 80, 170], [230, 230, 220]];
     for (let k = 0; k < 5; k++) { const bw = u * (50 + rng() * 34), bh = u * (34 + rng() * 26), bx = T.cx + (k - 2) * T.hw * 0.36 - bw / 2 + (rng() - 0.5) * u * 10, by = T.base - bh + u * (k % 2 ? 14 : 2), c0 = gc[k].map(v => v * (1 - dk * 0.6));
       const g = x.createLinearGradient(bx, by, bx + bw, by + bh); g.addColorStop(0, navC(navMix(c0, [255, 255, 255], 0.15))); g.addColorStop(1, navC(c0.map(v => v * 0.6))); x.fillStyle = g; x.fillRect(bx, by, bw, bh);
-      x.fillStyle = navC(c0.map(v => v * 1.15)); x.fillRect(bx - u * 2, by - u * 6, bw + u * 4, u * 8);
+      x.save(); x.beginPath(); x.rect(bx, by, bw, bh); x.clip(); x.fillStyle = 'rgba(255,250,235,.22)';   // el papel estampado: rayas o puntos
+      if (k % 2) for (let s = -bh; s < bw; s += u * 12) { x.beginPath(); x.moveTo(bx + s, by + bh); x.lineTo(bx + s + u * 5, by + bh); x.lineTo(bx + s + bh + u * 5, by); x.lineTo(bx + s + bh, by); x.closePath(); x.fill(); }
+      else for (let yy = by + u * 6; yy < by + bh; yy += u * 10) for (let xx = bx + u * 6 + ((yy / (u * 10)) % 2) * u * 5; xx < bx + bw; xx += u * 10) { x.beginPath(); x.arc(xx, yy, u * 2, 0, 7); x.fill(); }
+      const sg = x.createLinearGradient(bx, 0, bx + bw, 0); sg.addColorStop(0, 'rgba(0,0,0,.25)'); sg.addColorStop(0.3, 'rgba(0,0,0,0)'); x.fillStyle = sg; x.fillRect(bx, by, bw, bh); x.restore();
+      x.fillStyle = navC(navMix(c0, [255, 255, 255], 0.25)); x.beginPath(); x.moveTo(bx, by); x.lineTo(bx + u * 8, by - u * 9); x.lineTo(bx + bw + u * 8, by - u * 9); x.lineTo(bx + bw, by); x.closePath(); x.fill();   // la tapa, vista desde arriba
+      x.fillStyle = navC(c0.map(v => v * 0.45)); x.beginPath(); x.moveTo(bx + bw, by); x.lineTo(bx + bw + u * 8, by - u * 9); x.lineTo(bx + bw + u * 8, by + bh - u * 9); x.lineTo(bx + bw, by + bh); x.closePath(); x.fill();   // el costado en sombra
       const rc = k === 4 ? [200, 40, 50] : [236, 214, 150]; x.fillStyle = navC(rc.map(v => v * (1 - dk * 0.5))); x.fillRect(bx + bw * 0.45, by - u * 6, bw * 0.1, bh + u * 6);
       x.beginPath(); x.ellipse(bx + bw * 0.4, by - u * 9, u * 9, u * 5, -0.5, 0, 7); x.ellipse(bx + bw * 0.6, by - u * 9, u * 9, u * 5, 0.5, 0, 7); x.fill();
       x.fillStyle = 'rgba(255,255,255,.12)'; for (let i = 0; i < 10; i++) { x.beginPath(); x.arc(bx + rng() * bw, by + rng() * bh, u * 2.5, 0, 7); x.fill(); } } }
@@ -6400,28 +6431,41 @@ function* navPaint(c, W, H, amb, out) {
     x.fillStyle = 'rgba(0,0,0,.35)'; x.beginPath(); x.ellipse(px + pw / 2, py + ph * 0.98, pw * 0.52, ph * 0.08, 0, 0, 7); x.fill();
     // las lomas de papel de roca (arrugado: pliegues claros y oscuros)
     const hills = [[0.0, 0.42, 0.34, 0.1], [0.24, 0.5, 0.44, 0.02], [0.6, 0.38, 0.4, 0.14], [0.78, 0.46, 0.24, 0.0]];
-    for (const [hx, hw, hh, hy] of hills) { const x0 = px + pw * hx, x1 = x0 + pw * hw, top = py + ph * hy, bot = gy + ph * 0.08;
-      x.save(); x.beginPath(); x.moveTo(x0, bot); const n = 14; for (let i = 0; i <= n; i++) { const t = i / n, yy = top + ph * hh * (1 - Math.sin(Math.PI * t)) * 0.9 + (rng() - 0.5) * ph * 0.05; x.lineTo(x0 + (x1 - x0) * t, Math.min(bot, yy + (1 - Math.sin(Math.PI * t)) * ph * 0.18)); } x.lineTo(x1, bot); x.closePath(); x.clip();
+    for (const [hx, hw, hh, hy] of hills) { const x0 = px + pw * hx, x1 = x0 + pw * hw, top = py + ph * hy, bot = gy + ph * 0.08, hp = [];
+      x.save(); x.beginPath(); x.moveTo(x0, bot); const n = 14; for (let i = 0; i <= n; i++) { const t = i / n, yy = top + ph * hh * (1 - Math.sin(Math.PI * t)) * 0.9 + (rng() - 0.5) * ph * 0.05; const hy_ = Math.min(bot, yy + (1 - Math.sin(Math.PI * t)) * ph * 0.18); hp.push([x0 + (x1 - x0) * t, hy_]); x.lineTo(x0 + (x1 - x0) * t, hy_); } x.lineTo(x1, bot); x.closePath(); x.clip();
       const pg = x.createLinearGradient(0, top, 0, bot); const ht = [[168, 140, 104], [150, 128, 104], [176, 150, 112], [140, 120, 96]][hills.indexOf(hills.find(q => q[0] === hx))]; pg.addColorStop(0, navC(ht.map(v => v * (1 - dk * 0.55)))); pg.addColorStop(1, navC(ht.map(v => v * 0.55 * (1 - dk * 0.55)))); x.fillStyle = pg; x.fillRect(x0, top - ph * 0.1, x1 - x0, bot - top + ph * 0.2);
       for (let i = 0; i < 520; i++) { const cx = x0 + rng() * (x1 - x0), cy = top + rng() * (bot - top), a = rng() * 3.14, l = u * (4 + rng() * 10); x.strokeStyle = rng() < 0.5 ? `rgba(${230 * (1 - dk * 0.5)},${214 * (1 - dk * 0.5)},${186 * (1 - dk * 0.5)},.35)` : 'rgba(30,20,14,.35)'; x.lineWidth = u * (0.8 + rng() * 0.8);
         x.beginPath(); x.moveTo(cx, cy); x.lineTo(cx + Math.cos(a) * l, cy + Math.sin(a) * l); x.lineTo(cx + Math.cos(a + 0.9) * l * 0.6, cy + Math.sin(a + 0.9) * l * 0.6); x.stroke(); }
+      // volumen: facetas grandes del papel arrugado (planos que reciben o no la luz) y la loma sombreada (luz de arriba a la derecha)
+      for (let i = 0; i < 40; i++) { const cx = x0 + rng() * (x1 - x0), cy = top + rng() * (bot - top), r = u * (14 + rng() * 28), n_ = 5 + (rng() * 3 | 0); x.beginPath();
+        for (let k = 0; k < n_; k++) { const a = k / n_ * 6.283 + rng() * 0.6, rr = r * (0.55 + rng() * 0.5); x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr * 0.7); } x.closePath(); x.fillStyle = rng() < 0.5 ? 'rgba(255,240,215,.11)' : 'rgba(30,18,10,.13)'; x.fill(); }
+      { const vg = x.createRadialGradient(x1 - (x1 - x0) * 0.25, top, 0, x0 + (x1 - x0) * 0.45, bot, (x1 - x0) * 0.95); vg.addColorStop(0, `rgba(255,228,186,${0.26 * (1 - dk * 0.6)})`); vg.addColorStop(0.5, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(20,10,6,.42)'); x.fillStyle = vg; x.fillRect(x0, top - ph * 0.1, x1 - x0, bot - top + ph * 0.2);
+        const bs = x.createLinearGradient(0, bot - ph * 0.12, 0, bot); bs.addColorStop(0, 'rgba(10,6,4,0)'); bs.addColorStop(1, 'rgba(10,6,4,.4)'); x.fillStyle = bs; x.fillRect(x0, bot - ph * 0.12, x1 - x0, ph * 0.12); }
       // musgo en lo alto de la loma
       for (let i = 0; i < 260; i++) { const t = rng(), cx = x0 + (x1 - x0) * t, cy = top + ph * hh * (1 - Math.sin(Math.PI * t)) * 0.9 + rng() * ph * 0.08 + (1 - Math.sin(Math.PI * t)) * ph * 0.18; x.fillStyle = navC([[30, 58, 28], [44, 76, 34], [64, 96, 42], [96, 120, 56]][(rng() * 4) | 0].map(v => v * (1 - dk * 0.55)), 0.9); x.beginPath(); x.arc(cx, cy, u * (1.5 + rng() * 3), 0, 7); x.fill(); }
       // arbustitos (como los de musgo seco y ramitas) en las laderas
       for (let i = 0; i < 6; i++) { const t = 0.15 + rng() * 0.7, bx = x0 + (x1 - x0) * t, by = top + ph * hh * (1 - Math.sin(Math.PI * t)) * 0.9 + (1 - Math.sin(Math.PI * t)) * ph * 0.18 + rng() * ph * 0.1;
         for (let k = 0; k < 14; k++) { x.fillStyle = navC([[28, 54, 26], [40, 74, 32], [62, 96, 40]][k % 3].map(v => v * (1 - dk * 0.55))); x.beginPath(); x.arc(bx + (rng() - 0.5) * u * 18, by + (rng() - 0.5) * u * 10 - u * 4, u * (3 + rng() * 4), 0, 7); x.fill(); } }
-      x.restore(); }
+      x.restore();
+      // el borde de arriba recibe la luz (más del lado de la ventana)
+      { const rg = x.createLinearGradient(x0, 0, x1, 0); rg.addColorStop(0, 'rgba(255,236,200,0)'); rg.addColorStop(1, `rgba(255,236,200,${0.5 * (1 - dk * 0.6)})`); x.strokeStyle = rg; x.lineWidth = u * 2; x.lineJoin = 'round';
+        x.beginPath(); hp.forEach(([a, b], k) => k ? x.lineTo(a, b) : x.moveTo(a, b)); x.stroke(); } }
     // casitas en las lomas (paredes blancas, techo de teja)
     for (const [hx, hy] of [[0.12, 0.2], [0.33, 0.1], [0.7, 0.22], [0.86, 0.12]]) { const hx_ = px + pw * hx, hy_ = py + ph * hy + ph * 0.04, s = u * 14; x.fillStyle = navC([236, 228, 214].map(v => v * (1 - dk * 0.55))); x.fillRect(hx_ - s, hy_ - s * 0.8, s * 2, s * 1.4);
       x.fillStyle = navC([170, 60, 40].map(v => v * (1 - dk * 0.5))); x.beginPath(); x.moveTo(hx_ - s * 1.3, hy_ - s * 0.7); x.lineTo(hx_, hy_ - s * 1.5); x.lineTo(hx_ + s * 1.3, hy_ - s * 0.7); x.closePath(); x.fill();
       x.fillStyle = night ? 'rgba(255,200,110,.95)' : 'rgba(60,40,30,.8)'; x.fillRect(hx_ - s * 0.5, hy_ - s * 0.3, s * 0.4, s * 0.4); x.fillRect(hx_ + s * 0.2, hy_, s * 0.4, s * 0.6); }
     // el suelo de musgo, punteado (miles de puntitos de varios verdes)
     { x.save(); x.beginPath(); x.moveTo(px, py + ph * 0.98); x.quadraticCurveTo(px - pw * 0.02, gy, px + pw * 0.1, gy - ph * 0.04); x.bezierCurveTo(px + pw * 0.4, gy - ph * 0.12, px + pw * 0.7, gy - ph * 0.02, px + pw * 0.95, gy - ph * 0.06); x.quadraticCurveTo(px + pw * 1.03, gy + ph * 0.2, px + pw, py + ph * 0.98); x.closePath(); x.clip();
-      const mg = x.createLinearGradient(0, gy - ph * 0.1, 0, py + ph); mg.addColorStop(0, navC([46, 74, 34].map(v => v * (1 - dk * 0.55)))); mg.addColorStop(1, navC([22, 40, 20].map(v => v * (1 - dk * 0.55)))); x.fillStyle = mg; x.fillRect(px - pw * 0.05, gy - ph * 0.2, pw * 1.1, ph * 0.8);
-      const mc = [[22, 44, 20], [32, 60, 26], [46, 80, 34], [66, 102, 44], [98, 128, 60], [140, 150, 80]]; const MB = mc.map(() => new Path2D());
-      for (let i = 0; i < 5200; i++) { const cx = px + rng() * pw, cy = gy - ph * 0.14 + rng() * ph * 0.62, r = u * (0.9 + rng() * 2.4), k = Math.min(5, (rng() * 4 + (cy < gy ? 1 : 0) + rng() * 1.4) | 0); MB[k].moveTo(cx + r, cy); MB[k].arc(cx, cy, r, 0, 6.283); }
+      const mg = x.createLinearGradient(0, gy - ph * 0.1, 0, py + ph); mg.addColorStop(0, navC([64, 98, 44].map(v => v * (1 - dk * 0.55)))); mg.addColorStop(1, navC([36, 60, 28].map(v => v * (1 - dk * 0.55)))); x.fillStyle = mg; x.fillRect(px - pw * 0.05, gy - ph * 0.2, pw * 1.1, ph * 0.8);
+      const mc = [[28, 52, 24], [40, 70, 30], [56, 92, 38], [78, 116, 50], [110, 140, 66], [156, 166, 90]]; const MB = mc.map(() => new Path2D());
+      for (let i = 0; i < 6400; i++) { const cx = px + rng() * pw, cy = gy - ph * 0.14 + rng() * ph * 0.62, r = u * (0.9 + rng() * 2.4) * (0.55 + 0.9 * (cy - gy + ph * 0.14) / (ph * 0.62)), k = Math.min(5, (rng() * 4 + (cy < gy ? 1 : 0) + rng() * 1.4) | 0); MB[k].moveTo(cx + r, cy); MB[k].arc(cx, cy, r, 0, 6.283); }
       for (let i = 0; i < 46; i++) navBlob(x, px + rng() * pw, gy - ph * 0.1 + rng() * ph * 0.6, u * (20 + rng() * 50), rng() < 0.5 ? [10, 26, 10] : [120, 150, 70], 0.25);   // manchas: el musgo no es parejo
       MB.forEach((p, k) => { x.fillStyle = navC(mc[k].map(v => v * (1 - dk * 0.55))); x.fill(p); });
+      // montoncitos de musgo (relieve: oscuros abajo, con luz arriba)
+      for (let i = 0; i < 70; i++) { const cx = px + rng() * pw, cy = gy + rng() * ph * 0.45, s = u * (10 + rng() * 16) * (0.6 + (cy - gy) / ph);
+        navBlob(x, cx, cy + s * 0.3, s * 1.1, [8, 20, 8], 0.3); const lg = x.createRadialGradient(cx + s * 0.25, cy - s * 0.35, 0, cx, cy, s); lg.addColorStop(0, navC([150, 176, 90].map(v => v * (1 - dk * 0.55)), 0.7)); lg.addColorStop(1, navC([40, 70, 30].map(v => v * (1 - dk * 0.55)), 0));
+        x.fillStyle = lg; x.beginPath(); x.ellipse(cx, cy, s, s * 0.6, 0, 0, 7); x.fill(); }
+      { const ao = x.createLinearGradient(0, gy - ph * 0.08, 0, gy + ph * 0.06); ao.addColorStop(0, 'rgba(6,12,4,.5)'); ao.addColorStop(1, 'rgba(6,12,4,0)'); x.fillStyle = ao; x.fillRect(px, gy - ph * 0.08, pw, ph * 0.14); }   // la sombra al pie de las lomas
       // piedritas, arbustos y florecitas por todo el suelo
       for (let i = 0; i < 40; i++) { const sx = px + rng() * pw, sy = gy + rng() * ph * 0.46, r = u * (2.5 + rng() * 4); const g = x.createRadialGradient(sx - r * 0.3, sy - r * 0.4, 0, sx, sy, r); g.addColorStop(0, navC([210, 204, 196].map(v => v * (1 - dk * 0.5)))); g.addColorStop(1, navC([100, 96, 90].map(v => v * (1 - dk * 0.5)))); x.fillStyle = g; x.beginPath(); x.ellipse(sx, sy, r * 1.3, r, 0, 0, 7); x.fill(); }
       for (let i = 0; i < 9; i++) { const bx = px + pw * (rng() < 0.5 ? rng() * 0.25 : 0.6 + rng() * 0.38), by = gy + ph * (0.3 + rng() * 0.15); for (let k = 0; k < 22; k++) { x.fillStyle = navC([[24, 50, 24], [38, 72, 30], [64, 100, 42], [90, 124, 54]][k % 4].map(v => v * (1 - dk * 0.55))); x.beginPath(); x.arc(bx + (rng() - 0.5) * u * 34, by + (rng() - 0.5) * u * 16 - u * 6, u * (4 + rng() * 6), 0, 7); x.fill(); } }
@@ -6460,7 +6504,8 @@ function* navPaint(c, W, H, amb, out) {
       x.strokeStyle = navC(tun.map(v => v * 0.45), 0.6); x.lineWidth = Math.max(1, s * 0.012); for (let k = -2; k <= 2; k++) { x.beginPath(); x.moveTo(fx + k * hw * 0.3, fy - s * 0.02); x.quadraticCurveTo(fx + k * hw * 0.22, fy - s * 0.25, fx + k * s * 0.03, top + s * 0.2); x.stroke(); }   // pliegues
       // el manto, cayendo de los hombros por un lado
       if (man) { g = x.createLinearGradient(fx - hw, 0, fx + hw, 0); g.addColorStop(0, navC(man.map(v => v * 0.5))); g.addColorStop(1, navC(navMix(man, [255, 240, 220], 0.2))); x.fillStyle = g;
-        x.beginPath(); x.moveTo(fx - s * 0.13, top - s * 0.02); x.bezierCurveTo(fx - hw * 1.15, top + s * 0.25, fx - hw * 1.1, fy - s * 0.15, fx - hw * 0.95, fy); x.lineTo(fx - hw * 0.15, fy - s * 0.02); x.bezierCurveTo(fx - s * 0.05, fy - s * 0.35, fx + s * 0.02, top + s * 0.2, fx + s * 0.13, top - s * 0.02); x.closePath(); x.fill(); }
+        x.beginPath(); x.moveTo(fx - s * 0.13, top - s * 0.02); x.bezierCurveTo(fx - hw * 1.15, top + s * 0.25, fx - hw * 1.1, fy - s * 0.15, fx - hw * 0.95, fy); x.lineTo(fx - hw * 0.15, fy - s * 0.02); x.bezierCurveTo(fx - s * 0.05, fy - s * 0.35, fx + s * 0.02, top + s * 0.2, fx + s * 0.13, top - s * 0.02); x.closePath(); x.fill();
+        if (o.trim) { x.strokeStyle = navC(D([236, 196, 90]), 0.85); x.lineWidth = Math.max(1, s * 0.016); x.beginPath(); x.moveTo(fx - hw * 0.15, fy - s * 0.02); x.bezierCurveTo(fx - s * 0.05, fy - s * 0.35, fx + s * 0.02, top + s * 0.2, fx + s * 0.13, top - s * 0.02); x.stroke(); } }   // el ribete dorado del manto
       // los brazos y las manos (juntas al frente, o con el bastón, o con el regalo)
       const ay = top + s * (o.kneel ? 0.28 : 0.3), hx = fx + (o.staff ? s * 0.2 : 0), hy = ay + s * 0.05;
       x.strokeStyle = navC((man || tun).map(v => v * 0.8)); x.lineCap = 'round'; x.lineWidth = s * 0.075; x.beginPath(); x.moveTo(fx - s * 0.11, top + s * 0.06); x.quadraticCurveTo(fx - s * 0.13, ay, hx - s * 0.02, hy); x.moveTo(fx + s * 0.11, top + s * 0.06); x.quadraticCurveTo(fx + s * 0.14, ay, hx + s * 0.02, hy); x.stroke();
@@ -6473,6 +6518,9 @@ function* navPaint(c, W, H, amb, out) {
       if (o.veil) { x.fillStyle = navC(D(o.veil)); x.beginPath(); x.arc(fx, hy0 - hr * 0.1, hr * 1.25, Math.PI * 1.02, Math.PI * 1.98); x.lineTo(fx + hr * 1.3, hy0 + hr * 1.6); x.lineTo(fx + hr * 0.7, hy0 + hr * 0.3); x.lineTo(fx - hr * 0.7, hy0 + hr * 0.3); x.lineTo(fx - hr * 1.3, hy0 + hr * 1.6); x.closePath(); x.fill(); }
       else { x.fillStyle = navC(D(o.hair || [70, 46, 30])); x.beginPath(); x.arc(fx, hy0 - hr * 0.15, hr * 1.02, Math.PI * 1.05, Math.PI * 1.95); x.fill(); }
       if (o.beard) { x.fillStyle = navC(D(o.beard)); x.beginPath(); x.ellipse(fx, hy0 + hr * 0.75, hr * 0.6, hr * 0.5, 0, 0, Math.PI); x.fill(); }
+      if (o.halo) { x.strokeStyle = navC(D([250, 214, 110]), 0.75); x.lineWidth = Math.max(1, s * 0.018); x.beginPath(); x.ellipse(fx, hy0 - hr * 0.2, hr * 1.55, hr * 1.55, 0, 0, 7); x.stroke(); }
+      x.fillStyle = 'rgba(30,20,16,.75)'; for (const ex of [-0.32, 0.32]) { x.beginPath(); x.arc(fx + ex * hr, hy0 + hr * 0.05, Math.max(0.6, hr * 0.09), 0, 7); x.fill(); }
+      x.fillStyle = 'rgba(255,245,230,.35)'; x.beginPath(); x.ellipse(fx + hr * 0.3, hy0 - hr * 0.55, hr * 0.35, hr * 0.18, -0.5, 0, 7); x.fill();
       if (o.crown) { x.fillStyle = navC(D([240, 200, 80])); x.beginPath(); x.moveTo(fx - hr, hy0 - hr * 0.7); for (let k = 0; k <= 4; k++) x.lineTo(fx - hr + k * hr * 0.5, hy0 - hr * (k % 2 ? 1.2 : 1.7)); x.lineTo(fx + hr, hy0 - hr * 0.7); x.closePath(); x.fill(); }
       // la luz tibia que la recorta por la derecha
       x.strokeStyle = navC([255, 220, 170], 0.35 * (1 - dk * 0.5)); x.lineWidth = Math.max(1, s * 0.015); x.beginPath(); x.moveTo(fx + hw * 0.95, fy - s * 0.02); x.bezierCurveTo(fx + hw * 0.85, fy - s * 0.3, fx + s * 0.12, top + s * 0.1, fx + s * 0.1, top); x.stroke(); };
@@ -6482,14 +6530,14 @@ function* navPaint(c, W, H, amb, out) {
       const g = x.createLinearGradient(bx - pwd * 0.15, by, bx + pwd * 0.15, by); g.addColorStop(0, navC(c_.map(v => v * 0.6))); g.addColorStop(1, navC(c_)); x.fillStyle = g; x.beginPath(); x.ellipse(bx, by, pwd * 0.17, phh * 0.11, 0, 0, 7); x.fill();
       const hx = bx + dir * pwd * 0.17, hy = by - phh * 0.04; x.beginPath(); x.ellipse(hx, hy, pwd * 0.06, phh * 0.065, dir * 0.4, 0, 7); x.fill(); x.fillStyle = navC(c_.map(v => v * 0.7)); x.beginPath(); x.ellipse(hx + dir * pwd * 0.04, hy + phh * 0.035, pwd * 0.035, phh * 0.03, 0, 0, 7); x.fill();
       x.beginPath(); x.ellipse(hx - dir * pwd * 0.02, hy - phh * 0.07, pwd * 0.015, phh * 0.04, -dir * 0.4, 0, 7); x.fill(); x.fillStyle = '#111'; x.beginPath(); x.arc(hx + dir * pwd * 0.015, hy - phh * 0.01, Math.max(1, pwd * 0.008), 0, 7); x.fill(); }
-    fig(pcx - pwd * 0.22, pby - phh * 0.02, s0 * 0.9, { tunic: [200, 150, 160], mantle: [50, 92, 186], veil: [70, 110, 200], kneel: true });
-    fig(pcx + pwd * 0.24, pby, s0 * 1.05, { tunic: [130, 96, 60], mantle: [96, 116, 64], hair: [80, 56, 36], beard: [90, 64, 42], staff: true });
+    fig(pcx - pwd * 0.22, pby - phh * 0.02, s0 * 0.9, { tunic: [200, 150, 160], mantle: [50, 92, 186], veil: [70, 110, 200], kneel: true, halo: true, trim: true });
+    fig(pcx + pwd * 0.24, pby, s0 * 1.05, { tunic: [130, 96, 60], mantle: [96, 116, 64], hair: [80, 56, 36], beard: [90, 64, 42], staff: true, halo: true });
     { const mx = pcx, my = pby - phh * 0.03; x.fillStyle = navC(D([150, 110, 60])); x.beginPath(); x.moveTo(mx - s0 * 0.22, my - s0 * 0.14); x.lineTo(mx + s0 * 0.22, my - s0 * 0.14); x.lineTo(mx + s0 * 0.16, my); x.lineTo(mx - s0 * 0.16, my); x.closePath(); x.fill();
       x.fillStyle = navC(D([226, 196, 120])); for (let i = 0; i < 26; i++) { const sx = mx - s0 * 0.22 + rng() * s0 * 0.44; x.fillRect(sx, my - s0 * 0.17 + rng() * s0 * 0.05, u * 3, u * 1.2); }
       x.fillStyle = navC(D([246, 236, 222])); x.beginPath(); x.ellipse(mx, my - s0 * 0.19, s0 * 0.12, s0 * 0.055, 0, 0, 7); x.fill(); x.fillStyle = navC(skin); x.beginPath(); x.arc(mx - s0 * 0.1, my - s0 * 0.21, s0 * 0.045, 0, 7); x.fill(); out.nino = [mx, my - s0 * 0.2]; }
     // los tres reyes, chiquitos a lo lejos en el caminito, con su regalo
     [[0.8, -0.06, [170, 30, 40], [230, 190, 90], [240, 240, 240]], [0.86, -0.02, [40, 110, 60], [110, 50, 120], [60, 40, 30]], [0.92, 0.03, [110, 40, 130], [200, 120, 40], [40, 30, 24]]]
-      .forEach(([fx, fy, tu, ma, be], k) => fig(px + pw * fx, gy + ph * fy, s0 * (0.5 + k * 0.05), { tunic: tu, mantle: ma, beard: be, hair: [40, 30, 24], crown: true, gift: true }));
+      .forEach(([fx, fy, tu, ma, be], k) => fig(px + pw * fx, gy + ph * fy, s0 * (0.5 + k * 0.05), { tunic: tu, mantle: ma, beard: be, hair: [40, 30, 24], crown: true, gift: true, trim: true }));
     // el pastor y sus ovejas
     fig(px + pw * 0.08, gy + ph * 0.08, s0 * 0.75, { tunic: [150, 120, 80], mantle: [110, 80, 50], hair: [60, 40, 26], beard: [70, 50, 34], staff: true });
     for (let k = 0; k < 11; k++) { const sx = px + pw * (k < 7 ? 0.1 + rng() * 0.24 : 0.55 + rng() * 0.35), sy = gy + ph * (0.08 + rng() * 0.3), s = u * (10 + rng() * 4) * (0.8 + (sy - gy) / ph), dir = rng() < 0.5 ? -1 : 1;
@@ -6529,7 +6577,12 @@ function drawNavidad(dt) {
   if (N.job) { const t0 = performance.now(), jx = N.job.c.getContext('2d'); let r; do { r = N.job.job.next(); jx.getImageData(0, 0, 1, 1); } while (!r.done && performance.now() - t0 < 8); if (r.done) navDone(N); }
   // se pinta por partes, sin trabar (y se obliga al navegador a pintar cada parte en su momento: si no, lo deja todo para el primer cuadro
   // en que se usa la habitación nueva, y eso daba un tirón al empezar a grabar)
-  const L = N.L, u = L.u;
+  // mientras se repinta a otro tamaño, lo vivo se dibuja con las medidas del fondo actual y se escala con él (nada se descuadra)
+  const bw = N.bg.width, bh = N.bg.height;
+  if (bw !== W || bh !== H) { ctx.save(); ctx.scale(W / bw, H / bh); navLive(dt, bw, bh, amb, A, night, P); ctx.restore(); } else navLive(dt, W, H, amb, A, night, P);
+}
+function navLive(dt, W, H, amb, A, night, P) {   // (W y H son las medidas del fondo pintado)
+  const N = NAV, L = N.L, u = L.u;
   ctx.drawImage(N.bg, 0, 0, W, H);
   // la música: el ritmo de los bombillos (secuencias de las de antes: cambian cada 8 golpes)
   if (pulse.on && N.go > 0.3) { N.beats++; if (N.beats % 8 === 0) N.seq = (N.seq + 1) % 3; }
@@ -6537,7 +6590,7 @@ function drawNavidad(dt) {
   N.k = Math.max((N.k || 0) * Math.pow(0.04, dt), pulse.on ? 1 : 0);
   // el sol que entra (de día y de tarde) o la luz fría de la noche
   const win = N.out.win;
-  if (!night) { const br = A.beam * (0.75 + 0.3 * lvB * N.go + 0.15 * N.vo), sh = win.w * 0.55, fy = H * 0.86, fx0 = win.x - win.w * 0.4;
+  { const br = night ? 0.55 * (0.8 + 0.2 * N.vo) : A.beam * (0.75 + 0.3 * lvB * N.go + 0.15 * N.vo), sh = win.w * 0.55, fy = H * 0.86, fx0 = win.x - win.w * 0.4;
     // el rayo de sol: baja en diagonal desde la ventana y cae sobre el pesebre; pintado una vez a un cuarto de tamaño y desenfocado (bordes suaves, nada de aristas)
     if (!N.beam || N.beam.key !== N.key) { const q = 0.25, c = document.createElement('canvas'); c.width = Math.ceil(W * q); c.height = Math.ceil(H * q); const b = c.getContext('2d'); b.scale(q, q); if (CAN_BLUR) b.filter = `blur(${u * 26}px)`;
       const g = b.createLinearGradient(win.x + win.w, win.y, fx0, fy); g.addColorStop(0, navC(A.light, 0.5)); g.addColorStop(0.6, navC(A.light, 0.2)); g.addColorStop(1, navC(A.light, 0)); b.fillStyle = g;
@@ -6547,13 +6600,15 @@ function drawNavidad(dt) {
       N.beam = { c, key: N.key }; }
     ctx.save(); ctx.globalCompositeOperation = 'screen'; ctx.globalAlpha = Math.min(1, 0.42 * br); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(N.beam.c, 0, 0, W, H); ctx.restore();
     // el polvito que flota en la luz (quieto en silencio)
+    if (!night) {
     if (!N.motes) { const r = navRng(77); N.motes = Array.from({ length: 70 }, () => ({ a: r(), b: r(), s: 0.5 + r(), ph: r() * 6.28 })); }
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     for (const m of N.motes) { m.a = (m.a + dt * 0.012 * m.s * (0.2 + N.en) * N.go) % 1; m.b = (m.b + dt * 0.006 * (m.s - 1) * N.go + 1) % 1; m.ph += dt * 2 * N.go;
       const t = m.b, X = win.x + win.w * (0.1 + 0.85 * m.a) * (1 - t * 0.4) + (fx0 - win.x) * t, Y = win.y + win.h * 0.2 + (fy - win.y - win.h * 0.2) * t; const al = (0.25 + 0.35 * Math.sin(m.ph)) * br * (0.6 + 0.6 * lvH);
       if (al > 0.02) { ctx.fillStyle = navC([255, 240, 210], al); ctx.beginPath(); ctx.arc(X, Y, u * (1 + m.s * 0.8), 0, 7); ctx.fill(); } }
     ctx.restore();
-  } else {
+  } }
+  if (night) {
     // la pólvora a lo lejos: con los golpes fuertes, un estallido en el cielo de la ventana
     if (pulse.on && N.go > 0.3 && (pulse.k > 0.6 || N.beats % 4 === 0) && N.fw.length < 4) { const r = Math.random; N.fw.push({ x: win.x + win.w * (0.15 + r() * 0.7), y: win.y + win.h * (0.12 + r() * 0.3), t: 0, c: NAV_COLS[(r() * 6) | 0], n: 34 + (r() * 20 | 0), s: 0.6 + r() * 0.6 }); }
     ctx.save(); ctx.beginPath(); ctx.rect(win.x, win.y, win.w, win.h); ctx.clip(); ctx.globalCompositeOperation = 'lighter';
@@ -6586,6 +6641,12 @@ function drawNavidad(dt) {
   { const sr = st[2] * (3.5 + 2.5 * lvH * N.go + 1.5 * beatPh), g = ctx.createRadialGradient(st[0], st[1], 0, st[0], st[1], sr); g.addColorStop(0, 'rgba(255,240,180,.9)'); g.addColorStop(0.2, 'rgba(255,200,90,.35)'); g.addColorStop(1, 'rgba(255,200,90,0)'); ctx.fillStyle = g; ctx.fillRect(st[0] - sr, st[1] - sr, sr * 2, sr * 2); }
   { const [nx, ny] = N.out.nino, nr = u * (30 + 30 * N.vo), g = ctx.createRadialGradient(nx, ny, 0, nx, ny, nr); g.addColorStop(0, `rgba(255,236,190,${0.35 + 0.4 * N.vo})`); g.addColorStop(1, 'rgba(255,236,190,0)'); ctx.fillStyle = g; ctx.fillRect(nx - nr, ny - nr, nr * 2, nr * 2); }   // el Niño brilla con la voz
   ctx.restore();
+  // las velitas: su llama tiembla con la música y alumbra el alféizar
+  if (N.out.candles) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; N.fl = (N.fl || 0) + dt * (3 + 8 * N.en) * N.go;
+    N.out.candles.forEach(([cx, cy], k) => { const fk = 1 + 0.12 * Math.sin(N.fl * 1.7 + k * 2) * N.go + 0.08 * Math.sin(N.fl * 3.1 + k) * N.go + 0.15 * Math.min(1, N.lv[1]) * N.go, fh = u * 13 * fk, fw = u * 4.2;
+      const hg = ctx.createRadialGradient(cx, cy - fh * 0.5, 0, cx, cy - fh * 0.5, u * 60 * fk); hg.addColorStop(0, `rgba(255,190,100,${night ? 0.3 : 0.16})`); hg.addColorStop(1, 'rgba(255,190,100,0)'); ctx.fillStyle = hg; ctx.fillRect(cx - u * 60 * fk, cy - fh * 0.5 - u * 60 * fk, u * 120 * fk, u * 120 * fk);
+      const fg = ctx.createRadialGradient(cx, cy - fh * 0.35, 0, cx, cy - fh * 0.4, fh); fg.addColorStop(0, 'rgba(255,250,220,1)'); fg.addColorStop(0.4, 'rgba(255,200,90,.9)'); fg.addColorStop(1, 'rgba(255,120,40,0)'); ctx.fillStyle = fg;
+      ctx.beginPath(); ctx.moveTo(cx, cy - fh); ctx.quadraticCurveTo(cx + fw, cy - fh * 0.35, cx, cy); ctx.quadraticCurveTo(cx - fw, cy - fh * 0.35, cx, cy - fh); ctx.fill(); }); ctx.restore(); }
   // el televisor: la portada como una transmisión vieja (líneas, brillo que tiembla con los medios)
   { const s = N.out.scr, img = recording ? coverClean : (coverClean || coverAny), fl = 0.82 + 0.12 * Math.min(1, N.lv[1]) * N.go + 0.06 * beatPh;
     ctx.save(); ctx.beginPath(); ctx.roundRect(s.x, s.y, s.w, s.h, s.r); ctx.clip();
@@ -6594,6 +6655,7 @@ function drawNavidad(dt) {
     ctx.fillStyle = 'rgba(0,0,0,.28)'; for (let yy = s.y; yy < s.y + s.h; yy += Math.max(2, u * 3)) ctx.fillRect(s.x, yy, s.w, Math.max(1, u * 1.2));
     const vg = ctx.createRadialGradient(s.x + s.w / 2, s.y + s.h / 2, s.w * 0.25, s.x + s.w / 2, s.y + s.h / 2, s.w * 0.75); vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.6)'); ctx.fillStyle = vg; ctx.fillRect(s.x, s.y, s.w, s.h);
     const hg = ctx.createLinearGradient(s.x, s.y, s.x + s.w * 0.6, s.y + s.h * 0.6); hg.addColorStop(0, 'rgba(255,255,255,.16)'); hg.addColorStop(0.5, 'rgba(255,255,255,0)'); ctx.fillStyle = hg; ctx.fillRect(s.x, s.y, s.w, s.h);
+    ctx.fillStyle = `rgba(255,250,240,${night ? 0.04 : 0.08})`; for (const [ox, ow] of [[0.55, 0.12], [0.7, 0.05]]) { ctx.beginPath(); ctx.moveTo(s.x + s.w * ox, s.y); ctx.lineTo(s.x + s.w * (ox + ow), s.y); ctx.lineTo(s.x + s.w * (ox + ow - 0.18), s.y + s.h); ctx.lineTo(s.x + s.w * (ox - 0.18), s.y + s.h); ctx.closePath(); ctx.fill(); }   // el reflejo de la ventana en el vidrio
     ctx.restore();
     ctx.save(); ctx.globalCompositeOperation = 'lighter'; const tr = s.w * 1.4, tc = mix(0.5), tg = ctx.createRadialGradient(s.x + s.w / 2, s.y + s.h / 2, s.w * 0.3, s.x + s.w / 2, s.y + s.h / 2, tr);
     tg.addColorStop(0, navC(navMix(tc, [140, 170, 255], 0.5), (night ? 0.16 : 0.06) * fl)); tg.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = tg; ctx.fillRect(s.x + s.w / 2 - tr, s.y + s.h / 2 - tr, tr * 2, tr * 2); ctx.restore(); }
