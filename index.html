@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 160</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 161</div>
     </div>
   </div>
   <div class="group">
@@ -6226,6 +6226,7 @@ function* navPaint(c, W, H, amb, out) {
     for (let k = 0; k < 6; k++) { const cy = gy + gh * (0.12 + rng() * 0.38), cx = gx + rng() * gw, n = 14 + (rng() * 10 | 0);
       for (let i = 0; i < n; i++) { const px = cx + (rng() - 0.5) * gw * 0.5, py = cy + (rng() - 0.5) * gh * 0.05, r = u * (14 + rng() * 26);
         navBlob(x, px, py, r * 1.6, night ? [70, 80, 130] : navMix(A.sky[2], [255, 255, 255], 0.5), night ? 0.22 : 0.5); navBlob(x, px, py + r * 0.4, r, night ? [90, 90, 140] : navMix(A.sky[2], [255, 200, 170], 0.4), night ? 0.15 : 0.35); } }
+    const skyShot = x.getImageData(gx | 0, gy | 0, Math.ceil(gw), Math.ceil(gh));   // cómo se ve el cielo solo (para saber después qué parte sigue a la vista)
     // las montañas, tres capas, con bruma entre ellas
     const ridge = (base, amp, f, ph) => X => base - amp * (0.55 * Math.sin(X * f + ph) + 0.3 * Math.sin(X * f * 2.3 + ph * 1.7) + 0.15 * Math.sin(X * f * 5.1 + ph * 0.3));
     for (let k = 0; k < 3; k++) { const yb = gy + gh * (0.6 + k * 0.1), R = ridge(yb, gh * (0.16 - k * 0.03), 6 / gw, k * 2.1 + 0.7);
@@ -6284,7 +6285,7 @@ function* navPaint(c, W, H, amb, out) {
       if (!night) { const eg = x.createLinearGradient(side < 0 ? x0 + cw : x0, 0, side < 0 ? x0 + cw * 0.6 : x0 + cw * 0.4, 0); eg.addColorStop(0, navC(lit, 0.45 * A.beam)); eg.addColorStop(1, navC(lit, 0)); x.fillStyle = eg; x.fillRect(x0, y0, cw, y1 - y0); }   // la luz que atraviesa la tela
       navTex(x, [x0 - u * 10, y0, cw + u * 20, y1 - y0], rng, 0.1, u * 7); x.restore();
       x.fillStyle = '#b08a40'; x.beginPath(); x.ellipse(side < 0 ? x0 + cw * 0.6 : x0 + cw * 0.5, tie, u * 14, u * 6, 0, 0, 7); x.fill(); }
-    out.win = { x: gx, y: gy, w: gw, h: gh }; }
+    out.win = { x: gx, y: gy, w: gw, h: gh }; out.skyShot = skyShot; }
   yield;
   // ---- el piso de tablas, en perspectiva, con vetas ----
   { const y0 = L.wallB, vp = L.vp, n = 16; x.save(); x.beginPath(); x.rect(0, y0, W, H - y0); x.clip();
@@ -6347,35 +6348,37 @@ function* navPaint(c, W, H, amb, out) {
     x.fillStyle = sk; x.beginPath(); x.ellipse(T.cx, T.base - u * 6, T.hw * 0.72, u * 26, 0, 0, 7); x.fill();
     x.fillStyle = 'rgba(255,255,255,.75)'; for (let k = 0; k < 36; k++) { const a = k / 36 * 6.283; x.beginPath(); x.arc(T.cx + Math.cos(a) * T.hw * 0.72, T.base - u * 6 + Math.sin(a) * u * 26, u * 6, 0, 7); x.fill(); }   // borde de motas blancas
     x.fillStyle = '#4a2c18'; x.fillRect(T.cx - u * 9, T.base - Ht * 0.12, u * 18, Ht * 0.1); }
-  // el volumen oscuro de adentro, por pisos (cada piso de ramas hace su sombra): así no se ve la pared entre ramas ni un cono liso
-  { const q = 0.125, sc = document.createElement('canvas'); sc.width = Math.ceil(W * q); sc.height = Math.ceil(H * q); const s_ = sc.getContext('2d'); s_.scale(q, q);   // pequeño y ampliado: queda suave sin el desenfoque caro
-    s_.fillStyle = night ? 'rgba(5,11,10,.9)' : 'rgba(10,26,18,.88)';
-    for (let i = 0; i < 12; i++) { const tt = i / 11, ty = T.top + Ht * (0.05 + 0.82 * Math.pow(tt, 1.25)), tw = T.hw * (0.12 + 0.88 * Math.pow(tt, 0.85)); s_.beginPath(); s_.ellipse(T.cx, ty + tw * 0.22, tw * 0.62, tw * 0.24 + u * 8, 0, 0, 7); s_.fill(); }
+  // una sombra interior pequeña y tenue (solo para que entre ramas no se vea la pared; la forma la dan las ramas)
+  { const q = 0.125, sc = document.createElement('canvas'); sc.width = Math.ceil(W * q); sc.height = Math.ceil(H * q); const s_ = sc.getContext('2d'); s_.scale(q, q);
+    s_.fillStyle = night ? 'rgba(5,11,10,.7)' : 'rgba(10,26,18,.62)';
+    for (let i = 0; i < 22; i++) { const tt = i / 21, ty = T.top + Ht * (0.05 + 0.82 * Math.pow(tt, 1.25)), tw = T.hw * (0.12 + 0.88 * Math.pow(tt, 0.85)); s_.beginPath(); s_.ellipse(T.cx, ty + tw * 0.2, tw * 0.45, tw * 0.2 + u * 6, 0, 0, 7); s_.fill(); }
     x.save(); x.imageSmoothingQuality = 'high'; x.drawImage(sc, 0, 0, W, H); x.restore(); }
   yield;
   const needleCols = night ? [[5, 14, 12], [8, 22, 17], [12, 30, 22], [17, 40, 28], [24, 52, 34], [34, 66, 42], [50, 84, 54], [160, 120, 80]]
     : amb === 'dia' ? [[12, 34, 24], [18, 48, 32], [26, 62, 40], [36, 80, 48], [50, 100, 58], [72, 122, 66], [110, 150, 84], [220, 210, 160]]
     : [[11, 29, 22], [17, 41, 29], [24, 56, 37], [33, 73, 44], [47, 93, 53], [74, 122, 63], [127, 154, 82], [184, 190, 112]];
-  const tiers = 13, tipPts = [];
+  const tiers = 22, tipPts = [];
   { const lw = u * 5; x.strokeStyle = night ? '#0c1a12' : '#1d3a24'; x.lineWidth = lw; x.lineCap = 'round'; x.beginPath(); x.moveTo(T.cx, T.top + Ht * 0.02); x.lineTo(T.cx, T.top + Ht * 0.2); x.stroke(); }   // la guía de la punta, bajo la estrella
   for (let i = 0; i < tiers; i++) {
-    const tt = i / (tiers - 1), ty = T.top + Ht * (0.05 + 0.82 * Math.pow(tt, 1.25)), tw = T.hw * (0.12 + 0.88 * Math.pow(tt, 0.85)), nS = 18 + i * 6;   // los pisos de arriba más juntos: la punta es una sola
+    const tt = i / (tiers - 1), ty = T.top + Ht * (0.05 + 0.82 * Math.pow(tt, 1.25)), tw = T.hw * (0.12 + 0.88 * Math.pow(tt, 0.85)), nS = 26 + i * 8;   // las ramas de antes, con más pisos y más ramas por piso: frondoso
     const spr = []; for (let s = 0; s < nS; s++) { const th = rng() * 6.283; spr.push({ th, z: Math.cos(th), r: tw * (0.5 + rng() * 0.62) }); } spr.sort((a, b) => a.z - b.z);
-    const B = needleCols.map(() => new Path2D()), twig = new Path2D();
+    let B = needleCols.map(() => new Path2D()), twig = new Path2D(), nsp = 0;
+    const flush = () => { x.strokeStyle = night ? '#0a1510' : '#163024'; x.lineWidth = u * 2.2; x.lineCap = 'round'; x.stroke(twig); x.lineWidth = u * 1.25; B.forEach((p, k) => { x.strokeStyle = navC(needleCols[k]); x.stroke(p); }); B = needleCols.map(() => new Path2D()); twig = new Path2D(); };
     for (const s of spr) {
+      if (++nsp % 70 === 0) { flush(); yield; }   // los pisos grandes, en tandas: el pintado nunca traba
       const sx = T.cx + Math.sin(s.th) * u * 6, sy = ty + rng() * u * 6, ex = T.cx + Math.sin(s.th) * s.r, ey = ty + s.r * (0.2 + rng() * 0.3) + s.z * u * 10, mx = (sx + ex) / 2, my = (sy + ey) / 2 - s.r * 0.08;
       twig.moveTo(sx, sy); twig.quadraticCurveTo(mx, my, ex, ey);
       const steps = Math.max(6, Math.round(s.r / (u * 9))), z01 = (s.z + 1) / 2, sideL = Math.sin(s.th);
       for (let k = 1; k <= steps; k++) { const t = 0.12 + 0.88 * k / steps, px = (1 - t) * (1 - t) * sx + 2 * (1 - t) * t * mx + t * t * ex, py = (1 - t) * (1 - t) * sy + 2 * (1 - t) * t * my + t * t * ey;
         const dx = 2 * (1 - t) * (mx - sx) + 2 * t * (ex - mx), dy = 2 * (1 - t) * (my - sy) + 2 * t * (ey - my), da = Math.atan2(dy, dx);
-        for (let q = 0; q < 3; q++) for (const sd of [-1, 1]) { const a = da + sd * (0.35 + rng() * 0.75), nl = u * (5 + rng() * 6) * (0.65 + 0.45 * t), up = Math.sin(a) < 0 ? 0.13 : -0.13,   // las agujas de arriba reciben luz; las de abajo, sombra
+        for (let q = 0; q < 4; q++) for (const sd of [-1, 1]) { const a = da + sd * (0.35 + rng() * 0.75), nl = u * (5 + rng() * 6) * (0.65 + 0.45 * t), up = Math.sin(a) < 0 ? 0.13 : -0.13,   // las agujas de arriba reciben luz; las de abajo, sombra
           l = 0.1 + 0.4 * z01 + 0.2 * t + up + (night ? 0.04 : 0.15) * sideL + (rng() - 0.5) * 0.22, bi = Math.max(0, Math.min(6, Math.floor(l * 7)));
-          const b2 = (!night && sideL > 0.5 && t > 0.8 && up > 0 && rng() < 0.12) ? 7 : bi, ox = px + Math.cos(da) * u * q * 2.2, oy = py + Math.sin(da) * u * q * 2.2, bend = sd * 0.25;
+          const b2 = (!night && sideL > 0.5 && t > 0.8 && up > 0 && rng() < 0.12) ? 7 : bi, ox = px + Math.cos(da) * u * q * 1.8, oy = py + Math.sin(da) * u * q * 1.8, bend = sd * 0.25;
           B[b2].moveTo(ox, oy); B[b2].quadraticCurveTo(ox + Math.cos(a - bend) * nl * 0.55, oy + Math.sin(a - bend) * nl * 0.55, ox + Math.cos(a) * nl, oy + Math.sin(a) * nl); }
         if (k === steps && s.z > -0.2) tipPts.push([ex, ey, s.z, i]);
         if (k === Math.round(steps * 0.6) && s.z > 0.1 && rng() < 0.5) tipPts.push([px, py, s.z * 0.8, i]); }
     }
-    x.strokeStyle = night ? '#120a06' : '#2a1a10'; x.lineWidth = u * 2.6; x.lineCap = 'round'; x.stroke(twig);
+    x.strokeStyle = night ? '#0a1510' : '#163024'; x.lineWidth = u * 2.2; x.lineCap = 'round'; x.stroke(twig);   // las ramitas en el verde oscuro de la sombra (en café se veían rayitas por el centro)
     x.lineWidth = u * 1.25; B.forEach((p, k) => { x.strokeStyle = navC(needleCols[k]); x.stroke(p); });
     yield;   // un piso por vez: el pintado no traba la animación
   }
@@ -6567,6 +6570,11 @@ function* navPaint(c, W, H, amb, out) {
   yield;
   // ---- los cuerpos de todos los bombillos (apagados: vidrio de color) ----
   for (const b of out.bulbs) navBulbBody(x, b, u, 0);
+  // ---- la máscara del cielo: solo donde se ve el cielo de afuera (sin travesaños, corona, cortinas, matera, velitas ni bombillos) ----
+  { const w = out.win, s0 = out.skyShot, now = x.getImageData(w.x | 0, w.y | 0, s0.width, s0.height), m = new ImageData(s0.width, s0.height);
+    for (let i = 0; i < s0.data.length; i += 4) { const d = Math.abs(s0.data[i] - now.data[i]) + Math.abs(s0.data[i + 1] - now.data[i + 1]) + Math.abs(s0.data[i + 2] - now.data[i + 2]); m.data[i + 3] = d < 6 ? 255 : 0; }
+    const mc = document.createElement('canvas'); mc.width = s0.width; mc.height = s0.height; mc.getContext('2d').putImageData(m, 0, 0); out.skyMask = mc; out.skyShot = null; }
+  yield;
   // ---- la luz de la habitación: clara junto a la ventana, en penumbra hacia las esquinas y el techo (como en las ilustraciones) ----
   { const w = out.win, cx = w.x + w.w / 2, cy = w.y + w.h * 0.7, R = Math.max(W, H) * 0.75;
     x.save(); x.globalCompositeOperation = 'multiply'; const sg = x.createRadialGradient(cx, cy, w.w * 0.4, cx, cy, R); sg.addColorStop(0, 'rgba(255,255,255,1)'); sg.addColorStop(1, night ? 'rgba(120,110,150,1)' : 'rgba(150,110,110,1)'); x.fillStyle = sg; x.fillRect(0, 0, W, H);
@@ -6589,7 +6597,8 @@ function drawNavidad(dt) {
   const key = [W, H, amb].join();
   if (N.key !== key && N.pre && N.pre.key === key) { N.job = { c: N.pre.c, out: N.pre.out, key }; N.key = key; N.pre = null; navDone(N); }   // ya pintada durante la cuenta atrás
   if (N.key !== key) { const c = document.createElement('canvas'); c.width = W; c.height = H; const out = { bulbs: [] }, job = navPaint(c, W, H, amb, out);
-    N.job = { c, out, job, key }; N.key = key; if (!N.bg) { while (!job.next().done); navDone(N); } }
+    N.job = { c, out, job, key }; N.key = key;
+    if (!N.bg || Math.abs(N.bg.width / N.bg.height - W / H) > 0.02) { while (!job.next().done); navDone(N); } }   // si cambia la proporción, se pinta de una vez: nunca se muestra la habitación estirada (deformada)
   if (N.job) { const t0 = performance.now(), jx = N.job.c.getContext('2d'); let r; do { r = N.job.job.next(); jx.getImageData(0, 0, 1, 1); } while (!r.done && performance.now() - t0 < 8); if (r.done) navDone(N); }
   // se pinta por partes, sin trabar (y se obliga al navegador a pintar cada parte en su momento: si no, lo deja todo para el primer cuadro
   // en que se usa la habitación nueva, y eso daba un tirón al empezar a grabar)
@@ -6627,13 +6636,17 @@ function navLive(dt, W, H, amb, A, night, P) {   // (W y H son las medidas del f
   if (night) {
     // la pólvora a lo lejos: con los golpes fuertes, un estallido en el cielo de la ventana
     if (pulse.on && N.go > 0.3 && (pulse.k > 0.6 || N.beats % 4 === 0) && N.fw.length < 4) { const r = Math.random; N.fw.push({ x: win.x + win.w * (0.15 + r() * 0.7), y: win.y + win.h * (0.12 + r() * 0.3), t: 0, c: NAV_COLS[(r() * 6) | 0], n: 34 + (r() * 20 | 0), s: 0.6 + r() * 0.6 }); }
-    ctx.save(); ctx.beginPath(); ctx.rect(win.x, win.y, win.w, win.h); ctx.clip(); ctx.globalCompositeOperation = 'lighter';
-    N.fw.forEach(f => { f.t += dt * 0.7; const R = win.w * 0.16 * f.s * Math.pow(f.t, 0.4), al = Math.max(0, 1 - f.t) * 0.9;
+    const mk = N.out.skyMask, fc = N.fwC || (N.fwC = document.createElement('canvas')); if (fc.width !== mk.width || fc.height !== mk.height) { fc.width = mk.width; fc.height = mk.height; }
+    const fx = fc.getContext('2d'); fx.setTransform(1, 0, 0, 1, 0, 0); fx.globalCompositeOperation = 'source-over'; fx.clearRect(0, 0, fc.width, fc.height); fx.translate(-(win.x | 0), -(win.y | 0)); fx.globalCompositeOperation = 'lighter';
+    { const ctx = fx;   // (se dibujan en el lienzo de la pólvora)
+    N.fw.forEach(f => { f.t += dt * 0.7; const R = win.w * 0.11 * f.s * Math.pow(f.t, 0.4), al = Math.max(0, 1 - f.t) * 0.9;
       ctx.lineCap = 'round'; for (let i = 0; i < f.n; i++) { const a = i / f.n * 6.283 + f.s + Math.sin(i * 7.3) * 0.08, Rr = R * (0.85 + 0.15 * Math.sin(i * 3.7)), X = f.x + Math.cos(a) * Rr, Y = f.y + Math.sin(a) * Rr + f.t * f.t * win.h * 0.08, X0 = f.x + Math.cos(a) * Rr * 0.15, Y0 = f.y + Math.sin(a) * Rr * 0.15 + f.t * f.t * win.h * 0.02;
         const lg = ctx.createLinearGradient(X0, Y0, X, Y); lg.addColorStop(0, navC(f.c, 0)); lg.addColorStop(1, navC(navMix(f.c, [255, 255, 255], 0.4), al)); ctx.strokeStyle = lg; ctx.lineWidth = u * 1.2; ctx.beginPath(); ctx.moveTo(X0, Y0); ctx.lineTo(X, Y); ctx.stroke();
         ctx.fillStyle = navC([255, 250, 230], al); ctx.beginPath(); ctx.arc(X, Y, u * 1.4, 0, 7); ctx.fill(); }   // con estela, como la pólvora de verdad
       { const hg = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, R * 1.4); hg.addColorStop(0, navC(f.c, al * 0.18)); hg.addColorStop(1, navC(f.c, 0)); ctx.fillStyle = hg; ctx.fillRect(f.x - R * 1.4, f.y - R * 1.4, R * 2.8, R * 2.8); } });   // un halo que se desvanece, sin borde
-    N.fw = N.fw.filter(f => f.t < 1); ctx.restore();
+    }
+    fx.setTransform(1, 0, 0, 1, 0, 0); fx.globalCompositeOperation = 'destination-in'; fx.drawImage(mk, 0, 0);   // solo en el cielo de afuera: detrás de travesaños, corona y cortinas
+    N.fw = N.fw.filter(f => f.t < 1); ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.9; ctx.drawImage(fc, win.x | 0, win.y | 0); ctx.restore();
   }
   // los bombillos: la guirnalda en secuencias, el árbol y el pesebre titilan con su parte del sonido
   const bands = N.bl || (N.bl = new Float32Array(24)); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.3); bands[i] += (v - bands[i]) * (1 - Math.pow(v > bands[i] ? 0.001 : 0.06, dt)); }
