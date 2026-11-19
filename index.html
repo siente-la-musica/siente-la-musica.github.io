@@ -864,7 +864,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 167</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 168</div>
     </div>
   </div>
   <div class="group">
@@ -4410,6 +4410,23 @@ function drawLyricStyled(ly, size, cx, cy, maxW) {
   drawWordLines(ly.words, ly.shown, size, cx, cy, maxW);   // karaoke
 }
 const lyrBg = { t: 0, m: '', L: 0.5 };
+// dónde poner la letra (vídeo vertical): cada 1,5 s se mira la imagen en pequeño y, dentro de la franja segura de TikTok
+// (entre el 32 % y el 74 % de la altura), se busca la altura con menos detalle (cielo, pared lisa, agua tranquila) en el ancho
+// que ocupa la letra. Cambia solo si el nuevo sitio es claramente mejor, y se desliza suave: nunca salta
+const lyrPos = { t: 0, m: '', y: 0, tgt: 0, c: null };
+function lyrAutoY(pref) {
+  const now = performance.now(), P = lyrPos;
+  if (P.m !== state.mode) { P.m = state.mode; P.y = P.tgt = pref; P.t = 0; }
+  if (now - P.t > 1500) { P.t = now;
+    try { const cw = 60, ch = 108, c = P.c || (P.c = document.createElement('canvas')); c.width = cw; c.height = ch; const x = c.getContext('2d', { willReadFrequently: true });
+      x.drawImage(ctx.canvas, 0, 0, cw, ch); const d = x.getImageData(0, 0, cw, ch).data, L = new Float32Array(cw * ch);
+      for (let i = 0; i < L.length; i++) L[i] = 0.3 * d[i * 4] + 0.59 * d[i * 4 + 1] + 0.11 * d[i * 4 + 2];
+      const x0 = Math.floor(cw * 0.17), x1 = Math.ceil(cw * 0.83), cost = y => { const r0 = Math.max(1, Math.floor((y - 0.055) * ch)), r1 = Math.min(ch - 2, Math.ceil((y + 0.055) * ch)); let s = 0, n = 0;
+        for (let r = r0; r <= r1; r++) for (let q = x0; q < x1; q++) { const i = r * cw + q; s += Math.abs(L[i + 1] - L[i]) + Math.abs(L[i + cw] - L[i]); n++; } return s / n + Math.abs(y - pref) * 18; };
+      let best = P.tgt, bc = cost(P.tgt); for (let y = 0.32; y <= 0.741; y += 0.02) { const k = cost(y); if (k < bc * 0.8) { bc = k; best = y; } }
+      P.tgt = best; } catch (e) { P.tgt = pref; } }
+  P.y += (P.tgt - P.y) * 0.06; return P.y;
+}
 const dockEl = document.getElementById('dock');
 function drawRecOverlay() {
   if (!recording || state.mode === 'strobe') return;
@@ -4475,7 +4492,7 @@ function drawRecOverlay() {
     if (state.mode === 'bust') { yV = 0.76; yH = 0.86; }
     // en vertical, la letra siempre en la franja segura de TikTok: abajo van el usuario, la descripción y quiénes dieron like; a la derecha,
     // la columna de botones; arriba, el encabezado y nuestro título. Centrada y con margen a los dos lados
-    if (vertical) yV = Math.max(0.34, Math.min(0.72, yV));   // (arriba, bajo el bloque del título y la firma)   // la letra va sobre el torso: deja libres la cabeza y el cuello   // en la Ruta, la letra va en el cielo del parabrisas
+    if (vertical) yV = lyrAutoY(Math.max(0.34, Math.min(0.72, yV)));   // mira la imagen y busca el espacio más vacío de la franja segura   // la letra va sobre el torso: deja libres la cabeza y el cuello   // en la Ruta, la letra va en el cielo del parabrisas
     // un velo suave detrás de la letra: se lee sobre cualquier animación sin cambiarle el estilo
     { const lx = W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.46 : W * 0.46), rh_ = (vertical ? 150 : 120) * u;
       // el velo se elige por lo que hay de verdad detrás de la letra (no por el tema): sobre una escena oscura en modo día ya no
