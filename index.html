@@ -795,7 +795,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 156</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 157</div>
     </div>
   </div>
   <div class="group">
@@ -6171,7 +6171,7 @@ const navC = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
 function navLayout(W, H) {
   const P = H >= W, u = (P ? W : H) / 1000;
   return P ? { P, u, wallB: H * 0.62, vp: [W * 0.5, H * 0.38], win: { x: W * 0.42, y: H * 0.1, w: W * 0.48, h: H * 0.26 },
-      tree: { cx: W * 0.24, top: H * 0.12, base: H * 0.69, hw: W * 0.22 }, tv: { x: W * 0.6, y: H * 0.405, w: W * 0.36, h: W * 0.3 },
+      tree: { cx: W * 0.24, top: H * 0.175, base: H * 0.69, hw: W * 0.22 }, tv: { x: W * 0.6, y: H * 0.405, w: W * 0.36, h: W * 0.3 },
       cab: { x: W * 0.565, w: W * 0.43, h: H * 0.1 }, peb: { x: W * 0.02, y: H * 0.64, w: W * 0.96, h: H * 0.34 } }
     : { P, u, wallB: H * 0.62, vp: [W * 0.5, H * 0.38], win: { x: W * 0.4, y: H * 0.08, w: W * 0.24, h: H * 0.38 },
       tree: { cx: W * 0.17, top: H * 0.06, base: H * 0.8, hw: H * 0.25 }, tv: { x: W * 0.72, y: H * 0.33, w: H * 0.38, h: H * 0.31 },
@@ -6517,7 +6517,9 @@ function drawNavidad(dt) {
   const key = [W, H, amb].join();
   if (N.key !== key) { const c = document.createElement('canvas'); c.width = W; c.height = H; const out = { bulbs: [] }, job = navPaint(c, W, H, amb, out);
     N.job = { c, out, job, key }; N.key = key; if (!N.bg) { while (!job.next().done); navDone(N); } }
-  if (N.job) { const t0 = performance.now(); let r; do { r = N.job.job.next(); } while (!r.done && performance.now() - t0 < 10); if (r.done) navDone(N); }   // se pinta por partes, sin trabar
+  if (N.job) { const t0 = performance.now(), jx = N.job.c.getContext('2d'); let r; do { r = N.job.job.next(); jx.getImageData(0, 0, 1, 1); } while (!r.done && performance.now() - t0 < 8); if (r.done) navDone(N); }
+  // se pinta por partes, sin trabar (y se obliga al navegador a pintar cada parte en su momento: si no, lo deja todo para el primer cuadro
+  // en que se usa la habitación nueva, y eso daba un tirón al empezar a grabar)
   const L = N.L, u = L.u;
   ctx.drawImage(N.bg, 0, 0, W, H);
   // la música: el ritmo de los bombillos (secuencias de las de antes: cambian cada 8 golpes)
