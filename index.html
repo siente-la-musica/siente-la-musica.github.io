@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 191</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 192</div>
     </div>
   </div>
   <div class="group">
@@ -11429,48 +11429,46 @@ function drawIcons(dt) {
 }
 
 // ================= Escena: Túnel =================
-// Un viaje sin fin por un tubo de color: las paredes son degradados suaves de la portada, con luz de un lado y
-// sombra del otro; al fondo, la boca nítida del siguiente tramo, con su filo iluminado y la sombra bajo el borde.
-// Avanzamos con perspectiva real (cada tramo crece hasta envolvernos y adentro ya espera el siguiente, con otra
-// combinación de colores: el túnel cambia de lugar sin cortes) y el camino se curva despacio. La velocidad del
-// viaje sigue la energía; cada bombo da un impulso y enciende el filo; los graves iluminan las paredes; los medios
-// curvan el camino; la voz tiñe la luz del fondo con el color de la nota. En silencio, quieto.
-const tun = { rings: [-1, -1, -1, -1], ri: 0, prog: null, s: 0, seg: 0, spd: 0, ph: 0, kick: 0, la: 0.6, off: [0, 0], bass: 0, vo: 0, P: new Float32Array(36) };
+// Un recorrido por dentro de un tubo de color que se curva hacia arriba, abajo y a los lados, como una montaña
+// rusa: la cámara viaja por el centro siguiendo el camino, así que la perspectiva cambia todo el tiempo (la salida
+// a veces se ve arriba, a veces a un lado, a veces se esconde tras la curva). Las paredes son degradados suaves
+// de los colores de la portada (cada tramo los ordena distinto y se funden entre sí), con luz y sombra según la
+// curva y luz al fondo. Se dibuja marchando rayos dentro del tubo. Música: la velocidad sigue la energía y cada
+// bombo da un empujón; el tubo se ensancha con los graves; con más energía las curvas se vuelven más marcadas;
+// el interior se enciende con el golpe; la voz tiñe la luz del fondo. En silencio, quieto.
+const tun = { prog: null, z: 0, spd: 0, kick: 0, amp: 0.6, bass: 0, vo: 0, bloom: 0, P: new Float32Array(36) };
 function tunnelSetup() {
-  tun.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uZ, uPh, uKick, uLA, uBass, uVo; uniform vec4 uRing; uniform vec2 uOff, uLook; uniform vec3 uP[12]; uniform vec3 uMel;
+  tun.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uZ, uAmp, uR, uBloom, uVo; uniform vec3 uP[12]; uniform vec3 uMel;
     vec3 grad(int o, float k) { k = fract(k) * 4.; int i = int(k); float f = smoothstep(0., 1., fract(k)); return mix(uP[o + i], uP[o + (i == 3 ? 0 : i + 1)], f); }
-    // el color de la pared en un punto del tubo (ángulo, profundidad): cada tramo tiene su juego de colores y se funde con el siguiente
-    vec3 wallCol(float ang, float zz) {
-      float seg = zz / 9., sf = fract(seg); int s0 = int(mod(floor(seg), 3.)) * 4, s1 = int(mod(floor(seg) + 1., 3.)) * 4;
-      float k = .22 * cos(ang - 1.1 - zz * .02) + .08 * sin(2. * ang + zz * .05 - uPh * .3) + zz * .028;   // de un lado a otro y con la profundidad (sin sectores)
-      return mix(grad(s0, k), grad(s1, k), smoothstep(.55, 1., sf));
+    // el eje del tubo: curvas lentas en las dos direcciones (sumas de senos de distinta escala)
+    vec2 axis(float z) { return uAmp * vec2(2.2 * sin(z * .045) + 1.1 * sin(z * .11 + 1.3), 1.7 * sin(z * .038 + 2.) + .9 * cos(z * .095)); }
+    vec3 wallCol(float ang, float z) {
+      float seg = z / 16., sf = fract(seg); int s0 = int(mod(floor(seg), 3.)) * 4, s1 = int(mod(floor(seg) + 1., 3.)) * 4;
+      float k = .2 * cos(ang - 1. + z * .03) + z * .022;   // de un lado a otro y con la profundidad, sin cuñas
+      return mix(grad(s0, k), grad(s1, k), smoothstep(.45, 1., sf));
     }
     vec3 shade(vec2 uv) {
       float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.);
-      vec3 d = normalize(vec3(p + uLook, 1.15)); vec2 o = uOff;                       // la cámara va adentro del tubo, corrida del eje: se ve inclinado
-      float A = dot(d.xy, d.xy) + 1e-5, B = 2. * dot(o, d.xy), Cc = dot(o, o) - 1.;
-      float t = (-B + sqrt(max(B * B - 4. * A * Cc, 0.))) / (2. * A);                  // dónde choca la mirada con la pared
-      vec2 hxy = o + t * d.xy; float zz = t * d.z + uZ, ang = atan(hxy.y, hxy.x);
-      vec3 c = wallCol(ang, zz);
-      float lit = mix(.5 + .5 * cos(ang - uLA), .75, smoothstep(2., 9., t));   // hacia el fondo la luz ya llega de todos lados
-      c *= (.45 + .72 * lit) * (.75 + .6 * uBass) * mix(.55, 1.2, smoothstep(.4, 7., t));   // luz de un lado, y más luz hacia el fondo (lo cercano en penumbra)
-      // los tramos: cada tanto un filo, con su brillo y la sombra que deja detrás
-      // los anillos de luz que lanza cada bombo: nacen al fondo y viajan por las paredes hacia nosotros
-      for (int j = 0; j < 4; j++) { float rz = uRing[j]; if (rz < 0.) continue; float w = zz - rz; c += c * exp(-w * w / .8) * 1.5 * smoothstep(40., 20., rz - uZ); }   // el anillo: la pared se enciende en su propio color
-      float sf = fract(zz / 9.), fog = 1. - exp(-t * .14);
-      c *= 1. - .3 * exp(-sf * 12.) * (1. - lit * .6);
-      c += c * .9 * exp(-pow((1. - sf) / .025, 2.)) * (.35 + .45 * lit + .6 * uKick) * (1. - fog * .8);   // el filo, del color de la pared
-      // hacia el fondo, la luz: se aclara (la voz la tiñe)
-      float rr = length(d.xy); int se = int(mod(floor((uZ + 30.) / 9.), 3.)) * 4; vec3 endL = mix(mix(grad(se, .15 + rr * .9 + .1 * d.x) * 1.25, vec3(1.), .5 - rr * .4), uMel, uVo * .45);   // la luz del fondo: suave y limpia
-      c = mix(c, endL, smoothstep(.35, .97, fog));
-      return c;
+      vec3 cam = vec3(axis(uZ), uZ), tg = vec3(axis(uZ + 3.), uZ + 3.);
+      vec3 fw = normalize(tg - cam), rt = normalize(cross(vec3(0., 1., 0.), fw)), up = cross(fw, rt);
+      vec3 rd = normalize(fw * 1.9 + rt * p.x + up * p.y);   // lente más cerrado: se ve hondo y la boca de luz es grande
+      float t = .05, d = 0.;
+      for (int i = 0; i < 70; i++) { vec3 P = cam + rd * t; d = uR - length(P.xy - axis(P.z)); if (d < .004 || t > 60.) break; t += max(d * .75, .01); }
+      vec3 P = cam + rd * t; vec2 q = P.xy - axis(P.z); float ang = atan(q.y, q.x);
+      vec3 c = wallCol(ang, P.z);
+      vec3 n = normalize(vec3(-q, 0.));
+      vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .42 + .4 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .25 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
+      c *= lit * (1. + 1.1 * uBloom);   // el interior se enciende con el golpe
+      // al fondo, luz: se aclara con la distancia (la voz la tiñe)
+      float fog = 1. - exp(-t * .09);
+      vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .4), uMel, uVo * .4);
+      return mix(c, endL, smoothstep(.2, .95, fog));
     }
     void main() {
-      // dos muestras por píxel: los filos lejanos salen limpios
-      vec2 e = vec2(.5 / uRes.x, 0.);
-      vec3 col = (shade(vUv - e) + shade(vUv + e)) * .5;
-      if (uNight > .5) col *= .86; else col = mix(col, vec3(1.), .05);
-      col *= 1. - .22 * pow(length(vUv - .5) * 1.3, 2.);
+      vec3 col = shade(vUv);
+      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.15), 0., 1.);
+      if (uNight > .5) col *= .9; else col = mix(col, vec3(1.), .05);
+      col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
 }
@@ -11481,26 +11479,19 @@ function drawTunnel(dt) {
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
   if (pulse.on) tun.kick = Math.min(1, tun.kick + 0.5 + pulse.k * 0.4);
   tun.kick = ease(tun.kick, 0, 0.35);
-  tun.spd = ease(tun.spd, musicGate * (0.025 + energy * 0.13), 0.6);   // el viaje: avanza con la energía...
-  tun.s += dt * (tun.spd + tun.kick * 0.45) * 24;                      // ...y cada bombo da un empujón que se siente
-  if (pulse.on) tun.rings[tun.ri++ % 4] = tun.s + 32;
-  for (let j = 0; j < 4; j++) if (tun.rings[j] >= 0 && tun.rings[j] < tun.s - 2) tun.rings[j] = -1;
-  for (let j = 0; j < 4; j++) if (tun.rings[j] >= 0) tun.rings[j] -= dt * 14;   // el anillo viene hacia nosotros (además de que avanzamos) tun.ph += dt * musicGate * (0.2 + energy * 0.8);
-  // colores de cada tramo: los de la portada, vivos, girando de un tramo al siguiente
+  tun.spd = ease(tun.spd, musicGate * (0.4 + energy * 2.2), 0.6);              // avanza con la energía...
+  tun.z += dt * (tun.spd + tun.kick * 13);                                         // ...y cada bombo empuja
+  tun.amp += (0.45 + 0.55 * Math.min(1, energy * 1.8) - tun.amp) * (1 - Math.exp(-dt / 2.5)) * musicGate;   // con más energía, curvas más marcadas (cambia despacio)
+  tun.bass = ease(tun.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.25);
+  tun.vo = ease(tun.vo, Math.min(1, voice * 1.4), 0.4);
+  tun.bloom = ease(tun.bloom, tun.kick, 0.08);
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(70, Math.min(95, hs[0][1] * 1.3 + 20));
   const segCols = n => { const o = [0, 1, 2].map(k => hs[(k + n) % 3]); return [hexToRgb(hsl(o[0][0], sat, 55)), hexToRgb(hsl(o[1][0], sat, 60)), hexToRgb(hsl(o[2][0], sat, 50)), hexToRgb(hsl(o[0][0], sat * 0.9, 70))].map(c => c.map(v => v / 255)); };   // solo los colores de la portada, en distinto orden en cada tramo
   [segCols(0), segCols(1), segCols(2)].forEach((cs, j) => cs.forEach((c, k) => tun.P.set(c, (j * 4 + k) * 3)));
-  tun.la += dt * musicGate * (0.06 + energy * 0.2);
-  const mid = bandX(10, 26);
-  tun.off[0] = ease(tun.off[0], 0.32 * Math.sin(tun.ph * 0.13 + 1), 1.2); tun.off[1] = ease(tun.off[1], 0.22 * Math.cos(tun.ph * 0.1), 1.2);   // la cámara se corre dentro del tubo
-  tun.look = tun.look || [0, 0]; tun.look[0] = ease(tun.look[0], Math.sin(tun.ph * 0.21) * (0.12 + 0.12 * mid), 0.8); tun.look[1] = ease(tun.look[1], Math.cos(tun.ph * 0.17) * (0.08 + 0.1 * mid), 0.8);   // y mira hacia donde se curva el camino
-  tun.bass = ease(tun.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.3);
-  tun.vo = ease(tun.vo, Math.min(1, voice * 1.4), 0.4);
-  const [cw, ch] = glCanvas(0.85), p = tun.prog;
+  const [cw, ch] = glCanvas(0.75), p = tun.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
-  gl.uniform1f(p.u.uZ, tun.s); gl.uniform4f(p.u.uRing, ...tun.rings.map(v => v * (state.noFlash ? 1 : 1))); gl.uniform2f(p.u.uLook, tun.look[0], tun.look[1]); gl.uniform1f(p.u.uPh, tun.ph); gl.uniform1f(p.u.uKick, tun.kick * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uLA, tun.la);
-  gl.uniform1f(p.u.uBass, tun.bass); gl.uniform1f(p.u.uVo, tun.vo); gl.uniform2f(p.u.uOff, tun.off[0], tun.off[1]);
+  gl.uniform1f(p.u.uZ, tun.z); gl.uniform1f(p.u.uAmp, tun.amp); gl.uniform1f(p.u.uR, 1 + 0.18 * tun.bass); gl.uniform1f(p.u.uBloom, tun.bloom * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uVo, tun.vo);
   gl.uniform3fv(p.u['uP[0]'], tun.P); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -11509,46 +11500,35 @@ function drawTunnel(dt) {
 }
 
 // ================= Escena: Portal =================
-// Un hueco oscuro rodeado de un aura de luz en arcoíris, muy difuminada, como los pósters de luz de color: el color
-// gira alrededor del hueco (desde el tono de la portada, recorriendo todo el círculo), es intenso junto al borde y
-// se funde hacia afuera en un azul hondo, con una cola que se estira hacia un lado. Todo con inercia, como algo
-// vivo y lento: el hueco respira con los graves y late con cada bombo (se contrae y vuelve), los medios deforman
-// el contorno, la voz tiñe el aura con el color de la nota, y los colores giran con la energía. En silencio, quieto.
-const portal = { lph: 0, lr: 0, cw: 0, prog: null, ph: 0, spd: 0, R: 0, beat: 0, beatV: 0, wob: 0, vo: 0, rot: 0, hi: 0, tail: 0, m: [0, 0, 0], en: 0, glow: 0 };
+// Un hueco oscuro rodeado de una aureola de luz de color, muy difuminada, como los pósters de luz: hueco y aureola
+// son una sola pieza. Lo que se mueve son los colores (los de la portada): giran alrededor del hueco y salen
+// hacia afuera en ondas suaves, como si el color manara desde la orilla. Todo con inercia: el hueco respira con
+// los graves y late con el bombo (se contrae y vuelve) mientras la aureola destella; la energía aviva y acelera el
+// color; los medios ondulan apenas el contorno; los agudos lo hacen titilar; la voz tiñe la aureola con la nota.
+const portal = { prog: null, ph: 0, spd: 0, R: 0, beat: 0, beatV: 0, vo: 0, rot: 0, hi: 0, m: [0, 0, 0], en: 0, glow: 0, S: new Float32Array(15) };
 function portalSetup() {
-  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uWob, uVo, uRot, uHi, uHue, uTail, uBeat, uEn, uGlow; uniform vec3 uM; uniform vec2 uC, uL; uniform vec3 uMel, uBg;
+  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uVo, uRot, uHi, uBeat, uEn, uGlow; uniform vec3 uM; uniform vec2 uC; uniform vec3 uMel, uBg, uDeep; uniform vec3 uS[5];
     ${GLSL_COVER}
-    vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6. + vec3(0., 4., 2.), 6.) - 3.) - 1., 0., 1.); return v * mix(vec3(1.), k, s); }
+    vec3 ramp(float k) { k = fract(k) * 5.; int i = int(k); float f = fract(k); return mix(uS[i], uS[i == 4 ? 0 : i + 1], f); }   // paso lineal: los colores se funden sin bordes
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), q = p - uC;
       float an = atan(q.y, q.x);
-      // contorno orgánico: ondas lentas que los medios hacen crecer
-      float R = uR * (1. + (.025 + uM.x) * sin(2. * an + uPh * .4) + (.01 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));   // un huevo suave que la música deforma con inercia
-      // la cola: hacia afuera el aura se estira en una dirección que gira despacio
-      // la luz no rodea el hueco por igual: su centro está corrido (uL) y se pasea alrededor con la música, con una cola
-      vec2 qa = q - uL * uR, td = vec2(cos(uTail), sin(uTail)); float along = dot(qa, td);
-      vec2 qo = qa - td * max(along, 0.) * .5;
-      float r = length(q) / R, ro = length(qo) / R;
-      an = atan(qa.y, qa.x);
-      // el color gira alrededor del hueco, desde el tono de la portada; la voz lo tiñe con la nota
-      // la gama de las referencias (magenta, rosa durazno, amarillo, turquesa, azul) que gira despacio, con un eco del color de la portada
-      float hk = fract(an / 6.2832 + uRot) * 5.;
-      vec3 S0 = vec3(1., .06, .7), S1 = vec3(1., .32, .42), S2 = vec3(1., .86, .25), S3 = vec3(.12, .92, .88), S4 = vec3(.1, .22, .95);   // magenta, coral, amarillo, turquesa, azul: puros
-      vec3 ring = hk < 1. ? mix(S0, S1, hk) : hk < 2. ? mix(S1, S2, hk - 1.) : hk < 3. ? mix(S2, S3, hk - 2.) : hk < 4. ? mix(S3, S4, hk - 3.) : mix(S4, S0, hk - 4.);
-      ring = mix(ring, hsv(uHue, .9, 1.), .15) * (1. + .15 * sin(an * 3. + uPh * 2.) * uHi);   // los agudos lo hacen titilar
-      ring = mix(ring, uMel, uVo * .35 * smoothstep(-.2, .9, sin(an - 1.2)));
-      vec3 deep = mix(vec3(.16, .08, .6), hsv(uHue, .8, .5), .15);           // el azul hondo de afuera
-      // perfil: borde interior suave hacia el hueco, caída larga hacia afuera
-      float inner = smoothstep(.62 - .08 * uBeat, 1.02, r);
-      float outer = exp(-max(ro - 1., 0.) * (1.25 - .55 * uGlow));   // el aura se agranda con los graves
-      vec3 hc = mix(ring, deep, smoothstep(1., 2.1, ro)), halo = hc * outer;
-      halo += ring * exp(-pow((r - .98) / .06, 2.)) * (.25 + .5 * uBeat);   // la orilla, del mismo color (sin aros blancos), más viva con el latido
-      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg;
-      vec3 col;
-      if (uNight > .5) col = bg + halo * inner * (.85 + .7 * uEn + .5 * uBeat) + hc * exp(-max(ro - 1., 0.) * .5) * .2 * inner;   // aura viva con la energía y un segundo resplandor amplio de color
-      else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }   // de día el hueco también es hondo
-      if (uNight > .5) col = mix(col, vec3(.015, .01, .03), (1. - inner) * .9);           // el hueco: oscuro y hondo
-      float mx = max(col.r, max(col.g, col.b)); if (mx > 1.) col /= mix(1., mx, .9);   // donde hay mucha luz se limita sin lavarse a blanco: el color queda puro
+      float R = uR * (1. + (.02 + uM.x) * sin(2. * an + uPh * .4) + (.008 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));
+      float r = length(q) / R;
+      // los colores: giran alrededor y salen hacia afuera en ondas suaves (manan desde la orilla)
+      float k = an / 6.2832 + uRot + .18 * sin(an * 2. - uPh * .7) * .5 + (r - 1.) * .22 - uPh * .05;
+      vec3 ring = ramp(k) * (1. + .14 * sin(an * 3. + uPh * 2.) * uHi);
+      ring = mix(ring, uMel, uVo * .3 * smoothstep(-.2, .9, sin(an - 1.2 + uPh * .2)));
+      float inner = smoothstep(.6 - .08 * uBeat, 1.02, r);
+      float outer = exp(-max(r - 1., 0.) * (1.3 - .5 * uGlow));
+      vec3 hc = mix(ring, uDeep, smoothstep(1.1, 2.4, r)), halo = hc * outer;
+      halo += ring * exp(-pow((r - .98) / .07, 2.)) * (.22 + .5 * uBeat);              // la orilla, del mismo color, más viva con el latido
+      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg, col;
+      if (uNight > .5) {
+        col = bg + halo * inner * (.9 + .7 * uEn + .5 * uBeat) + hc * exp(-max(r - 1., 0.) * .5) * .18 * inner;
+        col = mix(col, vec3(.015, .01, .03), (1. - inner) * .92);                    // el hueco, oscuro y hondo
+      } else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }
+      float mx = max(col.r, max(col.g, col.b)); if (mx > 1.) col /= mix(1., mx, .9);    // la luz se limita sin lavarse a blanco
       float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.2), 0., 1.);
       if (uNight > .5) col *= 1. - .2 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
@@ -11559,34 +11539,32 @@ function drawPortal(dt) {
   if (!portal.prog) portalSetup();
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
-  portal.spd = ease(portal.spd, musicGate * (0.15 + energy * 0.9), 0.8); portal.ph += dt * portal.spd;
-  portal.rot += dt * musicGate * (0.01 + energy * 0.09);                          // los colores giran despacio
+  portal.spd = ease(portal.spd, musicGate * (0.2 + energy * 1.2), 0.6); portal.ph += dt * portal.spd;
+  portal.rot += dt * musicGate * (0.015 + energy * 0.12);                                 // los colores giran con la energía
   const base = (asp < 1 ? 0.2 : 0.24) * Math.min(asp, 1.1);
-  portal.R = ease(portal.R || base, base * (0.85 + 0.42 * Math.pow(bandX(0, 10), 1.1) * (0.6 + 0.8 * dynL) * musicGate), 0.25);   // respira con los graves (bien visible)
-  if (pulse.on) portal.beatV -= 7 + pulse.k * 6;                                // el latido: se contrae y vuelve
+  portal.R = ease(portal.R || base, base * (0.85 + 0.42 * Math.pow(bandX(0, 10), 1.1) * (0.6 + 0.8 * dynL) * musicGate), 0.25);   // respira con los graves
+  if (pulse.on) portal.beatV -= 7 + pulse.k * 6;                                            // el latido: se contrae y vuelve
   portal.beatV += (-portal.beat * 50 - portal.beatV * 8) * dt; portal.beat += portal.beatV * dt;
-  portal.wob = ease(portal.wob, bandX(10, 28) * musicGate, 0.5);
   portal.vo = ease(portal.vo, Math.min(1, voice * 1.4), 0.4);
   portal.hi = ease(portal.hi, bandX(28, BANDS) * musicGate, 0.15);
-  const mt = [0.04 * Math.pow(bandX(0, 10), 1.2), 0.03 * bandX(10, 26), 0.012 * bandX(26, BANDS)].map(v => v * (0.5 + 0.8 * dynL) * musicGate);
+  const mt = [0.035 * Math.pow(bandX(0, 10), 1.2), 0.025 * bandX(10, 26), 0.01 * bandX(26, BANDS)].map(v => v * (0.5 + 0.8 * dynL) * musicGate);
   for (let k = 0; k < 3; k++) portal.m[k] = ease(portal.m[k], mt[k], 0.3);
   portal.en = ease(portal.en, Math.min(1, energy * 2.2) * musicGate, 0.2);
   portal.glow = ease(portal.glow, Math.pow(bandX(0, 12), 1.1) * musicGate, 0.25);
-  portal.tail += dt * musicGate * (0.08 + energy * 0.5);
-  portal.lph += dt * musicGate * (0.15 + energy * 0.9 + portal.vo * 0.4);                        // la luz gira alrededor del hueco con la energía y la voz
-  portal.lr = ease(portal.lr, (0.22 + 0.35 * bandX(10, 26) + 0.25 * portal.vo) * musicGate + 0.12, 0.35);   // y se aleja del centro con los medios y la voz
-  portal.cw += dt * musicGate * (0.08 + energy * 0.35);                                           // el hueco también se pasea
-  const hue = hexToHsl(rgbToHex(...RGB[0]))[0] / 360;
-  const bg = night ? [0.07, 0.035, 0.1] : [0.9, 0.89, 0.93];
-  const wa = 0.03 + 0.05 * energy, C = asp < 1 ? [asp * 0.5 + Math.sin(portal.cw) * wa * asp, 0.52 + Math.cos(portal.cw * 0.8) * wa] : [asp * 0.5 + Math.sin(portal.cw) * wa * 1.5, 0.53 + Math.cos(portal.cw * 0.8) * wa];
+  // los colores de la portada, vivos: sus tres tonos y dos matices intermedios (más claro y más hondo), sin colores ajenos
+  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(72, Math.min(96, hs[0][1] * 1.3 + 22));
+  const v = (h, l) => hexToRgb(hsl(h, sat, l)).map(x => x / 255);
+  [v(hs[0][0], 55), v(hs[0][0], 68), v(hs[1][0], 56), v(hs[2][0], 58), v(hs[2][0], 46)].forEach((c, i) => portal.S.set(c, i * 3));
+  const deep = v(hs[1][0], 22), bg = night ? [0.05, 0.03, 0.08] : [0.92, 0.91, 0.94];
+  const C = asp < 1 ? [asp * 0.5, 0.52] : [asp * 0.5, 0.53];
   const [cw, ch] = glCanvas(0.85), p = portal.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
-  gl.uniform1f(p.u.uPh, portal.ph); gl.uniform1f(p.u.uR, portal.R * (1 + Math.max(-0.22, Math.min(0.14, portal.beat * 0.25))));   // el latido: se nota gl.uniform1f(p.u.uWob, portal.wob);
-  gl.uniform1f(p.u.uVo, portal.vo); gl.uniform1f(p.u.uRot, portal.rot); gl.uniform1f(p.u.uHi, portal.hi); gl.uniform1f(p.u.uHue, hue);
-  gl.uniform1f(p.u.uTail, portal.lph + 0.3 * Math.sin(portal.tail));   // la cola sigue a la luz gl.uniform1f(p.u.uBeat, Math.min(1, Math.abs(portal.beat) * 0.6) * (state.noFlash ? 0.5 : 1));
-  gl.uniform2f(p.u.uC, C[0], C[1]); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, bg);
-  gl.uniform3fv(p.u.uM, portal.m); gl.uniform2f(p.u.uL, Math.cos(portal.lph) * portal.lr, Math.sin(portal.lph) * portal.lr * 0.8); gl.uniform1f(p.u.uEn, portal.en); gl.uniform1f(p.u.uGlow, portal.glow);
+  gl.uniform1f(p.u.uPh, portal.ph); gl.uniform1f(p.u.uR, portal.R * (1 + Math.max(-0.22, Math.min(0.14, portal.beat * 0.25))));
+  gl.uniform1f(p.u.uVo, portal.vo); gl.uniform1f(p.u.uRot, portal.rot); gl.uniform1f(p.u.uHi, portal.hi);
+  gl.uniform1f(p.u.uBeat, Math.min(1, Math.abs(portal.beat) * 0.6) * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uEn, portal.en); gl.uniform1f(p.u.uGlow, portal.glow);
+  gl.uniform3fv(p.u.uM, portal.m); gl.uniform2f(p.u.uC, C[0], C[1]); gl.uniform3fv(p.u.uMel, melodyColor().map(x => x / 255)); gl.uniform3fv(p.u.uBg, bg); gl.uniform3fv(p.u.uDeep, deep);
+  gl.uniform3fv(p.u['uS[0]'], portal.S);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
