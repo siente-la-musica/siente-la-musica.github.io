@@ -859,7 +859,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 173</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 174</div>
     </div>
   </div>
   <div class="group">
@@ -11418,23 +11418,28 @@ function drawIcons(dt) {
 // estría es una lente cilíndrica que las dobla y las estira en franjas, con un filo de prisma en los bordes.
 // Cada estría escucha su parte del sonido (los graves en el centro, los agudos hacia los lados): con más volumen
 // dobla más fuerte la luz y su reflejo se enciende; el bombo empuja las del centro. En silencio, todo quieto.
-const reed = { prog: null, lv: new Float32Array(32), v: new Float32Array(32), tg: new Float32Array(32), kick: 0, ph: 0, L: new Float32Array(16), lb: [0, 0, 0, 0] };
+const reed = { prog: null, lv: new Float32Array(32), v: new Float32Array(32), tg: new Float32Array(32), kick: 0, ph: 0, L: new Float32Array(16), lb: [0, 0, 0, 0], tex: null, src: null, wave: 0, rib: 0.5, ribA: 0, sw: -1, swA: 0 };
 function reedSetup() {
-  reed.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uN, uKick, uPh; uniform vec3 uC0, uC1, uC2, uMel, uBg; uniform float uLv[32]; uniform vec4 uL[4];
+  reed.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uN, uKick, uPh, uHasImg, uWave, uRib, uRibA, uSw, uSwA; uniform sampler2D uImg; uniform vec3 uC0, uC1, uC2, uMel, uBg; uniform float uLv[32]; uniform vec4 uL[4];
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 cov(vec2 uv) { return uCovK > 0. ? mix(uBg, texture(uCov, (uv - uCovR.xy) / uCovR.zw).rgb, uCovK) : uBg; }
     // lo que hay detrás del vidrio: la portada y cuatro luces de sus colores, altas y suaves
     vec3 back(vec2 uv, float asp) {
-      vec3 c = cov(uv) * (uNight > .5 ? .46 : .78);
+      vec3 c = cov(uv);
+      if (uHasImg > .5) { vec2 q = uv - .5; q.x *= asp; c = mix(c, texture(uImg, q / (max(asp, 1.) * 1.02) + .5).rgb, .85); }   // la portada nítida, que se reconoce a través del vidrio
+      c *= uNight > .5 ? .5 : .8;
       vec2 p = vec2(uv.x * asp, uv.y);
+      // la voz: una cinta de luz del color de la nota, a la altura de lo agudo o grave que se canta
+      float ry = p.y - uRib - .05 * sin(p.x * 2.2 + uPh * 1.7);
+      c += uMel * exp(-ry * ry / .004) * uRibA + uMel * exp(-ry * ry / .03) * uRibA * .35;
       for (int i = 0; i < 4; i++) { vec4 L = uL[i]; vec3 lc = i == 0 ? uC0 : i == 1 ? uC1 : i == 2 ? uC2 : uMel;
         vec2 d = (p - L.xy) * vec2(1., .8); float r2 = dot(d, d) / (L.z * L.z);
         c += lc * (exp(-r2) * L.w + exp(-r2 * 6.) * L.w * .6); }   // halo amplio y corazón más vivo
       return c;
     }
     void main() {
-      float asp = uRes.x / uRes.y, x = vUv.x * uN, i = floor(x), t = fract(x) * 2. - 1.;
+      float asp = uRes.x / uRes.y, xw = vUv.x + sin(vUv.y * 5.5 + uPh * 2.3) * uWave / uN, x = xw * uN, i = floor(x), t = fract(x) * 2. - 1.;   // vidrio apenas ondulado: se mece con los medios
       float lv = uLv[int(clamp(i, 0., 31.))];
       // la lente: cada estría muestra, invertida y ensanchada, la franja que tiene detrás
       float bend = (2. + 2.2 * lv + .5 * uKick) / uN, cx = (i + .5) / uN, sh = t * abs(t) * .35 + t * .65;
@@ -11445,6 +11450,7 @@ function reedSetup() {
       col *= 1. - .3 * pow(abs(t), 7.);
       float day = uNight > .5 ? 1. : .65;
       col += mix(col, vec3(1.), .5) * exp(-pow((t + .38) / .2, 2.)) * (.06 + .3 * lv + .1 * uKick) * day;   // el reflejo: ancho y suave, del color de lo que hay detrás
+      col += vec3(1.) * exp(-pow((vUv.x - uSw) / .05, 2.)) * exp(-pow((t + .38) / .3, 2.)) * uSwA * .35 * day;   // el destello que recorre el vidrio con el golpe
       // la luz de su parte del sonido sube por dentro de la estría, suave (sin bordes)
       vec3 rc = i / uN < .33 ? mix(uC0, uC1, i / uN * 3.) : i / uN < .66 ? mix(uC1, uC2, i / uN * 3. - 1.) : mix(uC2, uC0, i / uN * 3. - 2.);
       col += rc * exp(-max(vUv.y - lv * .85, 0.) * 5.) * lv * .22 * (.4 + .6 * nz) * day;
@@ -11470,9 +11476,19 @@ function drawReeds(dt) {
     const b = reed.lb[i], ph = reed.ph * (0.6 + i * 0.17) + i * 1.9;
     reed.L.set([asp * (0.5 + 0.36 * Math.sin(ph)), 0.5 + 0.22 * Math.cos(ph * 0.8 + i), 0.13 + 0.1 * b + (i === 0 ? P * 0.04 : 0), (night ? 0.95 : 0.55) * (0.25 + 1.2 * b) * musicGate + (i === 0 ? P * 0.25 : 0)], i * 4);
   }
+  reed.wave += (bandX(10, 26) * 1.6 * musicGate - reed.wave) * (1 - Math.pow(0.05, dt));
+  reed.ribA += (Math.min(1, voice * 1.4) * (night ? 0.55 : 0.4) * musicGate - reed.ribA) * (1 - Math.pow(0.03, dt));
+  reed.rib += ((0.3 + 0.45 * Math.min(1, Math.max(0, bright))) - reed.rib) * (1 - Math.pow(0.2, dt));
+  if (pulse.on && pulse.k > 0.55 && reed.sw > 1.2) { reed.sw = -0.15; reed.swA = Math.min(1, 0.5 + pulse.k * 0.5) * (state.noFlash ? 0.4 : 1); }   // un golpe fuerte: un destello cruza el vidrio
+  reed.sw += dt * 1.6; if (reed.sw > 1.2) reed.swA = 0;
   const bg = mix(0.5).map(v => (night ? v * 0.09 : v + (255 - v) * 0.75) / 255);
   const [cw, ch] = glCanvas(1), p = reed.prog;
   gl.useProgram(p.pr); glCoverBind(p);
+  const img = state.coverBg && coverClean ? coverClean : null;
+  if (!reed.tex) reed.tex = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE0); if (img && reed.src !== img) { try { glUpload(reed.tex, img); reed.src = img; } catch (e) { reed.src = null; } }
+  gl.bindTexture(gl.TEXTURE_2D, reed.tex); gl.uniform1i(p.u.uImg, 0); gl.uniform1f(p.u.uHasImg, img && reed.src === img ? 1 : 0);
+  gl.uniform1f(p.u.uWave, reed.wave * 0.14); gl.uniform1f(p.u.uRib, reed.rib); gl.uniform1f(p.u.uRibA, reed.ribA); gl.uniform1f(p.u.uSw, reed.sw); gl.uniform1f(p.u.uSwA, reed.swA);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uN, n); gl.uniform1f(p.u.uKick, reed.kick * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uPh, reed.ph);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
