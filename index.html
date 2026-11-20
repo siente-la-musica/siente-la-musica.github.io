@@ -864,7 +864,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 169</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 170</div>
     </div>
   </div>
   <div class="group">
@@ -8410,7 +8410,7 @@ function glCoverBind(p, unit = 5) {
   if (img && (covGL.src !== img || (liveOn && covGL.ver !== bgLive.ver))) { try { glUpload(covGL.tex, img); covGL.src = img; covGL.ver = bgLive.ver; } catch (e) { covGL.src = null; } }
   gl.bindTexture(gl.TEXTURE_2D, covGL.tex); gl.activeTexture(gl.TEXTURE0);
   gl.uniform1i(p.u.uCov, unit);
-  const night = state.theme === 'dark', S = Math.max(W, H) * 1.18, ox = Math.sin(time * 0.031) * W * 0.03, oy = Math.cos(time * 0.027) * H * 0.03;
+  const S = Math.max(W, H) * (liveOn ? 1.05 : 1.18), ox = liveOn ? 0 : Math.sin(time * 0.031) * W * 0.03, oy = liveOn ? 0 : Math.cos(time * 0.027) * H * 0.03, night = state.theme === 'dark';
   gl.uniform1f(p.u.uCovK, img && covGL.src === img ? (liveOn ? 0.9 : (night ? 0.36 : 0.2) * bgFade) : 0);
   gl.uniform4f(p.u.uCovR, ((W - S) / 2 + ox) / W, ((H - S) / 2 - oy) / H, S / W, S / H);
 }
@@ -8498,8 +8498,8 @@ function lavaSetup() {
         col = mix(col, iri, line * .12);
         glow = (pow(clamp(F / .5, 0., 1.), 1.6) * .6 + (1. - exp(-Fw * Fw * 1.2)) * .55) * (1. - a) * uGlow; ga = .62;
       }
-      // grano de película, distinto en cada fotograma
-      col += (h(gl_FragCoord.xy) - .5) * .035;
+      // grano finísimo (el mismo en todas las escenas): solo evita bandas
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       vec3 gc = mix(wide, cool, .5);
       o = vec4(col * a + gc * glow * ga, clamp(a + glow * ga, 0., 1.));
     }`);
@@ -8630,7 +8630,7 @@ function dotsSetup() {
         col = mix(col, iri, line * .12);
         glow = pow(clamp(F / .5, 0., 1.), 1.5) * (1. - a) * uGlow; ga = .6;
       }
-      col += (h(gl_FragCoord.xy) - .5) * .035;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col * a + cool * glow * ga, clamp(a + glow * ga, 0., 1.));
     }`);
 }
@@ -8747,7 +8747,7 @@ function puffsSetup() {
         lit = mix(lit, sky, uZ[i].x * .22);                                 // bruma: las del fondo, más lejanas
         col = mix(col, lit, a);
       }
-      col += (h(gl_FragCoord.xy) - .5) * .035;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -8893,7 +8893,7 @@ function bustSetup() {
       // aura: la luz de la figura se abre en el aire (más con el bombo y la energía)
       float od = max(d, 0.), aura = exp(-od / (.05 + uP * .025)) * (1. - a.y);
       col += (uNight > .5 ? uCol * .32 : (mix(uCol, vec3(1.), .5) - bg) * .2) * aura * (.7 + uP * .8);
-      col += (h(gl_FragCoord.xy) - .5) * (.035 + uGr * .05);
+      col += (h(gl_FragCoord.xy) - .5) * (.015 + uGr * .05);
       o = vec4(col, 1.);
     }`);
 }
@@ -9074,7 +9074,7 @@ function catsSetup() {
         col = mix(col, ec, eye * (1. - c2.w * .4));
         col += mix(uMel, vec3(1.), .3) * exp(-dot(lp - ep, lp - ep) / .004) * uVoice * (uNight > .5 ? .35 : .12) * (1. - c2.w * .5);
       }
-      col += (h(gl_FragCoord.xy) - .5) * .07;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -9338,7 +9338,7 @@ function orbsSetup() {
           col += pal6(seed) * exp(-(r - 1.) * 5.) * (.08 + o.x * .25 + wave * .3);
         }
       }
-      col += (h(gl_FragCoord.xy) - .5) * .035;   // grano fino
+      col += (h(gl_FragCoord.xy) - .5) * .015;   // grano fino
       o = vec4(col, 1.);
     }`);
 }
@@ -9453,7 +9453,7 @@ function harpSetup() {
       } else {   // un resplandor de color por el borde de la cortina, como luz sobre el papel
         float eg = (t - lenH) / .07; col = mix(col, mix(pal(hueX), vec3(1.), .35), exp(-eg * eg) * (.18 + uP * .1));
       }
-      col += (h(gl_FragCoord.xy) - .5) * .025;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
   const gl = GLX.gl; harp.tex = gl.createTexture();
@@ -9800,17 +9800,17 @@ function drawCrystal(dt) {
     const m = b.r * 0.9;   // paredes blandas: ninguna gota se sale del cuadro
     if (b.x < m) b.vx += (m - b.x) * 6 * dt; if (b.x > asp - m) b.vx -= (b.x - asp + m) * 6 * dt;
     if (b.y < m) b.vy += (m - b.y) * 6 * dt; if (b.y > 1 - m) b.vy -= (b.y - 1 + m) * 6 * dt;
-    const damp = Math.pow(0.4 * musicGate + 0.015 * (1 - musicGate), dt); b.vx *= damp; b.vy *= damp; b.x += b.vx * dt;   // en silencio se aquietan del todo b.y += b.vy * dt;
+    const damp = Math.pow(0.4 * musicGate + 0.015 * (1 - musicGate), dt); b.vx *= damp; b.vy *= damp; b.x += b.vx * dt; b.y += b.vy * dt;   // en silencio se aquietan del todo
     const k0 = Math.floor(i / n * BANDS * 0.8), k1 = Math.min(BANDS, k0 + Math.max(3, Math.floor(BANDS / n)));   // cada gota escucha su tramo del espectro
     const gt = (i === 0 ? voice * 0.6 : 0) + bandX(k0, k1) * 0.6;
     b.g += (gt - b.g) * (1 - Math.pow(gt > b.g ? 0.0005 : 0.01, dt));   // la primera es la gota de la voz
     crystal.B.set([b.x, b.y, b.r * (0.78 + P * 0.18 + b.g * 0.65), b.ph], i * 4);
   });
   // la portada en color (si está y la opción de fondo está activa)
-  const gl = GLX.gl, img = state.coverBg && coverClean ? coverClean : null;
+  const gl = GLX.gl, liveOn = state.liveBg && state.coverBg, img = liveOn ? bgLive : state.coverBg && coverClean && bgCur && bgCur.color ? bgCur.color : null;   // el mismo fondo suave que las demás escenas
   if (!crystal.tex) crystal.tex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0);
-  if (img && crystal.texSrc !== img) { try { glUpload(crystal.tex, img); crystal.texSrc = img; } catch (e) { crystal.texSrc = null; } }
+  if (img && (crystal.texSrc !== img || (liveOn && crystal.texVer !== bgLive.ver))) { try { glUpload(crystal.tex, img); crystal.texSrc = img; crystal.texVer = bgLive.ver; } catch (e) { crystal.texSrc = null; } }
   const [cw, ch] = glCanvas(0.9);
   const p = crystal.prog; gl.useProgram(p.pr);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, crystal.tex); gl.uniform1i(p.u.uImg, 0);
@@ -9882,7 +9882,7 @@ function fireSetup() {
         col *= 1. - .08 * smoothstep(.3, .9, I) * a;                    // velo de tinta: profundidad
         col = mix(col, mix(bg, uK2, .35), exp(-max(uv.y - hx * .6, 0.) / (.16 + uHgt * .2)) * (.12 + uP * .1) * (1. - a));
       }
-      col += (h(gl_FragCoord.xy) - .5) * .03;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -10131,7 +10131,7 @@ function eclSetup() {
         if (uNight > .5) col += c * k * .7; else col = mix(col, c, k * .75);
         col = mix(col, vec3(.02), smoothstep(s.z * 1.04, s.z * .96, r));
       }
-      col += (h(gl_FragCoord.xy) - .5) * .06;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -10857,7 +10857,7 @@ function sphereSetup() {
       float sv = mix(uSp[i0], uSp[min(23, i0 + 1)], f_) * .5 + mix(uSp[max(0, i0 - 1)], uSp[min(23, i0 + 2)], f_) * .5;   // suavizado entre vecinas: una curva, no dientes
       float rr = 1.1 + sv * .12, ln = exp(-pow((r - rr) * uR * uRes.y / 2.2, 2.));
       col += mix(uMel, vec3(1.), .45) * (ln * (.08 + sv * 1.1) + exp(-abs(r - rr) * 26.) * sv * .2) * step(.9, r);
-      col += (h(gl_FragCoord.xy) - .5) * (uNight > .5 ? .05 : .04);   // grano fino de papel
+      col += (h(gl_FragCoord.xy) - .5) * .015;   // grano fino de papel
       o = vec4(col, 1.);
     }`);
 }
@@ -10947,7 +10947,7 @@ function capsSetup() {
         k = mix(k, mix(k, vec3(1.), .55), exp(sd * uRes.y / 2.5));           // filo de luz de un par de píxeles
         col = mix(col, k, a * (.88 + g.y * .12));
       }
-      col += (h(gl_FragCoord.xy) - .5) * .04;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -11020,7 +11020,7 @@ function sakuraSetup() {
       dotC = mix(dotC, vec3(1.), smoothstep(.42, .46, rr) * (lit > 0. ? .25 : 0.));
       vec3 col = mix(under, dotC, a);
       col *= 1. - smoothstep(.45, .5, rr) * (1. - a) * .12;   // la sombrita del borde
-      col += (h(gl_FragCoord.xy) - .5) * .035;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -11101,7 +11101,7 @@ function vitSetup() {
         col += mix(uSun, vec3(1.), .25) * fill * (.1 + .32 * clamp(lv, 0., 1.2)) * (uNight > .5 ? 1. : .4);   // de día, menos: que no se lave a blanco
         col *= .86 + clamp(lv, 0., 1.2) * .22;
       }
-      col += (h(gl_FragCoord.xy) - .5) * .035;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -11189,7 +11189,7 @@ function lensSetup() {
         lensC += k * smoothstep(.3, .0, edge) * .55 * I;   // el color llena la lente
         col = mix(col, lensC, in2);
       }
-      col += (h(gl_FragCoord.xy) - .5) * .03;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -11394,7 +11394,7 @@ function iconsSetup() {
         col = mix(col, inside, a);
         col += c1 * exp(-max(0., sq - 1.) * 18.) * (1. - a) * (.08 + lv * .2);    // la tarjeta brilla un poco hacia fuera
       }
-      col += (h(gl_FragCoord.xy) - .5) * .025;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -11468,8 +11468,8 @@ function columnsSetup() {
         }
       }
       col += glow * (uNight > .5 ? 1. : .6);
-      // grano de película, más notorio, y una viñeta suave
-      col += (h(gl_FragCoord.xy * .7) - .5) * .05;
+      // grano finísimo y una viñeta suave
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
@@ -11539,7 +11539,7 @@ function tubosSetup() {
         }
       }
       col = mix(col + glow, body, aaIn);
-      col += (h(gl_FragCoord.xy) - .5) * .03;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -11658,7 +11658,7 @@ function fanSetup() {
         k = mix(k, k * .82, smoothstep(.0, .08, u) * 0. + smoothstep(.93, 1., u) * .15 + smoothstep(.07, 0., u) * .15);   // las puntas redondas, un poco más hondas
         col = mix(col, k, a);
       }
-      col += (h(gl_FragCoord.xy) - .5) * .05;   // grano de papel
+      col += (h(gl_FragCoord.xy) - .5) * .015;   // grano de papel
       o = vec4(col, 1.);
     }`);
 }
@@ -11793,7 +11793,7 @@ function discoSetup() {
         float star = exp(-abs(d.y) / .0016) * exp(-abs(d.x) / L) + exp(-abs(d.x) / .0016) * exp(-abs(d.y) / L) + exp(-dot(d, d) / .00012);
         col += mix(lc(int(mod(fi, 3.))), vec3(1.), .7) * star * life * .55;
       }
-      col += (h(gl_FragCoord.xy) - .5) * .03;
+      col += (h(gl_FragCoord.xy) - .5) * .015;
       o = vec4(col, 1.);
     }`);
 }
@@ -12419,7 +12419,7 @@ function circSetup() {
           col = mix(col, L, a1);
         }
       }
-      col += (h(gl_FragCoord.xy) - .5) * .06;   // grano de papel
+      col += (h(gl_FragCoord.xy) - .5) * .015;   // grano de papel
       o = vec4(col, 1.);
     }`);
 }
