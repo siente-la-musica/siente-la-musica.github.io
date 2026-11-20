@@ -863,7 +863,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 184</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 185</div>
     </div>
   </div>
   <div class="group">
@@ -11494,17 +11494,17 @@ function drawLayers(dt) {
 // al moverse) y la nota tiñe el hilo de afuera; los platillos hacen titilar las burbujas. En silencio, quieto.
 const liq = { prog: null, ph: 0, amp: 0, wave: [-9, -9, -9], wi: 0, film: 0, vo: 0, hi: 0, drops: new Float32Array(16), sp: 0, eq: new Float32Array(16), eqv: new Float32Array(16), eqt: new Float32Array(16), kick: 0, bass: 0 };
 function liqSetup() {
-  liq.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uAmp, uFilm, uHi, uX, uKick, uBass; uniform float uEq[16]; uniform vec3 uWave, uMel, uC0, uC1, uC2, uBg; uniform vec4 uD[4];
+  liq.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uAmp, uFilm, uHi, uX, uKick, uBass, uSw, uSwY; uniform vec3 uM; uniform vec3 uWave, uMel, uC0, uC1, uC2, uBg; uniform vec4 uD[4];
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     // el arcoíris de una película fina: el color según su grosor (como el aceite o una pompa)
     vec3 film(float t) { return clamp(.5 + .5 * cos(6.2832 * (t + vec3(0., .33, .67))), 0., 1.); }
+    // el borde: tres ondas amplias que la música hace crecer despacio (graves la grande, medios la mediana,
+    // agudos un rizo fino), sobre una curva grande en S; el bombo lo hincha suave. Se mueve como aceite, sin nervios.
     float edge(float y) {
-      float e = uX + .09 * sin(y * 2.3 + uPh * .25 + .8) + uAmp * (.04 * sin(y * 4.1 + uPh) + .025 * sin(y * 9.3 - uPh * 1.4 + 1.) + .01 * sin(y * 17. + uPh * 2.1));   // una curva grande en S, y ondas más finas encima
-      for (int j = 0; j < 3; j++) { float wy = uWave[j]; if (wy > -5.) e += .05 * exp(-pow((y - wy) / .18, 2.)); }   // la ola del bombo
-      // el borde sigue el espectro de abajo (graves) arriba (agudos): cada tramo avanza con su sonido
-      float sy = clamp(y, 0., 1.) * 15., sv = mix(uEq[int(floor(sy))], uEq[int(min(15., floor(sy) + 1.))], smoothstep(0., 1., fract(sy)));
-      e += .09 * sv;
+      float e = uX + .09 * sin(y * 2.3 + uPh * .25 + .8);
+      e += uM.x * sin(y * 3.1 + uPh * .55) + uM.y * sin(y * 5.7 - uPh * .8 + 1.) + uM.z * sin(y * 9.4 + uPh * 1.2 + 2.);
+      e += uSw * exp(-pow((y - uSwY) / .3, 2.));
       return e;
     }
     void main() {
@@ -11560,23 +11560,23 @@ function drawLiquid(dt) {
   if (!glInit()) { drawBars(dt); return; }
   if (!liq.prog) liqSetup();
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
-  liq.ph += dt * musicGate * (0.25 + energy * 1.4 + bandX(10, 26) * 0.8);
-  liq.amp += ((0.6 + 0.9 * Math.pow(bandX(8, 26), 1.1) * (0.6 + 0.8 * dynL)) * (0.4 + 0.6 * musicGate) - liq.amp) * (1 - Math.pow(0.03, dt));
-  if (pulse.on) { liq.wave[liq.wi++ % 3] = -0.15; liq.kick = Math.min(1.2, liq.kick + 0.6 + pulse.k * 0.5); for (let k = 0; k < 5; k++) liq.eqv[k] += 1.5 + pulse.k * 2.5; }
-  liq.kick *= Math.pow(0.04, dt);
-  liq.bass += (Math.pow(bandX(0, 10), 1.2) * musicGate - liq.bass) * (1 - Math.pow(liq.bass < bandX(0, 10) ? 0.001 : 0.05, dt));
-  for (let k = 0; k < 16; k++) { const a = Math.floor(k / 16 * BANDS * 0.9); liq.eqt[k] = Math.pow(bandX(a, Math.min(BANDS, a + Math.ceil(BANDS / 16) + 1)), 1.2) * (0.6 + 0.9 * dynL) * musicGate; }
-  springTo(liq.eq, liq.eqv, liq.eqt, dt, 140, 0.72);
-  // suavizado entre tramos vecinos: el borde es una curva líquida, nunca un serrucho
-  const eqS = liq.eqS || (liq.eqS = new Float32Array(16)), tmp = liq.eqT || (liq.eqT = new Float32Array(16)); eqS.set(liq.eq);
-  for (let pass = 0; pass < 4; pass++) { for (let k = 0; k < 16; k++) tmp[k] = (eqS[Math.max(0, k - 1)] + 2 * eqS[k] + eqS[Math.min(15, k + 1)]) / 4; eqS.set(tmp); }
-  for (let j = 0; j < 3; j++) if (liq.wave[j] > -5) { liq.wave[j] += dt * (1.1 + energy * 1.5); if (liq.wave[j] > 1.3) liq.wave[j] = -9; }
+  // todo con inercia (como un líquido viscoso): la velocidad del flujo y el tamaño de cada onda siguen la música con suavidad
+  const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
+  liq.spd = ease(liq.spd || 0, musicGate * (0.18 + energy * 1.1 + bandX(10, 26) * 0.5), 0.8); liq.ph += dt * liq.spd;
+  liq.m = liq.m || [0, 0, 0];
+  const mt = [0.015 + 0.065 * Math.pow(bandX(0, 10), 1.2) * (0.6 + 0.8 * dynL), 0.008 + 0.035 * bandX(10, 26), 0.003 + 0.013 * bandX(26, BANDS)].map(v => v * (0.3 + 0.7 * musicGate));
+  for (let k = 0; k < 3; k++) liq.m[k] = ease(liq.m[k], mt[k], 0.45);
+  if (pulse.on) { liq.swT = Math.min(0.07, (liq.swT || 0) + 0.03 + pulse.k * 0.03); liq.swY = 0.2 + 0.6 * Math.random(); }
+  liq.swT = (liq.swT || 0) * Math.exp(-dt / 0.35); liq.sw = ease(liq.sw || 0, liq.swT, 0.12); liq.swYs = ease(liq.swYs ?? 0.5, liq.swY ?? 0.5, 0.25);
+  liq.kick = ease(liq.kick, 0, 0.4);
+  if (pulse.on) liq.kick = Math.min(1, liq.kick + 0.4 + pulse.k * 0.3);
+  liq.bass = ease(liq.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.5);
   liq.vo += (Math.min(1, voice * 1.4) - liq.vo) * (1 - Math.pow(0.05, dt));
   liq.film += dt * musicGate * (0.05 + liq.vo * 0.6);                       // la voz desliza los colores de la película
   liq.hi += (bandX(30, BANDS) * musicGate - liq.hi) * (1 - Math.pow(0.04, dt));
   // gotas sueltas (fijas en su sitio; la caja las infla un instante)
   if (hits.snare) liq.sp = 1; liq.sp *= Math.pow(0.05, dt);
-  const ex = asp < 1 ? 0.42 * asp : 0.5 * asp, D = asp < 1 ? [[0.12, 0.85, 0.022], [0.03, 0.62, 0.012], [0.28, 0.42, 0.018], [0.2, 0.2, 0.01]] : [[0.18, 0.78, 0.022], [0.08, 0.5, 0.013], [0.42, 0.3, 0.019], [0.3, 0.14, 0.011]];
+  const ex = asp < 1 ? 0.48 * asp : 0.55 * asp, D = asp < 1 ? [[0.12, 0.85, 0.022], [0.03, 0.62, 0.012], [0.28, 0.42, 0.018], [0.2, 0.2, 0.01]] : [[0.18, 0.78, 0.022], [0.08, 0.5, 0.013], [0.42, 0.3, 0.019], [0.3, 0.14, 0.011]];
   D.forEach(([x, y, r], i) => liq.drops.set([x * asp, y, r * (1 + 0.25 * liq.sp * (i % 2)), liq.film * 0.5 + i * 0.3], i * 4));
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k])));
   const bg = mix(0.5).map(v => (v + (255 - v) * 0.92) / 255);
@@ -11584,9 +11584,9 @@ function drawLiquid(dt) {
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
   gl.uniform1f(p.u.uPh, liq.ph); gl.uniform1f(p.u.uAmp, liq.amp); gl.uniform1f(p.u.uFilm, liq.film); gl.uniform1f(p.u.uHi, liq.hi); gl.uniform1f(p.u.uX, ex);
-  gl.uniform3fv(p.u.uWave, liq.wave); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, bg);
+  gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, bg);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
-  gl.uniform4fv(p.u['uD[0]'], liq.drops); gl.uniform1fv(p.u['uEq[0]'], liq.eqS); gl.uniform1f(p.u.uKick, liq.kick * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uBass, liq.bass);
+  gl.uniform4fv(p.u['uD[0]'], liq.drops); gl.uniform3fv(p.u.uM, liq.m); gl.uniform1f(p.u.uSw, liq.sw); gl.uniform1f(p.u.uSwY, liq.swYs); gl.uniform1f(p.u.uKick, liq.kick * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uBass, liq.bass);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
