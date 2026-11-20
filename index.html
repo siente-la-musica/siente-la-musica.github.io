@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 193</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 194</div>
     </div>
   </div>
   <div class="group">
@@ -11438,27 +11438,37 @@ function drawIcons(dt) {
 // el interior se enciende con el golpe; la voz tiñe la luz del fondo. En silencio, quieto.
 const tun = { prog: null, z: 0, spd: 0, kick: 0, amp: 0.6, bass: 0, vo: 0, bloom: 0, P: new Float32Array(36) };
 function tunnelSetup() {
-  tun.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uZ, uAmp, uR, uBloom, uVo; uniform vec3 uP[12]; uniform vec3 uMel;
+  tun.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uZ, uAmp, uR, uBloom, uVo, uLoud, uHi; uniform vec3 uP[12]; uniform vec3 uMel;
     vec3 grad(int o, float k) { k = fract(k) * 4.; int i = int(k); float f = smoothstep(0., 1., fract(k)); return mix(uP[o + i], uP[o + (i == 3 ? 0 : i + 1)], f); }
     // el eje del tubo: curvas lentas en las dos direcciones (sumas de senos de distinta escala)
-    vec2 axis(float z) { return uAmp * vec2(2.2 * sin(z * .045) + 1.1 * sin(z * .11 + 1.3), 1.7 * sin(z * .038 + 2.) + .9 * cos(z * .095)); }
+    vec2 axis(float z) { return uAmp * vec2(2.2 * sin(z * .07) + 1.1 * sin(z * .17 + 1.3), 1.7 * sin(z * .06 + 2.) + .9 * cos(z * .15)); }   // curvas que se suceden por compases
     vec3 wallCol(float ang, float z) {
-      float seg = z / 16., sf = fract(seg); int s0 = int(mod(floor(seg), 3.)) * 4, s1 = int(mod(floor(seg) + 1., 3.)) * 4;
-      float k = .2 * cos(ang - 1. + z * .03) + z * .022;   // de un lado a otro y con la profundidad, sin cuñas
-      return mix(grad(s0, k), grad(s1, k), smoothstep(.45, 1., sf));
+      // cada tiempo de la canción es una franja de 4 unidades: el color cambia de franja en franja (pasa una por golpe)
+      // y cada compás (4 tiempos) cambia el orden de los colores; los bordes de las franjas son suaves
+      float bar = z / 16., bf = fract(bar); int s0 = int(mod(floor(bar), 3.)) * 4, s1 = int(mod(floor(bar) + 1., 3.)) * 4;
+      float beat = z / 4., bi = floor(beat), bfr = fract(beat);
+      float k = (bi + smoothstep(.4, 1., bfr)) * .11 + .06 * cos(ang - 1.);   // cada tiempo pasa al color vecino: se siente el ritmo como un degradado que avanza
+      return mix(grad(s0, k), grad(s1, k), smoothstep(.7, 1., bf));
     }
     vec3 shade(vec2 uv) {
       float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.);
       vec3 cam = vec3(axis(uZ), uZ), tg = vec3(axis(uZ + 3.), uZ + 3.);
       vec3 fw = normalize(tg - cam), rt = normalize(cross(vec3(0., 1., 0.), fw)), up = cross(fw, rt);
-      vec3 rd = normalize(fw * 1.9 + rt * p.x + up * p.y);   // lente más cerrado: se ve hondo y la boca de luz es grande
+      // como en una montaña rusa: la cámara se inclina hacia el lado de la curva
+      vec2 acc = axis(uZ + 6.) - 2. * axis(uZ + 3.) + axis(uZ);
+      float roll = clamp(-acc.x * 1.6, -.45, .45), cr = cos(roll), sr = sin(roll);
+      vec3 rt2 = rt * cr + up * sr, up2 = up * cr - rt * sr;
+      vec3 rd = normalize(fw * mix(1.95, 1.55, uLoud) + rt2 * p.x + up2 * p.y);   // lente cerrado (boca de luz grande); en lo fuerte se abre: más velocidad
       float t = .05, d = 0.;
       for (int i = 0; i < 70; i++) { vec3 P = cam + rd * t; d = uR - length(P.xy - axis(P.z)); if (d < .004 || t > 60.) break; t += max(d * .75, .01); }
       vec3 P = cam + rd * t; vec2 q = P.xy - axis(P.z); float ang = atan(q.y, q.x);
       vec3 c = wallCol(ang, P.z);
       vec3 n = normalize(vec3(-q, 0.));
       vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .42 + .4 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .25 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
-      c *= lit * (1. + 1.1 * uBloom);   // el interior se enciende con el golpe
+      c *= lit * (1. + .7 * uBloom) * (.85 + .3 * uLoud);   // el golpe ilumina suave; lo fuerte, más luz
+      // los agudos: destellos finos que corren por las paredes, como líneas de velocidad
+      float st = smoothstep(.97, 1., sin(ang * 17. + P.z * .9) * sin(P.z * .37 + ang * 5.)) * smoothstep(1., 4., t);
+      c += c * st * uHi * .9;   // del color de la pared, suaves
       // al fondo, luz: se aclara con la distancia (la voz la tiñe)
       float fog = 1. - exp(-t * .13);
       vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .4), uMel, uVo * .4);
@@ -11480,8 +11490,14 @@ function drawTunnel(dt) {
   if (pulse.on) tun.kick = Math.min(1, tun.kick + 0.5 + pulse.k * 0.4);
   tun.kick = ease(tun.kick, 0, 0.35);
   tun.loud = ease(tun.loud || 0, Math.min(1, energy * 1.6 + dynL * 0.5), 1.2);   // la intensidad de la canción, muy suavizada
-  tun.spd = ease(tun.spd, musicGate * (0.9 + tun.loud * 3.2), 1.4);              // siempre fluye con música; acelera y frena con suavidad (sin tirones)
+  // el viaje va al tempo: pasa una franja (4 unidades) por cada tiempo de la canción; si se sabe dónde cae el
+  // tiempo, el avance se corrige muy suave para que el cambio de franja caiga justo en el golpe (nunca a tirones)
+  const okT = tempo.period > 0.25 && tempo.conf > 0.2, per = okT ? tempo.period : 0.5;
+  let rate = 4 / per * (0.75 + 0.35 * tun.loud);
+  if (okT) { const ph = (((performance.now() / 1000 - tempo.phaseRef) / per) % 1 + 1) % 1, cur = ((tun.z / 4) % 1 + 1) % 1; let e = ph + 0.44 - cur; e -= Math.round(e); rate += e * 4 * 0.8; }   // (+0,44: el cambio de color de la franja cae sobre el golpe)
+  tun.spd = ease(tun.spd, musicGate * rate, 0.7);
   tun.z += dt * tun.spd;
+  tun.hi = ease(tun.hi || 0, bandX(28, BANDS) * musicGate, 0.15);
   tun.amp += (0.45 + 0.55 * Math.min(1, energy * 1.8) - tun.amp) * (1 - Math.exp(-dt / 2.5)) * musicGate;   // con más energía, curvas más marcadas (cambia despacio)
   tun.bass = ease(tun.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.25);
   tun.vo = ease(tun.vo, Math.min(1, voice * 1.4), 0.4);
@@ -11492,7 +11508,7 @@ function drawTunnel(dt) {
   const [cw, ch] = glCanvas(0.75), p = tun.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
-  gl.uniform1f(p.u.uZ, tun.z); gl.uniform1f(p.u.uAmp, tun.amp); gl.uniform1f(p.u.uR, 1 + 0.18 * tun.bass); gl.uniform1f(p.u.uBloom, tun.bloom * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uVo, tun.vo);
+  gl.uniform1f(p.u.uZ, tun.z); gl.uniform1f(p.u.uAmp, tun.amp); gl.uniform1f(p.u.uR, 1 + 0.18 * tun.bass); gl.uniform1f(p.u.uBloom, tun.bloom * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uVo, tun.vo); gl.uniform1f(p.u.uLoud, tun.loud); gl.uniform1f(p.u.uHi, tun.hi);
   gl.uniform3fv(p.u['uP[0]'], tun.P); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
@@ -11514,18 +11530,18 @@ function portalSetup() {
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), q = p - uC;
       float an = atan(q.y, q.x);
-      float R = uR * (1. + (.02 + uM.x) * sin(2. * an + uPh * .4) + (.008 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));
+      float R = uR * (1. + .1 * cos(an - uA1) + (.02 + uM.x) * sin(2. * an + uPh * .4) + (.008 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));   // el hueco se estira hacia donde va la luz: el centro también se mueve
       float r = length(q) / R;
       // los colores: giran alrededor y salen hacia afuera en ondas suaves (manan desde la orilla)
       float k = an / 6.2832 + uRot + .18 * sin(an * 2. - uPh * .7) * .5 + (r - 1.) * .22 - uPh * .05;
-      vec3 ring = ramp(k) * (1. + .14 * sin(an * 3. + uPh * 2.) * uHi);
+      vec3 ring = ramp(k + uVo * .0) * (1. + .14 * sin(an * 3. + uPh * 2.) * uHi);
       ring = mix(ring, uMel, uVo * .3 * smoothstep(-.2, .9, sin(an - 1.2 + uPh * .2)));
       // el aura no es un aro parejo: tiene lóbulos (más luz hacia un lado, una cola hacia otro) que giran alrededor del hueco
-      float lobe = max(.12, 1. + .8 * cos(an - uA1) + .25 * cos(2. * an - uA2));
-      float inner = smoothstep(.5, 1.12, r);                                            // del hueco al color, suave (sin círculo marcado)
-      float outer = exp(-max(r - 1., 0.) * (1.35 - .5 * uGlow) / pow(lobe, 1.4));   // hacia el lóbulo la luz se extiende mucho más
+      float lobe = max(.3, 1. + .55 * cos(an - uA1) + .18 * cos(2. * an - uA2));   // lóbulos suaves
+      float inner = smoothstep(.35, 1.2, r);                                            // del hueco al color, muy suave
+      float outer = exp(-max(r - .9, 0.) * (1.2 - .45 * uGlow) / lobe);   // hacia el lóbulo la luz se extiende más, sin bordes
       vec3 hc = mix(ring, uDeep, smoothstep(1.1, 2.4, r)), halo = hc * outer;
-      halo *= .25 + .6 * lobe;   // del otro lado, el borde casi sin color (como en las referencias)
+      halo *= .4 + .5 * lobe;
       vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg, col;
       if (uNight > .5) {
         col = bg + halo * inner * (.75 + .9 * uEn + .35 * uBeat) + hc * exp(-max(r - 1., 0.) * .5 / lobe) * .16 * inner;   // con la música crece la luz, no el tamaño
@@ -11545,8 +11561,9 @@ function drawPortal(dt) {
   portal.spd = ease(portal.spd, musicGate * (0.25 + energy * 1.3), 0.9); portal.ph += dt * portal.spd;
   portal.rot += dt * musicGate * (0.015 + energy * 0.12);                                 // los colores giran con la energía
   const base = (asp < 1 ? 0.2 : 0.24) * Math.min(asp, 1.1);
-  portal.R = ease(portal.R || base, base * (0.94 + 0.1 * Math.pow(bandX(0, 10), 1.1) * musicGate), 0.6);   // el hueco apenas respira (no se acerca ni se aleja)
-  portal.a1 = (portal.a1 || 0) + dt * portal.spd * 0.9; portal.a2 = (portal.a2 || 2) - dt * portal.spd * 0.55;   // los lóbulos del aura giran alrededor, con la música
+  portal.R = ease(portal.R || base, base * (0.95 + 0.08 * Math.pow(bandX(0, 10), 1.1) * musicGate), 0.6);   // el hueco apenas respira (no se acerca ni se aleja)
+  const okT = tempo.period > 0.25 && tempo.conf > 0.2, bps = okT ? 1 / tempo.period : 2;   // la luz gira al tempo: una vuelta cada dos compases (8 tiempos)
+  portal.a1 = (portal.a1 || 0) + dt * musicGate * bps * (6.2832 / 8) * (0.6 + 0.5 * portal.en); portal.a2 = (portal.a2 || 2) - dt * musicGate * bps * (6.2832 / 12);
   if (pulse.on) portal.beat = Math.min(1, portal.beat + 0.5 + pulse.k * 0.4);   // el golpe: un destello de luz suave (no cambia el tamaño)
   portal.beat = ease(portal.beat, 0, 0.3);
   portal.vo = ease(portal.vo, Math.min(1, voice * 1.4), 0.4);
