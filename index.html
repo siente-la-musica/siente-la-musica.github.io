@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 194</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 195</div>
     </div>
   </div>
   <div class="group">
@@ -11445,10 +11445,10 @@ function tunnelSetup() {
     vec3 wallCol(float ang, float z) {
       // cada tiempo de la canción es una franja de 4 unidades: el color cambia de franja en franja (pasa una por golpe)
       // y cada compás (4 tiempos) cambia el orden de los colores; los bordes de las franjas son suaves
-      float bar = z / 16., bf = fract(bar); int s0 = int(mod(floor(bar), 3.)) * 4, s1 = int(mod(floor(bar) + 1., 3.)) * 4;
-      float beat = z / 4., bi = floor(beat), bfr = fract(beat);
-      float k = (bi + smoothstep(.4, 1., bfr)) * .11 + .06 * cos(ang - 1.);   // cada tiempo pasa al color vecino: se siente el ritmo como un degradado que avanza
-      return mix(grad(s0, k), grad(s1, k), smoothstep(.7, 1., bf));
+      // un degradado continuo a lo largo del túnel (sin franjas): los colores de la portada se funden unos en otros
+      float bar = z / 40., bf = fract(bar); int s0 = int(mod(floor(bar), 3.)) * 4, s1 = int(mod(floor(bar) + 1., 3.)) * 4;
+      float k = z * .012 + .06 * cos(ang - 1.);
+      return mix(grad(s0, k), grad(s1, k), smoothstep(0., 1., bf));
     }
     vec3 shade(vec2 uv) {
       float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.);
@@ -11466,10 +11466,8 @@ function tunnelSetup() {
       vec3 n = normalize(vec3(-q, 0.));
       vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .42 + .4 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .25 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
       c *= lit * (1. + .7 * uBloom) * (.85 + .3 * uLoud);   // el golpe ilumina suave; lo fuerte, más luz
-      // los agudos: destellos finos que corren por las paredes, como líneas de velocidad
-      float st = smoothstep(.97, 1., sin(ang * 17. + P.z * .9) * sin(P.z * .37 + ang * 5.)) * smoothstep(1., 4., t);
-      c += c * st * uHi * .9;   // del color de la pared, suaves
-      // al fondo, luz: se aclara con la distancia (la voz la tiñe)
+      c *= .94 + .06 * sin(P.z * .55);                                                   // una variación de luz muy leve a lo largo: se siente la profundidad y la velocidad
+            // al fondo, luz: se aclara con la distancia (la voz la tiñe)
       float fog = 1. - exp(-t * .13);
       vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .4), uMel, uVo * .4);
       return mix(c, endL, smoothstep(.1, .88, fog));   // la boca de luz del fondo, grande
@@ -11492,10 +11490,12 @@ function drawTunnel(dt) {
   tun.loud = ease(tun.loud || 0, Math.min(1, energy * 1.6 + dynL * 0.5), 1.2);   // la intensidad de la canción, muy suavizada
   // el viaje va al tempo: pasa una franja (4 unidades) por cada tiempo de la canción; si se sabe dónde cae el
   // tiempo, el avance se corrige muy suave para que el cambio de franja caiga justo en el golpe (nunca a tirones)
+  // rápido desde que suena: la velocidad sale del tempo y de la intensidad (canciones duras, mucho más rápido);
+  // dentro de cada tiempo la velocidad respira (crece en el golpe y se relaja entre golpes), sin frenar nunca
   const okT = tempo.period > 0.25 && tempo.conf > 0.2, per = okT ? tempo.period : 0.5;
-  let rate = 4 / per * (0.75 + 0.35 * tun.loud);
-  if (okT) { const ph = (((performance.now() / 1000 - tempo.phaseRef) / per) % 1 + 1) % 1, cur = ((tun.z / 4) % 1 + 1) % 1; let e = ph + 0.44 - cur; e -= Math.round(e); rate += e * 4 * 0.8; }   // (+0,44: el cambio de color de la franja cae sobre el golpe)
-  tun.spd = ease(tun.spd, musicGate * rate, 0.7);
+  const ph = okT ? (((performance.now() / 1000 - tempo.phaseRef) / per) % 1 + 1) % 1 : 0;
+  let rate = 4 / per * (1.4 + 1.8 * tun.loud) * (1 + 0.22 * (0.5 + 0.5 * Math.cos(ph * 6.2832)));
+  tun.spd = ease(tun.spd, musicGate * rate, 0.25);
   tun.z += dt * tun.spd;
   tun.hi = ease(tun.hi || 0, bandX(28, BANDS) * musicGate, 0.15);
   tun.amp += (0.45 + 0.55 * Math.min(1, energy * 1.8) - tun.amp) * (1 - Math.exp(-dt / 2.5)) * musicGate;   // con más energía, curvas más marcadas (cambia despacio)
