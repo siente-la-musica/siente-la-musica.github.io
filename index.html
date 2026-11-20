@@ -792,6 +792,7 @@
         <button data-mode="beam">Horizonte</button>
         <button data-mode="liquid">Iridiscencia</button>
         <button data-mode="layers">Capas</button>
+        <button data-mode="portal">Portal</button>
         <button data-mode="traces">Trazos</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="strobe">Estrobo</button>
@@ -863,7 +864,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 186</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 187</div>
     </div>
   </div>
   <div class="group">
@@ -1164,7 +1165,7 @@ document.getElementById('introSp').onclick = e => { e.stopPropagation(); documen
 // en un celular o tableta (pantalla táctil sin ratón) no se puede capturar el audio del equipo: Spotify va primero y el micrófono como alternativa
 if ((matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) || !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; document.getElementById('introMic').hidden = false; }
 { const CATS = { esc: ['navidad', 'ruta', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
-    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
+    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
     por: ['cover', 'livecover', 'lyrics', 'artist', 'strobe', 'vinyl'] };
   const inCat = (m, c) => c === 'all' || (c === 'abs' ? !CATS.esc.includes(m) && !CATS.luz.includes(m) && !CATS.por.includes(m) : CATS[c].includes(m));
   document.querySelectorAll('.mode-cats button').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.cat;
@@ -4518,7 +4519,7 @@ function drawRecOverlay() {
   ctx.restore();
 }
 const artistClean = new Map();
-const LYRIC_LOW = new Set(['disco', 'halos', 'beam', 'liquid', 'layers', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'reeds', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'anillo']);
+const LYRIC_LOW = new Set(['disco', 'halos', 'beam', 'liquid', 'layers', 'portal', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'reeds', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'anillo']);
 const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 'tubes', 'cats', 'puffs', 'harp']);
 
 // ================= Director automático =================
@@ -4526,7 +4527,7 @@ const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 't
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
   medium: { name: 'media',     modes: ['icons', 'reeds', 'traces', 'loop', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
@@ -11416,6 +11417,80 @@ function drawIcons(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
+// ================= Escena: Portal =================
+// Un hueco oscuro rodeado de un aura de luz en arcoíris, muy difuminada, como los pósters de luz de color: el color
+// gira alrededor del hueco (desde el tono de la portada, recorriendo todo el círculo), es intenso junto al borde y
+// se funde hacia afuera en un azul hondo, con una cola que se estira hacia un lado. Todo con inercia, como algo
+// vivo y lento: el hueco respira con los graves y late con cada bombo (se contrae y vuelve), los medios deforman
+// el contorno, la voz tiñe el aura con el color de la nota, y los colores giran con la energía. En silencio, quieto.
+const portal = { prog: null, ph: 0, spd: 0, R: 0, beat: 0, beatV: 0, wob: 0, vo: 0, rot: 0, hi: 0, tail: 0 };
+function portalSetup() {
+  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uWob, uVo, uRot, uHi, uHue, uTail, uBeat; uniform vec2 uC; uniform vec3 uMel, uBg;
+    ${GLSL_COVER}
+    vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6. + vec3(0., 4., 2.), 6.) - 3.) - 1., 0., 1.); return v * mix(vec3(1.), k, s); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), q = p - uC;
+      float an = atan(q.y, q.x);
+      // contorno orgánico: ondas lentas que los medios hacen crecer
+      float R = uR * (1. + (.03 + .035 * uWob) * sin(2. * an + uPh * .4) + (.012 + .018 * uWob) * sin(3. * an - uPh * .6 + 1.3));   // casi redondo, como un huevo suave
+      // la cola: hacia afuera el aura se estira en una dirección que gira despacio
+      vec2 td = vec2(cos(uTail), sin(uTail)); float along = dot(q, td);
+      vec2 qo = q - td * max(along, 0.) * .45;
+      float r = length(q) / R, ro = length(qo) / R;
+      // el color gira alrededor del hueco, desde el tono de la portada; la voz lo tiñe con la nota
+      // la gama de las referencias (magenta, rosa durazno, amarillo, turquesa, azul) que gira despacio, con un eco del color de la portada
+      float hk = fract(an / 6.2832 + uRot) * 5.;
+      vec3 S0 = vec3(1., .16, .76), S1 = vec3(1., .55, .5), S2 = vec3(.97, .93, .45), S3 = vec3(.35, .95, .92), S4 = vec3(.15, .3, .85);
+      vec3 ring = hk < 1. ? mix(S0, S1, hk) : hk < 2. ? mix(S1, S2, hk - 1.) : hk < 3. ? mix(S2, S3, hk - 2.) : hk < 4. ? mix(S3, S4, hk - 3.) : mix(S4, S0, hk - 4.);
+      ring = mix(ring, hsv(uHue, .7, 1.), .18);
+      ring = mix(ring, uMel, uVo * .35 * smoothstep(-.2, .9, sin(an - 1.2)));
+      vec3 deep = mix(vec3(.12, .14, .55), hsv(uHue, .6, .5), .2);           // el azul hondo de afuera
+      // perfil: borde interior suave hacia el hueco, caída larga hacia afuera
+      float inner = smoothstep(.62 - .08 * uBeat, 1.02, r);
+      float outer = exp(-max(ro - 1., 0.) * (1.55 - .25 * uHi));
+      vec3 hc = mix(ring, deep, smoothstep(1., 2.1, ro)), halo = hc * outer;
+      halo += mix(ring, vec3(1.), .3) * exp(-pow((r - .97) / .05, 2.)) * (.35 + .6 * uBeat);   // un filo fino de luz en la orilla, más vivo con el latido
+      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg;
+      vec3 col;
+      if (uNight > .5) col = bg + halo * inner * 1.6;
+      else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }   // de día el hueco también es hondo
+      if (uNight > .5) col = mix(col, vec3(.015, .01, .03), (1. - inner) * .9);           // el hueco: oscuro y hondo
+      col = uNight > .5 ? 1. - exp(-col * 1.35) : col;
+      if (uNight > .5) col *= 1. - .2 * pow(length(vUv - .5) * 1.3, 2.);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawPortal(dt) {
+  if (!glInit()) { drawBars(dt); return; }
+  if (!portal.prog) portalSetup();
+  const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
+  const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
+  portal.spd = ease(portal.spd, musicGate * (0.15 + energy * 0.9), 0.8); portal.ph += dt * portal.spd;
+  portal.rot += dt * musicGate * (0.004 + energy * 0.03);                          // los colores giran despacio
+  const base = (asp < 1 ? 0.2 : 0.24) * Math.min(asp, 1.1);
+  portal.R = ease(portal.R || base, base * (1 + 0.16 * Math.pow(bandX(0, 10), 1.2) * (0.6 + 0.8 * dynL) * musicGate), 0.35);   // respira con los graves
+  if (pulse.on) portal.beatV -= 2.2 + pulse.k * 2.5;                                // el latido: se contrae y vuelve
+  portal.beatV += (-portal.beat * 70 - portal.beatV * 10) * dt; portal.beat += portal.beatV * dt;
+  portal.wob = ease(portal.wob, bandX(10, 28) * musicGate, 0.5);
+  portal.vo = ease(portal.vo, Math.min(1, voice * 1.4), 0.4);
+  portal.hi = ease(portal.hi, bandX(28, BANDS) * musicGate, 0.3);
+  portal.tail += dt * musicGate * 0.05;
+  const hue = hexToHsl(rgbToHex(...RGB[0]))[0] / 360;
+  const bg = night ? [0.07, 0.035, 0.1] : [0.9, 0.89, 0.93];
+  const C = asp < 1 ? [asp * 0.5, 0.6] : [asp * 0.5, 0.53];
+  const [cw, ch] = glCanvas(0.85), p = portal.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
+  gl.uniform1f(p.u.uPh, portal.ph); gl.uniform1f(p.u.uR, portal.R * (1 + Math.max(-0.12, Math.min(0.08, portal.beat * 0.05)))); gl.uniform1f(p.u.uWob, portal.wob);
+  gl.uniform1f(p.u.uVo, portal.vo); gl.uniform1f(p.u.uRot, portal.rot); gl.uniform1f(p.u.uHi, portal.hi); gl.uniform1f(p.u.uHue, hue);
+  gl.uniform1f(p.u.uTail, -1.57 + 0.6 * Math.sin(portal.tail)); gl.uniform1f(p.u.uBeat, Math.min(1, Math.abs(portal.beat) * 0.6) * (state.noFlash ? 0.5 : 1));
+  gl.uniform2f(p.u.uC, C[0], C[1]); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, bg);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
 // ================= Escena: Capas =================
 // Formas orgánicas hechas de capas, como curvas de nivel o papel recortado: cada forma son doce siluetas
 // apiladas, cada una un poco más pequeña y corrida hacia su núcleo; afuera pálidas y translúcidas, adentro
@@ -13803,7 +13878,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
