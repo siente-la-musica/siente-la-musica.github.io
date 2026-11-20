@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 189</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 190</div>
     </div>
   </div>
   <div class="group">
@@ -11446,10 +11446,10 @@ function tunnelSetup() {
       c *= (.45 + .72 * lit) * (.75 + .6 * uBass) * mix(.55, 1.2, smoothstep(.4, 7., t));   // luz de un lado, y más luz hacia el fondo (lo cercano en penumbra)
       // los tramos: cada tanto un filo, con su brillo y la sombra que deja detrás
       // los anillos de luz que lanza cada bombo: nacen al fondo y viajan por las paredes hacia nosotros
-      for (int j = 0; j < 4; j++) { float rz = uRing[j]; if (rz < 0.) continue; float w = zz - rz; c += mix(c, vec3(1.), .55) * exp(-w * w / .5) * 1.1 * smoothstep(40., 20., rz - uZ); }
+      for (int j = 0; j < 4; j++) { float rz = uRing[j]; if (rz < 0.) continue; float w = zz - rz; c += c * exp(-w * w / .8) * .9 * smoothstep(40., 20., rz - uZ); }   // el anillo: la pared se enciende en su propio color
       float sf = fract(zz / 9.), fog = 1. - exp(-t * .14);
       c *= 1. - .3 * exp(-sf * 12.) * (1. - lit * .6);
-      c += mix(c, vec3(1.), .6) * exp(-pow((1. - sf) / .02, 2.)) * (.35 + .45 * lit + .6 * uKick) * (1. - fog * .8);
+      c += c * .9 * exp(-pow((1. - sf) / .025, 2.)) * (.35 + .45 * lit + .6 * uKick) * (1. - fog * .8);   // el filo, del color de la pared
       // hacia el fondo, la luz: se aclara (la voz la tiñe)
       float rr = length(d.xy); int se = int(mod(floor((uZ + 30.) / 9.), 3.)) * 4; vec3 endL = mix(mix(grad(se, .15 + rr * .9 + .1 * d.x) * 1.25, vec3(1.), .5 - rr * .4), uMel, uVo * .45);   // la luz del fondo: suave y limpia
       c = mix(c, endL, smoothstep(.35, .97, fog));
@@ -11504,9 +11504,9 @@ function drawTunnel(dt) {
 // se funde hacia afuera en un azul hondo, con una cola que se estira hacia un lado. Todo con inercia, como algo
 // vivo y lento: el hueco respira con los graves y late con cada bombo (se contrae y vuelve), los medios deforman
 // el contorno, la voz tiñe el aura con el color de la nota, y los colores giran con la energía. En silencio, quieto.
-const portal = { prog: null, ph: 0, spd: 0, R: 0, beat: 0, beatV: 0, wob: 0, vo: 0, rot: 0, hi: 0, tail: 0, m: [0, 0, 0], en: 0, glow: 0 };
+const portal = { lph: 0, lr: 0, cw: 0, prog: null, ph: 0, spd: 0, R: 0, beat: 0, beatV: 0, wob: 0, vo: 0, rot: 0, hi: 0, tail: 0, m: [0, 0, 0], en: 0, glow: 0 };
 function portalSetup() {
-  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uWob, uVo, uRot, uHi, uHue, uTail, uBeat, uEn, uGlow; uniform vec3 uM; uniform vec2 uC; uniform vec3 uMel, uBg;
+  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uWob, uVo, uRot, uHi, uHue, uTail, uBeat, uEn, uGlow; uniform vec3 uM; uniform vec2 uC, uL; uniform vec3 uMel, uBg;
     ${GLSL_COVER}
     vec3 hsv(float h, float s, float v) { vec3 k = clamp(abs(mod(h * 6. + vec3(0., 4., 2.), 6.) - 3.) - 1., 0., 1.); return v * mix(vec3(1.), k, s); }
     void main() {
@@ -11515,29 +11515,31 @@ function portalSetup() {
       // contorno orgánico: ondas lentas que los medios hacen crecer
       float R = uR * (1. + (.025 + uM.x) * sin(2. * an + uPh * .4) + (.01 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));   // un huevo suave que la música deforma con inercia
       // la cola: hacia afuera el aura se estira en una dirección que gira despacio
-      vec2 td = vec2(cos(uTail), sin(uTail)); float along = dot(q, td);
-      vec2 qo = q - td * max(along, 0.) * .45;
+      // la luz no rodea el hueco por igual: su centro está corrido (uL) y se pasea alrededor con la música, con una cola
+      vec2 qa = q - uL * uR, td = vec2(cos(uTail), sin(uTail)); float along = dot(qa, td);
+      vec2 qo = qa - td * max(along, 0.) * .5;
       float r = length(q) / R, ro = length(qo) / R;
+      an = atan(qa.y, qa.x);
       // el color gira alrededor del hueco, desde el tono de la portada; la voz lo tiñe con la nota
       // la gama de las referencias (magenta, rosa durazno, amarillo, turquesa, azul) que gira despacio, con un eco del color de la portada
       float hk = fract(an / 6.2832 + uRot) * 5.;
-      vec3 S0 = vec3(1., .16, .76), S1 = vec3(1., .55, .5), S2 = vec3(.97, .93, .45), S3 = vec3(.35, .95, .92), S4 = vec3(.15, .3, .85);
+      vec3 S0 = vec3(1., .06, .7), S1 = vec3(1., .32, .42), S2 = vec3(1., .86, .25), S3 = vec3(.12, .92, .88), S4 = vec3(.1, .22, .95);   // magenta, coral, amarillo, turquesa, azul: puros
       vec3 ring = hk < 1. ? mix(S0, S1, hk) : hk < 2. ? mix(S1, S2, hk - 1.) : hk < 3. ? mix(S2, S3, hk - 2.) : hk < 4. ? mix(S3, S4, hk - 3.) : mix(S4, S0, hk - 4.);
-      ring = mix(ring, hsv(uHue, .8, 1.), .22) * (1. + .15 * sin(an * 3. + uPh * 2.) * uHi);   // los agudos lo hacen titilar
+      ring = mix(ring, hsv(uHue, .9, 1.), .15) * (1. + .15 * sin(an * 3. + uPh * 2.) * uHi);   // los agudos lo hacen titilar
       ring = mix(ring, uMel, uVo * .35 * smoothstep(-.2, .9, sin(an - 1.2)));
-      vec3 deep = mix(vec3(.12, .14, .55), hsv(uHue, .6, .5), .2);           // el azul hondo de afuera
+      vec3 deep = mix(vec3(.16, .08, .6), hsv(uHue, .8, .5), .15);           // el azul hondo de afuera
       // perfil: borde interior suave hacia el hueco, caída larga hacia afuera
       float inner = smoothstep(.62 - .08 * uBeat, 1.02, r);
       float outer = exp(-max(ro - 1., 0.) * (1.25 - .55 * uGlow));   // el aura se agranda con los graves
       vec3 hc = mix(ring, deep, smoothstep(1., 2.1, ro)), halo = hc * outer;
-      halo += mix(ring, vec3(1.), .3) * exp(-pow((r - .97) / .05, 2.)) * (.35 + .6 * uBeat);   // un filo fino de luz en la orilla, más vivo con el latido
+      halo += ring * exp(-pow((r - .98) / .06, 2.)) * (.25 + .5 * uBeat);   // la orilla, del mismo color (sin aros blancos), más viva con el latido
       vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg;
       vec3 col;
-      if (uNight > .5) col = bg + halo * inner * (.95 + .75 * uEn + .6 * uBeat) + hc * exp(-max(ro - 1., 0.) * .55) * .16 * inner;   // aura viva con la energía y un segundo resplandor amplio de color
+      if (uNight > .5) col = bg + halo * inner * (.85 + .7 * uEn + .5 * uBeat) + hc * exp(-max(ro - 1., 0.) * .5) * .2 * inner;   // aura viva con la energía y un segundo resplandor amplio de color
       else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }   // de día el hueco también es hondo
       if (uNight > .5) col = mix(col, vec3(.015, .01, .03), (1. - inner) * .9);           // el hueco: oscuro y hondo
-      col = uNight > .5 ? 1. - exp(-col * 1.35) : col;
-      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.3), 0., 1.);   // color pleno, no lavado
+      float mx = max(col.r, max(col.g, col.b)); if (mx > 1.) col /= mix(1., mx, .9);   // donde hay mucha luz se limita sin lavarse a blanco: el color queda puro
+      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.2), 0., 1.);
       if (uNight > .5) col *= 1. - .2 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
@@ -11560,18 +11562,21 @@ function drawPortal(dt) {
   for (let k = 0; k < 3; k++) portal.m[k] = ease(portal.m[k], mt[k], 0.3);
   portal.en = ease(portal.en, Math.min(1, energy * 2.2) * musicGate, 0.2);
   portal.glow = ease(portal.glow, Math.pow(bandX(0, 12), 1.1) * musicGate, 0.25);
-  portal.tail += dt * musicGate * 0.05;
+  portal.tail += dt * musicGate * (0.08 + energy * 0.5);
+  portal.lph += dt * musicGate * (0.15 + energy * 0.9 + portal.vo * 0.4);                        // la luz gira alrededor del hueco con la energía y la voz
+  portal.lr = ease(portal.lr, (0.22 + 0.35 * bandX(10, 26) + 0.25 * portal.vo) * musicGate + 0.12, 0.35);   // y se aleja del centro con los medios y la voz
+  portal.cw += dt * musicGate * (0.08 + energy * 0.35);                                           // el hueco también se pasea
   const hue = hexToHsl(rgbToHex(...RGB[0]))[0] / 360;
   const bg = night ? [0.07, 0.035, 0.1] : [0.9, 0.89, 0.93];
-  const C = asp < 1 ? [asp * 0.5, 0.6] : [asp * 0.5, 0.53];
+  const wa = 0.03 + 0.05 * energy, C = asp < 1 ? [asp * 0.5 + Math.sin(portal.cw) * wa * asp, 0.6 + Math.cos(portal.cw * 0.8) * wa] : [asp * 0.5 + Math.sin(portal.cw) * wa * 1.5, 0.53 + Math.cos(portal.cw * 0.8) * wa];
   const [cw, ch] = glCanvas(0.85), p = portal.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
   gl.uniform1f(p.u.uPh, portal.ph); gl.uniform1f(p.u.uR, portal.R * (1 + Math.max(-0.22, Math.min(0.14, portal.beat * 0.25))));   // el latido: se nota gl.uniform1f(p.u.uWob, portal.wob);
   gl.uniform1f(p.u.uVo, portal.vo); gl.uniform1f(p.u.uRot, portal.rot); gl.uniform1f(p.u.uHi, portal.hi); gl.uniform1f(p.u.uHue, hue);
-  gl.uniform1f(p.u.uTail, -1.57 + 0.6 * Math.sin(portal.tail)); gl.uniform1f(p.u.uBeat, Math.min(1, Math.abs(portal.beat) * 0.6) * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uTail, portal.lph + 0.3 * Math.sin(portal.tail));   // la cola sigue a la luz gl.uniform1f(p.u.uBeat, Math.min(1, Math.abs(portal.beat) * 0.6) * (state.noFlash ? 0.5 : 1));
   gl.uniform2f(p.u.uC, C[0], C[1]); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, bg);
-  gl.uniform3fv(p.u.uM, portal.m); gl.uniform1f(p.u.uEn, portal.en); gl.uniform1f(p.u.uGlow, portal.glow);
+  gl.uniform3fv(p.u.uM, portal.m); gl.uniform2f(p.u.uL, Math.cos(portal.lph) * portal.lr, Math.sin(portal.lph) * portal.lr * 0.8); gl.uniform1f(p.u.uEn, portal.en); gl.uniform1f(p.u.uGlow, portal.glow);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
