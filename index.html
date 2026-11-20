@@ -859,7 +859,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 172</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 173</div>
     </div>
   </div>
   <div class="group">
@@ -9795,10 +9795,10 @@ function drawCrystal(dt) {
     crystal.B.set([b.x, b.y, b.r * (0.78 + P * 0.18 + b.g * 0.65), b.ph], i * 4);
   });
   // la portada en color (si está y la opción de fondo está activa)
-  const gl = GLX.gl, liveOn = state.liveBg && state.coverBg, img = liveOn ? bgLive : state.coverBg && coverClean && bgCur && bgCur.color ? bgCur.color : null;   // el mismo fondo suave que las demás escenas
+  const gl = GLX.gl, img = state.coverBg && coverClean ? coverClean : null;   // aquí la portada va nítida: las gotas de cristal la doblan
   if (!crystal.tex) crystal.tex = gl.createTexture();
   gl.activeTexture(gl.TEXTURE0);
-  if (img && (crystal.texSrc !== img || (liveOn && crystal.texVer !== bgLive.ver))) { try { glUpload(crystal.tex, img); crystal.texSrc = img; crystal.texVer = bgLive.ver; } catch (e) { crystal.texSrc = null; } }
+  if (img && crystal.texSrc !== img) { try { glUpload(crystal.tex, img); crystal.texSrc = img; } catch (e) { crystal.texSrc = null; } }
   const [cw, ch] = glCanvas(0.9);
   const p = crystal.prog; gl.useProgram(p.pr);
   gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, crystal.tex); gl.uniform1i(p.u.uImg, 0);
