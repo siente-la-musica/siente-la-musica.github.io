@@ -793,6 +793,7 @@
         <button data-mode="liquid">Iridiscencia</button>
         <button data-mode="layers">Capas</button>
         <button data-mode="portal">Portal</button>
+        <button data-mode="tunnel">Túnel</button>
         <button data-mode="traces">Trazos</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="strobe">Estrobo</button>
@@ -864,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 187</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 188</div>
     </div>
   </div>
   <div class="group">
@@ -1165,7 +1166,7 @@ document.getElementById('introSp').onclick = e => { e.stopPropagation(); documen
 // en un celular o tableta (pantalla táctil sin ratón) no se puede capturar el audio del equipo: Spotify va primero y el micrófono como alternativa
 if ((matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) || !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; document.getElementById('introMic').hidden = false; }
 { const CATS = { esc: ['navidad', 'ruta', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
-    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
+    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
     por: ['cover', 'livecover', 'lyrics', 'artist', 'strobe', 'vinyl'] };
   const inCat = (m, c) => c === 'all' || (c === 'abs' ? !CATS.esc.includes(m) && !CATS.luz.includes(m) && !CATS.por.includes(m) : CATS[c].includes(m));
   document.querySelectorAll('.mode-cats button').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.cat;
@@ -4519,7 +4520,7 @@ function drawRecOverlay() {
   ctx.restore();
 }
 const artistClean = new Map();
-const LYRIC_LOW = new Set(['disco', 'halos', 'beam', 'liquid', 'layers', 'portal', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'reeds', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'anillo']);
+const LYRIC_LOW = new Set(['disco', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'reeds', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'anillo']);
 const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 'tubes', 'cats', 'puffs', 'harp']);
 
 // ================= Director automático =================
@@ -4527,7 +4528,7 @@ const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 't
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
   medium: { name: 'media',     modes: ['icons', 'reeds', 'traces', 'loop', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
@@ -11417,6 +11418,81 @@ function drawIcons(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
+// ================= Escena: Túnel =================
+// Un viaje sin fin por un tubo de color: las paredes son degradados suaves de la portada, con luz de un lado y
+// sombra del otro; al fondo, la boca nítida del siguiente tramo, con su filo iluminado y la sombra bajo el borde.
+// Avanzamos con perspectiva real (cada tramo crece hasta envolvernos y adentro ya espera el siguiente, con otra
+// combinación de colores: el túnel cambia de lugar sin cortes) y el camino se curva despacio. La velocidad del
+// viaje sigue la energía; cada bombo da un impulso y enciende el filo; los graves iluminan las paredes; los medios
+// curvan el camino; la voz tiñe la luz del fondo con el color de la nota. En silencio, quieto.
+const tun = { prog: null, s: 0, seg: 0, spd: 0, ph: 0, kick: 0, la: 0.6, off: [0, 0], bass: 0, vo: 0, P: new Float32Array(36) };
+function tunnelSetup() {
+  tun.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uZ, uPh, uKick, uLA, uBass, uVo; uniform vec2 uOff, uLook; uniform vec3 uP[12]; uniform vec3 uMel;
+    vec3 grad(int o, float k) { k = fract(k) * 4.; int i = int(k); float f = smoothstep(0., 1., fract(k)); return mix(uP[o + i], uP[o + (i == 3 ? 0 : i + 1)], f); }
+    // el color de la pared en un punto del tubo (ángulo, profundidad): cada tramo tiene su juego de colores y se funde con el siguiente
+    vec3 wallCol(float ang, float zz) {
+      float seg = zz / 9., sf = fract(seg); int s0 = int(mod(floor(seg), 3.)) * 4, s1 = int(mod(floor(seg) + 1., 3.)) * 4;
+      float k = .22 * cos(ang - 1.1 - zz * .02) + .08 * sin(2. * ang + zz * .05 - uPh * .3) + zz * .028;   // de un lado a otro y con la profundidad (sin sectores)
+      return mix(grad(s0, k), grad(s1, k), smoothstep(.55, 1., sf));
+    }
+    vec3 shade(vec2 uv) {
+      float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.);
+      vec3 d = normalize(vec3(p + uLook, 1.15)); vec2 o = uOff;                       // la cámara va adentro del tubo, corrida del eje: se ve inclinado
+      float A = dot(d.xy, d.xy) + 1e-5, B = 2. * dot(o, d.xy), Cc = dot(o, o) - 1.;
+      float t = (-B + sqrt(max(B * B - 4. * A * Cc, 0.))) / (2. * A);                  // dónde choca la mirada con la pared
+      vec2 hxy = o + t * d.xy; float zz = t * d.z + uZ, ang = atan(hxy.y, hxy.x);
+      vec3 c = wallCol(ang, zz);
+      float lit = mix(.5 + .5 * cos(ang - uLA), .75, smoothstep(2., 9., t));   // hacia el fondo la luz ya llega de todos lados
+      c *= (.45 + .72 * lit) * (.9 + .25 * uBass) * mix(.55, 1.2, smoothstep(.4, 7., t));   // luz de un lado, y más luz hacia el fondo (lo cercano en penumbra)
+      // los tramos: cada tanto un filo, con su brillo y la sombra que deja detrás
+      float sf = fract(zz / 9.), fog = 1. - exp(-t * .14);
+      c *= 1. - .3 * exp(-sf * 12.) * (1. - lit * .6);
+      c += mix(c, vec3(1.), .6) * exp(-pow((1. - sf) / .02, 2.)) * (.35 + .45 * lit + .6 * uKick) * (1. - fog * .8);
+      // hacia el fondo, la luz: se aclara (la voz la tiñe)
+      float rr = length(d.xy); int se = int(mod(floor((uZ + 30.) / 9.), 3.)) * 4; vec3 endL = mix(mix(grad(se, .15 + rr * .9 + .1 * d.x) * 1.25, vec3(1.), .5 - rr * .4), uMel, uVo * .45);   // la luz del fondo: suave y limpia
+      c = mix(c, endL, smoothstep(.35, .97, fog));
+      return c;
+    }
+    void main() {
+      // dos muestras por píxel: los filos lejanos salen limpios
+      vec2 e = vec2(.5 / uRes.x, 0.);
+      vec3 col = (shade(vUv - e) + shade(vUv + e)) * .5;
+      if (uNight > .5) col *= .86; else col = mix(col, vec3(1.), .05);
+      col *= 1. - .22 * pow(length(vUv - .5) * 1.3, 2.);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawTunnel(dt) {
+  if (!glInit()) { drawBars(dt); return; }
+  if (!tun.prog) tunnelSetup();
+  const night = state.theme === 'dark', gl = GLX.gl;
+  const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
+  if (pulse.on) tun.kick = Math.min(1, tun.kick + 0.5 + pulse.k * 0.4);
+  tun.kick = ease(tun.kick, 0, 0.35);
+  tun.spd = ease(tun.spd, musicGate * (0.035 + energy * 0.22 + tun.kick * 0.12), 0.6);   // el viaje: avanza con la energía, el bombo empuja
+  tun.s += dt * tun.spd * 24; tun.ph += dt * musicGate * (0.2 + energy * 0.8);
+  // colores de cada tramo: los de la portada, vivos, girando de un tramo al siguiente
+  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(70, Math.min(95, hs[0][1] * 1.3 + 20));
+  const segCols = n => { const sh = n * 47; return [hexToRgb(hsl(hs[0][0] + sh, sat, 55)), hexToRgb(hsl(hs[1][0] + sh, sat, 60)), hexToRgb(hsl(hs[2][0] + sh, sat, 52)), hexToRgb(hsl(hs[0][0] + 180 + sh, sat * 0.8, 58))].map(c => c.map(v => v / 255)); };
+  [segCols(0), segCols(1), segCols(2)].forEach((cs, j) => cs.forEach((c, k) => tun.P.set(c, (j * 4 + k) * 3)));
+  tun.la += dt * musicGate * (0.06 + energy * 0.2);
+  const mid = bandX(10, 26);
+  tun.off[0] = ease(tun.off[0], 0.32 * Math.sin(tun.ph * 0.13 + 1), 1.2); tun.off[1] = ease(tun.off[1], 0.22 * Math.cos(tun.ph * 0.1), 1.2);   // la cámara se corre dentro del tubo
+  tun.look = tun.look || [0, 0]; tun.look[0] = ease(tun.look[0], Math.sin(tun.ph * 0.21) * (0.12 + 0.12 * mid), 0.8); tun.look[1] = ease(tun.look[1], Math.cos(tun.ph * 0.17) * (0.08 + 0.1 * mid), 0.8);   // y mira hacia donde se curva el camino
+  tun.bass = ease(tun.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.3);
+  tun.vo = ease(tun.vo, Math.min(1, voice * 1.4), 0.4);
+  const [cw, ch] = glCanvas(0.85), p = tun.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
+  gl.uniform1f(p.u.uZ, tun.s % 2700); gl.uniform2f(p.u.uLook, tun.look[0], tun.look[1]); gl.uniform1f(p.u.uPh, tun.ph); gl.uniform1f(p.u.uKick, tun.kick * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uLA, tun.la);
+  gl.uniform1f(p.u.uBass, tun.bass); gl.uniform1f(p.u.uVo, tun.vo); gl.uniform2f(p.u.uOff, tun.off[0], tun.off[1]);
+  gl.uniform3fv(p.u['uP[0]'], tun.P); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
 // ================= Escena: Portal =================
 // Un hueco oscuro rodeado de un aura de luz en arcoíris, muy difuminada, como los pósters de luz de color: el color
 // gira alrededor del hueco (desde el tono de la portada, recorriendo todo el círculo), es intenso junto al borde y
@@ -13878,7 +13954,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
