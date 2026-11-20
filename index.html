@@ -861,7 +861,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 179</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 180</div>
     </div>
   </div>
   <div class="group">
@@ -11421,21 +11421,21 @@ function drawIcons(dt) {
 // El resplandor sube con los graves, la línea se aviva con la energía, cada bombo manda un pulso de luz que
 // recorre la línea, la voz tiñe la luz que toca a la figura con el color de la nota y los agudos levantan un polvo
 // de luz muy fino. En silencio, todo quieto.
-const beam = { prog: null, h: 0.2, hv: 0, core: 0, pul: [-1, -1, -1], pi: 0, ph: 0, vo: 0, hi: 0 };
+const beam = { prog: null, h: 0.2, hv: 0, core: 0, pul: [-1, -1, -1], pi: 0, ph: 0, vo: 0, hi: 0, sp: new Float32Array(16), spv: new Float32Array(16), spt: new Float32Array(16), bloom: 0, sw: 0, swv: 0 };
 function beamSetup() {
-  beam.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uH, uCore, uPh, uVo, uHi, uAng; uniform vec3 uC0, uC1, uC2, uMel, uBg, uPul;
+  beam.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uH, uCore, uPh, uVo, uHi, uAng, uBloom, uSway; uniform float uSp[16]; uniform vec3 uC0, uC1, uC2, uMel, uBg, uPul;
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float sdCap(vec2 p, vec2 a, vec2 b, float r) { vec2 pa = p - a, ba = b - a; float t = clamp(dot(pa, ba) / dot(ba, ba), 0., 1.); return length(pa - ba * t) - r; }
     // la figura: de pie, manos en los bolsillos (en unidades de su altura)
     float fig(vec2 f) {
-      float d = length((f - vec2(.005, .9)) * vec2(1., .9)) - .085;             // cabeza con capucha
-      d = min(d, sdCap(f, vec2(0., .58), vec2(.005, .78), .13));                // torso (buzo)
-      d = min(d, sdCap(f, vec2(-.02, .46), vec2(0., .62), .12));
-      d = min(d, sdCap(f, vec2(-.06, .03), vec2(-.045, .46), .058));            // piernas
-      d = min(d, sdCap(f, vec2(.05, .02), vec2(.04, .46), .058));
-      d = min(d, sdCap(f, vec2(-.09, .02), vec2(-.03, .015), .03));             // pies
-      d = min(d, sdCap(f, vec2(.04, .015), vec2(.1, .015), .03));
+      float d = length((f - vec2(.01, .905)) * vec2(1., .88)) - .082;           // cabeza con capucha
+      d = min(d, sdCap(f, vec2(0., .6), vec2(.01, .78), .15));                  // torso (buzo holgado, brazos pegados)
+      d = min(d, sdCap(f, vec2(-.01, .47), vec2(0., .62), .14));                // cadera, con las manos en los bolsillos
+      d = min(d, sdCap(f, vec2(-.055, .05), vec2(-.05, .45), .068));           // piernas (pantalón)
+      d = min(d, sdCap(f, vec2(.055, .04), vec2(.05, .45), .068));
+      d = min(d, sdCap(f, vec2(-.1, .025), vec2(-.03, .02), .035));             // zapatos
+      d = min(d, sdCap(f, vec2(.04, .02), vec2(.11, .02), .035));
       return d;
     }
     void main() {
@@ -11450,19 +11450,22 @@ function beamSetup() {
       vec3 col = mix(uBg, withCover(uBg), .25) * (uNight > .5 ? .5 : 1.);
       // el resplandor sobre la línea: caliente junto a ella, hondo arriba; los extremos se apagan
       float ends = smoothstep(1.25, .55, abs(u) / span);
+      // la altura del resplandor sigue el espectro a lo largo de la línea (graves a la izquierda, agudos a la derecha)
+      float sx = uu * 15., sv = mix(uSp[int(floor(sx))], uSp[int(min(15., floor(sx) + 1.))], smoothstep(0., 1., fract(sx)));
+      float H = uH * (.5 + 1.25 * sv);
       if (s > 0.) {
-        float g = exp(-s / uH), gh = exp(-s / (uH * .25));
-        vec3 glow = mix(deep, hot, gh) * g * 1.5 + mix(hot, vec3(1., .95, .85), .35) * gh * .7;
+        float g = exp(-s / H), gh = exp(-s / (.018 + H * .14)) * (1. + uBloom * .8);   // ancho y hondo arriba; junto a la línea, una banda caliente intensa
+        vec3 glow = mix(deep, hot, exp(-s / (H * .45))) * g * 1.3 + mix(hot, vec3(1., .88, .62), .4) * gh * 2.;
         if (uNight > .5) col += glow * ends;
         else col = mix(col, col * mix(vec3(1.), hot * 1.15 + .05, gh * .85) * mix(vec3(1.), deep * 1.6 + .25, g * .7), ends);   // de día la luz tiñe el papel
         // polvo de luz que flota en el resplandor (con los agudos)
-        vec2 gp = p * 140.; vec2 id = floor(gp); float r = h(id);
-        float mote = step(.985, r) * smoothstep(.5, .1, length(fract(gp) - .5 - (vec2(h(id + 3.), h(id + 7.)) - .5) * .6));
-        col += hot * mote * g * uHi * 1.5 * ends;
+        vec2 gp = (p - vec2(uPh * .01, uPh * .035)) * 90.; vec2 id = floor(gp); float r = h(id);   // sube despacio, como polvo en un rayo de luz
+        float mote = step(.988, r) * smoothstep(.32, .0, length(fract(gp) - .5 - (vec2(h(id + 3.), h(id + 7.)) - .5) * .5));
+        col += mix(hot, vec3(1.), .4) * mote * g * (.15 + uHi * 1.2) * ends * (uNight > .5 ? 1. : .4);
       } else {
         // el piso: oscuro y brillante, refleja el resplandor apenas
-        float g = exp(s / (uH * .35));
-        if (uNight > .5) col += mix(deep, hot, .5) * g * .3 * ends;
+        float g = exp(s / .06);
+        if (uNight > .5) col += mix(deep, hot, .5) * g * .14 * ends + hot * exp(s / .006) * .14 * ends + deep * exp(s / .35) * .05 * ends;   // el piso: oscuro, con un brillo junto al borde   // el piso brilla junto al borde
         else col = mix(col * .9, col * .9 * mix(vec3(1.), hot + .2, .35), g * ends);
       }
       // la línea misma, con los pulsos de luz que la recorren
@@ -11470,13 +11473,21 @@ function beamSetup() {
       float pul = 0.; for (int j = 0; j < 3; j++) { float pu = uPul[j]; if (pu > -1.) pul += exp(-pow((uu - pu) / .05, 2.)); }
       col += mix(hot, vec3(1.), .5) * line * (.55 + uCore + pul * 1.2) * ends * (uNight > .5 ? 1. : .8);
       // la figura sobre la línea, con su reflejo en el piso
-      float fh = .085; vec2 F = C + dir * (span * .12);
-      vec2 f = (p - F) / fh; float d = fig(f), dr = fig(vec2(f.x, -f.y));
-      float aa = 1.5 / uRes.y / fh;
-      vec3 lit = mix(hot, uMel, uVo) * .9;                 // la luz que la toca: del resplandor, o de la nota cuando canta
-      vec3 body = vec3(.025, .02, .03) + lit * smoothstep(.0, .12, -f.x) * .12 + lit * exp(-pow((d + .015) / .018, 2.)) * smoothstep(.05, -.12, f.x) * .9;   // silueta oscura, con el canto del lado de la luz encendido
+      float fh = .075, ta = tan(uAng); vec2 F = C + dir * (span * .12);
+      vec2 f = (p - F) / fh;
+      f.x -= uSway * smoothstep(.25, 1., f.y);                                   // se mece con el ritmo (de la cintura para arriba)
+      vec2 fg = vec2(f.x, f.y - f.x * ta * smoothstep(.3, .0, f.y));            // los pies siguen la pendiente del piso: ninguno flota
+      float d = fig(fg), dr = fig(vec2(fg.x, -(f.y - f.x * ta) * 1.1));
+      float aa = 1.8 / uRes.y / fh;                                              // apenas desenfocada, como en una foto con poca profundidad
+      vec3 lit = mix(hot, uMel, uVo * .8);                                        // la luz que la toca: del resplandor, o de la nota cuando canta
+      float side = clamp(.55 - f.x * 3.5, 0., 1.), up = smoothstep(.0, .9, f.y);
+      vec3 body = lit * (.2 + .4 * side * (.5 + .5 * up)) + vec3(.012, .01, .016);                         // volumen: iluminada de lado por el resplandor
+      body += mix(lit, vec3(1.), .3) * exp(-pow((d + .012) / .016, 2.)) * (.35 + .5 * side) * (.6 + .4 * up);   // el canto encendido
+      // su sombra en el piso, hacia delante, y su reflejo difuminado
+      vec2 sh = vec2(u - span * .12, s + .02);
+      if (s < 0.) col *= 1. - .55 * exp(-sh.x * sh.x / .0009 - sh.y * sh.y / .0016);
+      col = mix(col, col * .6 + body * .25, smoothstep(aa * 6., -aa * 6., dr) * smoothstep(-.8, 0., f.y - f.x * ta) * step(s, 0.) * .65);
       col = mix(col, body, smoothstep(aa, -aa, d));
-      col = mix(col, col * .55 + body * .15, smoothstep(aa * 3., -aa * 3., dr) * smoothstep(-.9, 0., f.y) * .7);
       // tono: la luz se suma sin quemarse
       col = 1. - exp(-col * 1.4);
       if (uNight > .5) col *= 1. - .3 * pow(length(vUv - .5) * 1.25, 2.);
@@ -11490,7 +11501,11 @@ function drawBeam(dt) {
   // el resplandor sube con los graves (con un resorte: respira) y la línea se aviva con la energía
   const tgt = (0.14 + 0.22 * Math.pow(bandX(0, 12), 1.2) * (0.6 + 0.8 * dynL) + 0.05 * energy) * (0.45 + 0.55 * musicGate);
   beam.hv += ((tgt - beam.h) * 90 - beam.hv * 9) * dt; beam.h += beam.hv * dt;
-  if (pulse.on) { beam.hv += 0.25 + pulse.k * 0.35; beam.pul[beam.pi++ % 3] = 0; }
+  if (pulse.on) { beam.hv += 0.4 + pulse.k * 0.5; beam.pul[beam.pi++ % 3] = 0; beam.bloom = Math.min(1, beam.bloom + 0.6 + pulse.k * 0.4); beam.swv += (beam.sw > 0 ? -1 : 1) * (0.25 + pulse.k * 0.25); }
+  beam.bloom *= Math.pow(0.03, dt); beam.swv += (-beam.sw * 60 - beam.swv * 7) * dt; beam.sw += beam.swv * dt;
+  // el espectro repartido a lo largo de la línea, con resortes (respira como Montañas)
+  for (let k = 0; k < 16; k++) { const a = Math.floor(k / 16 * BANDS * 0.9); beam.spt[k] = Math.pow(bandX(a, Math.min(BANDS, a + Math.ceil(BANDS / 16) + 1)), 1.3) * (0.6 + 0.9 * dynL) * musicGate; }
+  springTo(beam.sp, beam.spv, beam.spt, dt, 110, 0.6);
   for (let j = 0; j < 3; j++) if (beam.pul[j] > -1) { beam.pul[j] += dt * 0.9; if (beam.pul[j] > 1.2) beam.pul[j] = -1; }
   beam.core += (Math.min(1, energy * 2 + P * 0.6) - beam.core) * (1 - Math.pow(0.02, dt));
   beam.vo += (Math.min(1, voice * 1.4) - beam.vo) * (1 - Math.pow(0.05, dt));
@@ -11503,7 +11518,7 @@ function drawBeam(dt) {
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
   gl.uniform1f(p.u.uH, Math.max(0.03, beam.h) * (asp < 1 ? 1.3 : 1)); gl.uniform1f(p.u.uCore, beam.core * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uPh, beam.ph);
-  gl.uniform1f(p.u.uVo, beam.vo); gl.uniform1f(p.u.uHi, beam.hi); gl.uniform1f(p.u.uAng, asp < 1 ? 0.62 : 0.42);
+  gl.uniform1f(p.u.uVo, beam.vo); gl.uniform1f(p.u.uHi, beam.hi); gl.uniform1fv(p.u['uSp[0]'], beam.sp); gl.uniform1f(p.u.uBloom, beam.bloom * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uSway, Math.max(-0.08, Math.min(0.08, beam.sw))); gl.uniform1f(p.u.uAng, asp < 1 ? 0.62 : 0.42);
   gl.uniform3fv(p.u.uPul, beam.pul.map(v => v)); gl.uniform3fv(p.u.uBg, bg);
   gl.uniform3fv(p.u.uC0, viv(hs[0][0], 58)); gl.uniform3fv(p.u.uC1, viv(hs[1][0], 55)); gl.uniform3fv(p.u.uC2, viv(hs[2][0], 55));
   gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
