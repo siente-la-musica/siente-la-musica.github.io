@@ -788,6 +788,7 @@
         <button data-mode="globes">Globos</button>
         <button data-mode="icons">Íconos</button>
         <button data-mode="reeds">Cristalera</button>
+        <button data-mode="halos">Halos</button>
         <button data-mode="traces">Trazos</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="strobe">Estrobo</button>
@@ -859,7 +860,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 176</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 177</div>
     </div>
   </div>
   <div class="group">
@@ -894,7 +895,7 @@ const PALETTES = [
 ];
 
 const state = {
-  mode: ((m) => m === 'dancers' ? 'bars' : ['columns', 'capsules', 'tubos', 'fan', 'circles', 'comet'].includes(m) ? 'reeds' : m)(store.get('mode', 'bars')),
+  mode: ((m) => m === 'dancers' ? 'bars' : m === 'circles' ? 'halos' : ['columns', 'capsules', 'tubos', 'fan', 'comet'].includes(m) ? 'reeds' : m)(store.get('mode', 'bars')),
   palette: store.get('palette', 'aurora'),
   custom: store.get('custom', '#ff6ad5'),
   theme: store.get('theme', matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),
@@ -1160,7 +1161,7 @@ document.getElementById('introSp').onclick = e => { e.stopPropagation(); documen
 // en un celular o tableta (pantalla táctil sin ratón) no se puede capturar el audio del equipo: Spotify va primero y el micrófono como alternativa
 if ((matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) || !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; document.getElementById('introMic').hidden = false; }
 { const CATS = { esc: ['navidad', 'ruta', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
-    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
+    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
     por: ['cover', 'livecover', 'lyrics', 'artist', 'strobe', 'vinyl'] };
   const inCat = (m, c) => c === 'all' || (c === 'abs' ? !CATS.esc.includes(m) && !CATS.luz.includes(m) && !CATS.por.includes(m) : CATS[c].includes(m));
   document.querySelectorAll('.mode-cats button').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.cat;
@@ -4514,7 +4515,7 @@ function drawRecOverlay() {
   ctx.restore();
 }
 const artistClean = new Map();
-const LYRIC_LOW = new Set(['disco', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'reeds', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'anillo']);
+const LYRIC_LOW = new Set(['disco', 'halos', 'sphere', 'vinyl', 'vitral', 'lenses', 'icons', 'reeds', 'globes', 'eclipse', 'loop', 'comet', 'infinity', 'light', 'aura', 'anillo']);
 const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 'tubes', 'cats', 'puffs', 'harp']);
 
 // ================= Director automático =================
@@ -4522,7 +4523,7 @@ const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 't
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
   medium: { name: 'media',     modes: ['icons', 'reeds', 'traces', 'loop', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
@@ -11412,6 +11413,74 @@ function drawIcons(dt) {
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
+// ================= Escena: Halos =================
+// Esferas de color difuminadas, como láminas de diseño: cada una es un degradado suave de dos tonos vivos de la
+// portada, con un núcleo desplazado (hondo u ojo de luz) y un borde que se deshace en el aire. Cada esfera
+// escucha su parte del sonido y respira con ella; el núcleo se pasea por dentro con la voz y toma el color de la
+// nota; el bombo empuja las de los graves y los platillos encienden su canto. Se mueven despacio y solo con música.
+const halo = { prog: null, n: 0, O: new Float32Array(24), A: new Float32Array(18), B: new Float32Array(18), C: new Float32Array(18), K: new Float32Array(24), lv: new Float32Array(6), v: new Float32Array(6), tg: new Float32Array(6), ph: 0, kick: 0, cph: new Float32Array(6) };
+function halosSetup() {
+  halo.prog = glProgram(`uniform vec2 uRes; uniform float uNight; uniform int uN; uniform vec3 uBg; uniform vec4 uO[6]; uniform vec4 uK[6]; uniform vec3 uA[6], uB[6], uC[6];
+    ${GLSL_COVER}
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = mix(uBg, withCover(uBg), uNight > .5 ? .45 : .14);
+      vec3 glow = vec3(0.);
+      for (int i = 0; i < 6; i++) { if (i >= uN) break;
+        vec4 O = uO[i], K = uK[i];                       // O: centro, radio, canto  ·  K: núcleo (desplazamiento), tamaño, hondura
+        vec2 q = (p - O.xy) / O.z; float d = length(q);
+        if (d > 1.6) continue;
+        float a = smoothstep(1.08, .76, d);              // borde suave que se deshace en el aire
+        vec2 dir = normalize(K.xy + vec2(1e-4));
+        vec3 c = mix(uA[i], uB[i], smoothstep(-1.1, .9, dot(q, dir)));     // degradado de dos tonos: la luz entra por el lado opuesto al núcleo
+        float dc = length(q - K.xy) / K.z, core = pow(smoothstep(1.25, 0., dc), 1.7);
+        c = mix(c, uC[i], core * K.w);                    // el núcleo desplazado, grande y difuminado: da hondura
+        c = mix(c, mix(uA[i], vec3(1.), .35), smoothstep(.55, .95, d) * smoothstep(1.05, .9, d) * (.18 + O.w));   // el canto, apenas más claro (los platillos lo avivan)
+        col = mix(col, c, a);
+        glow += mix(uA[i], uB[i], .5) * exp(-max(d - .8, 0.) * 3.) * (1. - a) * (uNight > .5 ? .16 : .04);   // un halo de su color alrededor
+      }
+      col += glow;
+      if (uNight > .5) col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawHalos(dt) {
+  if (!glInit()) { drawBars(dt); return; }
+  if (!halo.prog) halosSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H, vert = asp < 1;
+  // composición: en horizontal cinco esferas de tamaños distintos; en vertical cuatro, escalonadas
+  const L = vert ? [[0.64, 0.76, 0.19], [0.3, 0.62, 0.15], [0.34, 0.33, 0.15], [0.68, 0.19, 0.12]]   // en vertical, el centro queda libre para la letra
+                 : [[0.2, 0.55, 0.2], [0.42, 0.36, 0.15], [0.58, 0.62, 0.23], [0.8, 0.42, 0.17], [0.34, 0.76, 0.1]];
+  const n = L.length, bands = [[0, 8], [8, 16], [16, 26], [26, 38], [38, BANDS]];
+  for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5]; halo.tg[i] = Math.pow(bandX(a, b), 1.3) * (0.5 + 0.7 * dynL) * musicGate; }
+  if (pulse.on) { halo.v[0] += 2 + pulse.k * 3; halo.v[2] += 1 + pulse.k * 2; halo.kick = Math.min(1, halo.kick + 0.4 + pulse.k * 0.4); }
+  springTo(halo.lv, halo.v, halo.tg, dt, 120, 0.55);
+  halo.kick *= Math.pow(0.08, dt); halo.ph += dt * musicGate * (0.08 + energy * 0.4);
+  const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(70, Math.min(95, hs[0][1] * 1.3 + 20));
+  const viv = (h, l) => hexToRgb(hsl(h, sat, l)).map(v => v / 255), mel = melodyColor().map(v => v / 255), hi = bandX(30, BANDS), vo = Math.min(1, voice * 1.3);
+  for (let i = 0; i < n; i++) {
+    const [x, y, r] = L[i], lv = halo.lv[i], h0 = hs[i % 3][0] + (i >= 3 ? 30 : 0), ph = halo.ph * (0.7 + i * 0.11) + i * 2.1;
+    // respira con su banda; se mece despacio
+    halo.O.set([asp * x + Math.sin(ph) * 0.02 * asp, y + Math.cos(ph * 0.8) * 0.02, r * Math.min(asp, 1.1) * (0.92 + 0.22 * lv + (i === 0 ? halo.kick * 0.05 : 0)), (0.25 * hi) * (night ? 1 : 0.7)], i * 4);
+    halo.A.set(viv(h0 + 35, night ? 62 : 66), i * 3); halo.B.set(viv(h0, night ? 52 : 56), i * 3);
+    // núcleo: la mitad hondos (oscuros), la otra mitad ojos de luz; el de la voz toma el color de la nota
+    const deep = i % 2 === 0, hd = 250 + (((h0 - 250) % 360 + 540) % 360 - 180) * 0.25, cc = i === 1 ? mel.map(v => Math.min(1, v * 1.2)) : deep ? viv(hd, 22) : viv(h0 - 25, 80);   // hondos: violeta azulado oscuro, de la familia
+    halo.C.set(cc, i * 3);
+    halo.cph[i] += dt * musicGate * (0.15 + vo * 0.9 + lv * 0.4);
+    const off = 0.22 + 0.16 * lv + (i === 1 ? 0.12 * vo : 0);
+    halo.K.set([Math.cos(halo.cph[i] + i) * off, Math.sin(halo.cph[i] * 0.8 + i) * off, 0.62 + 0.18 * lv, (deep ? 0.9 : 0.8) * (i === 1 ? 0.4 + 0.6 * vo : 1)], i * 4);
+  }
+  const bg = night ? mix(0.5).map(v => v * 0.04 / 255 + 0.01) : mix(0.5).map(v => (v + (255 - v) * 0.93) / 255);
+  const [cw, ch] = glCanvas(0.85), p = halo.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, n); gl.uniform3fv(p.u.uBg, bg);
+  gl.uniform4fv(p.u['uO[0]'], halo.O); gl.uniform4fv(p.u['uK[0]'], halo.K); gl.uniform3fv(p.u['uA[0]'], halo.A); gl.uniform3fv(p.u['uB[0]'], halo.B); gl.uniform3fv(p.u['uC[0]'], halo.C);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+
 // ================= Escena: Cristalera =================
 // Un vidrio estriado de pared a pared con luz de colores detrás, como las fotografías de luz a través de vidrio
 // acanalado: detrás hay un degradado vivo de los colores de la portada y seis focos altos (graves, medios, agudos,
@@ -13443,7 +13512,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
