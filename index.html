@@ -861,7 +861,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 180</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 181</div>
     </div>
   </div>
   <div class="group">
@@ -11417,7 +11417,7 @@ function drawIcons(dt) {
 // ================= Escena: Horizonte =================
 // Una línea de luz cruza la oscuridad en diagonal: es el borde de un piso brillante. Sobre ella se levanta un
 // resplandor en los colores de la portada (caliente junto a la línea, más frío y hondo arriba) y el piso lo
-// refleja apenas. Una figura pequeña está de pie sobre la línea, con su reflejo y el canto iluminado por la luz.
+// refleja apenas.
 // El resplandor sube con los graves, la línea se aviva con la energía, cada bombo manda un pulso de luz que
 // recorre la línea, la voz tiñe la luz que toca a la figura con el color de la nota y los agudos levantan un polvo
 // de luz muy fino. En silencio, todo quieto.
@@ -11472,22 +11472,6 @@ function beamSetup() {
       float line = exp(-abs(s) / .0022) + exp(-abs(s) / .012) * .35;
       float pul = 0.; for (int j = 0; j < 3; j++) { float pu = uPul[j]; if (pu > -1.) pul += exp(-pow((uu - pu) / .05, 2.)); }
       col += mix(hot, vec3(1.), .5) * line * (.55 + uCore + pul * 1.2) * ends * (uNight > .5 ? 1. : .8);
-      // la figura sobre la línea, con su reflejo en el piso
-      float fh = .075, ta = tan(uAng); vec2 F = C + dir * (span * .12);
-      vec2 f = (p - F) / fh;
-      f.x -= uSway * smoothstep(.25, 1., f.y);                                   // se mece con el ritmo (de la cintura para arriba)
-      vec2 fg = vec2(f.x, f.y - f.x * ta * smoothstep(.3, .0, f.y));            // los pies siguen la pendiente del piso: ninguno flota
-      float d = fig(fg), dr = fig(vec2(fg.x, -(f.y - f.x * ta) * 1.1));
-      float aa = 1.8 / uRes.y / fh;                                              // apenas desenfocada, como en una foto con poca profundidad
-      vec3 lit = mix(hot, uMel, uVo * .8);                                        // la luz que la toca: del resplandor, o de la nota cuando canta
-      float side = clamp(.55 - f.x * 3.5, 0., 1.), up = smoothstep(.0, .9, f.y);
-      vec3 body = lit * (.2 + .4 * side * (.5 + .5 * up)) + vec3(.012, .01, .016);                         // volumen: iluminada de lado por el resplandor
-      body += mix(lit, vec3(1.), .3) * exp(-pow((d + .012) / .016, 2.)) * (.35 + .5 * side) * (.6 + .4 * up);   // el canto encendido
-      // su sombra en el piso, hacia delante, y su reflejo difuminado
-      vec2 sh = vec2(u - span * .12, s + .02);
-      if (s < 0.) col *= 1. - .55 * exp(-sh.x * sh.x / .0009 - sh.y * sh.y / .0016);
-      col = mix(col, col * .6 + body * .25, smoothstep(aa * 6., -aa * 6., dr) * smoothstep(-.8, 0., f.y - f.x * ta) * step(s, 0.) * .65);
-      col = mix(col, body, smoothstep(aa, -aa, d));
       // tono: la luz se suma sin quemarse
       col = 1. - exp(-col * 1.4);
       if (uNight > .5) col *= 1. - .3 * pow(length(vUv - .5) * 1.25, 2.);
