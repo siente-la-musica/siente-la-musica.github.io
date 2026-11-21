@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 200</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 201</div>
     </div>
   </div>
   <div class="group">
@@ -7093,20 +7093,42 @@ function miradorSetup() {
 // Reemplaza a la portada como luna: con portadas muy coloridas se veía pegada. La portada sigue en el título y el reproductor.
 function paintedMoon() {
   if (paintedMoon.c) return paintedMoon.c;
-  const S = 256, c = document.createElement('canvas'); c.width = c.height = S; const x = c.getContext('2d'), r = S / 2;
-  let seed = 3; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  x.beginPath(); x.arc(r, r, r - 1, 0, 7); x.clip();
-  const g = x.createRadialGradient(r * .82, r * .78, r * .1, r, r, r); g.addColorStop(0, '#fbf7ec'); g.addColorStop(.7, '#ece6d6'); g.addColorStop(1, '#bdb7ab'); x.fillStyle = g; x.fillRect(0, 0, S, S);
-  x.filter = 'blur(6px)'; for (const [mx, my, mr, a] of [[.36, .34, .2, .22], [.55, .4, .14, .2], [.62, .58, .17, .18], [.4, .62, .1, .16], [.3, .5, .08, .14], [.7, .3, .07, .12]]) { x.fillStyle = `rgba(120,118,128,${a})`; x.beginPath(); x.ellipse(mx * S, my * S, mr * S, mr * S * .8, rnd() * 3, 0, 7); x.fill(); }
-  x.filter = 'blur(1px)'; for (let i = 0; i < 22; i++) { const cx = rnd() * S, cy = rnd() * S, cr = (2 + rnd() * 7); x.strokeStyle = 'rgba(110,108,118,.18)'; x.lineWidth = 1.5; x.beginPath(); x.arc(cx, cy, cr, 0, 7); x.stroke(); x.fillStyle = 'rgba(255,255,255,.12)'; x.beginPath(); x.arc(cx - cr * .3, cy - cr * .3, cr * .5, 0, 7); x.fill(); }
-  x.filter = 'none'; const lg = x.createRadialGradient(r, r, r * .55, r, r, r); lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(1, 'rgba(40,40,60,.32)'); x.fillStyle = lg; x.fillRect(0, 0, S, S);
+  // una luna de verdad, calculada punto a punto como una esfera: mares oscuros con la forma de los de la luna (ruido de varias
+  // escalas, más densos arriba a la izquierda), grano fino de cráteres, unos cráteres con su borde claro, un cráter con rayos
+  // abajo (como Tycho) y el borde apenas más oscuro. Nada de círculos dibujados.
+  const S = 512, c = document.createElement('canvas'); c.width = c.height = S; const x = c.getContext('2d'), img = x.createImageData(S, S), D = img.data;
+  const hash = (i, j) => { let h = Math.imul(i * 374761393 + j * 668265263, 1274126177); h ^= h >>> 13; return ((Math.imul(h, 1103515245) >>> 0) % 10000) / 10000; };
+  const vn = (u, v) => { const i = Math.floor(u), j = Math.floor(v), f = u - i, g = v - j, a = hash(i, j), b = hash(i + 1, j), c2 = hash(i, j + 1), d = hash(i + 1, j + 1), sf = f * f * (3 - 2 * f), sg = g * g * (3 - 2 * g); return a + (b - a) * sf + (c2 - a) * sg + (a - b - c2 + d) * sf * sg; };
+  const fbm = (u, v, o) => { let s_ = 0, a = .5; for (let k = 0; k < o; k++) { s_ += a * vn(u, v); u *= 2.03; v *= 2.03; a *= .5; } return s_; };
+  const craters = []; let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 26; i++) craters.push([rnd() * 2 - 1, rnd() * 2 - 1, .02 + .07 * Math.pow(rnd(), 2)]);
+  const ty = [.12, .62];   // el cráter con rayos
+  for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+    const X = (px + .5) / S * 2 - 1, Y = (py + .5) / S * 2 - 1, r2 = X * X + Y * Y, i = (py * S + px) * 4;
+    if (r2 > 1) { D[i + 3] = 0; continue; }
+    const z = Math.sqrt(1 - r2);
+    // mares: manchas grandes y suaves, más hacia arriba a la izquierda y el centro (como la cara visible de la luna)
+    const bias = .5 + .32 * (-X * .6 - Y * .5) - .25 * r2;
+    let mare = fbm(X * 1.7 + 3.1, Y * 1.7 + 7.3, 5) + bias * .45 - .6; mare = Math.max(0, Math.min(1, mare * 2.6));
+    let alb = .97 - .13 * mare;   // luminosa: las manchas apenas se insinúan
+    alb *= .97 + .05 * fbm(X * 9 + 11, Y * 9 + 2, 4);
+    for (const [cx, cy, cr] of craters.slice(0, 0)) { const d = Math.hypot(X - cx, Y - cy) / cr; if (d < 1.4) { alb *= 1 - .07 * Math.exp(-d * d * 3) + .045 * Math.exp(-Math.pow((d - 1) / .22, 2)) * (cx - X + cy - Y > 0 ? 1 : .5); } }
+    { const dx = X - ty[0], dy = Y - ty[1], d = Math.hypot(dx, dy), an = Math.atan2(dy, dx); alb += .03 * Math.exp(-d * d / .002) + .025 * Math.pow(Math.max(0, Math.sin(an * 9 + 1) * Math.sin(an * 5)), 6) * Math.exp(-d / .35) * (1 - mare); }
+    const limb = 1 + .04 * (1 - z), v = Math.max(0, Math.min(1, alb * limb));   // sin borde oscuro: el borde apenas más claro, como una luz
+    D[i] = Math.round(255 * Math.min(1, v * 1.0 + .02)); D[i + 1] = Math.round(255 * Math.min(1, v * .97 + .015)); D[i + 2] = Math.round(255 * Math.min(1, v * .88 + .03));   // blanco cálido
+    D[i + 3] = Math.round(255 * Math.min(1, (1 - Math.sqrt(r2)) * S / 6));   // borde suave, que se funde con su resplandor
+  }
+  x.putImageData(img, 0, 0);
   return (paintedMoon.c = c);
 }
 function drawMoon(X, Y, R, halo, night) {
-  const hc = halo.map(v => Math.min(255, v * 200 + 55));
+  // una luna luminosa: el disco cálido con su borde suave fundido en un resplandor cercano y otro amplio (sin borde duro ni oscuro)
+  const hc = halo.map(v => Math.min(255, v * 200 + 55)), warm = [255, 246, 228];
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
-  const gh = ctx.createRadialGradient(X, Y, R * .95, X, Y, R * 3.2); gh.addColorStop(0, rgba(hc, night ? .22 : .16)); gh.addColorStop(.35, rgba(hc, night ? .07 : .05)); gh.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = gh; ctx.fillRect(X - R * 3.2, Y - R * 3.2, R * 6.4, R * 6.4); ctx.restore();
-  ctx.save(); ctx.beginPath(); ctx.arc(X, Y, R, 0, 7); ctx.clip(); ctx.globalAlpha = night ? .96 : .85; ctx.drawImage(paintedMoon(), X - R, Y - R, R * 2, R * 2); ctx.restore();
+  const gh = ctx.createRadialGradient(X, Y, R * .9, X, Y, R * 3.4); gh.addColorStop(0, rgba(hc, night ? .24 : .16)); gh.addColorStop(.3, rgba(hc, night ? .08 : .05)); gh.addColorStop(1, rgba(hc, 0)); ctx.fillStyle = gh; ctx.fillRect(X - R * 3.4, Y - R * 3.4, R * 6.8, R * 6.8);
+  const gn = ctx.createRadialGradient(X, Y, R * .85, X, Y, R * 1.9); gn.addColorStop(0, rgba(warm, night ? .38 : .26)); gn.addColorStop(.25, rgba(warm, night ? .16 : .1)); gn.addColorStop(.6, rgba(warm, night ? .04 : .03)); gn.addColorStop(1, rgba(warm, 0)); ctx.fillStyle = gn; ctx.fillRect(X - R * 1.9, Y - R * 1.9, R * 3.8, R * 3.8);
+  ctx.restore();
+  ctx.save(); ctx.globalAlpha = night ? 1 : .92; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(paintedMoon(), X - R, Y - R, R * 2, R * 2); ctx.restore();
 }
 function mirSilhouettes(G, ink, rim) {
   const c = mir.sil || (mir.sil = document.createElement('canvas')); c.width = W; c.height = H;
@@ -7398,22 +7420,36 @@ function faroSetup() {
         float spk = smoothstep(.56, .74, n(vec2(p.x * 30. / (.3 + d * 2.4), dd * 78. - uT * .9))) * (.45 + .55 * n(vec2(p.x * 9., dd * 20. + uT * .4)));
         sea += (uHalo * .7 + moonL * .6) * path * spk * (.75 + uHi * 1.2 + uP * .25);
         sea += moonL * step(.985 - uHi * .03, h(floor(vec2(p.x * 300., dd * 500.)) + floor(uT * 5.))) * path * .5;
+        float crest = smoothstep(.72, .92, n(vec2(p.x * 11. / (.2 + d * 2.6), dd * 60. - uT * .5))) * smoothstep(.0, .05, d);
+        sea += (moonL * .22 + uHalo * .12) * crest * (.4 + .6 * exp(-pow((p.x - uMoon.x) / (R * (2. + d * 9.)), 2.)));   // crestas de las olas, con la luz de la luna
         col = mix(sea, sky, exp(-d * 36.) * .7);
       }
       // ---- el haz: dos brazos de luz que giran, de perfil suave (sin bordes), con bruma dentro; y el destello de frente ----
       vec2 Lp = uTow + vec2(0., uTh + .026), v = p - Lp; vec3 beamC = mix(uWarm, vec3(1., .95, .82), .4); float face = 0.;
       for (int k = 0; k < 2; k++) { float a = uPh + float(k) * 3.1416, cs = cos(a), sn = sin(a), al = v.x * sign(cs), near = .5 + .5 * sn; face = max(face, pow(max(sn, 0.), 10.));
         if (al > 0.) { float w = .012 + al * (.09 + .16 * max(sn, 0.)), prof = exp(-pow(v.y - al * .04, 2.) / (w * w)), fall = exp(-al / (asp * 1.25 * abs(cs) + .03));
-          col += beamC * prof * fall * (.2 + .6 * near) * uPw * (.75 + .5 * n(p * 5. + vec2(uT * .2, 0.))); } }
+          col += beamC * prof * fall * (.2 + .6 * near) * uPw * (.55 + .7 * fbm(vec2(p.x * 3. - uT * .05, p.y * 8.)) * (.7 + .3 * n(p * 40. + uT * .3))) * mix(1., .6, smoothstep(.5, 1., prof)); } }   // un cono de luz con polvo y bruma dentro (no una franja)
       // ---- la costa de roca viene pintada de antemano (acantilado, contrafuerte y farallón; guarda la luz de la roca y dónde hay hierba):
       // aquí se le da el color según la hora, se oscurece el pie mojado y se le pone la espuma, que rompe con la caja ----
       float wl = uHy - .158 + (n(vec2(p.x * 14., uT * .5)) - .5) * .005;
-      vec3 rockLit = mix(uC1 * .55 + moonL * .26, vec3(.62, .46, .36), 1. - uNight), rockSh = mix(uC0 * .5, vec3(.17, .11, .15), 1. - uNight), grassC = mix(vec3(.04, .14, .11), vec3(.26, .42, .15), 1. - uNight);
+      vec3 rockLit = mix(uC1 * .55 + moonL * .26, vec3(.62, .46, .36), 1. - uNight), rockSh = mix(uC0 * .55 + vec3(.01, .012, .025), vec3(.2, .13, .15), 1. - uNight), grassC = mix(vec3(.03, .07, .07), vec3(.2, .24, .14), 1. - uNight);
       vec2 cuv = vec2(s / .9, (uv.y - (uHy - .2)) / .3);
       if (cuv.x < 1. && cuv.y > 0. && cuv.y < 1. && uv.y > wl) { vec4 t = texture(uCliff, cuv);
-        if (t.a > .01) { vec3 rk = mix(rockSh, rockLit, t.r) * (.4 + .6 * smoothstep(0., .075, uv.y - wl)) + beamC * exp(-dot(v, v) / .02) * .14 * uPw;
-          vec3 gc = grassC * (.5 + 1.2 * t.g) + moonL * .06;
-          col = mix(col, mix(rk, gc, t.b), t.a * smoothstep(0., .012 + .012 * n(vec2(p.x * 30., 2.)), uv.y - wl)); } }
+        if (t.a > .01) {
+          // ¿a qué distancia del borde de arriba está este punto? (cuántos pasos hacia arriba sigue habiendo roca)
+          float de = t.g * 15.;                                                                  // distancia (en px de la textura) al borde que mira a la luna
+          float g0 = max(texture(uCliff, cuv + vec2(0., .02)).b, texture(uCliff, cuv + vec2(0., .05)).b);
+          // la roca de noche: una silueta honda con textura sutil (estratos, grano, apenas las caras), y un filo nítido de luz de luna
+          float strata = .5 + .5 * sin(uv.y * 210. + fbm(vec2(p.x * 7., uv.y * 9.)) * 7.);
+          vec3 rk = rockSh * (.8 + .25 * t.r) * (.85 + .15 * strata) * (.85 + .3 * fbm(p * vec2(30., 60.)));
+          rk = mix(rk, mix(rockSh, rockLit, .5), .25 * (1. - smoothstep(0., .1, (uv.y - wl))) * 0.);
+          rk *= .55 + .45 * smoothstep(0., .06, uv.y - wl);                                     // el pie mojado, más oscuro
+          float rim = exp(-de / 3.) + .35 * exp(-de / 12.);
+          rk += (moonL * .7 + uHalo * .3) * rim * mix(.55, .4, 1. - uNight) * (.75 + .5 * fbm(vec2(p.x * 40., uv.y * 40.)));
+          rk += beamC * exp(-dot(v, v) / .02) * .12 * uPw;
+          float gcap = g0 * smoothstep(9. + 5. * fbm(vec2(p.x * 40., 3.)), 3., de + (uv.y > 0. ? 0. : 0.)) * step(.5, g0);
+          vec3 gc = grassC * (.7 + .5 * fbm(vec2(p.x * 60., uv.y * 90.))) + (moonL * .5 + uHalo * .2) * exp(-de / 2.5) * mix(.6, .4, 1. - uNight);
+          col = mix(col, mix(rk, gc, gcap), smoothstep(.015, .04, t.r) * smoothstep(0., .012 + .012 * n(vec2(p.x * 30., 2.)), uv.y - wl)); } }
       { float ca = 0.; for (int k = -2; k <= 2; k++) ca += texture(uCliff, vec2(s / .9 + float(k) * .012, (wl + .016 - (uHy - .2)) / .3)).a; ca /= 5.;   // hay roca en esta orilla (suavizado)
         float fy = uv.y - wl, mist = ca * exp(-abs(fy - .006) / .022) * (.45 + .55 * fbm(vec2(p.x * 6. - uT * .05, fy * 30. + uT * .03)));
         col = mix(col, mix(sky, vec3(.85, .9, 1.), .25) * mix(.95, 1.1, uNight), mist * mix(.32, .42, uNight));             // la neblina que levanta el mar, suave y viva
@@ -7426,8 +7462,10 @@ function faroSetup() {
         float lx = uMoon.x > uTow.x ? 1. : -1., nx = clamp(q.x / hw, -1., 1.), nz = sqrt(max(0., 1. - nx * nx));
         float lam = clamp(nx * lx * .75 + nz * .55, 0., 1.), tower = smoothstep(px, -px, abs(q.x) - hw) * step(0., q.y) * smoothstep(px, -px, q.y - uTh);
         float band = smoothstep(-.02, .02, sin((q.y / uTh + nz * .012) * 3.1416 * 5. - .6));
-        vec3 base = mix(vec3(.93, .92, .9), uAcc, band) * (.9 + .15 * n(vec2(q.x * 300., q.y * 140.)));
+        vec3 base = mix(vec3(.9, .86, .78), uAcc * .78, band) * (.92 + .12 * n(vec2(q.x * 300., q.y * 140.)));   // rojo profundo y crema, con la pátina de la pintura
         vec3 tc = base * (mix(uC0 * 1.5 + .04, vec3(.32, .26, .3), 1. - uNight) + moonL * lam * mix(.75, .9, 1. - uNight));
+        tc += moonL * pow(max(nx * lx, 0.), 6.) * nz * .18;                                                  // el brillo de la luna en el costado de la torre
+        tc *= 1. - .4 * exp(-(uTh - q.y) * 70.) * (1. - .5 * lam);                                        // sombra bajo el balcón
         tc += uWarm * exp(-(uTh - q.y) * 14.) * .45 * (.6 + .4 * uP);                                         // rebote cálido bajo la linterna
         tc *= 1. - .35 * smoothstep(.0, .012, q.y) * 0. - .3 * exp(-q.y * 60.);                             // se oscurece donde toca la roca
         for (int k = 0; k < 2; k++) { vec2 wq = q - vec2(-lx * hw * .15, uTh * (.34 + .3 * float(k))); float wm = smoothstep(px, -px, max(abs(wq.x) - .0045, abs(wq.y) - .011));
@@ -7452,8 +7490,7 @@ function faroSetup() {
       float bend = sin(uT * 1.4 + gb * .7) * .25 * (uv.y / max(gh, .01)) * (uv.y / max(gh, .01));
       float blade = smoothstep(.55 * (1. - uv.y / gh) + .03, .0, abs(gf - bend)) * step(uv.y, gh);
       col = mix(col, uC0 * .22, max(blade, smoothstep(.032, .012, uv.y + (n(vec2(p.x * 30., 7.)) - .5) * .025)));
-      for (int i = 0; i < 9; i++) { float fi = float(i); vec2 fp = vec2(fract(h1(fi + 3.) + sin(uT * .13 + fi) * .06) * asp, .03 + .16 * h1(fi + 9.) + sin(uT * .5 + fi * 2.) * .012);
-        float fl = .5 + .5 * sin(uT * (1.5 + h1(fi)) + fi * 2.4); col += mix(vec3(.75, 1., .5), uWarm, .4) * exp(-dot(p - fp, p - fp) / .00006) * fl * (.35 + uHi * 1.4 + uP * .3) * uNight; }
+      // (sin luciérnagas: se veían flotando sobre el mar)
       col *= 1. - .34 * smoothstep(.45, 1.1, length((vUv - vec2(.5, .52)) * vec2(1., .9)) * 1.25);
       col += (h(gl_FragCoord.xy) - .5) * .022;
       o = vec4(col, 1.);
@@ -7462,15 +7499,16 @@ function faroSetup() {
 // la costa del faro, pintada una vez: silueta dibujada a mano, caras de roca en facetas (más claras las que miran a la luna), repisas,
 // grietas, el pie más oscuro, y hierba que cubre lo alto y cuelga del borde. Rojo: luz de la roca; verde: luz de la hierba; azul: dónde hay hierba.
 function faroCliff() {
-  const Wc = 900, Hc = 300, X = v => v / 0.9 * Wc, Y = v => (1 - (v + 0.2) / 0.3) * Hc;
+  const Wc = 1800, Hc = 600, X = v => v / 0.9 * Wc, Y = v => (1 - (v + 0.2) / 0.3) * Hc;   // a la resolución de la pantalla: bordes sin escalones
   const mk = () => { const c = document.createElement('canvas'); c.width = Wc; c.height = Hc; return c; }, rock = mk(), grass = mk(), r = rock.getContext('2d'), g = grass.getContext('2d', { willReadFrequently: true });
   let seed = 11; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const shapes = [
-    { top: [[0, .036], [.06, .046], [.14, .05], [.3, .05], [.41, .05], [.46, .043], [.5, .02], [.53, -.012], [.56, -.05], [.6, -.085], [.63, -.118], [.665, -.16]], k: 1, grass: [0, .47] },
+    { top: [[0, .036], [.05, .044], [.12, .049], [.2, .046], [.27, .05], [.34, .047], [.4, .049], [.44, .046], [.47, .041], [.49, .03], [.497, .012], [.503, -.004], [.515, -.008], [.53, -.012], [.536, -.035], [.541, -.06], [.552, -.068], [.567, -.072], [.574, -.095], [.58, -.12], [.592, -.13], [.605, -.138], [.62, -.165]], k: 1, grass: [0, .48] },   // meseta, borde que cae casi vertical al mar con repisas
     { top: [[0, -.028], [.07, -.012], [.13, -.018], [.2, -.04], [.25, -.062], [.3, -.1], [.345, -.13], [.385, -.165]], k: 0.66, grass: null },
     { top: [[.72, -.165], [.728, -.13], [.738, -.1], [.75, -.078], [.764, -.066], [.778, -.064], [.79, -.074], [.8, -.094], [.81, -.125], [.82, -.165]], k: 0.9, grass: null },
     { top: [[.81, -.165], [.818, -.142], [.83, -.13], [.843, -.134], [.852, -.15], [.858, -.165]], k: 0.7, grass: null }];
-  for (const sh of shapes) { const pts = sh.top, path = c => { c.beginPath(); c.moveTo(X(pts[0][0]), Y(-.2)); for (const [a, b] of pts) c.lineTo(X(a), Y(b)); c.lineTo(X(pts[pts.length - 1][0]), Y(-.2)); c.closePath(); };
+  for (const sh of shapes) { { const src = sh.top, out_ = []; for (let i = 0; i < src.length - 1; i++) { const [a0, b0] = src[i], [a1, b1] = src[i + 1], n_ = Math.max(1, Math.round(Math.hypot(a1 - a0, b1 - b0) / .006)); for (let k = 0; k < n_; k++) { const f = k / n_; out_.push([a0 + (a1 - a0) * f, b0 + (b1 - b0) * f + (k && Math.abs(b1 - b0) < .02 ? (rnd() - .5) * .004 : (rnd() - .5) * .0025)]); } } out_.push(src[src.length - 1]); sh.top = out_; }
+  const pts = sh.top, path = c => { c.beginPath(); c.moveTo(X(pts[0][0]), Y(-.2)); for (const [a, b] of pts) c.lineTo(X(a), Y(b)); c.lineTo(X(pts[pts.length - 1][0]), Y(-.2)); c.closePath(); };
     const x0 = X(pts[0][0]), x1 = X(pts[pts.length - 1][0]), yT = Y(Math.max(...pts.map(q => q[1]))), G = l => { const q = Math.max(0, Math.min(255, Math.round(255 * l * sh.k))); return `rgb(${q},${q},${q})`; };
     r.save(); path(r); r.fillStyle = G(.5); r.fill(); r.clip();
     for (let i = 0; i < 46; i++) { const fx = x0 + rnd() * (x1 - x0), fy = yT - 10 + rnd() * (Hc - yT), w = 26 + rnd() * 60, h = 50 + rnd() * 120, tone = .36 + .3 * rnd() + .2 * (fx - x0) / (x1 - x0), sk = (rnd() - .5) * 46;
@@ -7483,11 +7521,16 @@ function faroCliff() {
     if (sh.grass) { const [ga, gb] = sh.grass, tp = pts.filter(q => q[0] >= ga - .001 && q[0] <= gb + .03);
       g.lineJoin = g.lineCap = 'round'; g.strokeStyle = 'rgb(120,120,120)'; g.lineWidth = 15; g.beginPath(); tp.forEach(([a, b], i) => i ? g.lineTo(X(a), Y(b) + 3) : g.moveTo(X(a), Y(b) + 3)); g.stroke();
       const xa = X(tp[0][0]), xb = X(tp[tp.length - 1][0]), topAt = xx => { for (let i = 1; i < pts.length; i++) if (X(pts[i][0]) >= xx) { const [a0, b0] = pts[i - 1], [a1, b1] = pts[i], f = (xx - X(a0)) / Math.max(1, X(a1) - X(a0)); return Y(b0 + (b1 - b0) * f); } return Y(pts[pts.length - 1][1]); };
-      for (let xx = xa; xx <= xb; xx += 3) { const ty = topAt(xx), l = Math.round(80 + rnd() * 150); g.strokeStyle = `rgb(${l},${l},${l})`; g.lineWidth = 2 + rnd() * 2.5;
+      for (let xx = xa; xx <= xb; xx += 3) { const ty = topAt(xx), l = Math.round(80 + rnd() * 150); g.strokeStyle = `rgb(${l},${l},${l})`; g.lineWidth = 1.2 + rnd() * 1.4;
         g.beginPath(); g.moveTo(xx, ty + 4); g.quadraticCurveTo(xx + (rnd() - .5) * 6, ty - 5, xx + (rnd() - .5) * 9, ty - 6 - rnd() * 9); g.stroke();
         if (rnd() < .55) { g.beginPath(); g.moveTo(xx, ty + 4); g.quadraticCurveTo(xx + (rnd() - .5) * 5, ty + 14, xx + (rnd() - .5) * 8, ty + 12 + rnd() * 22); g.stroke(); } } } }
   const out = mk(), o = out.getContext('2d'), Rd = r.getImageData(0, 0, Wc, Hc), Gd = g.getImageData(0, 0, Wc, Hc), O = o.createImageData(Wc, Hc);
   for (let i = 0; i < Rd.data.length; i += 4) { const ga = Gd.data[i + 3], ra = Rd.data[i + 3]; O.data[i] = Rd.data[i]; O.data[i + 1] = Gd.data[i]; O.data[i + 2] = ga; O.data[i + 3] = Math.max(ra, ga); }
+  // verde: la distancia (suave y exacta) desde el borde de arriba de la roca, para pintar su luz sin escalones
+  // verde: qué tan lejos está cada punto de la roca del borde que mira a la luna (arriba a la derecha): ahí va el filo de luz
+  for (let y = 0; y < Hc; y++) for (let x = 0; x < Wc; x++) { const i = (y * Wc + x) * 4; if (Rd.data[i + 3] < 20) { O.data[i + 1] = 0; continue; }
+    let d = 30; for (let k = 1; k <= 30; k++) { const xx = Math.round(x + k * .8), yy = Math.round(y - k * .6); if (xx >= Wc || yy < 0 || Rd.data[(yy * Wc + xx) * 4 + 3] < 20) { d = k - 1 + Rd.data[(Math.min(Hc - 1, Math.max(0, yy)) * Wc + Math.min(Wc - 1, xx)) * 4 + 3] / 255; break; } }
+    O.data[i + 1] = Math.round(Math.min(1, d / 30) * 255); }
   o.putImageData(O, 0, 0); return out;
 }
 function drawLight(dt) {
