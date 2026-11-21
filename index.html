@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 210</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 211</div>
     </div>
   </div>
   <div class="group">
@@ -2075,6 +2075,7 @@ function drawInk(dt, flowerMode = false) {
   if (ob) spawnBlob('big', ob, flowerMode);
   if (om) for (let k = 0; k < 1 + Math.floor(om * 2); k++) spawnBlob('mid', om, flowerMode);
   if (oh) for (let k = 0; k < 1 + Math.floor(oh * (flowerMode ? 2 : 3)); k++) spawnBlob('small', oh, flowerMode);
+  { const h = attHit(10, 40); if (h > 0 && !om) spawnBlob(h > 0.7 ? 'mid' : 'small', 0.4 + 0.4 * h, flowerMode); }   // cada nota (piano, sinte) abre una mancha o una flor
   if (Math.random() < energy * dt * 3) spawnBlob(Math.random() < 0.7 ? 'small' : 'mid', energy, flowerMode);
   // la voz: cada sílaba cantada abre una gota (o una flor) del color de la nota
   if (hits.voice && voice > 0.12) { spawnBlob('mid', 0.5 + hits.voice * 0.4, flowerMode); blobs[blobs.length - 1].sprite = Math.floor(((melodyHue % 1) + 1) % 1 * 3) % 3; }
@@ -5549,6 +5550,7 @@ function drawFluid(dt) {
     for (let k = 0; k < 8; k++) { const a = k / 8 * Math.PI * 2; fluidSplat(ox + Math.cos(a) * 0.05 * H / W, oy + Math.sin(a) * 0.05, Math.cos(a) * 2600 * kb, Math.sin(a) * 2600 * kb, fluidColor(RGB[k % 3], 0.12 * kb), R(0.12)); }
   }
   if (hits.mid) { const km = hits.mid * (0.15 + dynL * dynL * 0.95); ring(1 + Math.round(km), km * 0.6, 0.18, 0.3 + km * 0.3); }
+  else { const h = attHit(10, 40); if (h > 0) ring(1, 0.25 + 0.3 * h, 0.15, 0.3 + 0.2 * h); }   // cada nota (piano, sinte) suelta una onda de color
   if (hits.high) ring(1, hits.high * 0.4, 0.06, 0.6);
   if (Math.random() < energy * dt * 2) ring(1, energy * 0.25, 0.15, 0.12 + energy * 0.2);   // relleno suave al azar: poco, para que manden los golpes
   // la voz: cada sílaba suelta un hilo de tinta del color de la nota que sube suave desde abajo
@@ -6130,7 +6132,7 @@ function drawDunas(dt) {
   const cov = (t, l) => paiTone(mix(t), l, 50, 85);
   S.ph = (S.ph || 0) + dt * S.go * (0.15 + 0.6 * S.en + 0.25 * S.lv[0]);
   if (pulse.on) S.beat = 9; S.beat = Math.max(-3, (S.beat ?? -3) - dt * 16);
-  S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); }
+  S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); const h = attHit(a, a + Math.ceil(BANDS / 10)); if (h > 0) S.L[k] = Math.min(1.4, S.L[k] + 0.35 + 0.35 * h); }   // cada nota de su parte (piano, sinte, voz) levanta su ola
   const pal = night ? { s0: [0.06, 0.08, 0.18], s1: [0.02, 0.03, 0.09], sun: [0.95, 0.42, 0.25], w0: [0.3, 0.42, 0.7], w1: [0.04, 0.07, 0.2] }
     : { s0: [0.93, 0.9, 0.92], s1: [0.86, 0.9, 0.96], sun: [1, 0.55, 0.28], w0: [0.62, 0.74, 0.92], w1: [0.12, 0.2, 0.48] };
   paiRun(S, DUNAS_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(pal.s0, cov(.8, night ? 14 : 86), 0.35)); gl.uniform3fv(p.u.uSky1, paiBl(pal.s1, cov(.3, night ? 10 : 90), 0.3)); gl.uniform3fv(p.u.uSun, paiBl(pal.sun, cov(.9, 62), 0.55));
@@ -7559,6 +7561,7 @@ function drawLight(dt) {
   L.act = audible ? 2.5 : Math.max(0, L.act - dt); L.go += ((L.act > 0 ? 1 : 0) - L.go) * (1 - Math.pow(0.02, dt)); L.b += dt / per * L.go;
   L.bass += (bandX(0, 10) - L.bass) * (1 - Math.pow(0.001, dt)); L.vo += (Math.min(1, voice * 1.5) - L.vo) * (1 - Math.pow(0.08, dt));
   L.hi += (bandX(38, BANDS) - L.hi) * (1 - Math.pow(0.02, dt)); L.foam = Math.max(L.foam * Math.pow(0.06, dt), hits.snare ? 1 : 0);
+  { const h = attHit(8, 40); L.mel = Math.max((L.mel || 0) * Math.exp(-dt / 0.25), h); }   // cada nota (piano, sinte, voz) aviva el haz del faro
   if (pulse.on) { L.beats++; if (night && L.beats % 8 === 5 && !L.star) L.star = { x: (0.06 + Math.random() * 0.3) * asp, y: 0.8 + Math.random() * 0.12, t: 0.001 }; }
   if (L.star) { L.star.t += dt / (per * 1.5) * L.go; if (L.star.t >= 1) L.star = null; }
   const tone = (c, l, sMin = 55) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, s_), l)).map(v => v / 255); };
@@ -7570,7 +7573,7 @@ function drawLight(dt) {
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uTow, tx, topY); gl.uniform1f(p.u.uTh, th); gl.uniform1f(p.u.uHy, hy);
   gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uPh, (L.b * Math.PI / 2) % (Math.PI * 2));
-  gl.uniform1f(p.u.uPw, (0.35 + 0.65 * Math.min(1, L.bass * 1.4 + 0.25)) * (0.35 + 0.65 * L.go) * (night ? 1 : 0.6) * flash); gl.uniform1f(p.u.uP, P * flash); gl.uniform1f(p.u.uHi, L.hi); gl.uniform1f(p.u.uVo, L.vo); gl.uniform1f(p.u.uFoam, L.foam);
+  gl.uniform1f(p.u.uPw, (0.35 + 0.65 * Math.min(1, L.bass * 1.4 + 0.25)) * (0.35 + 0.65 * L.go) * (night ? 1 : 0.6) * flash); gl.uniform1f(p.u.uP, Math.min(1.2, P + 0.55 * (L.mel || 0)) * flash); gl.uniform1f(p.u.uHi, L.hi); gl.uniform1f(p.u.uVo, L.vo); gl.uniform1f(p.u.uFoam, L.foam);
   gl.uniform3f(p.u.uMoon, mx, my, mR * (1 + P * 0.025)); const cool = (c, nv, k) => night ? c.map((v, j) => v * (1 - k) + nv[j] * k) : c;   // de noche los tonos de la portada se enfrían hacia el azul profundo
   const dayS = (c, nat) => night ? c : c.map((v, j) => v * 0.3 + nat[j] * 0.7);   // de día, un atardecer real: azul profundo arriba, lavanda rosada al medio, durazno en el horizonte (la portada solo tiñe)
   gl.uniform3fv(p.u.uC0, dayS(cool(tone(mix(0.1), night ? 5 : 34), [0.012, 0.02, 0.06], 0.6), [0.16, 0.24, 0.52])); gl.uniform3fv(p.u.uC1, dayS(cool(tone(mix(0.5), night ? 11 : 56), [0.04, 0.07, 0.19], 0.6), [0.62, 0.5, 0.68])); gl.uniform3fv(p.u.uC2, dayS(cool(tone(mix(0.9), night ? 20 : 74, 70), [0.1, 0.16, 0.36], 0.55), [1, 0.72, 0.5]));
@@ -8336,6 +8339,7 @@ function drawTubes(dt) {
     // el aire: la música; en silencio se desinflan, en un drop se levantan de golpe
     const goal = Math.min(1.6, 0.03 + bandX(0, BANDS) * 1.1 + Math.pow(energy, 0.9) * 0.4 + beatSoft * 0.7 + (dropHit ? 1 : 0));
     m.air += (goal - m.air) * (1 - Math.pow(goal > m.air ? 0.02 : 0.3, dt));
+    { const h = attHit(10, 40); if (h > 0) { m.air = Math.min(1.8, m.air + 0.12 + 0.15 * h); const arm = m.arms[(m.k + Math.round(h * 3)) % 2], tip = arm[arm.length - 1]; tip.py += m.FH * 0.02 * h; } }   // cada nota: un soplo y un brazo que se alza
     // Coreografía al compás: en cada golpe un soplo de aire (se estira), un latigazo que alterna
     // izquierda y derecha (y cada muñeco va al contrario que su vecino) y un brazo arriba
     if (pulse.on) {
@@ -13750,6 +13754,7 @@ function drawRuta(dt) {
   ruta.on.fill(999); ruta.cars.forEach((c, i) => { ruta.on[i * 4] = c.z; ruta.on[i * 4 + 1] = c.br * (0.75 + P * 0.5); ruta.on[i * 4 + 2] = c.k; });
   const hi = bandX(40, BANDS); ruta.hi += (hi - ruta.hi) * (1 - Math.pow(0.02, dt));
   ruta.glow += ((0.35 + bandX(10, 36) * 0.9 + dynL * 0.5) * musicGate - ruta.glow) * (1 - Math.pow(0.1, dt));
+  { const h = attHit(8, 40); if (h > 0) ruta.glow = Math.min(2, ruta.glow + 0.3 + 0.3 * h); }   // cada nota aviva las luces del tablero y del camino
   // las agujas: revoluciones (saltan con el bombo), velocidad (la fuerza de la canción), el vúmetro y el volumen
   const loud = Math.min(1, dynL * 1.15);
   ruta.rpmV += (((0.22 + 0.45 * loud) * musicGate - ruta.rpm) * 70 - ruta.rpmV * 9) * dt; ruta.rpm = Math.max(0, Math.min(1.05, ruta.rpm + ruta.rpmV * dt));
@@ -14102,6 +14107,7 @@ function drawAuto(dt) {
   auto.dist += db * 0.5;   // la vía corre siempre pareja (aunque tu carro espere a que haya paso)
   auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
   auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
+  { const h = attHit(8, 40); if (h > 0) auto.glow = Math.min(1.4, auto.glow + 0.35 + 0.3 * h); }   // cada nota enciende las luces del camino
   auto.brake = Math.max(auto.brake * Math.pow(0.03, dt), hits.snare ? 1 : 0); auto.hi += (bandX(40, BANDS) - auto.hi) * (1 - Math.pow(0.02, dt));
   auto.myBrake += ((blocked ? 1 : 0) - auto.myBrake) * (1 - Math.pow(0.001, dt));
   const rot = Math.max(-0.1, Math.min(0.1, auto.xv * 0.55)), heroY = myY + P * 0.006, flash = state.noFlash ? 0.5 : 1;
