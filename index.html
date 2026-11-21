@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 202</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 203</div>
     </div>
   </div>
   <div class="group">
@@ -12032,7 +12032,7 @@ function halosSetup() {
       for (int i = 0; i < 6; i++) { if (i >= uN) break;
         vec4 O = uO[i], K = uK[i];                       // O: centro, radio, canto  ·  K: núcleo (desplazamiento), tamaño, hondura
         vec2 q = (p - O.xy) / O.z; q *= vec2(1. + uE[i].y, 1. - uE[i].y); float d = length(q);   // se aplasta con el golpe, como una gota
-        if (d > 1.6) continue;
+        if (d > 3.) continue;
         float a = smoothstep(1.08, .76, d);              // borde suave que se deshace en el aire
         vec2 dir = normalize(K.xy + vec2(1e-4));
         vec3 c = mix(uA[i], uB[i], smoothstep(-1.1, .9, dot(q, dir)));     // degradado de dos tonos: la luz entra por el lado opuesto al núcleo
@@ -12041,7 +12041,7 @@ function halosSetup() {
         c = mix(c, mix(uA[i], vec3(1.), .35), smoothstep(.55, .95, d) * smoothstep(1.05, .9, d) * (.18 + O.w));   // el canto, apenas más claro (los platillos lo avivan)
         c *= uE[i].x;                                     // se enciende con su parte del sonido
         col = mix(col, c, a);
-        glow += mix(uA[i], uB[i], .5) * exp(-max(d - .8, 0.) * 3.) * (1. - a) * (uNight > .5 ? .1 + .3 * uE[i].x * uE[i].x : .04);   // un halo de su color alrededor
+        float gx = max(d - .7, 0.); glow += mix(uA[i], uB[i], .5) * exp(-gx * gx * 3.5) * smoothstep(3., 1.2, d) * (1. - a) * (uNight > .5 ? .1 + .3 * uE[i].x * uE[i].x : .04);   // un halo de su color alrededor
       }
       col += glow;
       if (uNight > .5) col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
