@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 201</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 202</div>
     </div>
   </div>
   <div class="group">
@@ -11677,19 +11677,19 @@ function portalSetup() {
       float R = uR * (1. + .1 * cos(an - uA1) + (.02 + uM.x) * sin(2. * an + uPh * .4) + (.008 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));   // el hueco se estira hacia donde va la luz: el centro también se mueve
       float r = length(q) / R;
       // los colores: giran alrededor y salen hacia afuera en ondas suaves (manan desde la orilla)
-      float k = an / 6.2832 + uRot + uVo * .06 * sin(uPh * .3);   // el color cambia solo alrededor del hueco, en zonas suaves (sin espirales); la voz lo corre un poco
-      vec3 ring = ramp(k) * (1. + .14 * sin(an * 3. + uPh * 2.) * uHi);
-      ring = mix(ring, uMel, uVo * .3 * smoothstep(-.2, .9, sin(an - 1.2 + uPh * .2)));
+      float k = an / 6.2832 + uRot + uVo * .12 * sin(uPh * .3);   // el color cambia solo alrededor del hueco, en zonas suaves (sin espirales); la voz lo corre un poco
+      vec3 ring = ramp(k) * (1. + .3 * sin(an * 3. + uPh * 2.) * uHi);
+      ring = mix(ring, uMel, uVo * .5 * smoothstep(-.2, .9, sin(an - 1.2 + uPh * .2)));
       // el aura no es un aro parejo: tiene lóbulos (más luz hacia un lado, una cola hacia otro) que giran alrededor del hueco
       float lobe = max(.45, 1. + .5 * cos(an - uA1) + .12 * cos(2. * an - uA2));   // lóbulos suaves
       float inner = smoothstep(.35, 1.2, r);                                            // del hueco al color, muy suave
-      float xo = max(r - .9, 0.) * (1.25 - .45 * uGlow - .2 * uBr);
+      float xo = max(r - .9, 0.) * max(.3, 1.35 - .5 * uGlow - .2 * uBr - .7 * uBeat);
       float outer = mix(exp(-xo / lobe), exp(-xo * .8), .35) * (1. + .5 * exp(-max(r - 1., 0.) * 3.));   // borde exterior siempre difuminado (también del lado con menos luz)   // la luz más intensa junto al hueco; se extiende más hacia el lóbulo y respira con cada tiempo
       vec3 hc = mix(ring, uDeep, smoothstep(1.1, 2.4, r)), halo = hc * outer;
       halo *= .4 + .5 * lobe;
       vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg, col;
       if (uNight > .5) {
-        col = bg + halo * inner * (.75 + .9 * uEn + .35 * uBeat) + hc * exp(-max(r - 1., 0.) * .5 / lobe) * .16 * inner;   // con la música crece la luz, no el tamaño
+        col = bg + halo * inner * (.45 + .6 * uEn + .35 * uGlow + 1.4 * uBeat) + hc * exp(-max(r - 1., 0.) * .5 / lobe) * .16 * inner;   // con la música crece la luz, no el tamaño
         col = mix(col, vec3(.015, .01, .03), (1. - inner) * .92);                    // el hueco, oscuro y hondo
       } else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }
       float mx = max(col.r, max(col.g, col.b)); if (uNight > .5) col *= (1. - exp(-mx * 1.5)) / max(mx, 1e-4); else if (mx > 1.) col /= mx;   // curva suave que conserva el color: la luz nunca se aplana (sin bordes) ni se lava a blanco
@@ -11704,13 +11704,13 @@ function drawPortal(dt) {
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
   portal.spd = ease(portal.spd, musicGate * (0.25 + energy * 1.3), 0.9); portal.ph += dt * portal.spd;
-  portal.rot += dt * musicGate * (0.015 + energy * 0.12);                                 // los colores giran con la energía
+  portal.rot += dt * musicGate * (0.01 + energy * 0.06) + dt * (portal.av || 0) * 0.03;                                 // los colores giran con la energía
   const base = (asp < 1 ? 0.2 : 0.24) * Math.min(asp, 1.1);
   portal.R = ease(portal.R || base, base * (0.95 + 0.08 * Math.pow(bandX(0, 10), 1.1) * musicGate), 0.6);   // el hueco apenas respira (no se acerca ni se aleja)
   const okT = tempo.period > 0.25 && tempo.conf > 0.2, bps = okT ? 1 / tempo.period : 2;   // la luz gira al tempo: una vuelta cada dos compases (8 tiempos)
-  portal.a1 = (portal.a1 || 0) + dt * musicGate * bps * (6.2832 / 8) * (0.6 + 0.5 * portal.en); portal.a2 = (portal.a2 || 2) - dt * musicGate * bps * (6.2832 / 12);
-  if (pulse.on) portal.beat = Math.min(1, portal.beat + 0.5 + pulse.k * 0.4);   // el golpe: un destello de luz suave (no cambia el tamaño)
-  portal.beat = ease(portal.beat, 0, 0.3);
+  portal.a1 = (portal.a1 || 0) + dt * musicGate * bps * (6.2832 / 16) * (0.4 + 1.1 * portal.en); portal.a2 = (portal.a2 || 2) - dt * musicGate * bps * (6.2832 / 24);
+  if (pulse.on) { portal.beat = Math.min(1, portal.beat + 0.8 + pulse.k * 0.5); portal.av = (portal.av || 0) + 0.9 + pulse.k; }   // el golpe: un destello de luz suave (no cambia el tamaño)
+  portal.beat = ease(portal.beat, 0, 0.26); portal.av = ease(portal.av || 0, 0, 0.45); portal.a1 += dt * portal.av * musicGate;
   portal.vo = ease(portal.vo, Math.min(1, voice * 1.4), 0.4);
   portal.hi = ease(portal.hi, bandX(28, BANDS) * musicGate, 0.15);
   const mt = [0.035 * Math.pow(bandX(0, 10), 1.2), 0.025 * bandX(10, 26), 0.01 * bandX(26, BANDS)].map(v => v * (0.5 + 0.8 * dynL) * musicGate);
