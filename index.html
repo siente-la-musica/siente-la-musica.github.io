@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 204</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 205</div>
     </div>
   </div>
   <div class="group">
@@ -1338,6 +1338,23 @@ const raw = new Float32Array(BANDS);       // espectro sin suavizar
 // hacia arriba y techo que baja despacio). 0 = como siempre, 1 = lo más fuerte de estos segundos.
 // Así un modo puede mostrar cada subida y bajada de la canción, como las barras o las montañas.
 const lvFloor = new Float32Array(BANDS), lvCeil = new Float32Array(BANDS).fill(0.3), lvx = new Float32Array(BANDS);
+// El ataque de cada banda: dónde empieza a sonar algo nuevo (una nota de piano, un acorde, un sinte, una sílaba),
+// no solo el bombo. attNew: la fuerza del ataque en este fotograma (0 si no hay); att: el mismo ataque que se apaga
+// en ~0,15 s. Toda animación debería escucharlo en la parte que le toca (estándar: sentir toda la canción).
+const att = new Float32Array(BANDS), attNew = new Float32Array(BANDS), attRest = new Float32Array(BANDS), attPrev = new Float32Array(BANDS), attPk = new Float32Array(BANDS).fill(0.05);
+function attackTick(dt) {
+  for (let i = 0; i < BANDS; i++) {
+    const v = (raw[Math.max(0, i - 1)] + raw[i] * 2 + raw[Math.min(BANDS - 1, i + 1)]) / 4;   // con sus vecinas: una nota cae entre bandas
+    const f = Math.max(0, v - attPrev[i]); attPrev[i] += (v - attPrev[i]) * (1 - Math.pow(0.0005, dt));   // lo que sube sobre lo reciente
+    attPk[i] = Math.max(attPk[i] * Math.pow(0.6, dt), f, 0.04);
+    const k = f / attPk[i]; attRest[i] = Math.max(0, attRest[i] - dt);
+    attNew[i] = k > 0.6 && f > 0.05 && attRest[i] <= 0 ? Math.min(1, k) * musicGate : 0;   // cada nota cuenta una vez (descanso de 0,15 s por banda)
+    if (attNew[i] > 0) attRest[i] = 0.15;
+    att[i] = Math.max(att[i] * Math.exp(-dt / 0.15), attNew[i]);
+  }
+}
+const attX = (a, b) => { let m = 0; for (let i = a; i < Math.min(b, BANDS); i++) m = Math.max(m, att[i]); return m; };
+const attHit = (a, b) => { let m = 0; for (let i = a; i < Math.min(b, BANDS); i++) m = Math.max(m, attNew[i]); return m; };
 // nivel de un tramo de bandas, vivo: mezcla del nivel real con su subida o bajada
 // el analizador da decibelios: 9 dB menos (una estrofa frente al estribillo) apenas bajan el valor un 14 %.
 // dynL lo pasa a volumen real frente a lo más fuerte de los últimos ~20 s (1 = como el estribillo)
@@ -1489,6 +1506,7 @@ function analyse(dt) {
   // ¿Suena algo? Se mide el volumen real de la señal (no la energía, que se escala con lo fuerte de la canción):
   // un piano suave después de un drop sigue siendo música, y solo un silencio de verdad apaga y pasa a gris
   audible = analyser && analyser.getFloatTimeDomainData ? dynLs > 3e-6 : energy > 0.015;
+  attackTick(dt);
   bass = avg(raw, 0, 10); mid = avg(raw, 10, 38); high = avg(raw, 38, BANDS);
   energy = (bass * 0.5 + mid * 0.3 + high * 0.2) * (0.3 + 0.7 * dynL);   // la energía también sabe si la parte es suave o fuerte
   // reloj de la música, en tiempos: corre al tempo de la canción solo mientras suena (en silencio se detiene)
@@ -1572,7 +1590,7 @@ function analyse(dt) {
   // piano, cada sílaba cantada y la caja marcan el pulso, más suave. Así nada se congela cuando la batería calla.
   const melo = !real && !fill && analyser && nowP - lastBassHit > 1500 && nowP - pulse.at > 230 && (hits.mid > 0.22 || hits.voice > 0.2 || hits.snare > 0);
   if (real || fill || melo) {
-    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : melo ? 0.3 + Math.max(hits.mid, hits.voice, hits.snare ? 0.5 : 0) * 0.4 : 0.5;
+    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.melo = !!melo; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : melo ? 0.3 + Math.max(hits.mid, hits.voice, hits.snare ? 0.5 : 0) * 0.4 : 0.5;
     pulse.k = Math.min(1, pulse.k * (0.5 + (melo ? bandX(10, 40) : bandX(0, 12)) * 0.65));   // (una nota de piano se mide en su registro, no en los graves)   // el mismo bombo pega menos en la estrofa que en el estribillo
     // ataque al instante (en el mismo fotograma del golpe), sin esperar a que un muelle se estire
     const amp = pulse.k * (state.noFlash ? 0.3 : 0.6);
@@ -11670,28 +11688,30 @@ function drawTunnel(dt) {
 // color; los medios ondulan apenas el contorno; los agudos lo hacen titilar; la voz tiñe la aureola con la nota.
 const portal = { prog: null, ph: 0, spd: 0, R: 0, beat: 0, beatV: 0, vo: 0, rot: 0, hi: 0, m: [0, 0, 0], en: 0, glow: 0, S: new Float32Array(15) };
 function portalSetup() {
-  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uVo, uRot, uHi, uBeat, uEn, uGlow, uA1, uA2, uBr; uniform vec3 uM; uniform vec2 uC; uniform vec3 uMel, uBg, uDeep; uniform vec3 uS[5];
+  portal.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uR, uVo, uRot, uHi, uBeat, uEn, uGlow; uniform vec4 uL, uTh; uniform vec3 uM; uniform vec2 uC; uniform vec3 uMel, uBg, uDeep; uniform vec3 uS[5];
     ${GLSL_COVER}
     vec3 ramp(float k) { k = fract(k) * 5.; int i = int(k); float f = fract(k); return mix(uS[i], uS[i == 4 ? 0 : i + 1], f); }   // paso lineal: los colores se funden sin bordes
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), q = p - uC;
       float an = atan(q.y, q.x);
-      float R = uR * (1. + .1 * cos(an - uA1) + (.02 + uM.x) * sin(2. * an + uPh * .4) + (.008 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));   // el hueco se estira hacia donde va la luz: el centro también se mueve
+      // cuatro lenguas de luz, cada una escucha su parte del sonido (graves, medios, agudos, voz) y se estira hacia afuera cuando suena
+      vec4 bump = exp((cos(an - uTh) - 1.) * 2.2);
+      float R = uR * (1. + .05 * dot(uL, cos(an - uTh)) + (.02 + uM.x) * sin(2. * an + uPh * .4) + (.008 + uM.y) * sin(3. * an - uPh * .6 + 1.3) + uM.z * sin(5. * an + uPh * .9 + 2.));   // el hueco se estira hacia donde va la luz: el centro también se mueve
       float r = length(q) / R;
       // los colores: giran alrededor y salen hacia afuera en ondas suaves (manan desde la orilla)
       float k = an / 6.2832 + uRot + uVo * .12 * sin(uPh * .3);   // el color cambia solo alrededor del hueco, en zonas suaves (sin espirales); la voz lo corre un poco
       vec3 ring = ramp(k) * (1. + .3 * sin(an * 3. + uPh * 2.) * uHi);
       ring = mix(ring, uMel, uVo * .5 * smoothstep(-.2, .9, sin(an - 1.2 + uPh * .2)));
       // el aura no es un aro parejo: tiene lóbulos (más luz hacia un lado, una cola hacia otro) que giran alrededor del hueco
-      float lobe = max(.45, 1. + .5 * cos(an - uA1) + .12 * cos(2. * an - uA2));   // lóbulos suaves
+      float lobe = .42 + .18 * uGlow + dot(uL, bump) * 1.3;   // lóbulos suaves que salen hacia donde suena
       float inner = smoothstep(.35, 1.2, r);                                            // del hueco al color, muy suave
-      float xo = max(r - .9, 0.) * max(.3, 1.35 - .5 * uGlow - .2 * uBr - .7 * uBeat);
-      float outer = mix(exp(-xo / lobe), exp(-xo * .8), .35) * (1. + .5 * exp(-max(r - 1., 0.) * 3.));   // borde exterior siempre difuminado (también del lado con menos luz)   // la luz más intensa junto al hueco; se extiende más hacia el lóbulo y respira con cada tiempo
+      float xo = max(r - .9, 0.) * max(.35, 1.3 - .35 * uGlow - .25 * uBeat);
+      float outer = mix(exp(-xo / lobe), exp(-xo * 1.1), .2) * (1. + .5 * exp(-max(r - 1., 0.) * 3.));   // borde exterior siempre difuminado (también del lado con menos luz)   // la luz más intensa junto al hueco; se extiende más hacia el lóbulo y respira con cada tiempo
       vec3 hc = mix(ring, uDeep, smoothstep(1.1, 2.4, r)), halo = hc * outer;
       halo *= .4 + .5 * lobe;
       vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg, col;
       if (uNight > .5) {
-        col = bg + halo * inner * (.45 + .6 * uEn + .35 * uGlow + 1.4 * uBeat) + hc * exp(-max(r - 1., 0.) * .5 / lobe) * .16 * inner;   // con la música crece la luz, no el tamaño
+        col = bg + halo * inner * (.4 + .35 * uEn + .15 * uGlow + .55 * uBeat) + hc * exp(-max(r - 1., 0.) * .5 / lobe) * .16 * inner;   // con la música crece la luz, no el tamaño
         col = mix(col, vec3(.015, .01, .03), (1. - inner) * .92);                    // el hueco, oscuro y hondo
       } else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }
       float mx = max(col.r, max(col.g, col.b)); if (uNight > .5) col *= (1. - exp(-mx * 1.5)) / max(mx, 1e-4); else if (mx > 1.) col /= mx;   // curva suave que conserva el color: la luz nunca se aplana (sin bordes) ni se lava a blanco
@@ -11706,22 +11726,26 @@ function drawPortal(dt) {
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
   portal.spd = ease(portal.spd, musicGate * (0.25 + energy * 1.3), 0.9); portal.ph += dt * portal.spd;
-  portal.rot += dt * musicGate * (0.01 + energy * 0.06) + dt * (portal.av || 0) * 0.03;                                 // los colores giran con la energía
+  portal.rot += dt * musicGate * (0.008 + energy * 0.05) + dt * (portal.av || 0) * 0.025;   // los colores giran con la energía (y cada bombo los empuja)
   const base = (asp < 1 ? 0.2 : 0.24) * Math.min(asp, 1.1);
   portal.R = ease(portal.R || base, base * (0.95 + 0.08 * Math.pow(bandX(0, 10), 1.1) * musicGate), 0.6);   // el hueco apenas respira (no se acerca ni se aleja)
-  const okT = tempo.period > 0.25 && tempo.conf > 0.2, bps = okT ? 1 / tempo.period : 2;   // la luz gira al tempo: una vuelta cada dos compases (8 tiempos)
-  portal.a1 = (portal.a1 || 0) + dt * musicGate * bps * (6.2832 / 16) * (0.4 + 1.1 * portal.en); portal.a2 = (portal.a2 || 2) - dt * musicGate * bps * (6.2832 / 24);
+  // las lenguas de luz: cada una con su parte del sonido, con resorte (se estiran, se pasan un poco y vuelven); nada va con reloj
+  if (!portal.L) { portal.L = new Float32Array(4); portal.LV = new Float32Array(4); portal.LT = new Float32Array(4); portal.drift = 0; }
+  const lb = [bandX(0, 6) * 0.5, bandX(4, 16), bandX(16, 32), Math.max(bandX(32, BANDS), voice * 0.9)];   // 0: el bombo (salta con cada golpe), 1: el bajo, 2: los medios, 3: agudos y voz
+  if (!portal.Lavg) portal.Lavg = new Float32Array(4);
+  for (let i = 0; i < 4; i++) { portal.Lavg[i] = ease(portal.Lavg[i], lb[i], 2.5); portal.LT[i] = Math.min(1.4, i === 0 ? 0.3 * lb[0] : 0.25 * lb[i] + 2.6 * Math.max(0, lb[i] - portal.Lavg[i] * 0.9)) * (0.6 + 0.6 * dynL) * musicGate; }   // cada lengua escucha lo que cambia en su parte (si todo suena fuerte, no se infla todo igual)
+  if (pulse.on && !pulse.melo) for (let i = 0; i < 4; i++) portal.LV[i] += (i === 0 ? 10 : i === 1 ? 2.5 : 1.2) * (0.6 + pulse.k);
+  [[4, 16], [16, 32], [32, BANDS]].forEach(([a, b], j) => { const h = attHit(a, b); if (h > 0) portal.LV[j + 1] += 3 + 3.5 * h; });   // las notas (piano, sinte, voz) estiran la lengua de su registro
+  springTo(portal.L, portal.LV, portal.LT, dt, 280, 0.5);   // rápido: alcanza a seguir cada bombo (también a 128 BPM)
+  portal.drift += dt * musicGate * (0.03 + 0.12 * energy) + dt * (portal.av || 0) * 0.05;   // las lenguas también giran despacio con la energía
   if (pulse.on) { portal.beat = Math.min(1, portal.beat + 0.8 + pulse.k * 0.5); portal.av = (portal.av || 0) + 0.9 + pulse.k; }   // el golpe: un destello de luz suave (no cambia el tamaño)
-  portal.beat = ease(portal.beat, 0, 0.26); portal.av = ease(portal.av || 0, 0, 0.45); portal.a1 += dt * portal.av * musicGate;
+  portal.beat = ease(portal.beat, 0, 0.22); portal.av = ease(portal.av || 0, 0, 0.45);
   portal.vo = ease(portal.vo, Math.min(1, voice * 1.4), 0.4);
   portal.hi = ease(portal.hi, bandX(28, BANDS) * musicGate, 0.15);
   const mt = [0.035 * Math.pow(bandX(0, 10), 1.2), 0.025 * bandX(10, 26), 0.01 * bandX(26, BANDS)].map(v => v * (0.5 + 0.8 * dynL) * musicGate);
   for (let k = 0; k < 3; k++) portal.m[k] = ease(portal.m[k], mt[k], 0.3);
   portal.en = ease(portal.en, Math.min(1, energy * 2.2) * musicGate, 0.2);
   portal.glow = ease(portal.glow, Math.pow(bandX(0, 12), 1.1) * musicGate, 0.25);
-  // el resplandor respira con cada tiempo de la canción (crece en el golpe y se relaja), suave, sin cambiar el tamaño del hueco
-  { const okT = tempo.period > 0.25 && tempo.conf > 0.2, ph = okT ? (((performance.now() / 1000 - tempo.phaseRef) / tempo.period) % 1 + 1) % 1 : 0;
-    portal.br = ease(portal.br || 0, (okT ? 0.5 + 0.5 * Math.cos(ph * 6.2832) : 0.3) * musicGate * (0.4 + 0.6 * portal.en), 0.08); }
   // los colores de la portada, vivos: sus tres tonos y dos matices intermedios (más claro y más hondo), sin colores ajenos
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(72, Math.min(96, hs[0][1] * 1.3 + 22));
   const v = (h, l) => hexToRgb(hsl(h, sat, l)).map(x => x / 255);
@@ -11731,7 +11755,8 @@ function drawPortal(dt) {
   const [cw, ch] = glCanvas(0.85), p = portal.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
-  gl.uniform1f(p.u.uPh, portal.ph); gl.uniform1f(p.u.uR, portal.R); gl.uniform1f(p.u.uBr, portal.br); gl.uniform1f(p.u.uA1, portal.a1); gl.uniform1f(p.u.uA2, portal.a2);
+  gl.uniform1f(p.u.uPh, portal.ph); gl.uniform1f(p.u.uR, portal.R); gl.uniform4f(p.u.uL, Math.max(0, portal.L[0]), Math.max(0, portal.L[1]), Math.max(0, portal.L[2]), Math.max(0, portal.L[3]));
+  { const d = portal.drift; gl.uniform4f(p.u.uTh, 3.9 + d, 0.6 + d * 0.8, 2.3 - d * 0.6, 5.3 + d * 1.1); }   // graves abajo a la izquierda, medios arriba a la derecha, separados
   gl.uniform1f(p.u.uVo, portal.vo); gl.uniform1f(p.u.uRot, portal.rot); gl.uniform1f(p.u.uHi, portal.hi);
   gl.uniform1f(p.u.uBeat, portal.beat * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uEn, portal.en); gl.uniform1f(p.u.uGlow, portal.glow);
   gl.uniform3fv(p.u.uM, portal.m); gl.uniform2f(p.u.uC, C[0], C[1]); gl.uniform3fv(p.u.uMel, melodyColor().map(x => x / 255)); gl.uniform3fv(p.u.uBg, bg); gl.uniform3fv(p.u.uDeep, deep);
@@ -11759,8 +11784,8 @@ function layersSetup() {
         if (length(p - F.xy) > F.z * 1.6) continue;
         for (int k = 0; k < 12; k++) {
           float t = float(k) / 11.;                    // 0 la capa de afuera, 1 el núcleo
-          float wv = exp(-pow(((1. - t) - G.z) / .16, 2.)), rip = 1. + .14 * wv;   // la onda del bombo pasa capa por capa
-          float R = F.z * (1. - .86 * pow(t, .9)) * rip * (1. + .12 * G.w * (1. - t));
+          // el bombo abre las capas como un acordeón: las de adentro crecen más que las de afuera (el núcleo florece) y vuelven con un rebote
+          float R = F.z * (1. - (.86 - .36 * G.z) * pow(t, .9)) * (1. + .06 * G.z) * (1. + .12 * G.w * (1. - t));
           vec2 c = F.xy + G.xy * F.z * .5 * t;
           vec2 q = p - c; float an = atan(q.y, q.x), s = F.w + t * .6;
           float r = R * (1. + (.1 + .06 * uWob) * sin(2. * an + uPh * .6 + s) + (.06 + .05 * uWob) * sin(3. * an - uPh * .45 + s * 1.7) + .03 * sin(5. * an + uPh * .9 + s * 2.3));
@@ -11768,7 +11793,7 @@ function layersSetup() {
           float a = smoothstep(px, -px, d) * mix(uNight > .5 ? .5 : .3, 1., pow(t, 1.4));        // afuera translúcidas, adentro plenas
           vec3 lc = mix(uA[i], uB[i], pow(t, .85));
           if (uNight > .5) lc = mix(uB[i] * .6, mix(uA[i], vec3(1.), .3), pow(t, 1.3)); else lc = mix(lc, vec3(1.), (1. - t) * .45);   // de noche brilla desde el núcleo
-          lc *= 1. + (uNight > .5 ? .55 : .25) * wv * smoothstep(1.6, .2, G.z);   // la onda del bombo enciende cada capa al pasar
+          lc *= 1. + (uNight > .5 ? .18 : .08) * max(G.z, 0.) * t;   // el núcleo se aviva apenas
           col = mix(col, lc, a);
         }
       }
@@ -11783,9 +11808,11 @@ function drawLayers(dt) {
   const L = vert ? [[0.6, 0.77, 0.21], [0.33, 0.55, 0.15], [0.62, 0.3, 0.2]] : [[0.2, 0.6, 0.2], [0.45, 0.36, 0.21], [0.68, 0.64, 0.19], [0.86, 0.34, 0.14]];
   const n = L.length, bands = [[0, 8], [8, 18], [18, 30], [30, BANDS]];
   for (let i = 0; i < n; i++) { const [a, b] = bands[i]; lay.tg[i] = Math.pow(bandX(a, b), 1.2) * (0.6 + 0.8 * dynL) * musicGate; }
-  if (pulse.on) { for (let i = 0; i < n; i++) { lay.rp[i] = -0.1 - i * 0.06; lay.v[i] += (i === 0 || i === 1 ? 2.5 : 1.2) * (1 + pulse.k); } }
+  if (!lay.kx) { lay.kx = new Float32Array(4); lay.kv = new Float32Array(4); lay.k0 = new Float32Array(4); }
+  for (let i = 0; i < n; i++) { const [a, b] = bands[i], h = attHit(a, b); if (h > 0 && i > 0) { lay.kv[i] += 5 + 4.5 * h; lay.v[i] += 0.9 * h; } }   // cada forma escucha las notas de su parte (piano, sinte, voz)
+  if (pulse.on && !pulse.melo) { for (let i = 0; i < n; i++) { lay.kv[i] += (i === 0 ? 7 : i === 1 ? 5 : 3) * (0.6 + pulse.k); lay.v[i] += (i === 0 || i === 1 ? 1.5 : 0.7) * (1 + pulse.k); } }
+  springTo(lay.kx, lay.kv, lay.k0, dt, 260, 0.62);
   springTo(lay.lv, lay.v, lay.tg, dt, 130, 0.55);
-  for (let i = 0; i < n; i++) if (lay.rp[i] < 2) lay.rp[i] += dt * (2.4 + energy);
   lay.ph += dt * musicGate * (0.15 + energy * 0.9 + bandX(10, 26) * 0.6);
   lay.wob += (bandX(10, 30) * musicGate - lay.wob) * (1 - Math.pow(0.05, dt));
   lay.vo += (Math.min(1, voice * 1.4) - lay.vo) * (1 - Math.pow(0.05, dt));
@@ -11796,7 +11823,7 @@ function drawLayers(dt) {
     lay.dir[i] += dt * musicGate * (0.1 + lay.vo * 0.8);
     const dx = Math.cos(lay.dir[i] + i * 1.9) * (0.35 + 0.35 * lay.vo), dy = Math.sin(lay.dir[i] * 0.8 + i * 1.9) * (0.35 + 0.35 * lay.vo);
     lay.F.set([asp * x + Math.sin(ph * 0.5) * 0.015 * asp, y + Math.cos(ph * 0.4) * 0.015, r * Math.min(asp, 1.15) * (0.9 + 0.22 * lay.lv[i]), i * 1.7], i * 4);
-    lay.G.set([dx, dy, lay.rp[i], lay.lv[i]], i * 4);
+    lay.G.set([dx, dy, Math.max(-0.4, Math.min(1, lay.kx[i])), lay.lv[i]], i * 4);
     lay.A.set(viv(h0 + 30, night ? 60 : 72), i * 3);
     lay.B.set(i === 1 ? mel.map((v, k) => v * 0.6 + viv(h0, 40)[k] * 0.4) : viv(h0 - 10, night ? 48 : 42), i * 3);
   }
@@ -11821,18 +11848,18 @@ function drawLayers(dt) {
 // al moverse) y la nota tiñe el hilo de afuera; los platillos hacen titilar las burbujas. En silencio, quieto.
 const liq = { prog: null, ph: 0, amp: 0, wave: [-9, -9, -9], wi: 0, film: 0, vo: 0, hi: 0, drops: new Float32Array(16), sp: 0, eq: new Float32Array(16), eqv: new Float32Array(16), eqt: new Float32Array(16), kick: 0, bass: 0 };
 function liqSetup() {
-  liq.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uAmp, uFilm, uHi, uX, uKick, uBass, uSw, uSwY; uniform vec3 uM; uniform vec3 uWave, uMel, uC0, uC1, uC2, uBg; uniform vec4 uD[4];
+  liq.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uPh, uAmp, uFilm, uHi, uX, uKick, uBass, uSw, uSwY; uniform vec3 uM; uniform float uEg[97]; uniform vec3 uWave, uMel, uC0, uC1, uC2, uBg; uniform vec4 uD[4];
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     // el arcoíris de una película fina: el color según su grosor (como el aceite o una pompa)
     vec3 film(float t) { return clamp(.5 + .5 * cos(6.2832 * (t + vec3(0., .33, .67))), 0., 1.); }
     // el borde: tres ondas amplias que la música hace crecer despacio (graves la grande, medios la mediana,
     // agudos un rizo fino), sobre una curva grande en S; el bombo lo hincha suave. Se mueve como aceite, sin nervios.
+    // el borde se calcula una vez por cuadro (97 puntos, de y=-0,12 a 1,12) y aquí solo se interpola suave (Catmull-Rom)
     float edge(float y) {
-      float e = uX + .09 * sin(y * 2.3 + uPh * .25 + .8);
-      e += uM.x * sin(y * 3.1 + uPh * .55) + uM.y * sin(y * 5.7 - uPh * .8 + 1.) + uM.z * sin(y * 9.4 + uPh * 1.2 + 2.);
-      e += uSw * exp(-pow((y - uSwY) / .3, 2.));
-      return e;
+      float x = clamp((y + .12) / 1.24 * 96., 1., 94.999), i = floor(x), f = x - i; int k = int(i);
+      float a = uEg[k - 1], b = uEg[k], c = uEg[k + 1], d = uEg[k + 2];
+      return b + .5 * f * (c - a + f * (2. * a - 5. * b + 4. * c - d + f * (3. * (b - c) + d - a)));
     }
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), px = vec2(1.5 / uRes.y);
@@ -11845,7 +11872,8 @@ function liqSetup() {
       // por dentro: azul hondo y saturado; hacia el borde, la película se abre en un degradado ancho de arcoíris
       float W = .22 + .04 * sin(uFilm) + .12 * uBass;   // la película se ensancha con los graves
       if (d < 0.) {
-        float t = clamp(-d / W, 0., 1.);                          // 0 en el filo, 1 donde empieza el azul hondo
+        float sl = (edge(p.y + .02) - edge(p.y - .02)) / .04, dl = (e - p.x) / sqrt(1. + sl * sl);   // el grosor medido suave (sin pliegues en el lado de adentro de las curvas)
+        float t = clamp(mix(-d, dl, smoothstep(.01, .08, -d)) / W, 0., 1.);   // 0 en el filo, 1 donde empieza el azul hondo
         vec3 deep = mix(vec3(.01, .02, .2), vec3(.03, .12, .55), smoothstep(-.6, .0, d));
         deep = mix(deep, withCover(deep), .08);
         float k = t + .06 * sin(p.y * 6. + uFilm * 2.);           // la película ondula su grosor
@@ -11865,7 +11893,7 @@ function liqSetup() {
       // el filo: un hilo nítido rojo-rosado
       col += vec3(1., .25, .45) * exp(-abs(d) / .0018) * (.9 + uKick * .8) + vec3(1., .2, .4) * exp(-abs(d) / .01) * .2 * step(0., d);
       // afuera, tras un hueco oscuro, una cinta de luz azul con orillas magenta que sigue el borde (la nota la tiñe)
-      float d2 = d - (.055 + .015 * sin(p.y * 3. + uPh * .7) + .035 * uKick), a2 = abs(d2);   // la cinta se aleja con el golpe
+      float d2 = d - (.055 + .015 * sin(p.y * 3. + uPh * .7) + .008 * uKick), a2 = abs(d2);   // la cinta se aleja con el golpe
       vec3 c2 = mix(vec3(.2, .45, 1.), uMel, .3);
       vec3 rib = mix(c2 * 1.2, vec3(1., .2, .75), smoothstep(.004, .011, a2)) * smoothstep(.0145, .011, a2);
       col = mix(col, rib * (1. + .5 * uKick), smoothstep(.0145, .0115, a2) * (.85 + .15 * uHi));
@@ -11889,11 +11917,16 @@ function drawLiquid(dt) {
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
   // todo con inercia (como un líquido viscoso): la velocidad del flujo y el tamaño de cada onda siguen la música con suavidad
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
-  liq.spd = ease(liq.spd || 0, musicGate * (0.08 + energy * 0.4 + bandX(10, 26) * 0.25), 0.8); liq.ph += dt * (liq.spd + liq.kick * 2.6);   // fluye despacio y cada bombo lo empuja
+  liq.spd = ease(liq.spd || 0, musicGate * (0.08 + energy * 0.4 + bandX(10, 26) * 0.25), 0.8); liq.ph += dt * (liq.spd + liq.kick * 0.4);   // fluye despacio (sin tirones: el bombo lo dice la onda que recorre el borde)
   liq.m = liq.m || [0, 0, 0];
   const mt = [0.015 + 0.065 * Math.pow(bandX(0, 10), 1.2) * (0.6 + 0.8 * dynL), 0.008 + 0.035 * bandX(10, 26), 0.003 + 0.013 * bandX(26, BANDS)].map(v => v * (0.3 + 0.7 * musicGate));
   for (let k = 0; k < 3; k++) liq.m[k] = ease(liq.m[k], mt[k], 0.45);
-  if (pulse.on) { liq.swT = Math.min(0.16, (liq.swT || 0) + 0.08 + pulse.k * 0.06); liq.swY = 0.2 + 0.6 * Math.random(); }
+  // ondas por el borde: el bombo desde el centro; cada nota (piano, sinte, voz) desde la altura de su registro (graves abajo, agudos arriba)
+  if (!liq.wv) { liq.wv = new Float32Array(24).fill(-9); liq.wj = 0; }
+  const addW = (y, a) => { const j = (liq.wj++ % 6) * 4; liq.wv.set([0, y, a, 0], j); };
+  if (pulse.on && !pulse.melo) addW(0.5, 1);
+  [[6, 16, 0.28], [16, 28, 0.5], [28, 40, 0.7], [40, BANDS, 0.85]].forEach(([a, b, y]) => { const h = attHit(a, b); if (h > 0) addW(y, 0.45 + 0.4 * h); });
+  for (let w = 0; w < 6; w++) if (liq.wv[w * 4] >= 0 && liq.wv[w * 4] < 9) liq.wv[w * 4] += dt * 1.5;
   liq.swT = (liq.swT || 0) * Math.exp(-dt / 0.35); liq.sw = ease(liq.sw || 0, liq.swT, 0.07); liq.swYs = ease(liq.swYs ?? 0.5, liq.swY ?? 0.5, 0.25);
   liq.kick = ease(liq.kick, 0, 0.4);
   if (pulse.on) liq.kick = Math.min(1, liq.kick + 0.4 + pulse.k * 0.3);
@@ -11913,7 +11946,13 @@ function drawLiquid(dt) {
   gl.uniform1f(p.u.uPh, liq.ph); gl.uniform1f(p.u.uAmp, liq.amp); gl.uniform1f(p.u.uFilm, liq.film); gl.uniform1f(p.u.uHi, liq.hi); gl.uniform1f(p.u.uX, ex);
   gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, bg);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
-  gl.uniform4fv(p.u['uD[0]'], liq.drops); gl.uniform3fv(p.u.uM, liq.m); gl.uniform1f(p.u.uSw, liq.sw); gl.uniform1f(p.u.uSwY, liq.swYs); gl.uniform1f(p.u.uKick, liq.kick * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uBass, liq.bass);
+  gl.uniform4fv(p.u['uD[0]'], liq.drops); gl.uniform3fv(p.u.uM, liq.m); gl.uniform1f(p.u.uSw, 0); { if (!liq.eg) liq.eg = new Float32Array(97); const P = liq.ph, M = liq.m, wv = liq.wv;   // el borde, una vez por cuadro
+    for (let j = 0; j < 97; j++) { const y = -0.12 + j / 96 * 1.24;
+      let e = ex + 0.09 * Math.sin(y * 2.3 + P * 0.25 + 0.8) + M[0] * Math.sin(y * 3.1 + P * 0.55) + M[1] * Math.sin(y * 5.7 - P * 0.8 + 1) + M[2] * Math.sin(y * 9.4 + P * 1.2 + 2);
+      for (let w = 0; w < 6; w++) { const a = wv[w * 4]; if (a < 0 || a > 1.6) continue; const A = 0.05 * wv[w * 4 + 2] * Math.pow(1 - a / 1.6, 2) * Math.min(1, a / 0.25) ** 2 * (3 - 2 * Math.min(1, a / 0.25)), c = wv[w * 4 + 1] + a * 0.75, c2 = wv[w * 4 + 1] - a * 0.75;
+        e += A * (Math.exp(-(((y - c) / 0.2) ** 2)) + Math.exp(-(((y - c2) / 0.2) ** 2))); }
+      liq.eg[j] = e; }
+    gl.uniform1fv(p.u['uEg[0]'], liq.eg); } gl.uniform1f(p.u.uSwY, liq.swYs); gl.uniform1f(p.u.uKick, liq.kick * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uBass, liq.bass);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -11992,7 +12031,7 @@ function drawBeam(dt) {
   const tgt = (0.14 + 0.22 * Math.pow(bandX(0, 12), 1.2) * (0.6 + 0.8 * dynL) + 0.05 * energy) * (0.45 + 0.55 * musicGate);
   beam.hv += ((tgt - beam.h) * 90 - beam.hv * 9) * dt; beam.h += beam.hv * dt;
   if (pulse.on) { beam.hv += 0.4 + pulse.k * 0.5; beam.pul[beam.pi++ % 3] = 0; beam.bloom = Math.min(1, beam.bloom + 0.6 + pulse.k * 0.4); beam.swv += (beam.sw > 0 ? -1 : 1) * (0.25 + pulse.k * 0.25); }
-  beam.bloom *= Math.pow(0.002, dt);   // corto: cada bombo se ve aparte (también a 128 BPM) beam.swv += (-beam.sw * 60 - beam.swv * 7) * dt; beam.sw += beam.swv * dt;
+  beam.bloom *= Math.pow(0.002, dt); beam.swv += (-beam.sw * 60 - beam.swv * 7) * dt; beam.sw += beam.swv * dt;
   // el espectro repartido a lo largo de la línea, con resortes (respira como Montañas)
   for (let k = 0; k < 16; k++) { const a = Math.floor(k / 16 * BANDS * 0.9); beam.spt[k] = Math.pow(bandX(a, Math.min(BANDS, a + Math.ceil(BANDS / 16) + 1)), 1.3) * (0.6 + 0.9 * dynL) * musicGate; }
   springTo(beam.sp, beam.spv, beam.spt, dt, 110, 0.6);
@@ -12060,7 +12099,9 @@ function drawHalos(dt) {
                  : [[0.2, 0.55, 0.2], [0.42, 0.36, 0.15], [0.58, 0.62, 0.23], [0.8, 0.42, 0.17], [0.34, 0.76, 0.1]];
   const n = L.length, bands = [[0, 8], [8, 16], [16, 26], [26, 38], [38, BANDS]];
   for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5]; halo.tg[i] = Math.pow(bandX(a, b), 1.2) * (0.6 + 0.8 * dynL) * musicGate; }
-  if (pulse.on) {   // el bombo: todas saltan (más las de los graves), se aplastan y el núcleo gira
+  // cada halo escucha el ataque de su banda: una nota de piano mueve los halos de los medios, el hat el de los agudos
+  for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5], h = attHit(a, b); if (h > 0) { halo.v[i] += (1.6 + 2.4 * h) * (i === 0 ? 0.5 : 1); halo.sqv[i] += 1.6 * h * (state.noFlash ? 0.5 : 1); halo.cph[i] += 0.25 * h; halo.fl[i] = Math.max(halo.fl[i], 0.55 * h); } }
+  if (pulse.on && !pulse.melo) {   // el bombo: todas saltan (más las de los graves), se aplastan y el núcleo gira
     for (let i = 0; i < n; i++) { const w = i === 0 || i === 2 ? 1 : 0.45; halo.v[i] += (3 + pulse.k * 5) * w; halo.sqv[i] += (2.5 + pulse.k * 3) * w * (state.noFlash ? 0.5 : 1); halo.cph[i] += 0.35 * w; }
     halo.kick = Math.min(1, halo.kick + 0.5 + pulse.k * 0.4);
   }
@@ -12075,7 +12116,7 @@ function drawHalos(dt) {
     // respira con su banda; se mece despacio
     const drift = 0.02 + 0.04 * energy;
     halo.fl[i] *= Math.pow(0.02, dt);
-    halo.O.set([asp * x + Math.sin(ph) * drift * asp, y + Math.cos(ph * 0.8) * drift, r * Math.min(asp, 1.1) * (0.8 + 0.5 * lv), (0.25 * hi + 0.6 * halo.fl[i]) * (night ? 1 : 0.7)], i * 4);
+    halo.O.set([asp * x + Math.sin(ph) * drift * asp, y + Math.cos(ph * 0.8) * drift, r * Math.min(asp, 1.1) * (0.8 + 0.5 * Math.min(lv, 1.05) - 0.12 * Math.max(0, -lv)), (0.25 * hi + 0.6 * halo.fl[i]) * (night ? 1 : 0.7)], i * 4);
     halo.E.set([(night ? 0.72 : 0.82) + 0.45 * lv, Math.max(-0.15, Math.min(0.15, halo.sq[i] * 0.3))], i * 2);
     halo.A.set(viv(h0 + 35, night ? 62 : 66), i * 3); halo.B.set(viv(h0, night ? 52 : 56), i * 3);
     // núcleo: la mitad hondos (oscuros), la otra mitad ojos de luz; el de la voz toma el color de la nota
@@ -12112,10 +12153,10 @@ function reedSetup() {
     vec3 back(vec2 uv, float asp) {
       float y = uv.y + .1 * sin(uv.x * 3. + uPh * .7);
       vec3 g = y < .5 ? mix(uG0, uG1, smoothstep(0., .5, y)) : mix(uG1, uG2, smoothstep(.5, 1., y));
-      vec3 c = mix(g, cov(uv), .1) * (uNight > .5 ? .2 : .42);
+      vec3 c = mix(g, cov(uv), .1) * (uNight > .5 ? .09 : .42);   // de noche el fondo casi oscuro: la luz la ponen los focos
       vec2 p = vec2(uv.x * asp, uv.y);
       for (int i = 0; i < 6; i++) { vec4 L = uL[i]; vec2 d = (p - L.xy) * vec2(1., .6); float r2 = dot(d, d) / (L.z * L.z);
-        c += uLC[i] * (exp(-r2) + exp(-r2 * 5.) * .8) * L.w; }
+        c += uLC[i] * (exp(-r2) * .7 + exp(-r2 * 6.) * 1.3) * L.w + mix(uLC[i], vec3(1.), .6) * exp(-r2 * 30.) * L.w * L.w * .5; }   // cada foco: halo de color, centro intenso y un punto caliente que se aclara cuando suena fuerte
       return c;
     }
     vec3 reedAt(float ux) {
@@ -12157,7 +12198,7 @@ function drawReeds(dt) {
   }
   if (pulse.on) { reed.kick = Math.min(1.2, reed.kick + 0.5 + pulse.k * 0.4); const m = (n - 1) / 2; for (let i = 0; i < n; i++) reed.v[i] += Math.max(0, 1 - Math.abs(i - m) / (n * 0.18)) * (3 + pulse.k * 4); }
   springTo(reed.lv, reed.v, reed.tg, dt, 170, 0.62);
-  reed.kick *= Math.pow(0.004, dt);   // corto: cada bombo se ve aparte reed.ph += dt * musicGate * (0.12 + energy * 0.6);
+  reed.kick *= Math.pow(0.004, dt); reed.ph += dt * musicGate * (0.12 + energy * 0.6);
   // colores vivos: los de la portada, con la saturación subida (como luz de color, no pintura)
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), viv = (h, dl = 0) => hexToRgb(hsl(h, Math.max(72, Math.min(96, hs[0][1] * 1.3 + 20)), 56 + dl)).map(v => v / 255);
   const G = [viv(hs[2][0], -14), viv(hs[0][0]), viv(hs[1][0], 4)];
@@ -12168,7 +12209,7 @@ function drawReeds(dt) {
   for (let i = 0; i < 6; i++) {
     reed.lb[i] += (lt[i] - reed.lb[i]) * (1 - Math.pow(lt[i] > reed.lb[i] ? 0.002 : 0.08, dt));
     const b = reed.lb[i], ph = reed.ph * (0.5 + i * 0.13) + i * 1.7;
-    reed.L.set([asp * (X[i] + 0.14 * Math.sin(ph)), Y[i] + (i === 5 ? 0.04 : 0.1) * Math.cos(ph * 0.8 + i), (i === 5 ? 0.08 : 0.14) + 0.07 * b, (i === 5 ? (0.35 + 1.1 * b) * musicGate : (night ? 0.75 : 0.5) + 1.2 * b) * (0.35 + 0.65 * musicGate)], i * 4);
+    reed.L.set([asp * (X[i] + 0.14 * Math.sin(ph)), Y[i] + (i === 5 ? 0.04 : 0.1) * Math.cos(ph * 0.8 + i), (i === 5 ? 0.06 : 0.095) + 0.05 * b + (i === 0 || i === 5 ? 0.03 * reed.kick : 0), (i === 5 ? (0.2 + 1.3 * b + 1.1 * reed.kick) * musicGate : (night ? 0.45 : 0.4) + 1.7 * b + (i === 0 ? 0.9 * reed.kick : 0)) * (0.35 + 0.65 * musicGate)], i * 4);   // los focos laten con su parte del sonido; el bombo enciende el de los graves y el núcleo
     reed.LC.set(LC[i], i * 3);
   }
   const bg = mix(0.5).map(v => (night ? v * 0.09 : v + (255 - v) * 0.75) / 255);
