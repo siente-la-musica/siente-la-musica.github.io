@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 209</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 210</div>
     </div>
   </div>
   <div class="group">
@@ -8490,19 +8490,19 @@ function glCoverBind(p, unit = 5) {
 }
 // al grabar: si el equipo no llega a 30 cuadros por segundo, las capas de luz suave (que no tienen bordes nítidos)
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
-let recGL = 1, recSlow = 0, recFast = 0;
+let recGL = 1, recSlow = 0, recFast = 0, recDropped = false;
 const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
 const REC_HEAVY = new Set(['ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco']);
 function recPerf(ms, dt) {
-  if (!recording) { recGL = 1; recSlow = recFast = 0; return; }
+  if (!recording) { recGL = 1; recSlow = recFast = 0; recDropped = false; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
   if (ms > budget * 0.8) { recSlow += dt; recFast = 0; } else if (ms < budget * 0.42) { recFast += dt; recSlow = 0; }
   // las escenas con detalle fino no se ablandan; los paisajes pesados (cuyo texto y figuras van aparte, nítidos) pueden bajar un poco
   // solo si el equipo de verdad no llega: un video fluido vale más que un 10 % de nitidez en el cielo
   const floor = REC_HEAVY.has(state.mode) ? 0.86 : REC_SHARP.has(state.mode) ? 1 : 0.8;
   if (recGL < floor) recGL = floor;
-  if (recSlow > 0.7 && recGL > floor) { recGL = Math.max(floor, recGL - 0.1); recSlow = 0; }
-  else if (recFast > 4 && recGL < 1) { recGL = Math.min(1, recGL + 0.1); recFast = 0; }
+  if (recSlow > 0.7 && recGL > floor) { recGL = Math.max(floor, recGL - 0.1); recSlow = 0; recDropped = true; }
+  else if (recFast > 4 && recGL < 1 && !recDropped) { recGL = Math.min(1, recGL + 0.1); recFast = 0; }   // si ya tuvo que bajar, no vuelve a subir: subir y bajar en ciclo daba tirones (cada cambio rehace el lienzo)
 }
 function glCanvas(q) {
   q *= recGL;
@@ -13764,7 +13764,7 @@ function drawRuta(dt) {
   const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];
   const hor = A.hor || sat(warm, 62).map((v, i) => v * 0.9 + [0.1, 0.03, 0][i]);
   const hz = 0.58, wphi = groove * Math.PI / 2, wa0 = -1.42, wa1 = 0.14, wr1 = Lo.wl / H, wr0 = wr1 * 0.42;
-  const [cw, ch] = glCanvas(recording ? 1 : 0.8)   /* la escena es pesada: en pantalla se dibuja algo más pequeña (la cabina va aparte, nítida); al grabar, completa */, p = ruta.prog;
+  const [cw, ch] = glCanvas(recording ? 0.85 : 0.8)   /* la escena es pesada (y suave): se dibuja algo más pequeña y se amplía; la cabina, el texto y la letra van aparte, nítidos */, p = ruta.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uPiv, Lo.pivX / H, 1 - Lo.pivY / H); gl.uniform4f(p.u.uWp, wa0, wa1, wr0, wr1);
   gl.uniform1f(p.u.uDist, ruta.dist % 13440); gl.uniform1f(p.u.uCurve, curve); gl.uniform1f(p.u.uRoll, ruta.roll); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uNight, A.night); gl.uniform1f(p.u.uLamp, A.lamp * (0.35 + 0.65 * musicGate));
