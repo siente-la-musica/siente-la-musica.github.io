@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 214</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 215</div>
     </div>
   </div>
   <div class="group">
@@ -1785,6 +1785,11 @@ function updateMusicStatus() {
 // Pulso común de toda la página: lo usan las animaciones, la barra y el reproductor, así todo late a la vez.
 // on: hay golpe en este fotograma · count: cuántos van · k: su fuerza · x: el «empujón» (muelle) que sigue al golpe
 const pulse = { on: false, at: 0, due: 0, count: 0, k: 0, x: 0, v: 0 };
+// Empujones suaves: un salto que llega con el golpe (fase, giro, recorrido) no se da de una vez en un cuadro, se reparte
+// en ~0,2 s. Se siente igual el golpe, pero sin el «tropiezo» que en un video a 30 cuadros se ve como un salto.
+const NUDGE = {};
+const nudgeAdd = (id, amt) => { NUDGE[id] = (NUDGE[id] || 0) + amt; };
+function nudgeTake(id, dt) { const p_ = NUDGE[id] || 0; if (!p_) return 0; let r = p_ * (1 - Math.exp(-dt / 0.07)); if (Math.abs(p_ - r) < 1e-5) r = p_; NUDGE[id] = p_ - r; return r; }
 let beat = 0, beatRaw = 0, beatSoft = 0, lastBassHit = 0, eShort = 0, eLong = 0, quietT = 0, dropHit = false, lastDrop = 0;
 
 // Golpes detectados por subida brusca de energía en cada zona
@@ -2665,7 +2670,7 @@ let bgLiveT = 0, bgZoom = 0;
 function liveBgTick(dt) {
   if (!state.liveBg || !state.coverBg) return;
   const x = bgLiveX, S = 256, night = state.theme === 'dark', P = Math.max(0, pulse.x);
-  bgLiveT += dt * musicGate * (0.05 + energy * 0.5 + dynL * 0.25) + (pulse.on ? 0.04 * pulse.k : 0);   // en silencio, quieto
+  if (pulse.on) nudgeAdd('bg', 0.04 * pulse.k); bgLiveT += dt * musicGate * (0.05 + energy * 0.5 + dynL * 0.25) + nudgeTake('bg', dt);   // en silencio, quieto
   bgZoom += ((P * 0.025 + Math.pow(bandX(0, 10), 1.5) * 0.02) - bgZoom) * (1 - Math.pow(0.02, dt));
   const avg = [0, 1, 2].map(k => (RGB[0][k] + RGB[1][k] + RGB[2][k]) / 3), gray = Math.min(1, colorTick.gray || 0);
   x.globalCompositeOperation = 'source-over'; x.globalAlpha = 1; x.filter = 'none';
@@ -4038,9 +4043,10 @@ async function recPrepare() {
   prep.track = track;
   return prep;
 }
+let recPre = false;   // el lienzo del video ya se preparó durante la cuenta atrás
 function recUiStart() {
   recording = true; document.body.classList.add('recording'); document.body.classList.remove('idle');
-  freshCanvas(); resize();
+  if (!recPre) { freshCanvas(); resize(); } recPre = false;
   blobs.length = 0; lights.length = 0; ictx.clearRect(0, 0, W, H);
   recT0 = performance.now();
   recTimer = setInterval(() => {
@@ -4273,12 +4279,16 @@ document.getElementById('btnRecStart').onclick = async () => {
   cd.innerHTML = '<span class="cd-wait">Preparando…</span>'; cd.hidden = false;
   const target = recStartAt != null && canSeek() ? recStartAt : null; recStartAt = null;
   const prepP = recPrepare().catch(() => null);
+  // el lienzo nuevo, ya al tamaño del video, se prepara durante la cuenta atrás: así los primeros cuadros grabados no
+  // tienen que rehacer capas, desenfoques ni escenas (antes daban un tirón justo al empezar). Se ve el encuadre exacto.
+  const recAbort = () => { recSize = null; recPre = false; resize(); };
+  try { if (recSize) { freshCanvas(); resize(); recPre = true; } } catch (e) { recPre = false; }
   if (target != null) {
     cd.innerHTML = '<span class="cd-wait">Llevando la canción al punto elegido…</span>';
-    if (!await recCue(target)) { cd.hidden = true; showSong('<div class="meta"><div class="title">Spotify no quiso moverse a ese punto</div><div class="note">Revisa tu conexión e inténtalo de nuevo.</div></div>'); return; }
+    if (!await recCue(target)) { cd.hidden = true; recAbort(); showSong('<div class="meta"><div class="title">Spotify no quiso moverse a ese punto</div><div class="note">Revisa tu conexión e inténtalo de nuevo.</div></div>'); return; }
   }
   const prep = await prepP;
-  if (!prep && !legacy) { cd.hidden = true; showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div></div>'); return; }
+  if (!prep && !legacy) { cd.hidden = true; recAbort(); showSong('<div class="meta"><div class="title">Este navegador no puede grabar</div></div>'); return; }
   for (const n of [3, 2, 1]) { cd.textContent = n; await sleep(800); }
   const src = nowSource();
   cd.innerHTML = '<span class="cd-wait">♪ Esperando la música…</span>';
@@ -4464,7 +4474,7 @@ function drawRecOverlay() {
     const x0 = W * 0.07, y0 = H * (vertical ? 0.165 : 0.1), s_ = 120 * u;
     let tx = x0;
     // ¿qué hay detrás del título? Si el fondo no deja leerlo (claro con letra clara, u oscuro con letra oscura), un velo suave detrás
-    const tn = performance.now(); if (!hdrBg.t || tn - hdrBg.t > 4000 || hdrBg.m !== state.mode) { try { const d = ctx.getImageData(x0 | 0, Math.max(0, y0 - 60 * u) | 0, Math.max(8, W * 0.5) | 0, Math.max(8, 120 * u) | 0).data; let sL = 0, n = 0;
+    const tn = performance.now(); if (!recording) hdrBg.rd = false; if (!hdrBg.t || hdrBg.m !== state.mode || (recording ? !hdrBg.rd : tn - hdrBg.t > 4000)) { hdrBg.rd = recording;   /* al grabar se mide una sola vez (leer la imagen frena a la tarjeta gráfica: daba un tirón cada 4 s) */ try { const d = ctx.getImageData(x0 | 0, Math.max(0, y0 - 60 * u) | 0, Math.max(8, W * 0.5) | 0, Math.max(8, 120 * u) | 0).data; let sL = 0, n = 0;
       for (let i = 0; i < d.length; i += 4 * 41) { sL += 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; n++; } hdrBg.L = sL / n / 255; } catch (e) { hdrBg.L = 0.3; } hdrBg.t = tn; hdrBg.m = state.mode; }
     const lightText = state.theme === 'dark', need = lightText ? Math.max(0, (hdrBg.L - 0.42) / 0.4) : Math.max(0, (0.55 - hdrBg.L) / 0.4);
     if (need > 0.02) {
@@ -4529,7 +4539,7 @@ function drawRecOverlay() {
     { const lx = W / 2, ly_ = H * (vertical ? yV : yH), rw_ = (vertical ? W * 0.46 : W * 0.46), rh_ = (vertical ? 150 : 120) * u;
       // el velo se elige por lo que hay de verdad detrás de la letra (no por el tema): sobre una escena oscura en modo día ya no
       // aparece un óvalo blanco como de niebla; se mide cada medio segundo, en pocos puntos
-      const tn = performance.now(); if (!lyrBg.t || tn - lyrBg.t > 4000 || lyrBg.m !== state.mode) { try { const sw = Math.max(8, W * 0.4 | 0), sh = Math.max(8, 50 * u | 0), d = ctx.getImageData(Math.max(0, lx - sw / 2 | 0), Math.max(0, ly_ - sh / 2 | 0), sw, sh).data; let s = 0, n = 0;
+      const tn = performance.now(); if (!recording) lyrBg.rd = false; if (!lyrBg.t || lyrBg.m !== state.mode || (recording ? !lyrBg.rd : tn - lyrBg.t > 4000)) { lyrBg.rd = recording;   /* al grabar, una sola vez */ try { const sw = Math.max(8, W * 0.4 | 0), sh = Math.max(8, 50 * u | 0), d = ctx.getImageData(Math.max(0, lx - sw / 2 | 0), Math.max(0, ly_ - sh / 2 | 0), sw, sh).data; let s = 0, n = 0;
         for (let i = 0; i < d.length; i += 4 * 37) { s += 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; n++; } lyrBg.L = s / n / 255; } catch (e) { lyrBg.L = 0.5; } lyrBg.t = tn; lyrBg.m = state.mode; }
       const dk = state.theme === 'dark' || lyrBg.L < 0.42, soft = state.theme !== 'dark' && dk;   // de día sobre algo oscuro: velo oscuro y más leve
       ctx.save(); ctx.shadowBlur = 0; ctx.translate(lx, ly_); ctx.scale(1, rh_ / rw_); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw_);
@@ -4832,7 +4842,7 @@ function drawInfinity(dt) {
   drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.12, dt);
   camSpeed += (target - camSpeed) * (1 - Math.pow(0.3, dt));   // los cambios de parte de la canción se notan sin saltos
   camZ += dt * (camSpeed + drawInfinity.kb);
-  infRot += dt * (0.04 + dynL * 0.5) + (pulse.on ? 0.06 * pulse.k : 0);   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
+  if (pulse.on) nudgeAdd('inf', 0.06 * pulse.k); infRot += dt * (0.04 + dynL * 0.5) + nudgeTake('inf', dt);   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
   const P = Math.max(0, pulse.x);
   if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
@@ -6226,7 +6236,7 @@ function drawPuntosSuave(dt) {
   S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.3) * S.go; S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.03, dt)); }
   if (pulse.on) S.wave = 0; S.wave += dt * 0.8;
   S.hi = Math.max((S.hi || 0) * Math.pow(0.02, dt), hits.hat ? 1 : 0, Math.min(1, S.lv[2]) * 0.6);
-  S.ir = (S.ir || 0) + dt * S.go * (0.03 + 0.3 * S.en) + (pulse.on ? 0.05 : 0);
+  if (pulse.on) nudgeAdd('dotIr', 0.05); S.ir = (S.ir || 0) + dt * S.go * (0.03 + 0.3 * S.en) + nudgeTake('dotIr', dt);
   if (pulse.on && S.go > 0.3) { S.bn = Math.floor(S.bn || 0) + 1; S.bt = 0; } S.bt = Math.min(1, (S.bt ?? 1) + dt / (S.per * 0.55));   // la luz de adentro salta en cada golpe   // los colores giran con la canción (quietos en silencio)
   // la paleta nace de la portada (cada canción tiene la suya), pero con las reglas que la hacen elegante, como en la referencia:
   // cada tono con su propia luz y saturación (verdes y turquesas profundos, rojos y azules intensos, nada neón), un vecino por
@@ -6301,7 +6311,7 @@ function drawArco(dt) {
   if (!glInit()) { drawAura(dt); return; }
   const S = PAI.arc, night = state.theme === 'dark'; paiLevels(S, dt);
   if (pulse.on) S.ring = 0.1; S.ring += dt / (S.per * 1.2);
-  S.ph += dt * S.go * (0.1 + 0.9 * S.en + 0.5 * Math.min(1, S.lv[0])) + (pulse.on ? 0.06 : 0);
+  if (pulse.on) nudgeAdd('arcPh', 0.06); S.ph += dt * S.go * (0.1 + 0.9 * S.en + 0.5 * Math.min(1, S.lv[0])) + nudgeTake('arcPh', dt);
   const gt = Math.min(1, 0.08 + 0.75 * S.lv[0] + 0.35 * S.en) * S.go; S.grow += (gt - S.grow) * (1 - Math.pow(gt > S.grow ? 0.0005 : 0.03, dt));   // sube al instante con los graves y baja rápido: se ve latir
   const c = (k, l) => paiTone(mix(k), l, 55, 90);
   paiRun(S, ARCO_FS, (gl, p) => { gl.uniform3fv(p.u.uC0, c(0.15, night ? 62 : 66)); gl.uniform3fv(p.u.uC1, c(0.8, night ? 48 : 58)); gl.uniform3fv(p.u.uC2, c(0.5, 70));
@@ -8365,7 +8375,7 @@ function drawTubes(dt) {
     // cada golpe (y con la parte de la canción de cada muñeco); abajo deja un charco de luz en el suelo
     if (pulse.on) m.beamI = Math.max(m.beamI || 0, 0.35 + 0.55 * pulse.k);
     m.beamI = Math.max(0.08 + lvM * 0.5, (m.beamI || 0) * Math.pow(0.12, dt));
-    m.beamPh = (m.beamPh || m.k * 2.1) + dt * (0.15 + energy * 1.2) + (pulse.on ? 0.25 * pulse.k : 0);
+    if (pulse.on) nudgeAdd('tb' + m.k, 0.25 * pulse.k); m.beamPh = (m.beamPh || m.k * 2.1) + dt * (0.15 + energy * 1.2) + nudgeTake('tb' + m.k, dt);
     {
       const I = m.beamI * (state.noFlash ? 0.5 : 1), sx0 = m.x + Math.sin(m.beamPh * 0.7 + m.k) * m.FH * 0.3, sy0 = -m.FH * 0.08;
       const tx0 = m.x + Math.sin(m.beamPh) * m.FH * 0.35, n = 12;
@@ -8520,7 +8530,7 @@ function glCanvas(q) {
   // al grabar, las escenas pesadas no dibujan más píxeles de los que este equipo ya mueve fluido en pantalla (el video es
   // de 1080x1920, a menudo el doble que la ventana): se ven igual que en pantalla y no se traban. El texto va aparte, nítido
   const pxM = GLX.scrPx || (GLX.scrPx = {});
-  if (!recording) pxM[state.mode] = cw * cw * H / W;
+  if (!recording && !recSize) pxM[state.mode] = cw * cw * H / W;
   else if (REC_HEAVY.has(state.mode) && pxM[state.mode]) { const lim = pxM[state.mode] * 1.05; if (cw * cw * H / W > lim) cw = Math.round(Math.sqrt(lim * W / H)); }
   const ch = Math.max(2, Math.round(cw * H / W));
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
@@ -9185,7 +9195,7 @@ function drawCats(dt) {
   const moving = 0.02 + cats.go * (per < 0.38 ? 0.5 : 1) * cats.pace;
   cats.list.forEach((c, i) => {
     c.ph += dt / (4 * per) * moving;
-    if (pulse.on) c.ph += ((Math.round(c.ph * 4) / 4) - c.ph) * 0.35;   // la pisada se acerca al golpe
+    if (pulse.on) nudgeAdd('cat' + i, ((Math.round(c.ph * 4) / 4) - c.ph) * 0.35); c.ph += nudgeTake('cat' + i, dt);   // la pisada se acerca al golpe (repartido en ~0,2 s: sin tropiezo)
     c.x += dt * moving * c.s * 0.69 / (4 * per);                      // avanzan lo que miden sus pasos (sin patinar)
     if (c.x - c.s * 0.7 > asp) c.x -= cats.span;
     if (dropHit) c.hopV = 1.6 + i * 0.12;
@@ -9654,7 +9664,7 @@ function drawHarp(dt) {
   harp.syl *= Math.pow(0.08, dt);
   harp.tip = Math.max(harp.tip * Math.pow(0.03, dt), hits.hat ? 0.8 : 0);
   harp.flow += dt * (0.2 + voice * 1.3 + energy * 0.25);
-  harp.hue = (harp.hue || 0) + dt * (0.015 + energy * 0.12) + (pulse.on ? 0.025 * pulse.k : 0);
+  if (pulse.on) nudgeAdd('harpHue', 0.025 * pulse.k); harp.hue = (harp.hue || 0) + dt * (0.015 + energy * 0.12) + nudgeTake('harpHue', dt);
   for (let k = 0; k < 12; k++) harp.key[k] += (chromaNow[k] - harp.key[k]) * (1 - Math.pow(0.92, dt));
   // el cursor: con el ratón quieto un rato, los hilos vuelven a su sitio; al levantar el dedo, también
   const q = harp.ptr;
@@ -10957,7 +10967,7 @@ function drawSphere(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!sph.prog) sphereSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  sph.sw += dt * (0.02 + energy * 1.1 + voice * 1.2) + (pulse.on ? 0.18 * pulse.k : 0);
+  if (pulse.on) nudgeAdd('sphSw', 0.18 * pulse.k); sph.sw += dt * (0.02 + energy * 1.1 + voice * 1.2) + nudgeTake('sphSw', dt);
   if (pulse.on) sph.rim = Math.min(1.6, sph.rim + 0.7 + pulse.k * 0.7);
   sph.rim *= Math.pow(0.06, dt);
   const target = 0.86 + Math.pow(bandX(0, 10), 1.3) * 0.22 + P * 0.1 + dynL * 0.06;   // en silencio se encoge; con los graves se infla
@@ -12118,12 +12128,12 @@ function drawHalos(dt) {
   const n = L.length, bands = [[0, 8], [8, 16], [16, 26], [26, 38], [38, BANDS]];
   for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5]; halo.tg[i] = Math.pow(bandX(a, b), 1.2) * (0.6 + 0.8 * dynL) * musicGate; }
   // cada halo escucha el ataque de su banda: una nota de piano mueve los halos de los medios, el hat el de los agudos
-  for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5], h = attHit(a, b); if (h > 0) { halo.v[i] += (1.6 + 2.4 * h) * (i === 0 ? 0.5 : 1); halo.sqv[i] += 1.6 * h * (state.noFlash ? 0.5 : 1); halo.cph[i] += 0.25 * h; halo.fl[i] = Math.max(halo.fl[i], 0.55 * h); } }
+  for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5], h = attHit(a, b); if (h > 0) { halo.v[i] += (1.6 + 2.4 * h) * (i === 0 ? 0.5 : 1); halo.sqv[i] += 1.6 * h * (state.noFlash ? 0.5 : 1); nudgeAdd('hc' + i, 0.25 * h); halo.fl[i] = Math.max(halo.fl[i], 0.55 * h); } }
   if (pulse.on && !pulse.melo) {   // el bombo: todas saltan (más las de los graves), se aplastan y el núcleo gira
-    for (let i = 0; i < n; i++) { const w = i === 0 || i === 2 ? 1 : 0.45; halo.v[i] += (3 + pulse.k * 5) * w; halo.sqv[i] += (2.5 + pulse.k * 3) * w * (state.noFlash ? 0.5 : 1); halo.cph[i] += 0.35 * w; }
+    for (let i = 0; i < n; i++) { const w = i === 0 || i === 2 ? 1 : 0.45; halo.v[i] += (3 + pulse.k * 5) * w; halo.sqv[i] += (2.5 + pulse.k * 3) * w * (state.noFlash ? 0.5 : 1); nudgeAdd('hc' + i, 0.35 * w); }
     halo.kick = Math.min(1, halo.kick + 0.5 + pulse.k * 0.4);
   }
-  if (hits.snare) for (let i = 1; i < n; i += 2) { halo.fl[i] = 1; halo.cph[i] += 0.6; }   // la caja: las del medio destellan en el canto
+  if (hits.snare) for (let i = 1; i < n; i += 2) { halo.fl[i] = 1; nudgeAdd('hc' + i, 0.6); }   // la caja: las del medio destellan en el canto
   springTo(halo.lv, halo.v, halo.tg, dt, 150, 0.45);
   springTo(halo.sq, halo.sqv, HALO0, dt, 260, 0.25);
   halo.kick *= Math.pow(0.08, dt); halo.ph += dt * musicGate * (0.1 + energy * 0.9);
@@ -12140,7 +12150,7 @@ function drawHalos(dt) {
     // núcleo: la mitad hondos (oscuros), la otra mitad ojos de luz; el de la voz toma el color de la nota
     const deep = i % 2 === 0, hd = 250 + (((h0 - 250) % 360 + 540) % 360 - 180) * 0.25, cc = i === 1 ? mel.map(v => Math.min(1, v * 1.2)) : deep ? viv(hd, 22) : viv(h0 - 25, 80);   // hondos: violeta azulado oscuro, de la familia
     halo.C.set(cc, i * 3);
-    halo.cph[i] += dt * musicGate * (0.15 + vo * 0.9 + lv * 0.4);
+    halo.cph[i] += dt * musicGate * (0.15 + vo * 0.9 + lv * 0.4) + nudgeTake('hc' + i, dt);
     const off = 0.22 + 0.16 * lv + (i === 1 ? 0.12 * vo : 0);
     halo.K.set([Math.cos(halo.cph[i] + i) * off, Math.sin(halo.cph[i] * 0.8 + i) * off, 0.62 + 0.18 * lv, (deep ? 0.9 : 0.8) * (i === 1 ? 0.4 + 0.6 * vo : 1)], i * 4);
   }
@@ -14242,7 +14252,14 @@ function frame(now) {
 }
 function render(now) {
   if ((render.k = (render.k || 0) + 1) % 2 === 0 && dockEl) dockEl.style.setProperty('--beat', Math.max(0, Math.min(1, pulse.x || 0)).toFixed(2));   // el dock respira con el ritmo
-  const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now;
+  let dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); const raw_ = (now - last) / 1000; last = now;
+  // al grabar, el movimiento avanza en pasos parejos de 1/30 s (o 1/60): el temblor de los refrescos de pantalla (75 o 144 Hz,
+  // o un cuadro que llega unos ms tarde) no pasa al video. Si el reloj real se aparta, se corrige suave, así nunca se
+  // desfasa de la música aunque el equipo vaya lento
+  if (recording) { const st = 1 / recFps; render.wall = (render.wall || 0) + Math.max(0, raw_); let e = render.wall - (render.anim || 0) - st;
+    if (Math.abs(e) > 0.25) { render.anim = render.wall - st; e = 0; }
+    dt = Math.max(0, Math.min(0.05, st + 0.2 * e)); render.anim = (render.anim || 0) + dt; }
+  else render.wall = render.anim = 0;
   // El reloj de las animaciones solo corre mientras suena música: las derivas lentas, los brillos que pasean y
   // los vaivenes se detienen en silencio (y arrancan suave cuando vuelve el sonido). Nada se mueve sin música.
   musicGate += ((audible ? Math.min(1, 0.55 + energy * 10) : 0) - musicGate) * (1 - Math.pow(0.05, dt));
