@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 213</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 214</div>
     </div>
   </div>
   <div class="group">
@@ -8517,6 +8517,11 @@ function glCanvas(q) {
   // millones por cuadro y calentaban el equipo; son suaves, así que al ampliarlos se ven igual
   let cw = Math.max(2, Math.round(Math.min(W * q, 2560)));
   if (cw * cw * H / W > 2.2e6) cw = Math.round(Math.sqrt(2.2e6 * W / H));
+  // al grabar, las escenas pesadas no dibujan más píxeles de los que este equipo ya mueve fluido en pantalla (el video es
+  // de 1080x1920, a menudo el doble que la ventana): se ven igual que en pantalla y no se traban. El texto va aparte, nítido
+  const pxM = GLX.scrPx || (GLX.scrPx = {});
+  if (!recording) pxM[state.mode] = cw * cw * H / W;
+  else if (REC_HEAVY.has(state.mode) && pxM[state.mode]) { const lim = pxM[state.mode] * 1.05; if (cw * cw * H / W > lim) cw = Math.round(Math.sqrt(lim * W / H)); }
   const ch = Math.max(2, Math.round(cw * H / W));
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
   return [cw, ch];
