@@ -746,6 +746,7 @@
       <div class="group" role="group" aria-label="Animación" id="modes">
         <button data-mode="navidad">Navidad</button>
         <button data-mode="ruta">Ruta</button>
+        <button data-mode="ciudad">Ciudad</button>
         <button data-mode="autopista">Autopista</button>
         <button data-mode="light">Luz</button>
         <button data-mode="lago">Lago</button>
@@ -865,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 220</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 221</div>
     </div>
   </div>
   <div class="group">
@@ -1165,7 +1166,7 @@ document.getElementById('introSp').onclick = e => { e.stopPropagation(); documen
 // en el celular no se puede oír el audio de otras apps: ahí lo principal es conectar Spotify
 // en un celular o tableta (pantalla táctil sin ratón) no se puede capturar el audio del equipo: Spotify va primero y el micrófono como alternativa
 if ((matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) || !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; document.getElementById('introMic').hidden = false; }
-{ const CATS = { esc: ['navidad', 'ruta', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
+{ const CATS = { esc: ['navidad', 'ruta', 'ciudad', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
     luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
     por: ['cover', 'livecover', 'lyrics', 'artist', 'strobe', 'vinyl'] };
   const inCat = (m, c) => c === 'all' || (c === 'abs' ? !CATS.esc.includes(m) && !CATS.luz.includes(m) && !CATS.por.includes(m) : CATS[c].includes(m));
@@ -4575,7 +4576,7 @@ const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 't
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  calm:   { name: 'tranquila', modes: ['ciudad', 'globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
   medium: { name: 'media',     modes: ['icons', 'reeds', 'traces', 'loop', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
@@ -11526,78 +11527,161 @@ function drawIcons(dt) {
 // funden con la bruma. Música: cada capa escucha su parte del sonido (las lejanas los agudos, las cercanas los graves) y
 // enciende más ventanas cuanto más suena; cada nota de su parte hace brillar algunas ventanas; cada bombo manda una ola
 // de luz que recorre la ciudad; el vuelo va al ritmo de la canción y la voz tiñe la luna. En silencio, quieta.
-const city = { prog: null, t: 0, lv: new Float32Array(6), fl: new Float32Array(6), wave: -9, wk: 0, bank: 0, glow: 0 };
+const city = { prog: null, t: 0, lv: new Float32Array(6), fl: new Float32Array(6), wave: -9, wk: 0, bank: 0, glow: 0, lan: [], birds: [], beats: 0 };
 function citySetup() {
   city.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uT, uKick, uWave, uHi, uVo, uBank, uGlow; uniform float uLv[6]; uniform float uFl[6];
     uniform vec3 uSkyT, uSkyH, uCloud, uR0, uR1, uR2, uWall, uWarm, uMel, uFog;
+    const float S = 5.;
     float h1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
     float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 h3(vec2 p) { return fract(sin(vec3(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)), dot(p, vec2(419.2, 371.9)))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
     float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + vec2(1.7, 9.2); a *= .5; } return s; }
-    void main() {
-      float asp = uRes.x / uRes.y, px = 1.5 / uRes.y;
-      vec2 c = vUv - .5; c.x *= asp; float cb = cos(uBank), sb = sin(uBank); c = vec2(c.x * cb - c.y * sb, c.x * sb + c.y * cb);
-      float X = c.x, Y = c.y + .5, hor = .52;
-      // el cielo: hondo arriba, cálido sobre el horizonte; la ciudad lo ilumina desde abajo
-      vec3 col = mix(uSkyH, uSkyT, smoothstep(hor - .06, 1.02, Y));
-      col += uWarm * exp(-max(Y - hor, 0.) * 9.) * (.08 + .22 * uGlow) * (.4 + .6 * uNight);
-      // de noche: estrellas que titilan con los agudos y la luna (la voz la tiñe)
-      if (uNight > .5) {
-        vec2 g = vec2(X, Y) * 90.; vec2 id = floor(g); float r = h2(id);
-        float st = step(.985, r) * smoothstep(.35, .0, length(fract(g) - .5)) * smoothstep(hor + .05, hor + .3, Y);
-        col += vec3(1., .95, .85) * st * (.35 + .65 * h2(id + floor(uT * 2.)) * (.4 + uHi));
-      }
-      vec2 mp = vec2(X - asp * .22, Y - .83); float md = length(mp), mr = .045;
-      vec3 moonC = mix(vec3(1., .96, .86), uMel, uVo * .35) * (uNight > .5 ? 1. : .0) + (uNight > .5 ? vec3(0.) : vec3(1., .93, .78));
-      col += moonC * (smoothstep(mr + px, mr - px, md) * (uNight > .5 ? .95 : .55) + exp(-md * 10.) * (uNight > .5 ? .25 : .35));
-      // dos bancos de nubes grandes, de borde pintado, con su sombra y la luz cálida de la ciudad por debajo
-      for (int k = 0; k < 2; k++) { float fk = float(k);
-        vec2 q = vec2(X * (1.3 - fk * .35) + uT * (.012 + fk * .02) + fk * 3.1, Y * (2.6 - fk * .6));
-        float n = fbm(q * 1.4 + fk * 5.3), band = smoothstep(hor + .08 + fk * .1, hor + .24 + fk * .12, Y) * smoothstep(1.05, .8 - fk * .12, Y);
-        float m = smoothstep(.56, .585, n * (.55 + .6 * band)) * band;
-        float sh = fbm(q * 1.4 + fk * 5.3 + vec2(-.04, .07));
-        vec3 cc = mix(uCloud * .72, uCloud * 1.08, clamp((n - sh) * 5. + .55, 0., 1.));
-        cc += uWarm * smoothstep(.85, .5, Y) * (.06 + .3 * uNight) * (.5 + .5 * uGlow);
-        col = mix(col, cc, m * (.92 - fk * .18));
-      }
-      // la ciudad: seis capas de tejados, de lejos (bruma, agudos) a cerca (nítida, graves)
-      for (int i = 0; i < 6; i++) { float fi = float(i), d = fi / 5.;
-        float w = .045 + .085 * d, L = (X + uT * (.03 + .42 * d * d)) / w, cell = floor(L), fx = fract(L);
-        float r0 = h1(cell * 1.37 + fi * 31.7), r1 = h1(cell * 7.91 + fi * 13.1), r2 = h1(cell * 3.17 + fi * 5.3);
-        float street = hor - .035 - .45 * d * d - .04 * d, top = street + (.035 + .24 * d) * (.35 + .65 * r0);
-        float g = .05 + .08 * r1, ix = (fx - g) / (1. - 2. * g), inB = step(0., ix) * step(ix, 1.);
-        float roofTop = top, isRoof = 0.;
-        if (r1 < .5) { float rh = w * (.25 + .25 * r2) / max(asp, .56) * 1.2; roofTop = top + rh * (1. - abs(ix - .5) * 2.); }          // tejado de dos aguas
-        else if (r1 < .62) { float tw = abs(ix - .5) < .18 ? 1. : 0.; roofTop = top + tw * w * .9 * (1. - abs(ix - .5) / .18); }      // torre con aguja
-        else { roofTop = top + (abs(ix - .78) < .07 ? w * .35 : 0.); }                                                              // azotea con chimenea
-        float a = smoothstep(roofTop + px, roofTop - px, Y) * smoothstep(-.01, .01, ix) * smoothstep(1.01, .99, ix);
-        // las casitas bajas entre los edificios (callejones), para que la ciudad no tenga huecos
-        float low = smoothstep(street + .012 * (1. + d) + px, street + .012 * (1. + d) - px, Y);
-        a = max(a, low);
-        if (a <= 0.) continue;
-        float fog = (1. - d) * .72;
-        vec3 roofC = r2 < .33 ? uR0 : r2 < .66 ? uR1 : uR2, wall = uWall * (.82 + .3 * r0);
-        bool roof = Y > top && inB > .5;
-        vec3 bc = roof ? roofC * (ix < .5 ? 1. : .78) : wall * (ix > .62 ? .8 : 1.);       // la luz entra por un lado: volumen
-        // las ventanas: se encienden más cuanto más suena su parte; las notas hacen brillar algunas; el bombo manda una ola de luz
-        if (!roof && inB > .5 && Y < top - .006) {
-          float n = 2. + floor(r1 * 3.), wh = .016 + .022 * d, cx = ix * n, cy = (Y - street) / wh;
-          vec2 wid = vec2(cell * 13. + floor(cx) + fi * 101., floor(cy)), wf = vec2(fract(cx), fract(cy));
-          float win = smoothstep(.22, .26, wf.x) * smoothstep(.78, .74, wf.x) * smoothstep(.28, .33, wf.y) * smoothstep(.82, .77, wf.y);
-          float rr = h2(wid), lit = step(rr, (uNight > .5 ? .22 : .06) + .55 * uLv[i]);
-          float fl = uFl[i] * step(h2(wid + 7.), .3), wv = uKick * exp(-pow((X - uWave) / .16, 2.)) * step(h2(wid + 3.), .6);
-          float on = clamp(lit * (.75 + .25 * sin(uT * 3. + rr * 40.)) + fl + wv, 0., 1.4);
-          vec3 glass = mix(wall * .45, uWall * .25, .5);
-          bc = mix(bc, mix(glass, uWarm * (1.1 + .3 * fl), min(on, 1.)), win);
-          bc += uWarm * on * .08 * (1. - win);                                                                   // la luz se derrama apenas en la fachada
+    float ground(vec2 xz) { return 1.6 * sin(xz.x * .045) * sin(xz.y * .037 + 1.) + .8 * sin(xz.y * .09 + xz.x * .02); }   // colinas suaves: la ciudad sube y baja
+    float sdBox(vec3 p, vec3 b) { vec3 q = abs(p) - b; return length(max(q, 0.)) + min(max(q.x, max(q.y, q.z)), 0.); }
+    // la escena: suelo (calles), casas con tejado de dos aguas y árboles en las plazas. Devuelve distancia y material
+    // las medidas de cada casa (las comparten el volumen y el detalle de la fachada)
+    void house(vec2 id, out vec2 hb, out float hh, out float rf, out vec2 jo, out float tw) {
+      vec3 r = h3(id), r2 = h3(id + 17.);
+      hb = vec2(.95 + .7 * r.y, .85 + .6 * r.z); if (r2.x > .5) hb = hb.yx;
+      tw = r2.z > .955 ? 1. : 0.;   // alguna torre con techo en punta: el pueblo tiene lugares que se recuerdan
+      hh = .9 + 1.5 * r2.y * r2.y; rf = .75 + .45 * r.x;
+      if (tw > .5) { hb = vec2(.75 + .2 * r.y); hh += 2.6; rf = 1.7; }
+      jo = (vec2(r2.z, r.z) - .5) * max(0., (S * .5 - max(hb.x, hb.y) - .45)) * 2.;   // cada casa un poco corrida: un pueblo orgánico
+    }
+    vec2 map(vec3 p) {
+      float g = p.y - ground(p.xz); vec2 res = vec2(g, 1.);
+      vec2 id = floor(p.xz / S), l = mod(p.xz, S) - S * .5; vec3 r = h3(id), r2 = h3(id + 17.);
+      float base = ground((id + .5) * S);
+      if (r.x > .22) {
+        vec2 hb, jo; float hh, rf, tw; house(id, hb, hh, rf, jo, tw);
+        vec3 q = vec3(l.x - jo.x, p.y - base, l.y - jo.y);
+        float body = sdBox(q - vec3(0., hh * .5 - .5, 0.), vec3(hb.x, hh * .5 + .5, hb.y));
+        vec3 rq = hb.x > hb.y ? q : q.zyx; vec2 rb = hb.x > hb.y ? hb : hb.yx; rb += .12;
+        float roof;
+        if (tw > .5) {   // techo en punta de cuatro aguas
+          roof = max(sdBox(rq - vec3(0., hh + rf * .5, 0.), vec3(rb.x, rf * .5, rb.y)), (max(abs(rq.x) / rb.x, abs(rq.z) / rb.y) * rf + rq.y - hh - rf) / sqrt(1. + rf * rf / (rb.x * rb.x)));
+        } else {         // tejado de dos aguas con alero
+          float slab = sdBox(rq - vec3(0., hh + rf * .5, 0.), vec3(rb.x, rf * .5, rb.y));
+          float pl = (rq.y - hh - rf + rf / rb.y * abs(rq.z)) / sqrt(1. + rf * rf / (rb.y * rb.y));
+          roof = max(slab, pl);
+          if (r2.y > .3) { float cx = (r.y > .5 ? .55 : -.55) * rb.x, cz = (r.z > .5 ? .3 : -.3) * rb.y;   // la chimenea
+            float ch = sdBox(rq - vec3(cx, hh + rf * .8, cz), vec3(.15, .42, .15)); if (ch < res.x) res = vec2(ch, 5.); }
         }
-        bc = mix(bc, uFog, fog);
-        col = mix(col, bc, a);
-        col = mix(col, uFog, (1. - d) * .07 * step(.5, a));
+        if (body < res.x) res = vec2(body, 2.);
+        if (roof < res.x) res = vec2(roof, 3.);
+      } else {
+        vec3 tq = vec3(l.x - (r.y - .5) * 1.2, p.y - base - 1.5, l.y - (r.z - .5) * 1.2);
+        float tr = (length(tq * vec3(1., 1.15, 1.)) - 1.45 - .38 * (vn(tq.xz * 2.2 + tq.y * 1.7 + id * 3.) - .5) - .18 * sin(tq.y * 5. + tq.x * 3.)) * .7;   // copa frondosa e irregular
+        if (tr < res.x) res = vec2(tr, 4.);
       }
-      // textura de pintura muy leve y viñeta
-      col *= .96 + .06 * vn(vUv * uRes * .35);
-      col *= 1. - .22 * pow(length(vUv - .5) * 1.25, 2.);
+      return res;
+    }
+    vec3 nrm(vec3 p) { vec2 e = vec2(.01, 0.); return normalize(vec3(map(p + e.xyy).x - map(p - e.xyy).x, map(p + e.yxy).x - map(p - e.yxy).x, map(p + e.yyx).x - map(p - e.yyx).x)); }
+    vec3 sky(vec3 rd) {
+      float y = rd.y;
+      vec3 c = mix(uSkyH, uSkyT, smoothstep(-.05, .55, y));
+      // colinas lejanas con su bosque, fundidas en la bruma del horizonte
+      { float az = atan(rd.x, -rd.z), ridge = .012 + .05 * fbm(vec2(az * 3.2 + 4., 1.3)) + .012 * vn(vec2(az * 40., 2.));
+        if (y < ridge) { c = mix(mix(uFog, uSkyH, .3) * (uNight > .5 ? .7 : .82), uSkyH, .25 + .5 * smoothstep(ridge - .05, ridge, y)); } }
+      // nubes grandes de borde pintado sobre un plano alto
+      if (y > .02) { vec2 cp = rd.xz / y * 9. + vec2(0., -uT * .15);
+        float n = fbm(cp * .07), sh = fbm(cp * .07 + vec2(.05, -.08)), m = smoothstep(.55, .58, n) * smoothstep(.02, .2, y);
+        vec3 cc = mix(uCloud * .7, uCloud * 1.08, clamp((n - sh) * 5. + .55, 0., 1.)) + uWarm * (.05 + .25 * uNight) * smoothstep(.35, .05, y);
+        c = mix(c, cc, m * .9); }
+      if (uNight > .5) { vec2 g = rd.xz / max(y, .05) * 30.; vec2 id = floor(g); float st = step(.985, h2(id)) * smoothstep(.35, 0., length(fract(g) - .5)) * smoothstep(.08, .3, y);
+        c += vec3(1., .95, .85) * st * (.3 + .7 * h2(id + floor(uT * 2.)) * (.4 + uHi)); }
+      // la luna (de noche) o el sol bajo de la tarde
+      vec3 md = normalize(vec3(-.42, .15, -1.)); float mdot = max(dot(rd, md), 0.);
+      vec3 mc = uNight > .5 ? mix(vec3(1., .96, .86), uMel, uVo * .35) : vec3(1., .9, .7);
+      c += mc * (smoothstep(.9988, .9992, mdot) * (uNight > .5 ? .9 : 1.2) + pow(mdot, 60.) * (.35 + .5 * uKick) + pow(mdot, 6.) * (uNight > .5 ? .06 : .18 + .25 * uKick));   // el sol (y la luna) laten con el golpe
+      return c;
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 uv = (vUv - .5) * vec2(asp, 1.) / min(asp, 1.);
+      // la cámara vuela hacia adelante sobre los tejados, mirando un poco hacia abajo, con un vaivén suave
+      vec3 ro = vec3(sin(uT * .05) * 6. + 1.3, 10. + sin(uT * .07) * .8, -uT);
+      ro.y += ground(ro.xz) * .6;
+      vec3 fw = normalize(vec3(sin(uT * .05 + .3) * .15, -.15, -1.)), rt = normalize(cross(vec3(0., 1., 0.), fw)), up = cross(fw, rt);
+      float cb = cos(uBank), sb = sin(uBank); vec3 rt2 = rt * cb + up * sb, up2 = up * cb - rt * sb;
+      vec3 rd = normalize(fw * 1.5 + rt2 * uv.x + up2 * uv.y);
+      // se avanza por la ciudad celda a celda: el paso nunca cruza el borde de una manzana (así no se salta la casa de la
+      // vecina ni se queda pegado en el borde)
+      float t = .1; vec2 h = vec2(0.); bool hit = false; vec2 sgn = sign(rd.xz + 1e-6);
+      for (int i = 0; i < 140; i++) { vec3 q = ro + rd * t; h = map(q); if (h.x < .003 * t) { hit = true; break; } if (t > 160.) break;
+        vec2 l = mod(q.xz, S) - S * .5, te = (sgn * S * .5 - l) / (rd.xz + sgn * 1e-6); t += min(h.x * .9, min(te.x, te.y) + .03); }
+      vec3 col;
+      if (!hit) col = mix(sky(rd), mix(uFog, uSkyH, .6), (1. - smoothstep(-.02, .12, rd.y)) * .9);
+      else {
+        vec3 p = ro + rd * t, n = nrm(p); float mat = h.y;
+        vec2 id = floor(p.xz / S), l = mod(p.xz, S) - S * .5; vec3 r = h3(id), r2 = h3(id + 17.);
+        float base = ground((id + .5) * S);
+        // los materiales: estuco con matices, zócalo de piedra, tejas, chimenea de ladrillo, jardines y calles empedradas
+        vec2 hb, jo; float hh, rf, tw; house(id, hb, hh, rf, jo, tw);
+        vec3 q = vec3(l.x - jo.x, p.y - base, l.y - jo.y);
+        vec3 roofC = r2.x < .33 ? uR0 : r2.x < .66 ? uR1 : uR2, alb;
+        if (mat < 1.5) {
+          bool street = r.x > .22 ? max(abs(q.x) - hb.x, abs(q.z) - hb.y) > .55 || max(abs(l.x), abs(l.y)) > S * .5 - .5 : max(abs(l.x), abs(l.y)) > S * .5 - .45;
+          if (street) { vec2 cs = p.xz * 2.4; cs.x += .5 * floor(cs.y); vec2 cf = fract(cs); float joint = smoothstep(.0, .08, min(min(cf.x, 1. - cf.x), min(cf.y, 1. - cf.y)));
+            alb = mix(uWall * .42, uFog, .15) * (.8 + .25 * h2(floor(cs))) * mix(.72, 1., joint); }   // adoquines
+          else { float gn = vn(p.xz * 1.3) * .6 + vn(p.xz * 5.) * .4; alb = mix(vec3(.22, .42, .2), vec3(.4, .58, .26), gn);   // el jardín, con flores sueltas
+            float fl_ = step(.93, h2(floor(p.xz * 6.))); alb = mix(alb, mix(uR0, vec3(1., .9, .5), step(.5, h2(floor(p.xz * 6.) + 3.))) * 1.2, fl_ * .8); }
+        } else if (mat < 2.5) {
+          alb = uWall * (.82 + .3 * r.z) * (.92 + .12 * vn(vec2(q.x + q.z, q.y) * 4.));
+          if (q.y < .32) alb *= .62;                                                     // zócalo de piedra
+        } else if (mat < 3.5) {
+          vec3 rq = hb.x > hb.y ? q : q.zyx; float along = rq.x * 3.2, down = (abs(rq.z) + (hh + rf - rq.y)) * 4.2;
+          vec2 tl = vec2(along + .5 * floor(down), down);
+          alb = roofC * (.82 + .22 * h2(floor(tl) + id)) * mix(.78, 1., smoothstep(.0, .25, fract(tl.y)));   // tejas, cada una con su tono
+        } else if (mat < 4.5) { alb = mix(vec3(.13, .3, .17), vec3(.3, .5, .22), vn(p.xz * 3. + p.y * 2.)); }
+        else alb = vec3(.55, .3, .24) * (.85 + .2 * step(.5, fract(p.y * 7.)));          // ladrillo
+        // luz al estilo de la animación pintada: lado del sol cálido, sombra azulada, sin degradados duros
+        vec3 Ld = normalize(vec3(.65, uNight > .5 ? .7 : .55, .55));   // el sol (o la luna) desde atrás y a un lado: las fachadas que vemos brillan
+        float dif = smoothstep(-.1, .45, dot(n, Ld)), sky_ = .5 + .5 * n.y;
+        // sombras suaves: cada casa y cada árbol proyecta la suya (la luz de la tarde se siente)
+        if (dif > .01) { float sh = 1., st = .06; for (int k = 0; k < 22; k++) { float dd = map(p + n * .03 + Ld * st).x; sh = min(sh, 7. * dd / st); st += clamp(dd, .08, .6); if (sh < .02 || st > 18.) break; } dif *= clamp(sh, 0., 1.); }
+        vec3 sunC = uNight > .5 ? vec3(.55, .62, .95) * .9 : vec3(1., .86, .66), shC = uNight > .5 ? vec3(.2, .22, .42) : mix(vec3(.38, .45, .7), uSkyT, .3);
+        float ao = clamp((p.y - ground(p.xz)) * .35 + .45, 0., 1.);
+        col = alb * (shC * sky_ * ao + sunC * dif);
+        // de día, cada bombo pasa una franja de sol dorado por el pueblo (como cuando una nube deja pasar la luz)
+        if (uNight < .5) col += alb * vec3(1., .82, .55) * .7 * uKick * exp(-pow((p.z - uWave) / 9., 2.)) * (.4 + .6 * dif);
+        // las ventanas: escuchan su parte del sonido; las notas encienden algunas; el bombo manda una ola de luz por la calle
+        if (mat > 1.5 && mat < 2.5 && abs(n.y) < .3) {
+          float u = abs(n.x) > .5 ? q.z : q.x, half_ = abs(n.x) > .5 ? hb.y : hb.x, v = q.y;
+          float cols = max(1., floor(half_ * 2. / .95)), cw_ = half_ * 2. / cols;
+          vec2 wid = vec2(floor((u + half_) / cw_), floor((v - .45) / .92)), wf = vec2(fract((u + half_) / cw_), fract((v - .45) / .92));
+          float rowOk = step(.45, v) * step(v, hh - .25), hasW = step(.22, h2(wid * 1.7 + id + n.xz));
+          float wx = abs(wf.x - .5), wy = abs(wf.y - .5);
+          float win = smoothstep(.17, .15, wx) * smoothstep(.26, .24, wy) * rowOk * hasW;
+          float frame = smoothstep(.21, .19, wx) * smoothstep(.31, .29, wy) * rowOk * hasW - win;
+          float shut = step(.2, wx) * step(wx, .3) * smoothstep(.27, .25, wy) * rowOk * hasW * step(.45, h2(id + 5.));
+          float box = smoothstep(.21, .19, wx) * step(.29, -(wf.y - .5)) * step(-(wf.y - .5), .36) * rowOk * hasW * step(.4, h2(wid + id + 11.)) * (1. - uNight * .6);
+          col = mix(col, col * 1.25 + .05, frame * .8);                                  // el marco, claro
+          col = mix(col, roofC * (.55 + .45 * dif), shut * .9);                           // contraventanas del color del tejado
+          col = mix(col, mix(vec3(.85, .25, .35), vec3(1., .75, .3), step(.5, fract(u * 9.))) * (.5 + .5 * dif), box * step(.5, fract(u * 18.)));   // la matera con flores
+          // la puerta, en la fachada de adelante
+          float door = step(abs(u - (h2(id + 2.) - .5) * half_ * .8), .2) * step(v, .9) * step(.5, h2(id + n.xz * 3.)) * (1. - rowOk);
+          col = mix(col, vec3(.32, .2, .14) * (.6 + .5 * dif), door);
+          // las ventanas: escuchan su parte del sonido; las notas encienden algunas; el bombo manda una ola de luz por la calle
+          int bi = int(min(5., floor(r.y * 6.)));
+          float lv = uLv[0]; float fl = uFl[0];
+          for (int k = 1; k < 6; k++) if (k == bi) { lv = uLv[k]; fl = uFl[k]; }
+          float rr = h2(wid + id * 7.3), lit = step(rr, (uNight > .5 ? .34 : .04) + .6 * lv);
+          float wv = uKick * exp(-pow((p.z - uWave) / 6., 2.)) * step(h2(wid + id + 3.), .7);
+          float on = clamp(lit * (.8 + .2 * sin(uT * 2. + rr * 50.)) + fl * step(h2(wid + id + 9.), .35) + wv, 0., 1.5);
+          vec3 glass = uNight > .5 ? vec3(.05, .06, .12) : mix(uSkyT, vec3(1.), .3) * (.55 + .3 * wf.y);
+          col = mix(col, mix(glass, uNight > .5 ? uWarm * (1.2 + .4 * on) : mix(uWarm, vec3(1.), .5) * 1.5, min(on, 1.)), win);   // de día, destellos de sol en los vidrios
+          col += uWarm * min(on, 1.) * (1. - win) * smoothstep(.45, .2, length(vec2(wx, wy * .8))) * .25 * uNight;   // la luz de la ventana se derrama en la fachada
+        }
+        // de noche: faroles en las esquinas, con su charco de luz cálido (laten con el bombo)
+        if (uNight > .5) { vec2 lc = abs(l) - S * .5; float ld = length(lc);
+          col += uWarm * exp(-ld * ld * .8) * (.35 + .5 * uGlow + .6 * uKick * exp(-pow((p.z - uWave) / 6., 2.))) * (mat < 1.5 ? 1. : .35); }
+        // la bruma: profundidad (lo lejano se funde con el cielo del horizonte)
+        float fg = 1. - exp(-t * (uNight > .5 ? .02 : .014));
+        col = mix(col, mix(uFog, uSkyH, .6), fg * fg * (3. - 2. * fg) * (uNight > .5 ? 1. : .85));   // aire claro cerca, bruma solo a lo lejos
+      }
+      float lu = dot(col, vec3(.3, .59, .11)); col = mix(vec3(lu), col, 1.08);
+      col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
       o = vec4(clamp(col, 0., 1.), 1.);
     }`);
 }
@@ -11608,9 +11692,9 @@ function drawCity(dt) {
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
   const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
   // el vuelo va al ritmo de la canción: más rápido en lo fuerte; cada bombo lo empuja (repartido, sin tirones)
-  if (pulse.on && !pulse.melo) { nudgeAdd('city', 0.05 + 0.06 * pulse.k); city.wave = -0.75 * Math.max(1, W / H) - 0.3; city.wk = Math.min(1, city.wk + 0.7 + 0.3 * pulse.k); }
+  if (pulse.on && !pulse.melo) { nudgeAdd('city', 0.05 + 0.06 * pulse.k); city.wave = -city.t - 42; city.wk = Math.min(1, city.wk + 0.7 + 0.3 * pulse.k); }   // la ola de luz nace al fondo del pueblo
   city.t += dt * musicGate * (0.12 + 0.55 * energy + 0.2 * dynL) * (0.5 / per) + nudgeTake('city', dt);
-  city.wave += dt * 2.6 * Math.max(1, W / H); city.wk = ease(city.wk, 0, 0.5);
+  city.wave += dt * 48; city.wk = ease(city.wk, 0, 0.6);   // y viaja por las calles hacia la cámara (~1,3 s)
   const bands = [[38, BANDS], [30, 40], [22, 32], [14, 24], [6, 16], [0, 8]];   // de lejos (agudos) a cerca (graves)
   for (let i = 0; i < 6; i++) { const [a, b] = bands[i]; city.lv[i] = ease(city.lv[i], Math.min(1, Math.pow(bandX(a, b), 1.2) * (0.5 + 0.8 * dynL)) * musicGate, 0.25);
     const h = attHit(a, b); city.fl[i] = Math.max(city.fl[i] * Math.exp(-dt / 0.3), h); }
@@ -11622,10 +11706,10 @@ function drawCity(dt) {
   const U = night
     ? { skyT: bl([0.04, 0.06, 0.16], tone(RGB[1], 12), 0.4), skyH: bl([0.2, 0.18, 0.34], tone(RGB[0], 30), 0.35), cloud: bl([0.3, 0.33, 0.48], tone(RGB[1], 42), 0.3),
         r0: bl([0.24, 0.16, 0.22], tone(RGB[0], 24), 0.45), r1: bl([0.14, 0.22, 0.28], tone(RGB[1], 22), 0.45), r2: bl([0.2, 0.2, 0.3], tone(RGB[2], 22), 0.45),
-        wall: [0.17, 0.19, 0.3], warm: [1, 0.76, 0.42], fog: bl([0.17, 0.18, 0.32], tone(RGB[1], 24), 0.3) }
-    : { skyT: bl([0.36, 0.56, 0.86], tone(RGB[1], 62), 0.3), skyH: bl([1, 0.84, 0.64], tone(RGB[0], 82), 0.3), cloud: [1, 0.97, 0.93],
-        r0: bl([0.78, 0.38, 0.27], tone(RGB[0], 46), 0.35), r1: bl([0.27, 0.56, 0.6], tone(RGB[1], 46), 0.35), r2: bl([0.38, 0.44, 0.64], tone(RGB[2], 50), 0.35),
-        wall: [0.94, 0.87, 0.76], warm: [1, 0.82, 0.5], fog: bl([0.98, 0.86, 0.74], tone(RGB[0], 86), 0.25) };
+        wall: [0.42, 0.4, 0.5], warm: [1, 0.74, 0.4], fog: bl([0.2, 0.2, 0.36], tone(RGB[1], 28), 0.3) }
+    : { skyT: bl([0.3, 0.52, 0.88], tone(RGB[1], 58), 0.2), skyH: bl([0.98, 0.88, 0.74], tone(RGB[0], 84), 0.2), cloud: [1, 0.97, 0.94],
+        r0: bl([0.8, 0.36, 0.24], tone(RGB[0], 46), 0.2), r1: bl([0.24, 0.54, 0.56], tone(RGB[1], 44), 0.2), r2: bl([0.66, 0.3, 0.26], tone(RGB[2], 44), 0.15),
+        wall: [0.96, 0.9, 0.8], warm: [1, 0.82, 0.5], fog: bl([0.8, 0.84, 0.92], tone(RGB[1], 84), 0.2) };
   const [cw, ch] = glCanvas(0.9), p = city.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
@@ -11637,7 +11721,39 @@ function drawCity(dt) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  if (night) bloom(GLX.c, 0.32 + 0.2 * city.wk);   // de noche, la luz de ventanas y faroles se esparce en la bruma
+  ctx.restore();
+  cityLife(dt, night);
+}
+// la vida del cielo: de noche, farolillos de papel que suben con cada golpe; de día, bandadas que aletean al ritmo
+function cityLife(dt, night) {
+  const u = MIN / 1080, per = Math.max(0.3, Math.min(1, tempo.period || 0.5)), kick = pulse.on && !pulse.melo;
+  if (kick) city.beats++;
+  if (night) {
+    if (kick && city.lan.length < 36) for (let i = 0, n = 1 + (pulse.k > 0.6 ? 1 : 0); i < n; i++)
+      city.lan.push({ x: W * (0.08 + 0.84 * Math.random()), y: H * (0.78 + 0.18 * Math.random()), s: (24 + 16 * Math.random()) * u, ph: Math.random() * 6, v: (150 + 90 * Math.random()) * u, f: Math.random() });
+    for (const l of city.lan) { l.y -= dt * l.v * musicGate * (0.6 + 0.6 * energy); l.ph += dt * 1.3; l.x += Math.sin(l.ph) * 8 * u * dt; l.s *= Math.pow(0.8, dt); }
+    city.lan = city.lan.filter(l => l.y > -40 * u && l.s > 2 * u);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    for (const l of city.lan) {
+      const fl = 0.85 + 0.15 * Math.sin(time * 9 + l.f * 20), a = Math.min(1, (l.y / H) * 4, (H - l.y) / (H * 0.08)) * fl, r = l.s;
+      const g = ctx.createRadialGradient(l.x, l.y, 0, l.x, l.y, r * 4); g.addColorStop(0, `rgba(255,170,80,${0.35 * a})`); g.addColorStop(1, 'rgba(255,140,60,0)');
+      ctx.fillStyle = g; ctx.fillRect(l.x - r * 4, l.y - r * 4, r * 8, r * 8);
+      const b = ctx.createLinearGradient(l.x, l.y - r, l.x, l.y + r); b.addColorStop(0, `rgba(255,214,140,${0.95 * a})`); b.addColorStop(1, `rgba(255,120,50,${0.9 * a})`);
+      ctx.fillStyle = b; ctx.beginPath(); ctx.moveTo(l.x - r * 0.55, l.y - r); ctx.lineTo(l.x + r * 0.55, l.y - r); ctx.quadraticCurveTo(l.x + r * 0.75, l.y, l.x + r * 0.45, l.y + r); ctx.lineTo(l.x - r * 0.45, l.y + r); ctx.quadraticCurveTo(l.x - r * 0.75, l.y, l.x - r * 0.55, l.y - r); ctx.fill();
+    }
+    ctx.restore();
+  } else {
+    if (kick && city.beats % 8 === 1 && city.birds.length < 3) { const n = 5 + Math.floor(Math.random() * 5), y0 = H * (0.12 + 0.22 * Math.random()), dir = Math.random() < 0.5 ? 1 : -1;
+      city.birds.push({ x: dir > 0 ? -60 * u : W + 60 * u, y: y0, dir, n, s: (10 + 6 * Math.random()) * u, ph: Math.random() * 6, off: Array.from({ length: n }, (_, i) => [(-Math.abs(i - (n - 1) / 2) * 26 - Math.random() * 10) * u, (i - (n - 1) / 2) * 16 * u + (Math.random() - 0.5) * 8 * u]) }); }
+    for (const f of city.birds) { f.x += f.dir * dt * (90 + 60 * energy) * u * musicGate; f.y += Math.sin(time * 0.5 + f.ph) * 6 * u * dt; f.ph += dt * Math.PI * 2 / per; }
+    city.birds = city.birds.filter(f => f.x > -400 * u && f.x < W + 400 * u);
+    ctx.save(); ctx.strokeStyle = 'rgba(48,56,78,.75)'; ctx.lineCap = 'round';
+    for (const f of city.birds) f.off.forEach(([ox, oy], i) => { const x = f.x + ox * f.dir, y = f.y + oy, w = f.s, flap = Math.sin(f.ph + i * 0.7) * 0.6;   // aletean al ritmo de la canción
+      ctx.lineWidth = Math.max(1.2, w * 0.18); ctx.beginPath(); ctx.moveTo(x - w, y - w * flap * 0.8); ctx.quadraticCurveTo(x - w * 0.45, y - w * (0.35 + flap * 0.4), x, y); ctx.quadraticCurveTo(x + w * 0.45, y - w * (0.35 + flap * 0.4), x + w, y - w * flap * 0.8); ctx.stroke(); });
+    ctx.restore();
+  }
 }
 
 // ================= Escena: Neones =================
