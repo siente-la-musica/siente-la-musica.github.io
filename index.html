@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 224</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 225</div>
     </div>
   </div>
   <div class="group">
@@ -11827,13 +11827,15 @@ function citySetup() {
       tw = r2.z > .955 ? 1. : 0.;   // alguna torre con techo en punta: el pueblo tiene lugares que se recuerdan
       hh = .9 + 1.5 * r2.y * r2.y; rf = .75 + .45 * r.x;
       if (tw > .5) { hb = vec2(.75 + .2 * r.y); hh += 2.6; rf = 1.7; }
+      if (abs(id.x) < .5 && mod(id.y, 9.) < .5) { hb = vec2(1.15); hh = 6.8; rf = 2.4; tw = 2.; }   // la torre del reloj: cada cierto tramo, sobre el camino del vuelo
       jo = (vec2(r2.z, r.z) - .5) * max(0., (S * .5 - max(hb.x, hb.y) - .45)) * 2.;   // cada casa un poco corrida: un pueblo orgánico
+      if (tw > 1.5) jo = vec2(0.);
     }
     vec2 map(vec3 p) {
       float g = p.y - ground(p.xz); vec2 res = vec2(g, 1.);
       vec2 id = floor(p.xz / S), l = mod(p.xz, S) - S * .5; vec3 r = h3(id), r2 = h3(id + 17.);
       float base = ground((id + .5) * S);
-      if (r.x > .22) {
+      if (r.x > .22 || (abs(id.x) < .5 && mod(id.y, 9.) < .5)) {
         vec2 hb, jo; float hh, rf, tw; house(id, hb, hh, rf, jo, tw);
         vec3 q = vec3(l.x - jo.x, p.y - base, l.y - jo.y);
         float body = sdBox(q - vec3(0., hh * .5 - .5, 0.), vec3(hb.x, hh * .5 + .5, hb.y));
@@ -11874,7 +11876,7 @@ function citySetup() {
       // la luna (de noche) o el sol bajo de la tarde
       vec3 md = normalize(vec3(-.42, .15, -1.)); float mdot = max(dot(rd, md), 0.);
       vec3 mc = uNight > .5 ? mix(vec3(1., .96, .86), uMel, uVo * .35) : vec3(1., .9, .7);
-      c += mc * (smoothstep(.9988, .9992, mdot) * (uNight > .5 ? .9 : 1.2) + pow(mdot, 60.) * (.35 + .5 * uKick) + pow(mdot, 6.) * (uNight > .5 ? .06 : .18 + .25 * uKick));   // el sol (y la luna) laten con el golpe
+      c += mc * (smoothstep(.9988, .9992, mdot) * (uNight > .5 ? .9 : 1.2) + pow(mdot, 90.) * (.3 + .5 * uKick) + pow(mdot, 14.) * (uNight > .5 ? .05 : .16 + .25 * uKick));   // el sol (y la luna) laten con el golpe, sin quemar el cielo
       return c;
     }
     void main() {
@@ -11945,6 +11947,14 @@ function citySetup() {
           col = mix(col, col * 1.25 + .05, frame * .8);                                  // el marco, claro
           col = mix(col, roofC * (.55 + .45 * dif), shut * .9);                           // contraventanas del color del tejado
           col = mix(col, mix(vec3(.85, .25, .35), vec3(1., .75, .3), step(.5, fract(u * 9.))) * (.5 + .5 * dif), box * step(.5, fract(u * 18.)));   // la matera con flores
+          if (tw > 1.5 && n.z > .5) {   // la esfera del reloj, que de noche se enciende; las agujas avanzan con la música
+            vec2 cq = vec2(u, v - (hh - 1.1)); float cr_ = length(cq);
+            float face = smoothstep(.62, .58, cr_), ring = smoothstep(.66, .62, cr_) - face;
+            float a1 = uT * .6, a2 = uT * .05; vec2 d1 = vec2(sin(a1), cos(a1)), d2 = vec2(sin(a2), cos(a2));
+            float hand = max(smoothstep(.04, .015, abs(dot(cq, vec2(d1.y, -d1.x)))) * step(0., dot(cq, d1)) * step(cr_, .5), smoothstep(.05, .02, abs(dot(cq, vec2(d2.y, -d2.x)))) * step(0., dot(cq, d2)) * step(cr_, .34));
+            col = mix(col, uNight > .5 ? mix(uWarm, vec3(1., .96, .85), .6) * (1.1 + .5 * uKick) : vec3(.97, .95, .88) * (.6 + .5 * dif), face);
+            col = mix(col, vec3(.2, .18, .16), max(ring, hand * face));
+          }
           // la puerta, en la fachada de adelante
           float door = step(abs(u - (h2(id + 2.) - .5) * half_ * .8), .2) * step(v, .9) * step(.5, h2(id + n.xz * 3.)) * (1. - rowOk);
           col = mix(col, vec3(.32, .2, .14) * (.6 + .5 * dif), door);
@@ -12010,7 +12020,7 @@ function drawCity(dt) {
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
-  if (night) bloom(GLX.c, 0.32 + 0.2 * city.wk);   // de noche, la luz de ventanas y faroles se esparce en la bruma
+  if (night) bloom(GLX.c, 0.22 + 0.2 * city.wk);   // de noche, la luz de ventanas y faroles se esparce en la bruma
   ctx.restore();
   cityLife(dt, night);
 }
