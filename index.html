@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 218</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 219</div>
     </div>
   </div>
   <div class="group">
@@ -5375,7 +5375,7 @@ function skySetup() {
       float a;
       if (uNight > .5) {
         col = vec3(.09, .1, .15) * shade + light * (.35 + d * 1.1) * (.6 + shade * .6);
-        { float mx = max(col.r, max(col.g, col.b)); col = col * 1.25 / (1. + mx * 1.05); }   // tono suave que conserva el color: brilla sin volverse blanco
+        { float mx = max(col.r, max(col.g, col.b)); col = col * 1.05 / (1. + mx * 1.1); }   // tono suave que conserva el color: brilla sin volverse blanco (ni sumado al fondo)
         a = clamp(d * 1.1, 0., 1.);
         col += light * .06;   // un leve brillo en el aire entre nubes
         a = max(a, clamp(length(light) * .08, 0., .5));
@@ -5431,7 +5431,7 @@ function drawSkyClouds(dt) {
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
   ctx.drawImage(GLX.c, 0, 0, W, H);
-  if (night) bloom(GLX.c, 0.16 + beatSoft * 0.14);
+  if (night) bloom(GLX.c, 0.08 + beatSoft * 0.1);
 }
 
 // ================= Escena: Fluido =================
@@ -10530,12 +10530,12 @@ function lyricFxTick(dt) {
   }
   lfx.k += ((lfx.hold && lfx.kinds.length ? 1 : 0) - lfx.k) * (1 - Math.pow(lfx.hold ? 0.05 : 0.3, dt));   // entra en ~0,4 s; se va despacio
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), live = lfx.k > 0.02 ? lfx.k : 0, u = MIN / 700;
-  const rate = live * (0.4 + energy * 1.6), on = k => lfx.kinds.includes(k) && live > 0.05;
+  const rate = live * (0.25 + energy * 0.6), on = k => lfx.kinds.includes(k) && live > 0.05;
   const rnd = Math.random, col = () => Math.floor(rnd() * 3);
-  const spawn = (n, f) => { for (let i = 0; i < n; i++) if (lfx.parts.length < 260) lfx.parts.push(f()); };
+  const spawn = (n, f) => { for (let i = 0; i < n; i++) if (lfx.parts.length < 70) lfx.parts.push(f()); };   // sutil: acompaña a la letra, nunca llena la pantalla
   const burst = pulse.on ? 1 + pulse.k : 0, many = x => Math.floor(x) + (rnd() < x % 1 ? 1 : 0);
   if (on('fire')) spawn(many(dt * 40 * rate + burst * 6 * live), () => ({ t: 'ember', x: rnd() * W, y: H + 10, vx: (rnd() - 0.5) * 40 * u, vy: -(80 + rnd() * 160) * u * (1 + energy), s: (2 + rnd() * 4) * u, life: 1, c: col(), ph: rnd() * 6 }));
-  if (on('rain')) spawn(many(dt * 70 * rate), () => ({ t: 'drop', x: rnd() * W, y: -20, vx: -30 * u, vy: (700 + rnd() * 500) * u, s: (10 + rnd() * 16) * u, life: 1, c: col() }));
+  if (on('rain')) spawn(many(dt * 35 * rate), () => ({ t: 'drop', x: rnd() * W, y: -20, vx: -30 * u, vy: (700 + rnd() * 500) * u, s: (10 + rnd() * 16) * u, life: 1, c: col() }));
   if (on('love')) spawn(many(dt * 4 * rate + burst * 1.2 * live), () => ({ t: 'heart', x: W * (0.1 + rnd() * 0.8), y: H + 20, vx: 0, vy: -(60 + rnd() * 70) * u, s: (10 + rnd() * 16) * u, life: 1, c: col(), ph: rnd() * 6 }));
   if (on('stars')) spawn(many(dt * 10 * rate + burst * 3 * live), () => ({ t: 'star', x: rnd() * W, y: rnd() * H * 0.85, vx: 0, vy: 0, s: (5 + rnd() * 10) * u, life: 1, c: col(), ph: rnd() * 6, dec: 0.5 + rnd() }));
   if (on('sea')) spawn(many(dt * 14 * rate + burst * 3 * live), () => ({ t: 'bubble', x: rnd() * W, y: H + 10, vx: 0, vy: -(50 + rnd() * 90) * u, s: (4 + rnd() * 12) * u, life: 1, c: col(), ph: rnd() * 6 }));
