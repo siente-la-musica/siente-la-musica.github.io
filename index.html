@@ -191,10 +191,6 @@
   .sync-mark { flex: 1; padding: 14px; font-size: 15px; }
   .sync-count { font-size: 12px; color: var(--muted); }
   .rec-exact { display: flex; align-items: center; gap: 4px; }
-  .rec-hook { display: flex; flex-direction: column; gap: 6px; }
-  .rec-hook label { font-size: 13px; opacity: .9; } .rec-hook small { opacity: .65; }
-  .rec-hook input { width: 100%; box-sizing: border-box; font: 600 14px var(--font); color: var(--fg); background: var(--chip); border: 1px solid transparent; border-radius: 10px; padding: 8px 10px; outline: none; }
-  .rec-hook input:focus { border-color: color-mix(in srgb, var(--c1, #888) 60%, transparent); }
   .rec-exact input { width: 74px; text-align: center; font: 600 14px var(--font); font-variant-numeric: tabular-nums; color: var(--fg); background: var(--chip); border: 1px solid transparent; border-radius: 8px; padding: 5px 6px; outline: none; }
   .rec-exact input:focus { border-color: color-mix(in srgb, var(--c1, #888) 60%, transparent); }
   .rec-exact button { padding: 4px 8px; font-size: 12px; border-radius: 8px; }
@@ -828,7 +824,6 @@
       <div class="row-set"><span>Estilo de la letra</span>
         <div class="seg" role="group" aria-label="Estilo de la letra"><button data-lstyle="subs">Subtítulos</button><button data-lstyle="karaoke">Karaoke</button><button data-lstyle="word">Palabra gigante</button><button data-lstyle="type">Máquina de escribir</button><button data-lstyle="neon">Neón</button><button data-lstyle="liquid">Líquida</button></div>
       </div>
-      <div class="rec-hook"><label for="recHook">Frase gancho <small>· sale grande los primeros 2,5 s (opcional)</small></label><input id="recHook" type="text" maxlength="70" spellcheck="true" autocomplete="off" placeholder="Ej.: ¿Quién la ponía en tu casa?"></div>
       <p class="pop-note" id="recNote"></p>
       <button class="primary" id="btnRecStart">Empezar a grabar</button>
     </div>
@@ -870,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 216</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 217</div>
     </div>
   </div>
   <div class="group">
@@ -4308,40 +4303,6 @@ document.getElementById('btnRecStart').onclick = async () => {
   startRecording(prep);
 };
 
-// Frase gancho: una frase grande los primeros 2,5 s del clip (la primera razón para quedarse). Se recuerda por canción.
-const recHookEl = document.getElementById('recHook');
-const hookSong = () => (typeof sp !== 'undefined' && sp.item && sp.item.id) || 'x';
-function recHookLoad() { try { const m = store.get('hooks', {}) || {}; recHookEl.value = m[hookSong()] || ''; } catch (e) {} }
-recHookEl.addEventListener('input', () => { try { const m = store.get('hooks', {}) || {}; const v = recHookEl.value.trim(); if (v) m[hookSong()] = v; else delete m[hookSong()]; const ks = Object.keys(m); if (ks.length > 300) delete m[ks[0]]; store.set('hooks', m); } catch (e) {} });
-btnRec.addEventListener('click', () => { if (!recording) recHookLoad(); });
-recHookEl.addEventListener('keydown', e => e.stopPropagation());   // escribir la frase no dispara los atajos de teclado
-let recHookA = 0;
-function drawRecHook() {
-  const txt = recHookEl.value.trim();
-  if (!txt || !(recording || recPre) || state.mode === 'strobe') { recHookA = 0; return; }
-  const t = recording ? (performance.now() - recT0) / 1000 : 0;
-  recHookA = t < 2.2 ? 1 : Math.max(0, 1 - (t - 2.2) / 0.45);
-  if (recHookA <= 0) return;
-  const u = MIN / 1080, vertical = H > W, a = recHookA * recHookA * (3 - 2 * recHookA);
-  const size = (vertical ? 84 : 72) * u, maxW = W * (vertical ? 0.8 : 0.62), cx = W / 2, cy = H * (vertical ? 0.44 : 0.46);
-  ctx.save(); ctx.font = `700 ${size}px ${FONT_BRAND}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const words = txt.split(/\s+/), lines = []; let cur = '';
-  for (const w of words) { const tr = cur ? cur + ' ' + w : w; if (ctx.measureText(tr).width > maxW && cur) { lines.push(cur); cur = w; } else cur = tr; }
-  if (cur) lines.push(cur);
-  const lh = size * 1.18, h0 = lines.length * lh, wMax = Math.max(...lines.map(l => ctx.measureText(l).width));
-  const night = state.theme === 'dark';
-  // un velo suave detrás (oscuro de noche, claro de día) para que se lea sobre cualquier animación
-  const rw = wMax * 0.62 + 120 * u, rh = h0 * 0.62 + 90 * u, g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw);
-  const vc = night ? '0,0,0' : '255,255,255';
-  g.addColorStop(0, `rgba(${vc},${0.55 * a})`); g.addColorStop(0.6, `rgba(${vc},${0.3 * a})`); g.addColorStop(1, `rgba(${vc},0)`);
-  ctx.save(); ctx.translate(cx, cy); ctx.scale(1, rh / rw); ctx.fillStyle = g; ctx.fillRect(-rw, -rw, rw * 2, rw * 2); ctx.restore();
-  const s = 1 + 0.03 * (1 - a);   // al irse, se aleja apenas mientras se desvanece
-  ctx.translate(cx, cy); ctx.scale(s, s);
-  ctx.globalAlpha = a; ctx.shadowColor = night ? 'rgba(0,0,0,.85)' : 'rgba(255,255,255,.9)'; ctx.shadowBlur = 18 * u;
-  ctx.fillStyle = night ? '#ffffff' : '#141218';
-  lines.forEach((l, i) => ctx.fillText(l, 0, (i - (lines.length - 1) / 2) * lh));
-  ctx.restore();
-}
 // Texto que se dibuja en el lienzo solo mientras se graba
 function wrapWords(words, maxW) {
   const lines = []; let cur = [], w = 0;
@@ -4563,8 +4524,7 @@ function drawRecOverlay() {
       artistClean.set(a.id, null);
       const url = artistImageOf(it); if (url) loadImageClean(url).then(r => { if (r.clean) artistClean.set(a.id, r.img); });
     }
-  } else if (lyricsOn && ly && state.mode !== 'livecover' && recHookA < 0.98) {   // mientras está la frase gancho, la letra espera
-    ctx.globalAlpha = 1 - recHookA;
+  } else if (lyricsOn && ly && state.mode !== 'livecover') {
     // Subtítulos en el tercio inferior, por encima de la zona de texto de TikTok
     // en vertical, algo a la izquierda y más estrecha: la columna de botones de TikTok ocupa el borde derecho
     // La letra no cambia de estilo, solo de sitio: cada animación tiene su figura principal y la letra va a la zona
@@ -14342,7 +14302,6 @@ function render(now) {
   if (!recording) { ctx.fillStyle = grain; ctx.fillRect(0, 0, W, H); }
   ctx.globalAlpha = 1;
   drawRecOverlay();
-  drawRecHook();
   recPerf(performance.now() - tScene, dt);   // el tiempo de todo el cuadro (escena, letra, firma)
   recFrame(now);
   liveUI();
