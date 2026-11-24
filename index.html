@@ -865,7 +865,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 217</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 218</div>
     </div>
   </div>
   <div class="group">
@@ -11644,35 +11644,37 @@ function tunnelSetup() {
       // y cada compás (4 tiempos) cambia el orden de los colores; los bordes de las franjas son suaves
       // un degradado continuo a lo largo del túnel (sin franjas): los colores de la portada se funden unos en otros
       float bar = z / 40., bf = fract(bar); int s0 = int(mod(floor(bar), 3.)) * 4, s1 = int(mod(floor(bar) + 1., 3.)) * 4;
-      float k = z * .012 + .06 * cos(ang - 1.);
+      float k = z * .03 + .1 * cos(ang - 1.) + .05 * sin(ang * 2. + z * .05);   // los colores fluyen por el tubo mientras se avanza (suaves, sin franjas)
       return mix(grad(s0, k), grad(s1, k), smoothstep(0., 1., bf));
     }
     vec3 shade(vec2 uv) {
-      float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.);
+      float asp = uRes.x / uRes.y; vec2 p = (uv - .5) * vec2(asp, 1.) / min(asp, 1.);   // en vertical, el mismo ángulo de visión que en horizontal (se ven las paredes, no solo la luz del fondo)
       vec3 cam = vec3(axis(uZ), uZ), tg = vec3(axis(uZ + 3.), uZ + 3.);
       vec3 fw = normalize(tg - cam), rt = normalize(cross(vec3(0., 1., 0.), fw)), up = cross(fw, rt);
       // como en una montaña rusa: la cámara se inclina hacia el lado de la curva
       vec2 acc = axis(uZ + 6.) - 2. * axis(uZ + 3.) + axis(uZ);
       float roll = clamp(-acc.x * 1.6, -.45, .45), cr = cos(roll), sr = sin(roll);
       vec3 rt2 = rt * cr + up * sr, up2 = up * cr - rt * sr;
-      vec3 rd = normalize(fw * (mix(1.95, 1.55, uLoud) - .06 * uBloom) + rt2 * p.x + up2 * p.y);   // lente cerrado (boca de luz grande); en lo fuerte se abre: más velocidad
+      vec3 rd = normalize(fw * (mix(1.45, 1.2, uLoud) - .05 * uBloom) + rt2 * p.x + up2 * p.y);   // lente cerrado (boca de luz grande); en lo fuerte se abre: más velocidad
       float t = .05, d = 0.;
       for (int i = 0; i < 70; i++) { vec3 P = cam + rd * t; d = uR - length(P.xy - axis(P.z)); if (d < .004 || t > 60.) break; t += max(d * .75, .01); }
       vec3 P = cam + rd * t; vec2 q = P.xy - axis(P.z); float ang = atan(q.y, q.x);
       vec3 c = wallCol(ang, P.z);
       vec3 n = normalize(vec3(-q, 0.));
-      vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .42 + .4 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .25 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
+      vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .26 + .62 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .22 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
       c *= lit * (1. + 1.1 * uBloom) * (.85 + .3 * uLoud);   // el golpe ilumina suave; lo fuerte, más luz
-      c *= .94 + .06 * sin(P.z * .55);                                                   // una variación de luz muy leve a lo largo: se siente la profundidad y la velocidad
+      // bandas suaves de luz y sombra a lo largo del tubo (sin líneas ni aros: una ondulación de la luz) que pasan hacia la
+      // cámara mientras se avanza: dan la profundidad y el viaje hipnótico; una segunda, más lenta, rompe la repetición
+      c *= .58 + .42 * (.5 + .5 * sin(P.z * .85)) * (.8 + .2 * sin(P.z * .31 + 1.7));
             // al fondo, luz: se aclara con la distancia (la voz la tiñe)
-      float fog = 1. - exp(-t * .13);
-      vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .4), uMel, uVo * .4);
-      return mix(c, endL * (1. + .2 * uBloom), smoothstep(.1, .88, fog));   // la boca de luz del fondo, grande
+      float fog = 1. - exp(-t * .05);   // niebla liviana: las paredes y sus bandas se ven hasta lejos
+      vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .25), uMel, uVo * .4);
+      return mix(c, endL * (1. + .2 * uBloom), smoothstep(.3, .98, fog));   // la boca de luz del fondo, grande (las paredes cercanas conservan su color)
     }
     void main() {
       vec3 col = shade(vUv);
-      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.15), 0., 1.);
-      if (uNight > .5) col *= .9; else col = mix(col, vec3(1.), .05);
+      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.3), 0., 1.);
+      if (uNight > .5) col *= .92; else col = mix(col, vec3(1.), .05);
       col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
