@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 223</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 224</div>
     </div>
   </div>
   <div class="group">
@@ -7159,6 +7159,142 @@ function drawLago3D(dt) {
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
   if (night) bloom(GLX.c, 0.22 + 0.1 * Math.min(1, lk.lamp));
+  ctx.restore();
+}
+
+// ================= Escena: Luz (faro pintado, en 3D) =================
+// Un faro de piedra en lo alto de un acantilado, junto al mar, de noche (o a la hora dorada), como un fondo pintado a
+// mano: el acantilado con rocas y pasto, olas que rompen con espuma en la base, el mar que refleja la luna con su camino
+// de luz, la bruma y el haz del faro que gira y atraviesa el aire. Música: el haz gira al ritmo de la canción y crece con
+// los graves; cada bombo hace destellar la linterna; la caja levanta espuma; las notas avivan el camino de luz; los
+// agudos hacen titilar las estrellas; la voz tiñe la luna. En silencio, quieto.
+const fr3 = { prog: null, t: 0, ph: 0, pw: 0.5, kk: 0, fl: 0, foam: 0 };
+function fr3Setup() {
+  fr3.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uT, uPh, uPw, uKick, uFl, uHi, uVo, uFoam;
+    uniform vec3 uSkyT, uSkyH, uCloud, uRock, uGrass, uWarm, uMel, uFog, uDeep, uAcc;
+    float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
+    float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + vec2(1.7, 9.2); a *= .5; } return s; }
+    const vec3 LH = vec3(-5.5, 0., -20.);   // el faro (su base, sobre el acantilado)
+    vec3 Ldir() { return normalize(vec3(.32, uNight > .5 ? .2 : .09, -1.)); }
+    // el acantilado: un cabo que entra al mar con paredes casi verticales, pasto arriba, y una costa baja a lo lejos
+    float cliff(vec2 xz) {
+      vec2 c = (xz - vec2(-6.5, -21.)) * vec2(1., .7); float d = min(length(c) - 6., (xz.x + 11.) * .8) + 2.4 * fbm(xz * .12);   // un cabo que sale de la costa
+      float top = 4.6 + .6 * fbm(xz * .3), wall = smoothstep(1.2, -1.4, d);
+      float far_ = smoothstep(55., 90., -xz.y) * (1.5 + 4. * fbm(xz * .03));
+      return max(top * wall, far_) - 1.2 + (1. - wall) * .5 * vn(xz * .9) * smoothstep(3., 0., d);   // y piedras sueltas al pie
+    }
+    float tower(vec3 p, out float m) {
+      vec3 q = p - LH; q.y -= 4.4;
+      float H = 4.2, r = .62 - .1 * clamp(q.y / H, 0., 1.);
+      float body = max(length(q.xz) - r, max(-q.y, q.y - H));
+      float gal = max(length(q.xz) - .78, abs(q.y - H - .05) - .06);                   // el balcón
+      float rail = max(abs(length(q.xz) - .76) - .02, abs(q.y - H - .3) - .2);         // la baranda
+      float room = max(length(q.xz) - .42, abs(q.y - H - .45) - .38);                   // el cuarto de la linterna
+      float cap = max(length(q.xz) - (.5 - (q.y - H - .83) * .8), abs(q.y - H - 1.05) - .22);   // el techo en punta
+      m = 1.; float d = body; if (gal < d) { d = gal; m = 2.; } if (rail < d) { d = rail; m = 2.; } if (room < d) { d = room; m = 3.; } if (cap < d) { d = cap; m = 4.; }
+      return d;
+    }
+    vec3 sky(vec3 rd) {
+      float y = rd.y; vec3 c = mix(uSkyH, uSkyT, smoothstep(-.02, .5, y));
+      vec3 L = Ldir(); float md = max(dot(rd, L), 0.);
+      if (y > .01) { vec2 cp = rd.xz / y * 8.; float n = fbm(cp * .08 + vec2(uT * .004, 0.)), sh = fbm(cp * .08 + vec2(.05, -.08) + vec2(uT * .004, 0.));
+        float m = smoothstep(.57, .61, n) * smoothstep(.02, .22, y);
+        vec3 cc = mix(uCloud * .7, uCloud * 1.08, clamp((n - sh) * 5. + .5, 0., 1.)) + uWarm * pow(md, 8.) * (uNight > .5 ? .15 : .45);
+        c = mix(c, cc, m * .85); }
+      if (uNight > .5) { vec2 g = rd.xz / max(y, .04) * 28.; vec2 id = floor(g); c += vec3(1., .96, .88) * step(.982, h2(id)) * smoothstep(.35, 0., length(fract(g) - .5)) * smoothstep(.05, .25, y) * (.3 + .7 * h2(id + floor(uT * 2.)) * (.4 + uHi)); }
+      vec3 mc = uNight > .5 ? mix(vec3(1., .96, .88), uMel, uVo * .35) : vec3(1., .78, .5);
+      c += mc * (smoothstep(.9986, .999, md) * (uNight > .5 ? .95 : 1.3) + pow(md, 120.) * .3 + pow(md, 16.) * (uNight > .5 ? .06 : .2));
+      return c;
+    }
+    vec3 shadeCliff(vec3 p, vec3 rd, float t) {
+      vec2 e = vec2(.05, 0.); vec3 n = normalize(vec3(cliff(p.xz - e.xy) - cliff(p.xz + e.xy), 2. * e.x, cliff(p.xz - e.yx) - cliff(p.xz + e.yx)));
+      float top = smoothstep(.55, .8, n.y) * smoothstep(1.5, 3., p.y);
+      vec3 rk = uRock * (.72 + .38 * vn(vec2(p.x + p.z, p.y * 1.7) * 1.1)) * (.88 + .12 * vn(vec2(p.x - p.z, p.y) * 4.));   // la roca, con vetas y grietas
+      vec3 alb = mix(rk, uGrass * (.75 + .4 * vn(p.xz * 1.5)), top);
+      vec3 L = Ldir(); float dr = dot(n, normalize(vec3(L.x + .3, .6, L.z + .5))), dif = smoothstep(.0, .35, dr) * .75 + .25 * smoothstep(-.4, .8, dr);
+      vec3 c = alb * ((uNight > .5 ? vec3(.14, .17, .34) : vec3(.42, .45, .7)) * (.5 + .5 * n.y) + (uNight > .5 ? vec3(.5, .58, .92) : vec3(1., .8, .58)) * dif * .85);
+      // la espuma donde la ola pega contra la roca (la caja la levanta)
+      float foam = smoothstep(.9, .0, p.y) * smoothstep(.35, .7, vn(p.xz * 2.5 + uT * .6) + .35 * uFoam);
+      c = mix(c, vec3(.92, .95, 1.) * (uNight > .5 ? .7 : 1.), foam * .8);
+      float fg = 1. - exp(-t * .012); return mix(c, uFog, fg * fg * .9);
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 uv = (vUv - .5) * vec2(asp, 1.) / min(asp, 1.);
+      vec3 ro = vec3(2. + sin(uT * .03) * 1., 2.2 + .1 * sin(uT * .25), 4.);
+      vec3 fw = normalize(vec3(asp < 1. ? -.3 : -.12, .05, -1.)), rt = normalize(cross(vec3(0., 1., 0.), fw)), up = cross(fw, rt);
+      vec3 rd = normalize(fw * 1.35 + rt * uv.x + up * uv.y);
+      float tW = rd.y < 0. ? -ro.y / rd.y : 1e9, t = .2, tH = 1e9;
+      for (int i = 0; i < 100; i++) { vec3 q = ro + rd * t; float hh = q.y - cliff(q.xz); if (hh < .01 * t) { tH = t; break; } if (t > min(tW, 130.)) break; t += max(.04, hh * .45); }
+      float tt = .1, tm = 0., tT = 1e9; for (int i = 0; i < 70; i++) { float d = tower(ro + rd * tt, tm); if (d < .003) { tT = tt; break; } tt += d; if (tt > 45.) break; }
+      vec3 col; vec3 lamp = LH + vec3(0., 4.4 + 4.2 + .45, 0.);
+      if (tT < min(tH, tW)) {
+        vec3 p = ro + rd * tT; float m_; vec2 e = vec2(.003, 0.);
+        vec3 n = normalize(vec3(tower(p + e.xyy, m_) - tower(p - e.xyy, m_), tower(p + e.yxy, m_) - tower(p - e.yxy, m_), tower(p + e.yyx, m_) - tower(p - e.yyx, m_)));
+        vec3 L = Ldir(); float dif = smoothstep(-.1, .5, dot(n, normalize(vec3(L.x + .6, .5, L.z + .8))));
+        vec3 alb = tm < 1.5 ? mix(mix(vec3(.92, .9, .84), uAcc, step(.5, fract((p.y - LH.y - 4.4) / 1.4 + .25))), vec3(.62, .6, .58), step(p.y, LH.y + 5.))  * (.85 + .2 * vn(vec2(atan(p.x - LH.x, p.z - LH.z) * 6., p.y * 3.))) : tm < 2.5 ? vec3(.22, .22, .26) : tm < 3.5 ? vec3(1.) : uAcc;   // piedra clara con zócalo, hierro oscuro, la linterna y el techo
+        col = alb * ((uNight > .5 ? vec3(.16, .19, .36) : vec3(.45, .48, .72)) + (uNight > .5 ? vec3(.5, .58, .92) : vec3(1., .82, .6)) * dif * .85);
+        col += (uNight > .5 ? vec3(.4, .5, .9) : vec3(1., .8, .55)) * pow(1. - max(dot(n, -rd), 0.), 3.) * .3;
+        if (tm > 2.5 && tm < 3.5) col = mix(uWarm, vec3(1., .97, .85), .5) * (1.1 + 1.2 * uKick) * (.6 + .4 * uPw);   // la linterna encendida
+        if (tm < 1.5) col += uWarm * .25 * (uPw + uKick) * exp(-max(lamp.y - p.y - .4, 0.) * 2.);   // la luz baña la punta de la torre
+      } else if (tH < tW) col = shadeCliff(ro + rd * tH, rd, tH);
+      else if (tW < 1e8) {
+        vec3 p = ro + rd * tW; vec2 w = p.xz;
+        float nx = (vn(w * vec2(.9, 2.2) + vec2(uT * .3, 0.)) - vn(w * vec2(.9, 2.2) + vec2(.3 + uT * .3, 0.))) * .05, nz = (vn(w * vec2(1.2, 3.) + vec2(0., uT * .25)) - vn(w * vec2(1.2, 3.) + vec2(0., .3 + uT * .25))) * .06;
+        vec3 n = normalize(vec3(nx, 1., nz)), rr = reflect(rd, n);
+        float t2 = .2, hit2 = 0.; for (int i = 0; i < 40; i++) { vec3 q = p + rr * t2; float hh = q.y - cliff(q.xz); if (hh < .02 * t2) { hit2 = 1.; break; } if (t2 > 110.) break; t2 += max(.1, hh * .6); }
+        vec3 rc = hit2 > .5 ? shadeCliff(p + rr * t2, rr, tW + t2) : sky(rr);
+        float fres = .2 + .8 * pow(1. - max(rr.y, 0.), 4.);
+        col = mix(uDeep, rc, fres * .92);
+        vec3 L = Ldir(); float sp = pow(max(dot(rr, L), 0.), 90.) * smoothstep(.4, .9, vn(w * vec2(2.5, 12.) + uT * vec2(.6, 0.)));
+        col += (uNight > .5 ? vec3(1., .95, .85) : vec3(1., .82, .55)) * sp * (1.3 + 3. * uFl + 3. * uKick);
+        // la espuma blanca al pie del acantilado
+        float near_ = cliff(w); col = mix(col, vec3(.9, .94, 1.) * (uNight > .5 ? .65 : 1.), smoothstep(-.9, -.1, near_) * smoothstep(.35, .75, vn(w * 2.2 + uT * .5) + .3 * uFoam) * .8);
+        float fg = 1. - exp(-tW * .016); col = mix(col, uFog, fg * fg * .85);
+      } else col = sky(rd);
+      // el haz del faro: gira, atraviesa la bruma (con polvo de luz) y crece con los graves
+      float tMax = min(min(tH, tW), min(tT, 140.));
+      for (int k = 0; k < 2; k++) {   // dos haces opuestos, como los faros de verdad
+        float ang = uPh + float(k) * 3.14159; vec3 bd = normalize(vec3(cos(ang), -.03, sin(ang))); vec3 w0 = ro - lamp; float b_ = dot(rd, bd), d_ = dot(rd, w0), e_ = dot(bd, w0), den = max(1. - b_ * b_, 1e-4);
+        float sc = (b_ * e_ - d_) / den, tc = (e_ - b_ * d_) / den;   // los puntos más cercanos entre el rayo de la vista y el haz
+        if (sc > 0. && sc < tMax && tc > 0.) { float dd = length((ro + rd * sc) - (lamp + bd * tc)), wdt = .3 + tc * .1;
+          float beam = exp(-dd * dd / (wdt * wdt)) * exp(-tc * .02) * (.65 + .35 * fbm(vec2(tc * .4 - uT * .3, dd * 2.)));
+          col += mix(uWarm, vec3(1., .96, .85), .5) * beam * (.4 + .7 * uPw + 1.6 * uKick) * (uNight > .5 ? 1. : .6); } }   // el bombo enciende el haz
+      // el halo de la linterna
+      { vec3 lp = lamp - ro; float al = dot(lp, rd), dl = length(lp - rd * al); if (al > 0.) col += uWarm * (.6 + 1.6 * uKick) * (exp(-dl * (5. - 2. * uKick)) * .5 + exp(-dl * (1.2 - .5 * uKick)) * .14) * (uNight > .5 ? 1. : .5); }
+      col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
+      o = vec4(clamp(col, 0., 1.), 1.);
+    }`);
+}
+function drawLuz3D(dt) {
+  if (!glInit()) { drawInfinity(dt); return; }
+  if (!fr3.prog) fr3Setup();
+  const night = state.theme === 'dark', gl = GLX.gl;
+  const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
+  const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
+  fr3.t += dt * musicGate * (0.6 + 0.6 * energy);
+  if (pulse.on && !pulse.melo) { fr3.kk = Math.min(1, fr3.kk + 0.7 + 0.3 * pulse.k); nudgeAdd('faro', 0.22 + 0.2 * pulse.k); }
+  fr3.kk = ease(fr3.kk, 0, 0.3);
+  fr3.ph += dt * musicGate * (Math.PI * 2 / (per * 8)) + nudgeTake('faro', dt);   // el haz da una vuelta cada dos compases
+  fr3.pw = ease(fr3.pw, (0.35 + 0.65 * Math.min(1, bandX(0, 10) * 1.3)) * musicGate, 0.25);
+  fr3.fl = Math.max(fr3.fl * Math.exp(-dt / 0.3), attHit(10, 40));
+  fr3.foam = Math.max(fr3.foam * Math.exp(-dt / 0.4), hits.snare ? 1 : 0, attHit(40, BANDS) * 0.6);
+  const tone = (c, l, sMin = 25, sMax = 55) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, Math.min(sMax, s_)), l)).map(v => v / 255); };
+  const bl = (a, b, k) => a.map((v, j) => v * (1 - k) + b[j] * k);
+  const U = night
+    ? { skyT: bl([0.02, 0.04, 0.13], tone(RGB[1], 10), 0.3), skyH: bl([0.18, 0.24, 0.46], tone(RGB[0], 32), 0.3), cloud: [0.3, 0.34, 0.52], rock: [0.3, 0.3, 0.36], grass: [0.16, 0.28, 0.2], warm: [1, 0.74, 0.4], fog: bl([0.17, 0.22, 0.42], tone(RGB[1], 30), 0.25), deep: [0.02, 0.05, 0.12] }
+    : { skyT: bl([0.3, 0.5, 0.86], tone(RGB[1], 58), 0.2), skyH: bl([1, 0.8, 0.6], tone(RGB[0], 80), 0.25), cloud: [1, 0.95, 0.9], rock: [0.62, 0.54, 0.48], grass: [0.36, 0.54, 0.28], warm: [1, 0.8, 0.5], fog: bl([0.86, 0.82, 0.86], tone(RGB[0], 82), 0.2), deep: [0.1, 0.22, 0.34] };
+  const [cw, ch] = glCanvas(0.75), p = fr3.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uT, fr3.t);
+  gl.uniform1f(p.u.uPh, fr3.ph); gl.uniform1f(p.u.uPw, fr3.pw); gl.uniform1f(p.u.uKick, fr3.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uFl, fr3.fl); gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uFoam, fr3.foam);
+  gl.uniform3fv(p.u.uSkyT, U.skyT); gl.uniform3fv(p.u.uSkyH, U.skyH); gl.uniform3fv(p.u.uCloud, U.cloud); gl.uniform3fv(p.u.uRock, U.rock); gl.uniform3fv(p.u.uGrass, U.grass);
+  gl.uniform3fv(p.u.uWarm, U.warm); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uFog, U.fog); gl.uniform3fv(p.u.uDeep, U.deep); gl.uniform3fv(p.u.uAcc, tone(RGB[0], 34, 45, 70));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  if (night) bloom(GLX.c, 0.16 + 0.12 * fr3.kk);
   ctx.restore();
 }
 
@@ -14599,7 +14735,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLight, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
