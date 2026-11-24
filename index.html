@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 225</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 226</div>
     </div>
   </div>
   <div class="group">
@@ -7208,7 +7208,7 @@ function fr3Setup() {
       return c;
     }
     vec3 shadeCliff(vec3 p, vec3 rd, float t) {
-      vec2 e = vec2(.05, 0.); vec3 n = normalize(vec3(cliff(p.xz - e.xy) - cliff(p.xz + e.xy), 2. * e.x, cliff(p.xz - e.yx) - cliff(p.xz + e.yx)));
+      vec2 e = vec2(.12, 0.); vec3 n = normalize(vec3(cliff(p.xz - e.xy) - cliff(p.xz + e.xy), 2. * e.x, cliff(p.xz - e.yx) - cliff(p.xz + e.yx)));
       float top = smoothstep(.55, .8, n.y) * smoothstep(1.5, 3., p.y);
       vec3 rk = uRock * (.72 + .38 * vn(vec2(p.x + p.z, p.y * 1.7) * 1.1)) * (.88 + .12 * vn(vec2(p.x - p.z, p.y) * 4.));   // la roca, con vetas y grietas
       vec3 alb = mix(rk, uGrass * (.75 + .4 * vn(p.xz * 1.5)), top);
@@ -7226,6 +7226,7 @@ function fr3Setup() {
       vec3 rd = normalize(fw * 1.35 + rt * uv.x + up * uv.y);
       float tW = rd.y < 0. ? -ro.y / rd.y : 1e9, t = .2, tH = 1e9;
       for (int i = 0; i < 100; i++) { vec3 q = ro + rd * t; float hh = q.y - cliff(q.xz); if (hh < .01 * t) { tH = t; break; } if (t > min(tW, 130.)) break; t += max(.04, hh * .45); }
+      if (tH < 1e8) { float lo = max(.2, tH - .7), hi = tH; for (int k = 0; k < 8; k++) { float mid = (lo + hi) * .5; vec3 q = ro + rd * mid; if (q.y - cliff(q.xz) < 0.) hi = mid; else lo = mid; } tH = hi; }   // el punto exacto donde el rayo toca la roca: sin vetas ni escalones en las paredes
       float tt = .1, tm = 0., tT = 1e9; for (int i = 0; i < 70; i++) { float d = tower(ro + rd * tt, tm); if (d < .003) { tT = tt; break; } tt += d; if (tt > 45.) break; }
       vec3 col; vec3 lamp = LH + vec3(0., 4.4 + 4.2 + .45, 0.);
       if (tT < min(tH, tW)) {
