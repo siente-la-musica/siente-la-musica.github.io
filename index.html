@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 277</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 278</div>
     </div>
   </div>
   <div class="group">
@@ -7213,7 +7213,7 @@ function lk3Setup() {
     // el terreno: el lago al centro, orillas bajas a los lados y montañas al fondo (con su bosque como un relieve fino)
     float terr(vec2 xz, out float forest) {
       float back = smoothstep(50., 95., -xz.y), side = smoothstep(26., 48., abs(xz.x + 4. * sin(xz.y * .04)));
-      float rr_ = rid(xz * .016 + vec2(2.3, 0.)); float m = back * (1.5 + 15. * rr_ * rr_) + side * (1.5 + 7. * fbm(xz * .045));   // picos y valles marcados
+      float rr_ = rid(xz * .016 + vec2(2.3, 0.)); float m = back * (1.5 + 15. * rr_ * rr_) + side * (1.5 + 7. * (vn(xz * .045) * .55 + vn(xz * .09 + 3.) * .3 + vn(xz * .18 + 7.) * .15));   /* 3 capas: lo mismo a la vista, más liviano */   // picos y valles marcados
       forest = smoothstep(12., 2., m) * smoothstep(.3, 1.2, m);
       return m - 1.1 + forest * (.32 * vn(xz * .55) + .22 * vn(xz * 1.25 + 4.));   // el bosque en copas redondas y suaves   // el bosque en copas redondas (racimos), no en franja
     }
@@ -7223,11 +7223,11 @@ function lk3Setup() {
       vec3 L = Ldir(); float md = max(dot(rd, L), 0.);
       if (y > .01) { vec2 cp = rd.xz / y * 8.; float n = fbm(cp * .08 + vec2(uT * .004, 0.)), sh = fbm(cp * .08 + vec2(.05, -.08) + vec2(uT * .004, 0.));
         float m = smoothstep(.56, .6, n) * smoothstep(.02, .22, y);
-        vec3 cc = mix(uCloud * .7, uCloud * 1.08, clamp((n - sh) * 5. + .5, 0., 1.)) + uWarm * pow(md, 4.) * (uNight > .5 ? .25 : .6);   // nubes con el borde encendido por la luna o el sol
+        vec3 cc = mix(uCloud * .7, uCloud * 1.08, clamp((n - sh) * 5. + .5, 0., 1.)) + uWarm * pow(md, 4.) * (uNight > .5 ? .12 : .45);   // nubes con el borde encendido por la luna o el sol
         c = mix(c, cc, m * .85); }
       if (uNight > .5) { vec2 g = rd.xz / max(y, .04) * 28.; vec2 id = floor(g); c += vec3(1., .96, .88) * step(.982, h2(id)) * smoothstep(.35, 0., length(fract(g) - .5)) * smoothstep(.05, .25, y) * (.3 + .7 * h2(id + floor(uT * 2.)) * (.4 + uHi)); }
       vec3 mc = uNight > .5 ? mix(vec3(1., .96, .88), uMel, uVo * .35) : vec3(1., .78, .5);
-      c += mc * (smoothstep(.9986, .999, md) * (uNight > .5 ? .95 : 1.3) + pow(md, 80.) * (.4 + .5 * uKick) + pow(md, 8.) * ((uNight > .5 ? .1 : .3) + .25 * uKick));   // el halo late con el golpe
+      c += mc * (smoothstep(.9986, .999, md) * (uNight > .5 ? .95 : 1.3) + pow(md, 80.) * (.4 + .5 * uKick) + pow(md, 8.) * ((uNight > .5 ? .05 : .22) + .2 * uKick));   /* el halo de la luna, sin quemarse a blanco */   // el halo late con el golpe
       return c;
     }
     // el bote: casco de madera (un elipsoide hueco, abierto arriba) y el farol en su poste
@@ -7264,9 +7264,10 @@ function lk3Setup() {
       vec3 col; float forest = 0.;
       // el terreno (si el rayo lo toca antes del agua)
       float tW = rd.y < 0. ? -ro.y / rd.y : 1e9, t = .2, tH = 1e9;
-      for (int i = 0; i < 90; i++) { vec3 q = ro + rd * t; float hh = q.y - terr(q.xz, forest); if (hh < .01 * t) { tH = t; break; } if (t > min(tW, 120.)) break; t += max(.05, hh * .5); }
+      for (int i = 0; i < 90; i++) { vec3 q = ro + rd * t; float hh = q.y - terr(q.xz, forest); if (hh < .01 * t) { tH = t; break; } if (t > min(tW, 120.)) break; t += max(.07, hh * .6); }
       // el bote, cerca
-      float tb = .1, bm = 0., tB = 1e9; for (int i = 0; i < 50; i++) { float d = boat(ro + rd * tb, bm); if (d < .002) { tB = tb; break; } tb += d; if (tb > 14.) break; }
+      float tb = .1, bm = 0., tB = 1e9; vec3 bc = vec3(1.1, .4, -4.6) - ro; float bca = dot(bc, rd); bool nearB = length(bc - rd * bca) < 1.9 && bca > 0.;   /* el bote solo se busca si el rayo pasa cerca */
+      if (nearB) for (int i = 0; i < 50; i++) { float d = boat(ro + rd * tb, bm); if (d < .002) { tB = tb; break; } tb += d; if (tb > 14.) break; }
       if (tB < min(tH, tW)) {
         vec3 p = ro + rd * tB; float m_; vec2 e = vec2(.002, 0.);
         vec3 n = normalize(vec3(boat(p + e.xyy, m_) - boat(p - e.xyy, m_), boat(p + e.yxy, m_) - boat(p - e.yxy, m_), boat(p + e.yyx, m_) - boat(p - e.yyx, m_)));
@@ -7285,7 +7286,7 @@ function lk3Setup() {
         vec3 n = normalize(vec3(nx, 1., nz)), rr = reflect(rd, n);
         // el reflejo de montañas, bote y cielo
         vec3 rc; float t2 = .2, hit2 = 0., f2;
-        for (int i = 0; i < 50; i++) { vec3 q = p + rr * t2; float hh = q.y - terr(q.xz, f2); if (hh < .02 * t2) { hit2 = 1.; break; } if (t2 > 110.) break; t2 += max(.1, hh * .6); }
+        for (int i = 0; i < 32; i++) { vec3 q = p + rr * t2; float hh = q.y - terr(q.xz, f2); if (hh < .03 * t2) { hit2 = 1.; break; } if (t2 > 110.) break; t2 += max(.15, hh * .75); }
         rc = hit2 > .5 ? shadeTerr(p + rr * t2, rr, tW + t2, f2) : sky(rr);
         float fres = .25 + .75 * pow(1. - max(rr.y, 0.), 4.);
         col = mix(uDeep, rc, fres * .95);
@@ -7299,6 +7300,12 @@ function lk3Setup() {
       } else col = sky(rd);
       // el halo del farol en el aire
       { vec3 lp = vec3(2.05, 1.18, -4.6) - ro; float along = dot(lp, rd), dd = length(lp - rd * along); if (along > 0.) col += uWarm * uLamp * (uNight > .5 ? .5 : .2) * exp(-dd * 9.) + uWarm * uLamp * (uNight > .5 ? .12 : .04) * exp(-dd * 2.2); }
+      // de noche, luciérnagas sobre el agua junto al bote: titilan con las notas y se encienden con el bombo
+      if (uNight > .5) for (int i = 0; i < 18; i++) { float fi = float(i), hx = h2(vec2(fi, 3.1)), hy = h2(vec2(fi, 7.7)), hz = h2(vec2(fi, 1.3));
+        vec3 fp = vec3(-3.5 + 9. * hx + .4 * sin(uT * (.3 + .2 * hy) + fi), .35 + .9 * hy + .15 * sin(uT * (.5 + .3 * hz) + fi * 2.), -3. - 7. * hz);
+        vec3 fd = fp - ro; float fl = length(fd); float ang = length(cross(rd, fd / fl));
+        if (dot(rd, fd) > 0. && fl < min(min(tH, tW), tB) + .5) { float tw = .5 + .5 * sin(uT * (2. + 3. * hx) + fi * 5.);
+          col += mix(uWarm, vec3(.8, 1., .55), .5) * exp(-pow(ang * fl / .045, 2.)) * (.25 + .6 * tw * (.4 + uFl) + .6 * uKick) * 1.4; } }
       // la bruma sobre el agua (los graves la levantan)
       col = mix(col, uFog * 1.05, (.12 + .22 * uMist) * exp(-max((ro + rd * min(min(tH, tW), 60.)).y, 0.) * 1.2) * smoothstep(0., .2, -rd.y + .12));
       col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
