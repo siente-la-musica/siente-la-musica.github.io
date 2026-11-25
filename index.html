@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 302</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 303</div>
     </div>
   </div>
   <div class="group">
@@ -6187,7 +6187,7 @@ function drawMilky(dt) {
   if (!milky.prog) milkySetup();
   const night = state.theme === 'dark', gl = GLX.gl;
   if (pulse.on && !pulse.melo) { milky.kk = 1; nudgeAdd('milky', 0.012 * musicGate); }
-  milky.kk *= Math.exp(-dt * 4); milky.en += (Math.min(1, energy * 2 + dynL * 0.4) - milky.en) * (1 - Math.pow(0.2, dt));
+  milky.kk *= Math.exp(-dt * 6); milky.en += (Math.min(1, energy * 2 + dynL * 0.4) - milky.en) * (1 - Math.pow(0.2, dt));
   milky.rot += dt * musicGate * (0.004 + energy * 0.01) + nudgeTake('milky', dt);
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(65, Math.min(92, s_ * 1.1)), l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
@@ -6240,7 +6240,7 @@ function drawStars(dt) {
     let wave = 0; const dc = Math.hypot(s_.x - 0.5, (s_.y - 0.5) * H / W);
     for (const w of starSky.waves) wave += w.k * Math.exp(-Math.pow((dc - w.r) * 14, 2));
     // Cada estrella brilla con su propia frecuencia: unas titilan con la voz, otras con los platillos
-    const b = Math.min(1.3, musicGate * (0.5 + s_.z * 0.45) * tw + s_.base * tw * (0.5 + musicGate * 0.5 + energy * 0.5) + lv * (0.9 + s_.z * 1.2) * (0.6 + 0.4 * musicGate) + near * 0.8 + wave + Math.max(0, pulse.x) * 0.55 * musicGate);   // con cualquier sonido el cielo está presente; con el bombo, todo el cielo titila a la vez
+    const b = Math.min(1.3, musicGate * (0.5 + s_.z * 0.45) * tw + s_.base * tw * (0.5 + musicGate * 0.5 + energy * 0.5) + lv * (0.9 + s_.z * 1.2) * (0.6 + 0.4 * musicGate) + near * 0.8 + wave + Math.max(0, pulse.x) * 0.85 * musicGate);   // con cualquier sonido el cielo está presente; con el bombo, todo el cielo titila a la vez
     const col = s_.c < 0 ? [235, 238, 255] : RGB[s_.c];
     const r = DPR * (0.35 + s_.z * 0.95) * (1 + lv * 0.45 + near * 0.5);
     ctx.globalAlpha = Math.min(1, b);
