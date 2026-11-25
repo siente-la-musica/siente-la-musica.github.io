@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 254</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 255</div>
     </div>
   </div>
   <div class="group">
@@ -12169,8 +12169,8 @@ function citySetup() {
       vec3 r = h3(id), r2 = h3(id + 17.);
       hb = vec2(.95 + .7 * r.y, .85 + .6 * r.z); if (r2.x > .5) hb = hb.yx;
       tw = 0.;   // (sin torres en punta al azar: solo la del reloj)
-      hh = .9 + .75 * r2.y * r2.y; rf = .75 + .45 * r.x;   // casas de uno o dos pisos, con tejado
-      if (r2.y > .78 && r.z > .45) { hh += 1.5 + .9 * r.y; rf = 0.; }   // edificios de tres o cuatro pisos: techo plano con cornisa, sin tejado
+      hh = .9 + 1.5 * r2.y * r2.y; rf = .75 + .45 * r.x;
+      if (r2.y > .72 && r.z > .35) { hh += 1.3 + .9 * r.y; rf = 0.; }   // edificios de tres o cuatro pisos: techo plano con cornisa, sin tejado
       if (tw > .5) { hb = vec2(.75 + .2 * r.y); hh += 2.6; rf = 1.7; }
       if (abs(id.x) < .5 && mod(id.y, 9.) < .5) { hb = vec2(1.15); hh = 6.8; rf = 0.; tw = 2.; }   /* sin techo en punta: remate plano */   // la torre del reloj: cada cierto tramo, sobre el camino del vuelo
       jo = (vec2(r2.z, r.z) - .5) * max(0., (S * .5 - max(hb.x, hb.y) - .45)) * 2.;   // cada casa un poco corrida: un pueblo orgánico
@@ -12189,6 +12189,14 @@ function citySetup() {
         float roof;
         if (rf < .01) {   // techo plano: una cornisa que sobresale un poco
           roof = sdBox(q - vec3(0., hh + .06, 0.), vec3(hb.x + .08, .07, hb.y + .08));
+          // en la azotea: un tanque de agua o el cuartito de la escalera
+          vec2 rc = vec2((r.y - .5) * hb.x, (r.z - .5) * hb.y) * .8;
+          roof = min(roof, r2.z > .5 ? length(vec2(length(q.xz - rc) - .28, 0.)) * 0. + max(length(q.xz - rc) - .28, abs(q.y - hh - .5) - .3) : sdBox(q - vec3(rc.x, hh + .35, rc.y), vec3(.38, .3, .3)));
+          // balcones en la fachada de adelante y de atrás, uno por piso, con su baranda
+          if (tw < .5) { float fy = clamp(floor((q.y - .45) / .92 + .5), 1., floor((hh - .6) / .92)); float yb = q.y - (.45 + fy * .92) + .06;
+            vec3 bq = vec3(q.x - (h2(id + fy) - .5) * hb.x * .7, yb, abs(q.z) - hb.y - .14);
+            float bal = min(sdBox(bq, vec3(.42, .035, .14)), sdBox(bq - vec3(0., .14, .13), vec3(.42, .12, .012)));
+            if (bal < res.x) res = vec2(bal, 2.); }
           if (roof < res.x) res = vec2(roof, 2.); roof = 1e3;
         } else if (tw > .5) {   // techo en punta de cuatro aguas
           roof = max(sdBox(rq - vec3(0., hh + rf * .5, 0.), vec3(rb.x, rf * .5, rb.y)), (max(abs(rq.x) / rb.x, abs(rq.z) / rb.y) * rf + rq.y - hh - rf) / sqrt(1. + rf * rf / (rb.x * rb.x)));
@@ -12265,6 +12273,7 @@ function citySetup() {
           alb = uWall * (.82 + .3 * r.z) * (.92 + .12 * vn(vec2(q.x + q.z, q.y) * 4.));
           if (q.y < .32) alb *= .62;                                                     // zócalo de piedra
           if (n.y > .6) alb = mix(uWall * .5, uFog * .4, .3) * (.85 + .2 * vn(p.xz * 3.));   // la azotea de los edificios: concreto, más hondo
+          if (rf < .01 && abs(n.y) < .3) alb *= .9 + .1 * smoothstep(.0, .04, abs(fract((q.y - .4) / .92) - .02));   // la franja que marca cada piso
         } else if (mat < 3.5) {
           vec3 rq = hb.x > hb.y ? q : q.zyx; float along = rq.x * 3.2, down = (abs(rq.z) + (hh + rf - rq.y)) * 4.2;
           vec2 tl = vec2(along + .5 * floor(down), down);
