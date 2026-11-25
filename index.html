@@ -799,7 +799,7 @@
         <button data-mode="traces">Trazos</button>
         <button data-mode="loop">Lazo</button>
         <button data-mode="strobe">Estrobo</button>
-        <button data-mode="tubes">Inflables</button>
+        <button data-mode="tubes">Cintas</button>
         <button data-mode="vinyl">Vinilo</button>
         <button data-mode="cover">Portada</button>
         <button data-mode="livecover">Portada viva</button>
@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 250</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 251</div>
     </div>
   </div>
   <div class="group">
@@ -8797,7 +8797,73 @@ function tubeStroke(g, pts, w, c, stripes) {
   tubePath(g, pts, -0.26, w); g.strokeStyle = rgba(light, 0.55); g.lineWidth = w * 0.1; g.stroke(); g.restore();   // brillo satinado
   tubePath(g, pts, 0.3, w); g.strokeStyle = 'rgba(0,0,0,.12)'; g.lineWidth = w * 0.16; g.stroke();   // el lado en sombra: volumen
 }
+// ---------- Cintas: cuatro cintas largas de seda (como en la gimnasia rítmica) que dibujan curvas en el aire con la
+// música. Cada una sigue a su parte del sonido; al girar sobre sí misma muestra el brillo y la sombra de la tela; cada
+// bombo da un latigazo que recorre la cinta; la voz las hace ondular más. Sus colores, los de la portada. ----------
+const RIB_N = 4, RIB_L = 40;
+const rib = { prog: null, t: 0, pts: new Float32Array(RIB_N * RIB_L * 4), hist: null, kk: 0, C: new Float32Array(RIB_N * 3), lv: [0, 0, 0, 0], v: [0, 0, 0, 0] };
+function ribSetup() {
+  rib.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uGate; uniform vec4 uPt[${RIB_N * RIB_L}]; uniform vec3 uC[${RIB_N}], uBg;
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = uBg * (.85 + .3 * vUv.y);
+      for (int r = 0; r < ${RIB_N}; r++) {
+        vec3 c = uC[r];
+        float bd = 1e3, bt = 0., bw = 0., bk = 0.;
+        for (int i = 0; i < ${RIB_L - 1}; i++) {
+          vec4 a = uPt[r * ${RIB_L} + i], b = uPt[r * ${RIB_L} + i + 1];
+          vec2 e = b.xy - a.xy, w = p - a.xy; float h = clamp(dot(w, e) / max(dot(e, e), 1e-6), 0., 1.);
+          float tw = mix(a.z, b.z, h), wd = mix(a.w, b.w, h), half_ = wd * (.22 + .78 * abs(cos(tw)));   // la cinta gira: de canto es fina, de frente es ancha
+          float d = length(w - e * h) - half_;
+          if (d < bd) { bd = d; bt = tw; bw = half_; bk = (float(i) + h) / ${RIB_L - 1}.; }
+        }
+        float face = cos(bt), al = smoothstep(.002, -.002, bd) * smoothstep(0., .2, bk);
+        float sh = .5 + .5 * abs(face) + .4 * pow(abs(face), 10.);                 // el brillo de la seda cuando mira de frente
+        vec3 cc = (face > 0. ? c : c * .68) * sh * (.75 + .25 * bk);
+        cc += mix(c, vec3(1.), .4) * .3 * smoothstep(-bw * .45, 0., bd) * abs(face);   // el filo de la tela
+        col += c * exp(-max(bd, 0.) / .02) * .12 * (.4 + .6 * uGate);              // su luz en el aire
+        col = mix(col, cc, al * (.5 + .5 * uGate));
+      }
+      if (uNight < .5) col = mix(col, col * .9 + .08, .2);
+      o = vec4(col, 1.);
+    }`);
+}
 function drawTubes(dt) {
+  if (!glInit()) return drawTubes2D(dt);
+  if (!rib.prog) ribSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  if (pulse.on && !pulse.melo) { nudgeAdd('rib', 0.5 * musicGate); rib.kk = 1; }
+  rib.kk *= Math.exp(-dt * 5);
+  rib.t += dt * musicGate * (0.5 + energy * 1.6 + dynL * 0.4) + nudgeTake('rib', dt);
+  const bands = [[0, 10], [10, 20], [20, 32], [32, BANDS]];
+  for (let r = 0; r < RIB_N; r++) { const [a, b] = bands[r], h = attHit(a, b); if (h > 0) rib.v[r] += 3 * h;
+    rib.v[r] += ((bandX(a, b) * musicGate - rib.lv[r]) * 80 - rib.v[r] * 10) * dt; rib.lv[r] += rib.v[r] * dt; }
+  if (!rib.hist) rib.hist = Array.from({ length: RIB_N }, () => []);
+  const T = rib.t, vo = Math.min(1, voice * 1.4);
+  for (let r = 0; r < RIB_N; r++) {
+    // la punta dibuja una curva (como un ocho que se abre y se cierra) alrededor de su centro; la cola la sigue
+    const cx = asp * (0.5 + (r - 1.5) * (asp < 1 ? 0.12 : 0.2)), cy = 0.5 + (r % 2 ? 0.06 : -0.06);
+    const A = (asp < 1 ? 0.33 : 0.27) * (0.75 + 0.5 * Math.max(0, rib.lv[r]) + 0.3 * rib.kk), ph = T * (0.9 + 0.17 * r) + r * 1.7;
+    for (let i = 0; i < RIB_L; i++) {
+      const k = i / (RIB_L - 1), q = ph - (1 - k) * 3.4;                                   // la cola recorre la misma curva, un poco atrás
+      const x = cx + Math.sin(q) * A * Math.min(asp, 1) * 1.1, y = cy + Math.sin(q * 2 + r) * A * 0.75 + Math.sin(q * 0.37) * 0.08;
+      const tw = T * 1.3 + k * (5 + 3 * vo) + r * 2;                                         // el giro de la tela a lo largo de la cinta
+      rib.pts.set([x, y, tw, (0.008 + 0.02 * k) * (1 + 0.35 * rib.kk) * Math.min(1, asp * 1.4)], (r * RIB_L + i) * 4);
+    }
+  }
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], 56), sat(RGB[1], 60), sat(RGB[2], 54), sat(mix(0.5), 62)].forEach((c, k) => rib.C.set(c, k * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = rib.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uGate, musicGate);
+  gl.uniform4fv(p.u['uPt[0]'], rib.pts); gl.uniform3fv(p.u['uC[0]'], rib.C); gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 30, night ? 7 : 88)).map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.25 + P * 0.2);
+}
+function drawTubes2D(dt) {
   const night = state.theme === 'dark';
   if (tube.key !== W + 'x' + H) tubeInit();
   ambient();
@@ -9620,7 +9686,7 @@ function drawCats(dt) {
 // delante (bokeh), sobre nubes de color muy suaves. Cada golpe enciende y estira unos destellos; los
 // platillos hacen chispas; la voz mece la cortina. Colores de la portada.
 const curtain = { threads: null, key: '', fields: null, bokeh: null };
-const curtainCount = () => Math.round(Math.min(38, Math.max(14, W / DPR / 48)));
+const curtainCount = () => Math.round(Math.min(60, Math.max(22, W / DPR / 30)));   // más hilos y más finos: una cortina, no unas rayas
 function curtainInit() {
   const n = curtainCount();
   const bead = y => ({ y, v: 0, r: 0.6 + Math.pow(Math.random(), 2.5) * 2.6, c: Math.random() < 0.18 ? 3 : Math.floor(Math.random() * 3),
@@ -9652,22 +9718,33 @@ function curGSetup() {
       col += pal(vUv.x) * exp(-pow((vUv.y - .55) / .45, 2.)) * .12 * (.4 + .6 * uGate);   // niebla de color detrás
       for (int L = 0; L < 4; L++) {
         float fl = float(L), z = 1. + fl * .55;                    // 0 = adelante (grande y desenfocado), 3 = al fondo
-        float dens = 22. * z, blur = abs(fl - 1.5) * .9 + .25;     // la capa del medio, nítida
+        float dens = 8. * z, blur = abs(fl - 1.5) * .9 + .25;     // la capa del medio, nítida
         float sw = (uSway * (.02 + .05 * uVo) / z) * sin(p.y * 3. + fl * 1.7 + uSway * .3);
         float xx = (p.x + sw + fl * .37) * dens; float id = floor(xx) + fl * 100., h1 = hs(id), h2 = hs(id + 7.3);
-        if (h1 < .35) continue;                                    // no todas las columnas tienen hilo
+        if (h1 < .4) continue;                                    // no todas las columnas tienen hilo
         float fx = fract(xx) - .5 - (h2 - .5) * .5;
-        float w = (.035 + .05 * blur) , line = exp(-pow(fx / w, 2.));
+        float w = (.018 + .04 * blur) , line = exp(-pow(fx / w, 2.));
         float u = clamp((p.x + fl * .11) / asp, 0., 1.); int bi = int(u * 15.99); float lv = uLv[bi];
         vec3 c = pal(u * .8 + h2 * .25);
         float depthK = (L == 0 ? .55 : L == 1 ? 1. : L == 2 ? .7 : .45);
         float wave = exp(-pow((u - uWave) / .07, 2.)) * uWaveK;
         col += c * line * (.08 + .16 * lv + .25 * wave) * depthK * (.4 + .6 * uGate);
-        // las gotas de luz que bajan por el hilo, con su estela hacia arriba
-        float rep = 1.6 + 1.4 * h1, vv = fract(-p.y * rep / z + uFlow * (.4 + .6 * h2) / z + h1 * 7.);
-        float head = exp(-vv * (60. / (1. + blur))) , tail = exp(-vv * 9.) * .35;
-        float bead = (head + tail) * exp(-pow(fx / (w * (1.2 + .4 * blur)), 2.)) * step(.55, hs(id + floor(-p.y * rep / z + uFlow * (.4 + .6 * h2) / z + h1 * 7.) * 1.3));
-        col += mix(c, vec3(1.), .25) * bead * (.4 + 1.1 * lv + .7 * wave + .4 * uKick) * depthK * (.3 + .7 * uGate) / (1. + blur * .6);
+        // las cuentas de cristal del hilo: brillan con su parte de la música, titilan y lanzan destellos largos en cruz;
+        // bajan muy despacio (la cortina respira)
+        float rep = 1.4 + 1.2 * h1, yy = p.y * rep / z + uFlow * .08 * (.5 + h2) / z + h1 * 7.;
+        float bi_ = floor(yy), by = fract(yy) - .5, hb = hs(id * 3.1 + bi_ * 1.7);
+        if (hb > .45) {
+          float rr = (.02 + .045 * hs(id + bi_)) * (1. + .6 * lv) / (1. + blur * .2);
+          vec2 dq = vec2(fx / dens * z, by / rep * z) ;  // distancia real en pantalla
+          float bd = length(dq), core = exp(-bd * bd / (rr * rr * .02 + 1e-6));
+          float edgeX = smoothstep(.5, .32, abs(fract(xx) - .5)), edgeY = smoothstep(.5, .3, abs(by));   // el halo no pasa a la celda vecina
+          float halo = exp(-bd / (rr * (.6 + .5 * blur))) * edgeX * edgeY;
+          float tw = .55 + .45 * sin(uFlow * (2. + 3. * hb) + hb * 40.);
+          float on_ = (.25 + 1.3 * lv + .9 * wave + .4 * uKick) * tw * (.3 + .7 * uGate);
+          float fl = hb > .8 ? 1. : 0.;   // algunas lanzan el destello largo
+          float flare = fl * (exp(-abs(dq.x) / (rr * .08)) * exp(-abs(dq.y) / (rr * (6. + 10. * lv))) + exp(-abs(dq.y) / (rr * .08)) * exp(-abs(dq.x) / (rr * 1.2)) * .5) * edgeX * edgeY;
+          col += mix(c, vec3(1.), .3) * (core * .9 + halo * .35 + flare * .6) * on_ * depthK / (1. + blur * .5);
+        }
       }
       col = col / (1. + .25 * col);
       if (uNight < .5) col = mix(col, col * .9 + .08, .3);
@@ -9675,6 +9752,7 @@ function curGSetup() {
     }`);
 }
 function drawCurtain(dt) {
+  return drawCurtain2D(dt);   // la cortina de cuentas de cristal (su esencia); la versión de fibra en GPU queda guardada
   if (!glInit()) return drawCurtain2D(dt);
   if (!curG.prog) curGSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
@@ -9745,7 +9823,7 @@ function drawCurtain2D(dt) {
     const g = lctx.createLinearGradient(0, 0, 0, yEnd);
     const ta = 0.35 + t.lv * 1.1;
     g.addColorStop(0, rgba(tc, 0)); g.addColorStop(0.08, rgba(tc, Math.min(1, (night ? 0.32 : 0.6) * ta))); g.addColorStop(0.9, rgba(tc, Math.min(1, (night ? 0.26 : 0.5) * ta))); g.addColorStop(1, rgba(tc, 0));
-    lctx.strokeStyle = g; lctx.lineWidth = lw * t.thick * (0.8 + t.lv * 0.9);
+    lctx.strokeStyle = g; lctx.lineWidth = lw * t.thick * (0.6 + t.lv * 0.9);
     lctx.beginPath(); lctx.moveTo(x0, 0); lctx.quadraticCurveTo(x0 + sx * 0.25, yEnd * 0.55, xAt(yEnd), yEnd); lctx.stroke();
     for (let i = t.beads.length - 1; i >= 0; i--) {
       const b = t.beads[i];
@@ -9766,7 +9844,8 @@ function drawCurtain2D(dt) {
       lctx.globalAlpha = b.a * Math.min(1, 0.3 + b.glow * 0.5 + t.lv * 0.5);
       lctx.drawImage(SPRITES[b.c === 3 ? 0 : b.c], x - gr, y - gr, gr * 2, gr * 2);
       lctx.globalAlpha = b.a;
-      lctx.fillStyle = rgba(hot, 1); lctx.beginPath(); lctx.arc(x, y, r, 0, Math.PI * 2); lctx.fill();
+      { const cg = lctx.createRadialGradient(x, y, 0, x, y, r * 1.6); cg.addColorStop(0, rgba(hot.map(v => v + (255 - v) * 0.3), 1)); cg.addColorStop(0.45, rgba(hot, 0.85)); cg.addColorStop(1, rgba(hot, 0));   // la cuenta: un núcleo de luz difuso (no un disco sólido)
+        lctx.fillStyle = cg; lctx.fillRect(x - r * 1.6, y - r * 1.6, r * 3.2, r * 3.2); }
       if (b.spark > 0.05) {
         // chispa de los platillos: un brillo suave con rayos que se afinan y se desvanecen (antes era una cruz de líneas)
         const L = r * (3 + 6 * b.spark), sg = lctx.createRadialGradient(x, y, 0, x, y, L);
@@ -9788,8 +9867,7 @@ function drawCurtain2D(dt) {
     const x = k.x * W + Math.sin(time * 0.2 + k.ph) * MIN * 0.02, y = k.y * H, R = k.r * MIN * (1 + P * 0.05);
     const g = ctx.createRadialGradient(x - R * 0.2, y - R * 0.25, 0, x, y, R);
     const c = RGB[k.c];
-    g.addColorStop(0, rgba(c.map(v => v + (255 - v) * 0.6), night ? 0.22 : 0.3)); g.addColorStop(0.75, rgba(c, night ? 0.16 : 0.22));
-    g.addColorStop(0.93, rgba(c.map(v => v * 0.6), night ? 0.2 : 0.28)); g.addColorStop(1, rgba(c, 0));
+    g.addColorStop(0, rgba(c.map(v => v + (255 - v) * 0.5), night ? 0.12 : 0.16)); g.addColorStop(0.6, rgba(c, night ? 0.08 : 0.1)); g.addColorStop(1, rgba(c, 0));   // bokeh muy suave, sin borde de lente
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
