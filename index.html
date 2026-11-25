@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 253</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 254</div>
     </div>
   </div>
   <div class="group">
@@ -12168,13 +12168,14 @@ function citySetup() {
     void house(vec2 id, out vec2 hb, out float hh, out float rf, out vec2 jo, out float tw) {
       vec3 r = h3(id), r2 = h3(id + 17.);
       hb = vec2(.95 + .7 * r.y, .85 + .6 * r.z); if (r2.x > .5) hb = hb.yx;
-      tw = r2.z > .955 ? 1. : 0.;   // alguna torre con techo en punta: el pueblo tiene lugares que se recuerdan
-      hh = .9 + 1.5 * r2.y * r2.y; rf = .75 + .45 * r.x;
-      if (r2.y > .72 && r.z > .35) { hh += 1.3 + .9 * r.y; rf = 0.; }   // edificios de tres o cuatro pisos: techo plano con cornisa, sin tejado
+      tw = 0.;   // (sin torres en punta al azar: solo la del reloj)
+      hh = .9 + .75 * r2.y * r2.y; rf = .75 + .45 * r.x;   // casas de uno o dos pisos, con tejado
+      if (r2.y > .78 && r.z > .45) { hh += 1.5 + .9 * r.y; rf = 0.; }   // edificios de tres o cuatro pisos: techo plano con cornisa, sin tejado
       if (tw > .5) { hb = vec2(.75 + .2 * r.y); hh += 2.6; rf = 1.7; }
-      if (abs(id.x) < .5 && mod(id.y, 9.) < .5) { hb = vec2(1.15); hh = 6.8; rf = 2.4; tw = 2.; }   // la torre del reloj: cada cierto tramo, sobre el camino del vuelo
+      if (abs(id.x) < .5 && mod(id.y, 9.) < .5) { hb = vec2(1.15); hh = 6.8; rf = 0.; tw = 2.; }   /* sin techo en punta: remate plano */   // la torre del reloj: cada cierto tramo, sobre el camino del vuelo
       jo = (vec2(r2.z, r.z) - .5) * max(0., (S * .5 - max(hb.x, hb.y) - .45)) * 2.;   // cada casa un poco corrida: un pueblo orgánico
       if (tw > 1.5) jo = vec2(0.);
+      if (hh > 1.7 && tw < .5) rf = 0.;   // más de dos pisos: edificio de techo plano
     }
     vec2 map(vec3 p) {
       float g = p.y - ground(p.xz); vec2 res = vec2(g, 1.);
@@ -12186,7 +12187,7 @@ function citySetup() {
         float body = sdBox(q - vec3(0., hh * .5 - .5, 0.), vec3(hb.x, hh * .5 + .5, hb.y));
         vec3 rq = hb.x > hb.y ? q : q.zyx; vec2 rb = hb.x > hb.y ? hb : hb.yx; rb += .12;
         float roof;
-        if (rf < .01 && tw < .5) {   // techo plano: una cornisa que sobresale un poco
+        if (rf < .01) {   // techo plano: una cornisa que sobresale un poco
           roof = sdBox(q - vec3(0., hh + .06, 0.), vec3(hb.x + .08, .07, hb.y + .08));
           if (roof < res.x) res = vec2(roof, 2.); roof = 1e3;
         } else if (tw > .5) {   // techo en punta de cuatro aguas
@@ -12202,8 +12203,12 @@ function citySetup() {
         if (roof < res.x) res = vec2(roof, 3.);
       } else {
         vec3 tq = vec3(l.x - (r.y - .5) * 1.2, p.y - base - 1.5, l.y - (r.z - .5) * 1.2);
-        float tr = (length(tq * vec3(1., 1.15, 1.)) - 1.45 - .38 * (vn(tq.xz * 2.2 + tq.y * 1.7 + id * 3.) - .5) - .18 * sin(tq.y * 5. + tq.x * 3.)) * .7;   // copa frondosa e irregular
-        if (tr < res.x) res = vec2(tr, 4.);
+        // el árbol, como en la animación pintada: una copa de racimos redondos (no una bola) y su tronco
+        float tr = 1e3; for (int k = 0; k < 4; k++) { float fk = float(k); vec3 off = vec3(cos(fk * 2.1 + r.y * 6.) * .55, .15 + .35 * fract(fk * .37 + r.z), sin(fk * 2.1 + r.y * 6.) * .55) * (k == 0 ? 0. : 1.);
+          float lr = (k == 0 ? 1.05 : .72 + .18 * h2(id + fk)); tr = min(tr, length(tq - off - vec3(0., k == 0 ? .25 : 0., 0.)) - lr); }
+        tr += .05 * (vn(tq.xz * 1.6 + tq.y * 1.2 + id * 3.) - .5);   // apenas ondulada: silueta lisa, nada de papel arrugado
+        if (tr < res.x) res = vec2(tr * .8, 4.);
+        float trunk = max(length(tq.xz) - .13, max(-(tq.y + 1.6), tq.y + .2)); if (trunk < res.x) res = vec2(trunk, 6.);
       }
       return res;
     }
@@ -12265,7 +12270,8 @@ function citySetup() {
           vec2 tl = vec2(along + .5 * floor(down), down);
           alb = roofC * (.82 + .22 * h2(floor(tl) + id)) * mix(.78, 1., smoothstep(.0, .25, fract(tl.y)));   // tejas, cada una con su tono
         } else if (mat < 4.5) { alb = mix(vec3(.13, .3, .17), vec3(.3, .5, .22), vn(p.xz * 3. + p.y * 2.)); }
-        else alb = vec3(.55, .3, .24) * (.85 + .2 * step(.5, fract(p.y * 7.)));          // ladrillo
+        else if (mat < 5.5) alb = vec3(.55, .3, .24) * (.85 + .2 * step(.5, fract(p.y * 7.)));          // ladrillo
+        else alb = vec3(.32, .22, .16) * (.85 + .2 * vn(vec2(p.y * 6., atan(p.x, p.z) * 3.)));   // el tronco
         // luz al estilo de la animación pintada: lado del sol cálido, sombra azulada, sin degradados duros
         vec3 Ld = normalize(vec3(.65, uNight > .5 ? .7 : .55, .55));   // el sol (o la luna) desde atrás y a un lado: las fachadas que vemos brillan
         float dif = smoothstep(-.1, .45, dot(n, Ld)), sky_ = .5 + .5 * n.y;
@@ -12275,9 +12281,11 @@ function citySetup() {
         float ao = clamp((p.y - ground(p.xz)) * .35 + .45, 0., 1.);
         col = alb * (shC * sky_ * ao + sunC * dif);
         if (mat > 3.5 && mat < 4.5) {   // los árboles, pintados: la copa en manchas de luz y sombra, como pinceladas
-          float tn = vn(p.xz * 2.4 + p.y * 3.1 + id * 5.) * .55 + vn(p.xz * 6.5 - p.y * 4.) * .45;
-          float lt = smoothstep(.38, .62, dif * .75 + tn * .55);
+          float tn = vn(p.xz * 1.1 + p.y * 1.3 + id * 5.);                       // manchas grandes de luz (no ruido fino)
+          float lt = smoothstep(.44, .52, dif * .85 + tn * .22);                 // dos masas limpias: sol y sombra, como pintado
           col = mix(alb * shC * sky_ * 1.15, alb * sunC * 1.3 + (uNight > .5 ? vec3(.0, .02, .05) : vec3(.05, .07, .0)), lt);
+          col += alb * sunC * .35 * smoothstep(.55, .85, n.y) * lt;                 // la copa brilla arriba, donde le da el cielo
+          col = mix(col, col * vec3(1.05, 1., .9), h2(id + 4.) * .4);            // cada árbol con su verde
         }
         if (uNight > .5) col += alb * vec3(.35, .45, .8) * pow(1. - max(dot(n, -rd), 0.), 3.) * .35 * dif;   // de noche, la luna recorta los bordes
         // de día, cada bombo pasa una franja de sol dorado por el pueblo (como cuando una nube deja pasar la luz)
