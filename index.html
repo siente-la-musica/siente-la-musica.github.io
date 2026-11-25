@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 226</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 227</div>
     </div>
   </div>
   <div class="group">
@@ -6134,7 +6134,8 @@ const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uF
       float hx = H_(q + vec2(.02, 0.)) - H_(q - vec2(.02, 0.)), li = clamp(.55 - hx * 4. - d * 2., 0., 1.);
       vec3 c = mix(uW1, mix(uW0, uW2, fk / 8.), li) * mix(1., .75, fk / 9. * uNight);
       float hit = exp(-pow((fk - uBeat) / .7, 2.));   // el golpe recorre las olas de adelante hacia atrás
-      c += mix(uW2, vec3(1.), .4) * exp(-d * 45.) * (.12 + .35 * hit) * (.3 + lk);
+      c += mix(uW2, vec3(1.), .4) * exp(-d * 45.) * (.12 + .7 * hit) * (.3 + lk);
+      c *= 1. + .3 * hit * smoothstep(.0, .06, d) * (1. - .5 * uNight * 0.);   // el golpe enciende la ola entera al pasar, no solo su cresta
       c = mix(c, uSun * .9 + .1, exp(-d * 60.) * exp(-pow((p.x - sc.x) / (asp * .25), 2.)) * (.5 - fk * .05) * smoothstep(5., 0., fk));   // la cresta de atrás, encendida por el sol
       float lv_ = d * (140. - fk * 8.) - uT * .3 * uFlow, fw = fwidth(lv_), lines = abs(fract(lv_) - .5);
       c += vec3(.9, .95, 1.) * smoothstep(fw * 1.2, 0., lines - .5 + fw * 1.5) * (.04 + .14 * uLv.z + .1 * hit) * clamp(1. - d * 3., 0., 1.);
@@ -6147,7 +6148,8 @@ function drawDunas(dt) {
   if (!glInit()) { drawInfinity(dt); return; }
   const S = PAI.dun, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
   const cov = (t, l) => paiTone(mix(t), l, 50, 85);
-  S.ph = (S.ph || 0) + dt * S.go * (0.15 + 0.6 * S.en + 0.25 * S.lv[0]);
+  if (pulse.on && musicGate > 0.3) S.sg = 1; S.sg = (S.sg || 0) * Math.exp(-dt * 7);   // cada bombo da un empujón suave al viento de las dunas
+  S.ph = (S.ph || 0) + dt * S.go * (0.15 + 0.6 * S.en + 0.25 * S.lv[0]) * (0.75 + 1.1 * S.sg);
   if (pulse.on) S.beat = 9; S.beat = Math.max(-3, (S.beat ?? -3) - dt * 16);
   S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); const h = attHit(a, a + Math.ceil(BANDS / 10)); if (h > 0) S.L[k] = Math.min(1.4, S.L[k] + 0.35 + 0.35 * h); }   // cada nota de su parte (piano, sinte, voz) levanta su ola
   const pal = night ? { s0: [0.06, 0.08, 0.18], s1: [0.02, 0.03, 0.09], sun: [0.95, 0.42, 0.25], w0: [0.3, 0.42, 0.7], w1: [0.04, 0.07, 0.2] }
@@ -14537,7 +14539,7 @@ function autoSetup() {
         float ca = cos(c.z), sa = sin(c.z); vec2 q = p - c.xy; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
         vec2 v = q - vec2(0., hb.y); float wd = hb.x * .6 + max(v.y, 0.) * (.42 + .25 * uP * me);
         float cone = exp(-pow(v.x / wd, 2.)) * exp(-max(v.y, 0.) * (me > .5 ? 4.2 : 7.)) * smoothstep(-.01, .02, v.y);
-        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .45 * uP : .22) * mix(.14, 1., uNight) * inR;
+        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .9 * uP : .22) * mix(.14, 1., uNight) * inR;
         vec2 v2 = q + vec2(0., hb.y); float brk = uDim[i].z;
         col += vec3(1., .06, .04) * exp(-dot(v2, v2) / (.0009 + .0014 * brk)) * (.22 + .6 * brk) * mix(.3, 1., uNight);
         if (i == 0) {
@@ -14666,7 +14668,8 @@ function drawAuto(dt) {
   // el cambio de carril: un resorte ágil (más rápido cuanto más rápida la canción) y el carro se inclina hacia donde va
   const per = Math.max(0.3, tempo.period || 0.5), om = Math.max(11, Math.min(20, 6.6 / per)), tx = laneX(auto.lane);
   auto.xv += ((tx - auto.x) * om * om - auto.xv * 1.7 * om) * dt * (db > 0 ? 1 : 0); auto.x += auto.xv * dt * (db > 0 ? 1 : 0);
-  auto.dist += db * 0.5;   // la vía corre siempre pareja (aunque tu carro espere a que haya paso)
+  if (pulse.on && musicGate > 0.3) auto.sg = 1; auto.sg = (auto.sg || 0) * Math.exp(-dt * 7);   // cada bombo empuja el carro: un tirón suave y luego afloja
+  auto.dist += db * 0.5 * (0.8 + 0.75 * auto.sg);   // la vía corre pareja en promedio (aunque tu carro espere a que haya paso)
   auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
   auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
   { const h = attHit(8, 40); if (h > 0) auto.glow = Math.min(1.4, auto.glow + 0.35 + 0.3 * h); }   // cada nota enciende las luces del camino
@@ -14683,7 +14686,7 @@ function drawAuto(dt) {
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform2f(p.u.uRoad, cx, halfW);
   gl.uniform1f(p.u.uDist, auto.dist % 480); gl.uniform1f(p.u.uLW, LW); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P * flash);
-  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.3) * (0.35 + 0.65 * musicGate)); gl.uniform1f(p.u.uSpd, Math.max(0, loud - 0.35) * 1.5 * musicGate); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHi, auto.hi); gl.uniform1f(p.u.uTilt, TILT); gl.uniform1f(p.u.uDistW, auto.dist % 32);
+  gl.uniform1f(p.u.uTrail, auto.trail); gl.uniform1f(p.u.uGlow, auto.glow); gl.uniform1f(p.u.uLamp, (night ? 1 : 0.3) * (0.35 + 0.65 * musicGate) * (1 + 0.9 * P * flash)); /* los postes laten con el bombo */ gl.uniform1f(p.u.uSpd, Math.max(0, loud - 0.35) * 1.5 * musicGate); gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uHi, auto.hi); gl.uniform1f(p.u.uTilt, TILT); gl.uniform1f(p.u.uDistW, auto.dist % 32);
   gl.uniform3fv(p.u.uBg, (night ? hexToRgb(hsl(hh, 22, 7)) : hexToRgb(hsl(hh, 20, 62))).map(v => v / 255));
   gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uC0, tone(RGB[0], 58, 75).map(v => v / 255)); gl.uniform3fv(p.u.uC2, tone(RGB[2], 60, 75).map(v => v / 255));
   gl.uniform4fv(p.u['uCar[0]'], auto.U); gl.uniform4fv(p.u['uDim[0]'], auto.D);
