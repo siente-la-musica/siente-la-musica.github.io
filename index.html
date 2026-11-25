@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 251</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 252</div>
     </div>
   </div>
   <div class="group">
@@ -8803,12 +8803,13 @@ function tubeStroke(g, pts, w, c, stripes) {
 const RIB_N = 4, RIB_L = 40;
 const rib = { prog: null, t: 0, pts: new Float32Array(RIB_N * RIB_L * 4), hist: null, kk: 0, C: new Float32Array(RIB_N * 3), lv: [0, 0, 0, 0], v: [0, 0, 0, 0] };
 function ribSetup() {
-  rib.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uGate; uniform vec4 uPt[${RIB_N * RIB_L}]; uniform vec3 uC[${RIB_N}], uBg;
+  rib.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uGate; uniform vec4 uPt[${RIB_N * RIB_L}]; uniform vec4 uBox[${RIB_N}]; uniform vec3 uC[${RIB_N}], uBg;
     void main() {
       float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
       vec3 col = uBg * (.85 + .3 * vUv.y);
       for (int r = 0; r < ${RIB_N}; r++) {
-        vec3 c = uC[r];
+        vec3 c = uC[r]; vec4 bx = uBox[r];
+        if (p.x < bx.x - .06 || p.x > bx.z + .06 || p.y < bx.y - .06 || p.y > bx.w + .06) continue;   // lejos de esta cinta: nada que revisar
         float bd = 1e3, bt = 0., bw = 0., bk = 0.;
         for (int i = 0; i < ${RIB_L - 1}; i++) {
           vec4 a = uPt[r * ${RIB_L} + i], b = uPt[r * ${RIB_L} + i + 1];
@@ -8854,10 +8855,12 @@ function drawTubes(dt) {
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
   [sat(RGB[0], 56), sat(RGB[1], 60), sat(RGB[2], 54), sat(mix(0.5), 62)].forEach((c, k) => rib.C.set(c, k * 3));
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
-  const [cw, ch] = glCanvas(1), p = rib.prog;
+  if (!rib.box) rib.box = new Float32Array(RIB_N * 4);
+  for (let r = 0; r < RIB_N; r++) { let a = 9, b = 9, c = -9, d = -9; for (let i = 0; i < RIB_L; i++) { const o = (r * RIB_L + i) * 4, x = rib.pts[o], y = rib.pts[o + 1]; a = Math.min(a, x); b = Math.min(b, y); c = Math.max(c, x); d = Math.max(d, y); } rib.box.set([a, b, c, d], r * 4); }
+  const [cw, ch] = glCanvas(0.7), p = rib.prog;
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uGate, musicGate);
-  gl.uniform4fv(p.u['uPt[0]'], rib.pts); gl.uniform3fv(p.u['uC[0]'], rib.C); gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 30, night ? 7 : 88)).map(v => v / 255));
+  gl.uniform4fv(p.u['uPt[0]'], rib.pts); gl.uniform4fv(p.u['uBox[0]'], rib.box); gl.uniform3fv(p.u['uC[0]'], rib.C); gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 30, night ? 7 : 88)).map(v => v / 255));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
@@ -8959,7 +8962,7 @@ function glCoverBind(p, unit = 5) {
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0, recDropped = false;
 const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'bloques', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
-const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust']);
+const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust', 'tubes']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; recDropped = false; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
@@ -9782,12 +9785,13 @@ function drawCurtain2D(dt) {
   if (curtain.key !== curtainCount()) curtainInit();   // todo va en proporciones: al cambiar la calidad sigue igual (antes se reiniciaba)
   // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
   if (!night) { ctx.fillStyle = rgba(mix(0.5).map(v => v + (255 - v) * 0.9), 1); ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
+  else { ctx.fillStyle = rgba(mix(0.5).map(v => v * 0.06), 0.72); ctx.fillRect(0, 0, W, H); }   // de noche, la sala en penumbra honda: así brillan las cuentas (místico)
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   curtain.fph = (curtain.fph || 0) + dt * (0.015 + energy * 2.3);   // las nubes de color se mueven con la música
   curtain.fields.forEach((f, k) => {
     const x = W * (0.5 + 0.45 * Math.sin(curtain.fph * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(curtain.fph * f.sp * 1.3 + f.ph * 2));
     const col = night ? RGB[f.c] : RGB[f.c].map(v => v + (255 - v) * 0.45);
-    glowSpot(x, y, MIN * f.s * (1 + P * 0.06), col, (night ? 0.16 : 0.38) + energy * 0.1 + P * 0.08);
+    glowSpot(x, y, MIN * f.s * (1 + P * 0.06), col, (night ? 0.08 : 0.38) + energy * 0.06 + P * 0.05);
   });
   if (!night) glowSpot(W * (0.5 + 0.3 * Math.sin(time * 0.03)), H * 0.45, MIN * 0.6, [255, 255, 255], 0.55);   // un claro de luz
   // hilos desenfocados (como en una foto con poca profundidad de campo): franjas de luz anchas y suaves
@@ -9858,8 +9862,15 @@ function drawCurtain2D(dt) {
   }
   lctx.globalAlpha = 1;
   ambient();
-  bloom(layer, (night ? 0.65 : 0.4) + P * 0.3);
+  // lo místico: un haz de luz que baja desde arriba por la bruma (respira con la voz) y la penumbra honda arriba y abajo
+  if (night) { curtain.vo = (curtain.vo || 0) + (Math.min(1, voice * 1.4) - (curtain.vo || 0)) * (1 - Math.pow(0.05, dt));
+    const bx = W * (0.5 + 0.12 * Math.sin(curtain.fph * 0.02)), bw = W * (0.22 + 0.1 * curtain.vo), bg_ = ctx.createLinearGradient(bx - bw, 0, bx + bw, 0), mc = melodyColor();
+    const ca = (0.05 + 0.12 * curtain.vo + 0.05 * P) * musicGate;
+    bg_.addColorStop(0, rgba(mc, 0)); bg_.addColorStop(0.5, rgba(mc.map(v => v + (255 - v) * 0.4), ca)); bg_.addColorStop(1, rgba(mc, 0));
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = bg_; ctx.beginPath(); ctx.moveTo(bx - bw * 0.25, 0); ctx.lineTo(bx + bw * 0.25, 0); ctx.lineTo(bx + bw, H); ctx.lineTo(bx - bw, H); ctx.fill(); ctx.restore(); }
+  bloom(layer, (night ? 0.75 : 0.4) + P * 0.3);
   ctx.drawImage(layer, 0, 0);
+  if (night) { const vg = ctx.createLinearGradient(0, 0, 0, H); vg.addColorStop(0, 'rgba(0,0,0,.55)'); vg.addColorStop(0.3, 'rgba(0,0,0,0)'); vg.addColorStop(0.72, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.6)'); ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H); }
   // bokeh delante: esferas grandes desenfocadas con un borde algo más hondo (como una lente)
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
   for (const k of curtain.bokeh) {
