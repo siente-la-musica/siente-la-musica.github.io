@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 265</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 266</div>
     </div>
   </div>
   <div class="group">
@@ -1450,7 +1450,7 @@ function keepAudioAlive(dt) {
 addEventListener('pointerdown', () => { if (audioCtx && audioCtx.state !== 'running') audioCtx.resume().catch(() => {}); });
 
 // ================= Análisis =================
-let bass = 0, mid = 0, high = 0, energy = 0, time = 0, groove = 0, musicGate = 0, audible = false;
+let timeK = 1, bass = 0, mid = 0, high = 0, energy = 0, time = 0, groove = 0, musicGate = 0, audible = false;
 const lowPrev = new Float32Array(12), fullPrev = new Float32Array(BANDS), kickHist = new Float32Array(32), kickE2 = new Float32Array(32);
 const flux = { bass: { prev: 0, avg: 0.02, cd: 0 }, mid: { prev: 0, avg: 0.02, cd: 0 }, high: { prev: 0, avg: 0.02, cd: 0 }, snare: { prev: 0, avg: 0.02, cd: 0 }, hat: { prev: 0, avg: 0.02, cd: 0 }, voice: { prev: 0, avg: 0.02, cd: 0 }, perc: { prev: 0, avg: 0.02, cd: 0 } };
 
@@ -15207,7 +15207,9 @@ function render(now) {
   // El reloj de las animaciones solo corre mientras suena música: las derivas lentas, los brillos que pasean y
   // los vaivenes se detienen en silencio (y arrancan suave cuando vuelve el sonido). Nada se mueve sin música.
   musicGate += ((audible ? Math.min(1, 0.55 + energy * 10) : 0) - musicGate) * (1 - Math.pow(0.05, dt));
-  time += dt * musicGate;
+  // y su paso sigue la intensidad: en lo suave las derivas van lentas, en el coro corren (la estrofa y el coro se distinguen)
+  timeK += ((0.6 + 0.8 * Math.min(1, energy * 2)) - timeK) * (1 - Math.pow(0.3, dt));
+  time += dt * musicGate * timeK;
   if (!document.hidden && !recording) adapt(dt);
   keepAudioAlive(dt);
   analyse(dt);
