@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 295</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 296</div>
     </div>
   </div>
   <div class="group">
@@ -1969,26 +1969,23 @@ function drawBars(dt) {
   lctx.clearRect(0, 0, W, H);
   const gap = (W / n) * 0.3, bw = (W - gap * (n - 1)) / n, slot = bw + gap, x0 = 0;   // la primera y la última tocan los bordes
   // A lo ancho de toda la pantalla pero bajas: ocupan la franja de abajo y dejan el resto libre
-  const base = H * 0.985, maxH = H * (H > W ? 0.3 : 0.38), P = Math.max(0, pulse.x);
-  const barMel = melodyColor();
+  // una onda de sonido simétrica: las barras crecen hacia arriba y hacia abajo desde una línea de luz; los graves en el
+  // centro y los agudos hacia los bordes (espejo), y la luz se apaga hacia las puntas. Hipnótica y se lee de un vistazo.
+  const cy = H * (H > W ? 0.62 : 0.58), maxH = H * (H > W ? 0.19 : 0.26), P = Math.max(0, pulse.x);
+  const barMel = melodyColor(), mid_ = (n - 1) / 2;
   for (let i = 0; i < n; i++) {
-    // Arriba se comprime suave: lo fuerte sigue moviéndose en vez de quedarse pegado al techo
-    const v0 = Math.max(0, barX[i]), v = v0 < 0.85 ? v0 : 0.85 + 0.35 * Math.tanh((v0 - 0.85) / 0.35);
-    // las barras de la zona de la voz toman el color de la nota mientras se canta
-    const fb = i / (n - 1) * (BANDS - 1) * 0.86, wv = Math.min(1, voice * 1.5) * Math.max(0, Math.min(1, (fb - 19) / 4, (51 - fb) / 4));
-    const h = bw * 0.6 + v * maxH, x = x0 + i * slot, c = mix(i / (n - 1)).map((x_, j) => x_ + (barMel[j] - x_) * wv * 0.65);
-    barPeak[i] = Math.max(barPeak[i] - dt * 0.35, v);   // marca de pico que cae despacio
-    const g = lctx.createLinearGradient(0, base - h, 0, base);
-    g.addColorStop(0, rgba(c.map(x_ => x_ + (255 - x_) * (0.35 + P * 0.3)), 1)); g.addColorStop(0.25, rgba(c, 0.95)); g.addColorStop(1, rgba(c, night ? 0.25 : 0.35));
-    lctx.fillStyle = g;
-    lctx.beginPath(); lctx.roundRect(x, base - h, bw, h, [bw / 2, bw / 2, 0, 0]); lctx.fill();
-    const py = base - (bw * 0.6 + barPeak[i] * maxH) - bw * 0.5;
-    lctx.fillStyle = rgba(c, 0.7); lctx.beginPath(); lctx.roundRect(x, py, bw, Math.max(DPR * 2, bw * 0.18), bw * 0.09); lctx.fill();
+    const k = Math.min(n - 1, Math.round(Math.abs(i - mid_) * 2 * (n - 1) / n));
+    const v0 = Math.max(0, barX[k]), v = v0 < 0.85 ? v0 : 0.85 + 0.35 * Math.tanh((v0 - 0.85) / 0.35);
+    const fb = k / (n - 1) * (BANDS - 1) * 0.86, wv = Math.min(1, voice * 1.5) * Math.max(0, Math.min(1, (fb - 19) / 4, (51 - fb) / 4));
+    const h = bw * 0.5 + v * maxH, x = x0 + i * slot, c = mix(k / (n - 1)).map((x_, j) => x_ + (barMel[j] - x_) * wv * 0.65);
+    const g = lctx.createLinearGradient(0, cy - h, 0, cy + h);
+    g.addColorStop(0, rgba(c, 0)); g.addColorStop(0.35, rgba(c, 0.85)); g.addColorStop(0.5, rgba(c.map(x_ => x_ + (255 - x_) * (0.3 + P * 0.25)), 1)); g.addColorStop(0.65, rgba(c, 0.85)); g.addColorStop(1, rgba(c, 0));
+    lctx.fillStyle = g; lctx.beginPath(); lctx.roundRect(x, cy - h, bw, h * 2, bw / 2); lctx.fill();
   }
-  // luz en la base que late con los graves
-  const fl = lctx.createLinearGradient(0, H, 0, H * 0.7);
-  fl.addColorStop(0, rgba(mix(0.5), (night ? 0.18 : 0.12) * (0.4 + bass) + P * 0.15)); fl.addColorStop(1, rgba(mix(0.5), 0));
-  lctx.fillStyle = fl; lctx.fillRect(0, H * 0.7, W, H * 0.3);
+  // la línea de luz del centro, que late con los graves
+  const fl = lctx.createLinearGradient(0, cy - H * 0.05, 0, cy + H * 0.05);
+  fl.addColorStop(0, rgba(mix(0.5), 0)); fl.addColorStop(0.5, rgba(mix(0.5), (night ? 0.3 : 0.2) * (0.4 + bass) + P * 0.25)); fl.addColorStop(1, rgba(mix(0.5), 0));
+  lctx.fillStyle = fl; lctx.fillRect(0, cy - H * 0.05, W, H * 0.1);
   ambient();
   bloom(layer, (night ? 0.75 : 0.4) + beatSoft * 0.45 + Math.max(0, pulse.x) * 0.5);
   ctx.drawImage(layer, 0, 0);
