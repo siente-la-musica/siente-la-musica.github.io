@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 278</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 279</div>
     </div>
   </div>
   <div class="group">
@@ -7362,13 +7362,14 @@ function fr3Setup() {
     float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
     float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + vec2(1.7, 9.2); a *= .5; } return s; }
+    float fb3(vec2 p) { return vn(p) * .57 + vn(p * 2.03 + vec2(1.7, 9.2)) * .29 + vn(p * 4.1 + vec2(5.2, 3.1)) * .14; }   /* 3 capas: el relieve se ve igual y es más liviano */
     const vec3 LH = vec3(-5.5, 0., -20.);   // el faro (su base, sobre el acantilado)
     vec3 Ldir() { return normalize(vec3(.32, uNight > .5 ? .2 : .09, -1.)); }
     // el acantilado: un cabo que entra al mar con paredes casi verticales, pasto arriba, y una costa baja a lo lejos
     float cliff(vec2 xz) {
-      vec2 c = (xz - vec2(-6.5, -21.)) * vec2(1., .7); float d = min(length(c) - 6., (xz.x + 11.) * .8) + 2.4 * fbm(xz * .12);   // un cabo que sale de la costa
-      float top = 4.6 + .6 * fbm(xz * .3), wall = smoothstep(1.2, -1.4, d);
-      float far_ = smoothstep(55., 90., -xz.y) * (1.5 + 4. * fbm(xz * .03));
+      vec2 c = (xz - vec2(-6.5, -21.)) * vec2(1., .7); float d = min(length(c) - 6., (xz.x + 11.) * .8) + 2.4 * fb3(xz * .12);   // un cabo que sale de la costa
+      float top = 4.6 + .6 * vn(xz * .3), wall = smoothstep(1.2, -1.4, d);
+      float far_ = smoothstep(55., 90., -xz.y) * (1.5 + 4. * fb3(xz * .03));
       return max(top * wall, far_) - 1.2 + (1. - wall) * .5 * vn(xz * .9) * smoothstep(3., 0., d);   // y piedras sueltas al pie
     }
     float tower(vec3 p, out float m) {
@@ -7415,7 +7416,8 @@ function fr3Setup() {
       float tW = rd.y < 0. ? -ro.y / rd.y : 1e9, t = .2, tH = 1e9;
       for (int i = 0; i < 100; i++) { vec3 q = ro + rd * t; float hh = q.y - cliff(q.xz); if (hh < .01 * t) { tH = t; break; } if (t > min(tW, 130.)) break; t += max(.04, hh * .45); }
       if (tH < 1e8) { float lo = max(.2, tH - .7), hi = tH; for (int k = 0; k < 8; k++) { float mid = (lo + hi) * .5; vec3 q = ro + rd * mid; if (q.y - cliff(q.xz) < 0.) hi = mid; else lo = mid; } tH = hi; }   // el punto exacto donde el rayo toca la roca: sin vetas ni escalones en las paredes
-      float tt = .1, tm = 0., tT = 1e9; for (int i = 0; i < 70; i++) { float d = tower(ro + rd * tt, tm); if (d < .003) { tT = tt; break; } tt += d; if (tt > 45.) break; }
+      float tt = .1, tm = 0., tT = 1e9; vec3 tc_ = LH + vec3(0., 6., 0.) - ro; float tca = dot(tc_, rd); bool nearT = tca > 0. && length(tc_ - rd * tca) < 4.;   /* la torre solo se busca si el rayo pasa cerca */
+      if (nearT) for (int i = 0; i < 70; i++) { float d = tower(ro + rd * tt, tm); if (d < .003) { tT = tt; break; } tt += d; if (tt > 45.) break; }
       vec3 col; vec3 lamp = LH + vec3(0., 4.4 + 4.2 + .45, 0.);
       if (tT < min(tH, tW)) {
         vec3 p = ro + rd * tT; float m_; vec2 e = vec2(.003, 0.);
@@ -7431,7 +7433,7 @@ function fr3Setup() {
         vec3 p = ro + rd * tW; vec2 w = p.xz;
         float nx = (vn(w * vec2(.9, 2.2) + vec2(uT * .3, 0.)) - vn(w * vec2(.9, 2.2) + vec2(.3 + uT * .3, 0.))) * .05, nz = (vn(w * vec2(1.2, 3.) + vec2(0., uT * .25)) - vn(w * vec2(1.2, 3.) + vec2(0., .3 + uT * .25))) * .06;
         vec3 n = normalize(vec3(nx, 1., nz)), rr = reflect(rd, n);
-        float t2 = .2, hit2 = 0.; for (int i = 0; i < 40; i++) { vec3 q = p + rr * t2; float hh = q.y - cliff(q.xz); if (hh < .02 * t2) { hit2 = 1.; break; } if (t2 > 110.) break; t2 += max(.1, hh * .6); }
+        float t2 = .2, hit2 = 0.; for (int i = 0; i < 28; i++) { vec3 q = p + rr * t2; float hh = q.y - cliff(q.xz); if (hh < .03 * t2) { hit2 = 1.; break; } if (t2 > 110.) break; t2 += max(.15, hh * .75); }
         vec3 rc = hit2 > .5 ? shadeCliff(p + rr * t2, rr, tW + t2) : sky(rr);
         float fres = .2 + .8 * pow(1. - max(rr.y, 0.), 4.);
         col = mix(uDeep, rc, fres * .92);
@@ -7444,11 +7446,11 @@ function fr3Setup() {
       // el haz del faro: gira, atraviesa la bruma (con polvo de luz) y crece con los graves
       float tMax = min(min(tH, tW), min(tT, 140.));
       for (int k = 0; k < 2; k++) {   // dos haces opuestos, como los faros de verdad
-        float ang = 1.35 + 1.25 * sin(uPh) + float(k) * 3.14159; /* el haz barre el cielo de lado a lado frente a la cámara */ vec3 bd = normalize(vec3(cos(ang), -.03, sin(ang))); vec3 w0 = ro - lamp; float b_ = dot(rd, bd), d_ = dot(rd, w0), e_ = dot(bd, w0), den = max(1. - b_ * b_, 1e-4);
+        float ang = -.3 + .85 * sin(uPh) + float(k) * 3.14159; /* el haz barre el horizonte de lado a lado, sin deslumbrar a la cámara */ vec3 bd = normalize(vec3(cos(ang), -.03, sin(ang))); vec3 w0 = ro - lamp; float b_ = dot(rd, bd), d_ = dot(rd, w0), e_ = dot(bd, w0), den = max(1. - b_ * b_, 1e-4);
         float sc = (b_ * e_ - d_) / den, tc = (e_ - b_ * d_) / den;   // los puntos más cercanos entre el rayo de la vista y el haz
         if (sc > 0. && sc < tMax && tc > 0.) { float dd = length((ro + rd * sc) - (lamp + bd * tc)), wdt = .3 + tc * .1;
           float beam = exp(-dd * dd / (wdt * wdt)) * exp(-tc * .02) * (.65 + .35 * fbm(vec2(tc * .4 - uT * .3, dd * 2.)));
-          col += mix(uWarm, vec3(1., .96, .85), .5) * beam * (.4 + .7 * uPw + 1.6 * uKick) * (uNight > .5 ? 1. : .6); } }   // el bombo enciende el haz
+          col += mix(uWarm, vec3(1., .96, .85), .22) * beam * (.4 + .7 * uPw + 1.6 * uKick) * (uNight > .5 ? 1. : .6); } }   // el bombo enciende el haz
       // el halo de la linterna
       { vec3 lp = lamp - ro; float al = dot(lp, rd), dl = length(lp - rd * al); if (al > 0.) col += uWarm * (.6 + 1.6 * uKick) * (exp(-dl * (5. - 2. * uKick)) * .5 + exp(-dl * (1.2 - .5 * uKick)) * .14) * (uNight > .5 ? 1. : .5); }
       col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
