@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 272</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 273</div>
     </div>
   </div>
   <div class="group">
@@ -6161,15 +6161,15 @@ function drawStars(dt) {
     ambient(); }
   // como Infinito: la parte de la canción marca la velocidad del viaje (pasea en la estrofa, vuela en el coro)
   // y cada golpe da un empujón que se ve (sube al instante y se va en ~0,4 s)
-  if (pulse.on && !pulse.melo) starSky.kv = (starSky.kv || 0) + 0.008 + 0.018 * pulse.k;
+  if (pulse.on && !pulse.melo) starSky.kv = (starSky.kv || 0) + 0.014 + 0.026 * pulse.k;
   starSky.kb = (starSky.kb || 0) + ((starSky.kv || 0) - (starSky.kb || 0)) * (1 - Math.pow(0.00002, dt));
-  starSky.kv = (starSky.kv || 0) * Math.pow(0.12, dt);
-  starSky.sp = (starSky.sp || 0) + ((0.002 + Math.pow(dynL, 1.6) * 0.016 * Math.min(1, energy * 5)) - (starSky.sp || 0)) * (1 - Math.pow(0.3, dt));
+  starSky.kv = (starSky.kv || 0) * Math.pow(0.03, dt);   /* el empujón, corto: cae en el golpe */
+  starSky.sp = (starSky.sp || 0) + ((0.0015 + Math.pow(dynL, 1.6) * 0.005 * Math.min(1, energy * 5)) * musicGate - (starSky.sp || 0)) * (1 - Math.pow(0.3, dt));
   const speed = starSky.sp + starSky.kb;
   // Onda que recorre el cielo desde el centro en cada golpe, encendiendo las estrellas a su paso
   // Solo con golpes reales de la canción (nada de latido propio) y muy tenue
-  if (pulse.on && !pulse.melo) starSky.waves.push({ r: 0, k: 0.35 + pulse.k * 0.5 });
-  starSky.waves.forEach(w => { w.r += dt * 1.8; w.k *= Math.pow(0.25, dt); });
+  if (pulse.on && !pulse.melo) starSky.waves.push({ r: 0, k: 0.6 + pulse.k * 0.6 });
+  starSky.waves.forEach(w => { w.r += dt * 2.6; w.k *= Math.pow(0.08, dt); });   /* la onda del golpe cruza rápido y se apaga en su tiempo */
   starSky.waves = starSky.waves.filter(w => w.r < 1.3 && w.k > 0.03);
   // Constelaciones reales: de vez en cuando aparece una (con un golpe de medios o en un drop), sus
   // líneas se trazan una a una con cada golpe, se queda un rato y se desvanece
@@ -6193,7 +6193,7 @@ function drawStars(dt) {
     let wave = 0; const dc = Math.hypot(s_.x - 0.5, (s_.y - 0.5) * H / W);
     for (const w of starSky.waves) wave += w.k * Math.exp(-Math.pow((dc - w.r) * 14, 2));
     // Cada estrella brilla con su propia frecuencia: unas titilan con la voz, otras con los platillos
-    const b = Math.min(1.3, musicGate * (0.5 + s_.z * 0.45) * tw + s_.base * tw * (0.5 + musicGate * 0.5 + energy * 0.5) + lv * (0.9 + s_.z * 1.2) * (0.6 + 0.4 * musicGate) + near * 0.8 + wave);   // con cualquier sonido el cielo está presente
+    const b = Math.min(1.3, musicGate * (0.5 + s_.z * 0.45) * tw + s_.base * tw * (0.5 + musicGate * 0.5 + energy * 0.5) + lv * (0.9 + s_.z * 1.2) * (0.6 + 0.4 * musicGate) + near * 0.8 + wave + Math.max(0, pulse.x) * 0.55 * musicGate);   // con cualquier sonido el cielo está presente; con el bombo, todo el cielo titila a la vez
     const col = s_.c < 0 ? [235, 238, 255] : RGB[s_.c];
     const r = DPR * (0.35 + s_.z * 0.95) * (1 + lv * 0.45 + near * 0.5);
     ctx.globalAlpha = Math.min(1, b);
