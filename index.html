@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 294</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 295</div>
     </div>
   </div>
   <div class="group">
@@ -8318,6 +8318,65 @@ function glassDrop(x, y, r, stretch = 1) {   // una gota: lente que invierte el 
   ctx.fillStyle = g; ctx.beginPath(); ctx.ellipse(x, y, r, r * stretch, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.beginPath(); ctx.ellipse(x - r * 0.35, y - r * 0.4 * stretch, r * 0.22, r * 0.14 * stretch, -0.5, 0, Math.PI * 2); ctx.fill();
 }
+// Ventana: una ventana de verdad en una noche de lluvia. Detrás, luces de ciudad desenfocadas (colores de la portada);
+// sobre el vidrio empañado, gotas pequeñas quietas y gotas grandes que resbalan dejando su rastro; cada gota es un lente
+// que muestra las luces invertidas y nítidas. Resbalan al ritmo; el bombo las empuja; la voz enciende una ventana cálida.
+const win_ = { prog: null, t: 0, kk: 0, vo: 0, C: new Float32Array(12), lv: new Float32Array(4) };
+function winSetup() {
+  win_.prog = glProgram(`uniform vec2 uRes; uniform float uT, uKick, uNight, uGate, uVo; uniform vec3 uC[4], uBg, uMel; uniform float uLv[4];
+    float hs(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 city(vec2 p, float soft) {   // las luces de la ciudad detrás del vidrio (soft: 1 empañado, 0 nítido)
+      vec3 col = mix(uBg * .6, uBg * 1.4, smoothstep(0., 1., p.y));
+      for (int L = 0; L < 3; L++) { float fl = float(L); vec2 g = p * (3. + fl * 2.) + fl * 5.1; vec2 gi = floor(g), gf = fract(g) - .5;
+        float h = hs(gi + fl); if (h > .45) { int ci = int(mod(h * 37., 4.)); vec3 c = uC[0]; float lv = uLv[0]; for (int k = 1; k < 4; k++) if (k == ci) { c = uC[k]; lv = uLv[k]; }
+          vec2 o = (vec2(hs(gi + 2.), hs(gi + 5.)) - .5) * .2; float r = .09 + .1 * hs(gi + 9.);   /* cada luz cabe en su celda (nunca sale cortada) */
+          float b = smoothstep(r + .04 + soft * .14, r - .03, length(gf - o)) * smoothstep(.2, .55, p.y + .1 * fl);
+          col += c * b * (.35 + .6 * lv) * (.5 + .5 * uGate); } }
+      col += mix(uMel, vec3(1., .75, .45), .5) * exp(-pow(length((p - vec2(.62, .6)) * vec2(1.5, 1.)) / (.14 + .1 * soft), 2.)) * uVo * .8;   // la voz: una ventana cálida al fondo
+      return col;
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec2 off = vec2(0.); float wet = 0., trail = 0.;
+      // gotas pequeñas quietas
+      for (int k = 0; k < 2; k++) { vec2 g = p * (17. + 9. * float(k)) + float(k) * 3.7; vec2 gi = floor(g), gf = fract(g) - .5; float h = hs(gi + float(k) * 11.); vec2 o = (vec2(hs(gi + 1.), hs(gi + 3.)) - .5) * .7;   /* gotas al azar, de varios tamaños */
+        float r = (.06 + .2 * fract(h * 7.)) * step(.62, h); vec2 d = gf - o; float m = r > .001 ? smoothstep(r, r * .6, length(d)) : 0.; off += d * m * .9; wet = max(wet, m); }   /* sin gota, nada (evita un cálculo inválido) */
+      // gotas grandes que resbalan, cada una por su columna, con su rastro de gotitas
+      for (int k = 0; k < 2; k++) { float fk = float(k); vec2 g = vec2(p.x * (7. + fk * 3.), p.y); float col_ = floor(g.x), hx = hs(vec2(col_, fk));
+        float sp = .1 + .15 * hx, y = 1.15 - fract(uT * sp + hx * 7.) * 1.4, x = col_ + .5 + .25 * sin(p.y * 9. + hx * 20.) * .3;
+        vec2 d = vec2((g.x - x) / (7. + fk * 3.) * asp, p.y - y) * vec2(1., 1.); float R = .018 + .012 * hx;
+        float m = smoothstep(R, R * .55, length(d * vec2(1., .8))); off += d / R * m * .025; wet = max(wet, m);
+        float tr = smoothstep(.02, .0, abs(d.x)) * smoothstep(y, y + .25, p.y) * smoothstep(y + .45, y + .1, p.y); trail = max(trail, tr * step(.5, hx)); }
+      float soft = (1. - wet) * (1. - trail * .8);
+      vec3 col = city(p - off * 1.1, soft) * (1. + .25 * wet);   /* la gota: un lente que aclara lo de atrás */
+      col += mix(col, vec3(1.), .5) * pow(wet, 3.) * .15;   // el brillo de la gota (agua, no mancha)
+      col = mix(col, col * 1.08 + .03, soft * .25);   // el vaho del vidrio
+      if (uNight < .5) col = mix(col, col * .85 + .18, .4);
+      col *= 1. - .12 * pow(length(vUv - .5) * 1.3, 2.);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawWindow(dt) {
+  if (!glInit()) return drawGlass(dt);
+  if (!win_.prog) winSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  if (pulse.on && !pulse.melo) { nudgeAdd('win', 0.35 * musicGate); win_.kk = 1; }
+  win_.kk *= Math.exp(-dt * 5);
+  win_.t += dt * musicGate * (0.6 + energy * 1.4) + nudgeTake('win', dt);
+  win_.vo += (Math.min(1, voice * 1.4) - win_.vo) * (1 - Math.pow(0.05, dt));
+  [[0, 10], [10, 24], [24, 38], [38, BANDS]].forEach(([a, b], k) => { const v = Math.pow(bandX(a, b), 1.2) * musicGate + (k === 0 ? P * 0.4 : 0); win_.lv[k] += (v - win_.lv[k]) * (1 - Math.pow(v > win_.lv[k] ? 0.001 : 0.06, dt)); });
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], 58), sat(RGB[1], 62), sat(RGB[2], 56), sat(mix(0.5), 66)].forEach((c, k) => win_.C.set(c, k * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(0.85), p = win_.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, win_.t); gl.uniform1f(p.u.uKick, win_.kk); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uGate, musicGate); gl.uniform1f(p.u.uVo, win_.vo);
+  gl.uniform3fv(p.u['uC[0]'], win_.C); gl.uniform1fv(p.u['uLv[0]'], win_.lv); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255)); gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 35, night ? 8 : 60)).map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.3 + P * 0.2);
+}
 function drawGlass(dt) {
   const night = state.theme === 'dark';
   if (glass.key !== W + 'x' + H) { glass.small = []; glass.big = []; glass.key = W + 'x' + H; }
@@ -15236,7 +15295,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawFocos, aura: drawAura, infinity: drawInfinity };
+const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawWindow, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawFocos, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
