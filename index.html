@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 258</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 259</div>
     </div>
   </div>
   <div class="group">
@@ -6478,7 +6478,12 @@ const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, u
     vec3 warm = mix(vec3(1., .93, .84), uC2, .25);
     vec3 a = mix(warm, uC0, smoothstep(.05, .5, d));
     a = mix(a, uC1, smoothstep(.4, .85, d));
-    a *= 1. + (.05 + .2 * uLv.y) * sin((d * 3. - uPh) * 6.2832) * smoothstep(1., .3, d);   // las ondas de luz se marcan más con los medios                          // ondas de luz suaves, no de color
+    // anillos de color que nacen del centro y fluyen hacia afuera al ritmo (hipnótico): cada uno toma otro color de la portada
+    float wv = fract(d * 4.5 - uPh * 1.6), band_ = floor(d * 4.5 - uPh * 1.6);
+    vec3 rc = mod(band_, 3.) < 1. ? uC0 : mod(band_, 3.) < 2. ? uC1 : uC2;
+    float ringL = smoothstep(.0, .25, wv) * smoothstep(1., .55, wv);
+    a = mix(a, mix(a, rc * 1.15, .55), ringL * smoothstep(1.02, .15, d) * (.55 + .45 * uLv.y));
+    a *= 1. + (.12 + .25 * uLv.y + .3 * uP) * sin((d * 4.5 - uPh * 1.6) * 6.2832) * smoothstep(1., .2, d);   // las ondas de luz se marcan más con los medios                          // ondas de luz suaves, no de color
     a += warm * exp(-d * d * 6.) * (.06 + .35 * uVo + .35 * uP);   // el centro se enciende con la voz y el golpe
     float m = smoothstep(1.03, .8, d);
     a += mix(uC1, warm, .35) * exp(-pow((d - .97) / (.025 + .02 * uP), 2.)) * (.15 + .5 * uP + .45 * uLv.z);   // el borde, luz de su color   // el borde brilla con los agudos y el golpe                // un borde de luz fino que lo dibuja
@@ -11451,7 +11456,9 @@ function sphereSetup() {
       float z = sqrt(max(0., 1. - min(1., r * r)));
       float a = uSw * (1. - r * .7), c = cos(a), s = sin(a);
       vec2 q = mat2(c, -s, s, c) * p;
+      vec3 nn = vec3(p.x, p.y, z); { float ca = cos(uSw * .5), sa = sin(uSw * .5); nn.xz = mat2(ca, -sa, sa, ca) * nn.xz; float cb = cos(.35), sb = sin(.35); nn.yz = mat2(cb, -sb, sb, cb) * nn.yz; }
       vec2 uv = .5 + q * .42 / (.55 + .45 * z);
+      vec3 mv = nn * 1.4; for (int k = 0; k < 5; k++) { float fk = float(k) + 1.; mv += .22 / fk * sin(mv.yzx * (2.2 * fk) + uSw * (.35 + .1 * fk) + fk); }   // las vetas, en 3D: giran con el globo sin costuras
       // adentro, un líquido marmoleado: la portada se arremolina en vetas que fluyen con la música (hipnótico, nunca quieto)
       for (int k = 0; k < 6; k++) { float fk = float(k) + 1.; uv += .07 / (fk * fk * .5 + .5) * vec2(sin(uv.y * 5. * fk + uSw * (.9 + .25 * fk) + fk * 1.7), cos(uv.x * 4.5 * fk - uSw * (.8 + .2 * fk) + fk * .9)) * (.8 + .2 * uRim); }
       // el borde separa un poco los colores, como un prisma
@@ -11461,7 +11468,7 @@ function sphereSetup() {
       for (int k = 0; k < 12; k++) { float an = float(k) * 2.399, rb = sqrt(float(k) / 12.) * .09; vec2 o2 = vec2(cos(an), sin(an)) * rb;
         inner += vec3(coverAt(uv * (1. - ch) + .5 * ch + o2).r, coverAt(uv + o2).g, coverAt(uv * (1. + ch) - .5 * ch + o2).b); }
       inner /= 12.;
-      { float t1 = .5 + .5 * sin((uv.x * .8 + uv.y) * 7. + uSw * .5), t2 = .5 + .5 * sin(uv.x * 9. - uv.y * 5. - uSw * .8);   // las vetas del mármol, con los colores vivos de la portada
+      { float t1 = .5 + .5 * sin((mv.x + mv.y * .8) * 3.2 + mv.z * 1.5), t2 = .5 + .5 * sin(mv.y * 4. - mv.z * 2.5 + mv.x);   // las vetas del mármol, con los colores vivos de la portada
         vec3 mb = mix(mix(uK0, uK1, smoothstep(.05, .95, t1)), uK2, smoothstep(.3, 1., t2) * .6);
         mb += mix(mb, vec3(1.), .5) * pow(t1 * t2, 6.) * .5;
         inner = mix(inner, mb, .78); }
@@ -11470,6 +11477,8 @@ function sphereSetup() {
       inner += mix(uAvg, vec3(1.), .4) * exp(-dot(p - vec2(-.35, .38), p - vec2(-.35, .38)) * 6.) * (.14 + uHi * .2);   // luz suave arriba
       float rim = exp(-pow((r - .97) * 16., 2.));
       inner += uMel * 1.1 * rim * (.25 + uRim * .7);   // el borde se enciende de su color (no de blanco)
+      inner += mix(uK1, uMel, .3) * pow(1. - z, 3.) * (.45 + .5 * uRim);                          // el borde del vidrio, de su color (fresnel)
+      inner += mix(uAvg, vec3(1.), .6) * pow(max(0., dot(normalize(vec3(p, z)), normalize(vec3(-.45, .55, .7)))), 40.) * .5;   // el reflejo de una ventana en el vidrio
       float edge = smoothstep(1.06, .84, r);   // borde muy suave, como fuera de foco
       col = mix(col, inner, edge);
       // el sonido dibujado alrededor: un aro de luz fino cuyo radio sigue el espectro (graves arriba, agudos
