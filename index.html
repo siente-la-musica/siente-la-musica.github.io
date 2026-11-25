@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 264</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 265</div>
     </div>
   </div>
   <div class="group">
@@ -6309,7 +6309,7 @@ const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uF
       c += mix(uW2, vec3(1.), .4) * exp(-d * 45.) * (.12 + .7 * hit) * (.3 + lk);
       c *= 1. + .3 * hit * smoothstep(.0, .06, d) * (1. - .5 * uNight * 0.);   // el golpe enciende la ola entera al pasar, no solo su cresta
       c = mix(c, uSun * .9 + .1, exp(-d * 60.) * exp(-pow((p.x - sc.x) / (asp * .25), 2.)) * (.5 - fk * .05) * smoothstep(5., 0., fk));   // la cresta de atrás, encendida por el sol
-      float lv_ = d * (140. - fk * 8.) - uT * .3 * uFlow, fw = fwidth(lv_), lines = abs(fract(lv_) - .5);
+      float lv_ = d * (140. - fk * 8.) - uPh * .9, fw = fwidth(lv_), lines = abs(fract(lv_) - .5);
       c += vec3(.9, .95, 1.) * smoothstep(fw * 1.2, 0., lines - .5 + fw * 1.5) * (.04 + .14 * uLv.z + .1 * hit) * clamp(1. - d * 3., 0., 1.);
       col = c; }
     col *= 1. - .2 * smoothstep(.55, 1.15, length((vUv - .5) * vec2(1., .9)) * 1.25);
@@ -6321,7 +6321,7 @@ function drawDunas(dt) {
   const S = PAI.dun, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
   const cov = (t, l) => paiTone(mix(t), l, 50, 85);
   if (pulse.on && musicGate > 0.3) S.sg = 1; S.sg = (S.sg || 0) * Math.exp(-dt * 7);   // cada bombo da un empujón suave al viento de las dunas
-  S.ph = (S.ph || 0) + dt * S.go * (0.15 + 0.6 * S.en + 0.25 * S.lv[0]) * (0.75 + 1.1 * S.sg);
+  S.ph = (S.ph || 0) + dt * S.go * (0.15 + 0.6 * S.en + 0.25 * S.lv[0]) * (0.5 + 2.4 * S.sg);
   if (pulse.on) S.beat = 9; S.beat = Math.max(-3, (S.beat ?? -3) - dt * 16);
   S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); const h = attHit(a, a + Math.ceil(BANDS / 10)); if (h > 0) S.L[k] = Math.min(1.4, S.L[k] + 0.35 + 0.35 * h); }   // cada nota de su parte (piano, sinte, voz) levanta su ola
   const pal = night ? { s0: [0.06, 0.08, 0.18], s1: [0.02, 0.03, 0.09], sun: [0.95, 0.42, 0.25], w0: [0.3, 0.42, 0.7], w1: [0.04, 0.07, 0.2] }
@@ -10067,7 +10067,7 @@ function harpSetup() {
           sc = mix(sc, uMel, uVoice * .3);                                 // mientras se canta, todo se tiñe de la nota
           sc = mix(sc, vec3(1.), .05 + .22 * r3 * r3);
           vec3 hot = mix(sc, vec3(1.), .65), mel = mix(uMel, vec3(1.), .3);
-          float tipK = (.6 + uTip * .9 + uP * .35) * (.5 + .5 * sheet);
+          float tipK = (.6 + uTip * .9 + uP * .9) * (.5 + .5 * sheet);
           if (uNight > .5) add += line * (sc * body * b + hot * tip * tipK + mel * (flow + syl * 1.3));
           else {
             vec3 silk = mix(sc, sc * sc, .5);    // de día, hilos de seda de color sobre blanco (con cuerpo)
@@ -10076,7 +10076,7 @@ function harpSetup() {
         }
       }
       if (uNight > .5) {
-        col += add * (1. + uP * .25);
+        col += add * (1. + uP * .7);   // los hilos se encienden con cada bombo
         float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .25) * exp(-eg * eg) * (.1 + uTip * .1 + uP * .08) * sheet;   // el borde, una línea de luz de color
       } else {   // un resplandor de color por el borde de la cortina, como luz sobre el papel
         float eg = (t - lenH) / .07; col = mix(col, mix(pal(hueX), vec3(1.), .35), exp(-eg * eg) * (.18 + uP * .1));
@@ -13559,7 +13559,7 @@ function drawDisco(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
   // gira al compás: una vuelta cada 16 golpes, y en silencio se detiene despacio
   const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5;
-  if (pulse.on && !pulse.melo) { nudgeAdd('disco', 0.07 + 0.06 * pulse.k); disco.kk = 1; } disco.kk = (disco.kk || 0) * Math.exp(-dt * 6);   // cada bombo: la bola da un tirón y late
+  if (pulse.on && !pulse.melo) { nudgeAdd('disco', 0.14 + 0.1 * pulse.k); disco.kk = 1; } disco.kk = (disco.kk || 0) * Math.exp(-dt * 6);   // cada bombo: la bola da un tirón y late
   disco.rot += dt * (Math.PI * 2 / (16 * per)) * Math.min(1, energy * 3 + 0.45 * musicGate) + nudgeTake('disco', dt);   // también gira en las partes suaves (piano, voz sola)
   // los focos: cada uno con su parte del sonido, encendidos de golpe y apagándose suave
   const tgt = [bandX(0, 10), bandX(12, 34) * 0.7 + voice * 0.6, bandX(34, BANDS)];
@@ -13578,8 +13578,9 @@ function drawDisco(dt) {
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 1000); gl.uniform1f(p.u.uRot, disco.rot); gl.uniform1f(p.u.uSpark, disco.spark * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uR, Math.min(0.3, 0.3 * W / H) * (1 + P * 0.015 + disco.kk * 0.035)); gl.uniform2f(p.u.uC, 0.5, 0.52); gl.uniform1f(p.u.uSway, Math.sin(disco.sway));
-  { const h1 = n => { const v = Math.sin(n * 91.345) * 47453.53; return v - Math.floor(v); }, T = time % 1000, rot = disco.rot, asp = W / H;
+  gl.uniform1f(p.u.uR, Math.min(0.3, 0.3 * W / H) * (1 + P * 0.015 + disco.kk * 0.06)); gl.uniform2f(p.u.uC, 0.5, 0.52); gl.uniform1f(p.u.uSway, Math.sin(disco.sway));
+  disco.tw = (disco.tw || 0) + dt * musicGate * (0.3 + energy * 1.2) + disco.kk * dt * 3;   // los destellos titilan con la música (no con el reloj)
+  { const h1 = n => { const v = Math.sin(n * 91.345) * 47453.53; return v - Math.floor(v); }, T = disco.tw % 1000, rot = disco.rot, asp = W / H;
     const sp = disco.spA || (disco.spA = new Float32Array(184)), st = disco.stA || (disco.stA = new Float32Array(40));
     for (let i = 0; i < 46; i++) { const a = h1(i) * 6.283 + rot * (0.9 + h1(i + 3) * 0.3), r = 0.32 + h1(i + 7) * 0.75;
       sp.set([Math.cos(a) * r * Math.max(asp, 1) * 0.62, Math.sin(a) * r * 0.55, 0.006 + h1(i + 11) * 0.014, 0.4 + 0.6 * Math.pow(0.5 + 0.5 * Math.sin(T * (2 + h1(i + 5) * 5) + i), 2)], i * 4); }
