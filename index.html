@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 280</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 281</div>
     </div>
   </div>
   <div class="group">
@@ -12215,10 +12215,9 @@ function citySetup() {
         vec3 rq = hb.x > hb.y ? q : q.zyx; vec2 rb = hb.x > hb.y ? hb : hb.yx; rb += .12;
         float roof;
         if (rf < .01) {   // techo plano: una cornisa que sobresale un poco
+          // la azotea: un pretil alrededor del borde (terraza) y, en algunas, una jardinera con plantas
           roof = sdBox(q - vec3(0., hh + .06, 0.), vec3(hb.x + .08, .07, hb.y + .08));
-          // en la azotea: un tanque de agua o el cuartito de la escalera
-          vec2 rc = vec2((r.y - .5) * hb.x, (r.z - .5) * hb.y) * .8;
-          roof = min(roof, r2.z > .5 ? length(vec2(length(q.xz - rc) - .28, 0.)) * 0. + max(length(q.xz - rc) - .2, abs(q.y - hh - .38) - .22) : sdBox(q - vec3(rc.x, hh + .24, rc.y), vec3(.26, .2, .22)));
+          if (r2.z > .45) { float pl = sdBox(q - vec3(0., hh + .2, (r.y > .5 ? 1. : -1.) * (hb.y - .2)), vec3(hb.x - .2, .1, .1)) - .03; if (pl < res.x) res = vec2(pl, 4.); }
           if (roof < res.x) res = vec2(roof, 2.); roof = 1e3;
         } else if (tw > .5) {   // techo en punta de cuatro aguas
           roof = max(sdBox(rq - vec3(0., hh + rf * .5, 0.), vec3(rb.x, rf * .5, rb.y)), (max(abs(rq.x) / rb.x, abs(rq.z) / rb.y) * rf + rq.y - hh - rf) / sqrt(1. + rf * rf / (rb.x * rb.x)));
@@ -12296,6 +12295,7 @@ function citySetup() {
           alb = mix(uWall, uWall * tint * 1.08, .55) * (.86 + .22 * r.z) * (.92 + .12 * vn(vec2(q.x + q.z, q.y) * 4.));
           if (q.y < .32) alb *= .62;                                                     // zócalo de piedra
           if (n.y > .6) alb = mix(uWall * .5, uFog * .4, .3) * (.85 + .2 * vn(p.xz * 3.));   // la azotea de los edificios: concreto, más hondo
+          if (n.y > .6 && rf < .01) alb = mix(alb, uWall * .95, smoothstep(-.16, -.1, max(abs(q.x) - hb.x, abs(q.z) - hb.y)));   /* el pretil: el borde de la terraza, más claro */
           if (rf < .01 && abs(n.y) < .3) alb *= .9 + .1 * smoothstep(.0, .04, abs(fract((q.y - .4) / .92) - .02));   // la franja que marca cada piso
         } else if (mat < 3.5) {
           vec3 rq = hb.x > hb.y ? q : q.zyx; float along = rq.x * 3.2, down = (abs(rq.z) + (hh + rf - rq.y)) * 4.2;
