@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 247</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 248</div>
     </div>
   </div>
   <div class="group">
@@ -7326,7 +7326,7 @@ function drawLago3D(dt) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; glSoftUp(cw); ctx.drawImage(GLX.c, 0, 0, W, H); ctx.filter = 'none';
   if (night) bloom(GLX.c, 0.22 + 0.1 * Math.min(1, lk.lamp));
   ctx.restore();
 }
@@ -7403,7 +7403,7 @@ function fr3Setup() {
         vec3 p = ro + rd * tT; float m_; vec2 e = vec2(.003, 0.);
         vec3 n = normalize(vec3(tower(p + e.xyy, m_) - tower(p - e.xyy, m_), tower(p + e.yxy, m_) - tower(p - e.yxy, m_), tower(p + e.yyx, m_) - tower(p - e.yyx, m_)));
         vec3 L = Ldir(); float dif = smoothstep(-.1, .5, dot(n, normalize(vec3(L.x + .6, .5, L.z + .8))));
-        vec3 alb = tm < 1.5 ? mix(mix(vec3(.92, .9, .84), uAcc, step(.5, fract((p.y - LH.y - 4.4) / 1.4 + .25))), vec3(.62, .6, .58), step(p.y, LH.y + 5.))  * (.85 + .2 * vn(vec2(atan(p.x - LH.x, p.z - LH.z) * 6., p.y * 3.))) : tm < 2.5 ? vec3(.22, .22, .26) : tm < 3.5 ? vec3(1.) : uAcc;   // piedra clara con zócalo, hierro oscuro, la linterna y el techo
+        vec3 alb = tm < 1.5 ? mix(mix(vec3(.92, .9, .84), uAcc, smoothstep(.5 - fwidth(p.y) / 1.4 - .01, .5 + fwidth(p.y) / 1.4 + .01, abs(fract((p.y - LH.y - 4.4) / 1.4 + .25) - .5) * 2.)), vec3(.62, .6, .58), smoothstep(LH.y + 5. + fwidth(p.y) + .02, LH.y + 5. - fwidth(p.y) - .02, p.y))  * (.85 + .2 * vn(vec2(atan(p.x - LH.x, p.z - LH.z) * 6., p.y * 3.))) : tm < 2.5 ? vec3(.22, .22, .26) : tm < 3.5 ? vec3(1.) : uAcc;   // piedra clara con zócalo, hierro oscuro, la linterna y el techo
         col = alb * ((uNight > .5 ? vec3(.16, .19, .36) : vec3(.45, .48, .72)) + (uNight > .5 ? vec3(.5, .58, .92) : vec3(1., .82, .6)) * dif * .85);
         col += (uNight > .5 ? vec3(.4, .5, .9) : vec3(1., .8, .55)) * pow(1. - max(dot(n, -rd), 0.), 3.) * .3;
         if (tm > 2.5 && tm < 3.5) col = mix(uWarm, vec3(1., .97, .85), .5) * (1.1 + 1.2 * uKick) * (.6 + .4 * uPw);   // la linterna encendida
@@ -7464,7 +7464,7 @@ function drawLuz3D(dt) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; glSoftUp(cw); ctx.drawImage(GLX.c, 0, 0, W, H); ctx.filter = 'none';
   if (night) bloom(GLX.c, 0.16 + 0.12 * fr3.kk);
   ctx.restore();
 }
@@ -8906,6 +8906,9 @@ function recPerf(ms, dt) {
   if (recSlow > 0.35 && recGL > floor) { recGL = Math.max(floor, recGL - 0.1); recSlow = 0; recDropped = true; }
   else if (recFast > 4 && recGL < 1 && !recDropped) { recGL = Math.min(1, recGL + 0.1); recFast = 0; }   // si ya tuvo que bajar, no vuelve a subir: subir y bajar en ciclo daba tirones (cada cambio rehace el lienzo)
 }
+// al ampliar una escena dibujada a poca resolución (al grabar en un equipo justo), un suavizado leve: los bordes se ven
+// como pintura suave y no en escalones de píxeles
+function glSoftUp(cw) { const r = W / cw; if (r > 1.35) ctx.filter = `blur(${Math.min(1.6, (r - 1) * 0.5).toFixed(2)}px)`; }
 function glCanvas(q) {
   q *= recGL;
   // como mucho ~2,2 millones de píxeles (un 1080p): en pantallas retina o 4K los efectos se dibujaban a 5-8
@@ -9632,7 +9635,69 @@ function curtainInit() {
   curtain.bokeh = Array.from({ length: 5 }, () => ({ x: Math.random(), y: Math.random(), r: 0.04 + Math.random() * 0.05, c: Math.floor(Math.random() * 3), ph: Math.random() * 100, v: 0.004 + Math.random() * 0.008 }));
   curtain.key = n;
 }
+// la cortina en la GPU: miles de hilos finos de luz en cuatro capas de profundidad (la del medio nítida, las de adelante y
+// atrás desenfocadas), por los que bajan gotas de luz sin parar; cada columna escucha su parte del sonido; la voz la mece;
+// cada bombo cruza una ola de luz de lado a lado y empuja las gotas. Colores de la portada, en degradado a lo ancho.
+const curG = { prog: null, flow: 0, sway: 0, wave: 9, waveK: 0, vo: 0, lv: new Float32Array(16), v: new Float32Array(16), C: new Float32Array(12) };
+function curGSetup() {
+  curG.prog = glProgram(`uniform vec2 uRes; uniform float uFlow, uSway, uWave, uWaveK, uVo, uGate, uNight, uKick; uniform float uLv[16]; uniform vec3 uC[4], uBg;
+    float hs(float n) { return fract(sin(n * 91.345) * 47453.53); }
+    vec3 pal(float t) { t = clamp(t, 0., 1.) * 3.; int i = int(min(t, 2.999)); float f = smoothstep(0., 1., fract(t)); vec3 a = uC[0], b = uC[1];
+      for (int k = 0; k < 3; k++) if (k == i) { a = uC[k]; b = uC[k + 1]; } return mix(a, b, f); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = uBg * (.8 + .4 * vUv.y);
+      col += pal(vUv.x) * exp(-pow((vUv.y - .55) / .45, 2.)) * .12 * (.4 + .6 * uGate);   // niebla de color detrás
+      for (int L = 0; L < 4; L++) {
+        float fl = float(L), z = 1. + fl * .55;                    // 0 = adelante (grande y desenfocado), 3 = al fondo
+        float dens = 22. * z, blur = abs(fl - 1.5) * .9 + .25;     // la capa del medio, nítida
+        float sw = (uSway * (.02 + .05 * uVo) / z) * sin(p.y * 3. + fl * 1.7 + uSway * .3);
+        float xx = (p.x + sw + fl * .37) * dens; float id = floor(xx) + fl * 100., h1 = hs(id), h2 = hs(id + 7.3);
+        if (h1 < .35) continue;                                    // no todas las columnas tienen hilo
+        float fx = fract(xx) - .5 - (h2 - .5) * .5;
+        float w = (.035 + .05 * blur) , line = exp(-pow(fx / w, 2.));
+        float u = clamp((p.x + fl * .11) / asp, 0., 1.); int bi = int(u * 15.99); float lv = uLv[bi];
+        vec3 c = pal(u * .8 + h2 * .25);
+        float depthK = (L == 0 ? .55 : L == 1 ? 1. : L == 2 ? .7 : .45);
+        float wave = exp(-pow((u - uWave) / .07, 2.)) * uWaveK;
+        col += c * line * (.08 + .16 * lv + .25 * wave) * depthK * (.4 + .6 * uGate);
+        // las gotas de luz que bajan por el hilo, con su estela hacia arriba
+        float rep = 1.6 + 1.4 * h1, vv = fract(-p.y * rep / z + uFlow * (.4 + .6 * h2) / z + h1 * 7.);
+        float head = exp(-vv * (60. / (1. + blur))) , tail = exp(-vv * 9.) * .35;
+        float bead = (head + tail) * exp(-pow(fx / (w * (1.2 + .4 * blur)), 2.)) * step(.55, hs(id + floor(-p.y * rep / z + uFlow * (.4 + .6 * h2) / z + h1 * 7.) * 1.3));
+        col += mix(c, vec3(1.), .25) * bead * (.4 + 1.1 * lv + .7 * wave + .4 * uKick) * depthK * (.3 + .7 * uGate) / (1. + blur * .6);
+      }
+      col = col / (1. + .25 * col);
+      if (uNight < .5) col = mix(col, col * .9 + .08, .3);
+      o = vec4(col, 1.);
+    }`);
+}
 function drawCurtain(dt) {
+  if (!glInit()) return drawCurtain2D(dt);
+  if (!curG.prog) curGSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  if (pulse.on && !pulse.melo) { nudgeAdd('cur', 0.35 * musicGate); curG.wave = -0.1; curG.waveK = 0.7 + 0.5 * pulse.k; }
+  curG.flow += dt * musicGate * (0.25 + energy * 1.1 + dynL * 0.3) + nudgeTake('cur', dt);
+  curG.wave += dt * 0.9; curG.waveK *= Math.pow(0.4, dt);
+  curG.vo += (Math.min(1, voice * 1.4) - curG.vo) * (1 - Math.pow(0.05, dt));
+  curG.sway += dt * musicGate * (0.3 + curG.vo * 1.2);
+  for (let i = 0; i < 16; i++) { const k0 = Math.floor(i / 16 * BANDS * 0.92), k1 = Math.min(BANDS, k0 + 3), h = attHit(k0, k1); if (h > 0) curG.v[i] += 2.5 * h;
+    curG.v[i] += ((Math.pow(bandX(k0, k1), 1.2) * musicGate - curG.lv[i]) * 120 - curG.v[i] * 12) * dt; curG.lv[i] += curG.v[i] * dt; }
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], 58), sat(RGB[1], 62), sat(RGB[2], 56), sat(mix(0.5), 60)].forEach((c, k) => curG.C.set(c, k * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = curG.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uFlow, curG.flow); gl.uniform1f(p.u.uSway, curG.sway); gl.uniform1f(p.u.uWave, curG.wave); gl.uniform1f(p.u.uWaveK, curG.waveK * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uVo, curG.vo); gl.uniform1f(p.u.uGate, musicGate); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uKick, P * (state.noFlash ? 0.5 : 1));
+  gl.uniform1fv(p.u['uLv[0]'], curG.lv); gl.uniform3fv(p.u['uC[0]'], curG.C);
+  gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 35, night ? 5 : 22)).map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  bloom(GLX.c, 0.3 + P * 0.2);
+}
+function drawCurtain2D(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
   if (curtain.key !== curtainCount()) curtainInit();   // todo va en proporciones: al cambiar la calidad sigue igual (antes se reiniciaba)
   // fondo: nubes de color muy suaves (de día, pastel luminoso sobre blanco; de noche, niebla de color)
@@ -12112,7 +12177,7 @@ function drawCity(dt) {
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; glSoftUp(cw); ctx.drawImage(GLX.c, 0, 0, W, H); ctx.filter = 'none';
   if (night) bloom(GLX.c, 0.22 + 0.2 * city.wk);   // de noche, la luz de ventanas y faroles se esparce en la bruma
   ctx.restore();
   cityLife(dt, night);
