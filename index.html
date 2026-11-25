@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 237</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 238</div>
     </div>
   </div>
   <div class="group">
@@ -9392,8 +9392,16 @@ function catsSetup() {
         vec4 c = uCat[i], c2 = uCat2[i], c3 = uCat3[i];
         vec2 lp = (p - c.xy) / c.z; lp.x *= c2.y;                 // espejo si mira a la izquierda
         lp.y -= c2.x + .01 * sin(c.w * 12.566);                    // salto y el leve vaivén del paso
-        if (length((lp - vec2(.1, .6)) * vec2(.8, 1.)) > 1.15) continue;   // lejos del gato: nada que dibujar
         vec3 base = pal(c2.z);
+        // la estela: lucecitas que se desprenden detrás del gato y suben despacio en el aire (más con cada golpe)
+        if (lp.x < -.25 && lp.x > -1.9 && lp.y > -.1 && lp.y < 1.3) {
+          vec2 mq = lp * 7. + vec2(0., -uTime * .5), mi = floor(mq), mf = fract(mq) - .5;
+          float hm = h(mi + float(i) * 7.1); vec2 off = (vec2(h(mi + 1.3), h(mi + 2.7)) - .5) * .6;
+          float md = length(mf - off), tw = .6 + .4 * sin(uTime * (2. + 3. * hm) + hm * 40.);
+          float mote = step(.62, hm) * exp(-md * md * 90.) * smoothstep(-1.9, -.8, lp.x) * smoothstep(-.1, .2, lp.y) * smoothstep(1.3, .7, lp.y) * tw;
+          col += mix(base, vec3(1.), .45) * mote * (.5 + .9 * uP + .4 * uHigh) * (1. - c2.w * .5) * (uNight > .5 ? 1. : .7);
+        }
+        if (length((lp - vec2(.1, .6)) * vec2(.8, 1.)) > 1.15) continue;   // lejos del gato: nada que dibujar
         float blur = (.03 + c2.w * .014) * c.z;
         // patas de allá: el mismo color, más en sombra
         float df = catFar(lp, c.w) * c.z, af = smoothstep(blur, -blur, df);
