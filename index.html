@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 263</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 264</div>
     </div>
   </div>
   <div class="group">
@@ -10865,7 +10865,7 @@ function drawLoop(dt) {
   if (pulse.on) { lazo.beatT = (lazo.beatT || 0) + Math.PI / 4; lazo.twK = (lazo.twK || 0) + 0.35 * pulse.k; lazo.breath = 1; }
   lazo.rot += ((lazo.beatT || 0) - lazo.rot) * (1 - Math.pow(0.004, dt)) + dt * 0.02 * energy;
   lazo.twK = (lazo.twK || 0) * Math.pow(0.05, dt); lazo.breath = (lazo.breath || 0) * Math.pow(0.02, dt);
-  lazo.ph += dt * (0.03 + energy * 0.6 + dynL * 0.3) + lazo.twK * dt * 6;
+  lazo.ph += dt * musicGate * (0.03 + energy * 0.4 + dynL * 0.2) + lazo.twK * dt * 10;   // el giro de la cinta lo da sobre todo el golpe
   lazo.open = Math.max(lazo.open * Math.pow(0.25, dt), dropHit ? 1 : 0);
   if (pulse.on) lazo.heads.push({ s: 0, k: 0.5 + 0.5 * pulse.k });
   lazo.heads.forEach(h => h.s += dt * (0.55 + dynL * 0.5));
@@ -10873,7 +10873,7 @@ function drawLoop(dt) {
   // el ocho mira de frente y se mece en el espacio (no da la vuelta entera, que lo ponía de canto)
   const yaw = 0.55 * Math.sin(lazo.rot), tilt = 0.25 * Math.sin(lazo.rot * 0.7 + 1) + 0.1 * Math.sin(lazo.ph * 0.23);
   const cr = Math.cos(yaw), sr = Math.sin(yaw), ct = Math.cos(tilt), st = Math.sin(tilt);
-  const A = Math.min(W * 0.36, MIN * 0.62) * (1 + lazo.breath * 0.045 + Math.pow(bandX(0, 10), 1.4) * 0.03), D = 3.2;   // respira con el bombo
+  const A = Math.min(W * 0.36, MIN * 0.62) * (1 + lazo.breath * 0.1 + Math.pow(bandX(0, 10), 1.4) * 0.03), D = 3.2;   // respira con el bombo
   // un punto de la cinta: el ocho (lemniscata de Gerono) con la cinta abierta hacia los lados y retorcida
   const pt = (u, off, w) => {
     const x = Math.cos(u), y = Math.sin(u) * Math.cos(u) * 0.95, tw = 2 * u + lazo.ph * 0.8;
@@ -12139,7 +12139,7 @@ function drawIcons(dt) {
     if (pulse.on && !pulse.melo) icn.v[i] += cx_ === 0 ? 5 + pulse.k * 6 : 1.6 + pulse.k * 1.6;   // el bombo: fuerte en la columna de los graves y un saltito en todos
     if (hits.snare && cx_ === Math.min(gx - 1, 2)) icn.v[i] += 3;
   }
-  springTo(icn.lv, icn.v, tg, dt, 260, 0.55);
+  springTo(icn.lv, icn.v, tg, dt, 620, 0.6);   // más firme: el salto cae en el golpe
   if (pulse.on) icn.kick = Math.min(1.5, icn.kick + 0.6 + pulse.k * 0.5);
   icn.kick *= Math.pow(0.02, dt);
   const size = Math.min(asp * 0.8 / (gx + (gx - 1) * 0.16), 0.84 / (gy + (gy - 1) * 0.16));
@@ -12884,9 +12884,9 @@ function drawLiquid(dt) {
   const addW = (y, a) => { const j = (liq.wj++ % 6) * 4; liq.wv.set([0, y, a, 0], j); };
   if (pulse.on && !pulse.melo) addW(0.5, 1);
   [[6, 16, 0.28], [16, 28, 0.5], [28, 40, 0.7], [40, BANDS, 0.85]].forEach(([a, b, y]) => { const h = attHit(a, b); if (h > 0) addW(y, 0.45 + 0.4 * h); });
-  for (let w = 0; w < 6; w++) if (liq.wv[w * 4] >= 0 && liq.wv[w * 4] < 9) liq.wv[w * 4] += dt * 1.5;
+  for (let w = 0; w < 6; w++) if (liq.wv[w * 4] >= 0 && liq.wv[w * 4] < 9) liq.wv[w * 4] += dt * 2.8;   // la onda del golpe recorre rápido (no se arrastra en el compás)
   liq.swT = (liq.swT || 0) * Math.exp(-dt / 0.35); liq.sw = ease(liq.sw || 0, liq.swT, 0.07); liq.swYs = ease(liq.swYs ?? 0.5, liq.swY ?? 0.5, 0.25);
-  liq.kick = ease(liq.kick, 0, 0.4);
+  liq.kick = ease(liq.kick, 0, 0.18);   // corto: el golpe se siente en el golpe
   if (pulse.on && !pulse.melo) liq.kick = Math.min(1.3, liq.kick + 0.7 + pulse.k * 0.4);
   liq.bass = ease(liq.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.5);
   liq.vo += (Math.min(1, voice * 1.4) - liq.vo) * (1 - Math.pow(0.05, dt));
