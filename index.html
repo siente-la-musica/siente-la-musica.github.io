@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 288</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 289</div>
     </div>
   </div>
   <div class="group">
@@ -4800,7 +4800,7 @@ function drawAura(dt) {
   gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
-function drawAura2D(dt) {
+function drawAura2D(dt) { const time = ltime;   /* las ondas de la letra, con su reloj de siempre */
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
   // de día, como la Luz: manchas de color luminoso pintadas encima del blanco (no 'multiply', que las
   // dejaba pálidas) y luego un velo de tinta que les da profundidad
@@ -8393,7 +8393,7 @@ function drawStrobe(dt) {
 
 function drawLyricsScene(dt) { const time = ltime;
   drawBackdrop(0, 0.5);        // la portada se ve algo más en este modo (suma a la del fondo)
-  drawAura(dt);
+  drawAura2D(dt);   /* las ondas de luz de siempre alrededor de la letra (no la Aura nueva) */
   // Velo suave del color de fondo detrás de la letra para que se lea sobre cualquier portada
   const night = state.theme === 'dark', R = Math.max(W, H) * 0.4;
   const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R);
