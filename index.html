@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 291</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 292</div>
     </div>
   </div>
   <div class="group">
@@ -12989,6 +12989,7 @@ function beamSetup() {
       vec3 hot = k < .5 ? mix(uC2, uC0, smoothstep(.0, .5, k)) : mix(uC0, uC1, smoothstep(.5, 1., k));
       vec3 deep = mix(uC1, uC2, uu) * .55;
       vec3 col = mix(uBg, withCover(uBg), .25) * (uNight > .5 ? .5 : 1.);
+      if (s < 0.) col += deep * .35 * exp(s / .35) * smoothstep(1.4, .4, abs(u) / span);   /* el piso refleja el resplandor (no un negro plano) */
       // el resplandor sobre la línea: caliente junto a ella, hondo arriba; los extremos se apagan
       float ends = smoothstep(1.25, .55, abs(u) / span);
       // la altura del resplandor sigue el espectro a lo largo de la línea (graves a la izquierda, agudos a la derecha)
@@ -13012,6 +13013,8 @@ function beamSetup() {
       // la línea misma, con los pulsos de luz que la recorren
       float line = exp(-abs(s) / .0022) + exp(-abs(s) / .012) * .35;
       float pul = 0.; for (int j = 0; j < 3; j++) { float pu = uPul[j]; if (pu > -1.) pul += exp(-pow((uu - pu) / .05, 2.)); }
+      pul += 1.1 * pow(.5 + .5 * sin(abs(u) * 34. - uPh * 5.), 10.) * smoothstep(.0, .05, abs(u));   /* luz que corre sin parar desde la figura hacia los dos lados (hipnótico) */
+      col += hot * pow(.5 + .5 * sin(abs(u) * 34. - uPh * 5.), 10.) * exp(-abs(s) / .05) * .32 * ends;   /* y su reflejo sube al resplandor y baja al piso */
       col += mix(hot, vec3(1.), .5) * line * (.55 + uCore + pul * 1.2) * ends * (uNight > .5 ? 1. : .8);
       // tono: la luz se suma sin quemarse
       col = 1. - exp(-col * 1.4);
@@ -13035,7 +13038,7 @@ function drawBeam(dt) {
   beam.core += (Math.min(1, energy * 2 + P * 0.6) - beam.core) * (1 - Math.pow(0.02, dt));
   beam.vo += (Math.min(1, voice * 1.4) - beam.vo) * (1 - Math.pow(0.05, dt));
   beam.hi += (bandX(28, BANDS) * musicGate - beam.hi) * (1 - Math.pow(0.05, dt));
-  beam.ph += dt * musicGate * (0.1 + energy * 0.5);
+  if (pulse.on && !pulse.melo) nudgeAdd('beamPh', 0.35 * musicGate); beam.ph += dt * musicGate * (0.2 + energy * 0.7) + nudgeTake('beamPh', dt);   /* la luz corre por la línea con la música y el bombo la empuja */
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(72, Math.min(96, hs[0][1] * 1.3 + 20));
   const viv = (h, l) => hexToRgb(hsl(h, sat, l)).map(v => v / 255);
   const bg = night ? [0.012, 0.01, 0.018] : mix(0.5).map(v => (v + (255 - v) * 0.86) / 255);
