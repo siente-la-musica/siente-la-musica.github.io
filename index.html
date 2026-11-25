@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 255</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 256</div>
     </div>
   </div>
   <div class="group">
@@ -1965,7 +1965,7 @@ function drawBars(dt) {
     if (hits.mid && i > n * 0.25 && i < n * 0.75) barV[i] += hits.mid * 6;
     if (hits.hat && i > n * 0.6) barV[i] += hits.hat * 4;
   }
-  springTo(barX, barV, barT, dt, 650, 0.42);
+  springTo(barX, barV, barT, dt, 650, 0.68);   // amortiguado: el salto cae en el golpe (antes rebotaba y el movimiento llegaba tarde)
   lctx.clearRect(0, 0, W, H);
   const gap = (W / n) * 0.3, bw = (W - gap * (n - 1)) / n, slot = bw + gap, x0 = 0;   // la primera y la última tocan los bordes
   // A lo ancho de toda la pantalla pero bajas: ocupan la franja de abajo y dejan el resto libre
@@ -1990,7 +1990,7 @@ function drawBars(dt) {
   fl.addColorStop(0, rgba(mix(0.5), (night ? 0.18 : 0.12) * (0.4 + bass) + P * 0.15)); fl.addColorStop(1, rgba(mix(0.5), 0));
   lctx.fillStyle = fl; lctx.fillRect(0, H * 0.7, W, H * 0.3);
   ambient();
-  bloom(layer, (night ? 0.75 : 0.4) + beatSoft * 0.45);
+  bloom(layer, (night ? 0.75 : 0.4) + beatSoft * 0.45 + Math.max(0, pulse.x) * 0.5);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -2043,7 +2043,7 @@ function drawMountains(dt) {
   // la voz: mientras se canta, una luna del color de la nota sale detrás de las montañas (sube con la voz)
   const mv = drawMountains.v = (drawMountains.v || 0) + (Math.min(1, voice * 1.5) - (drawMountains.v || 0)) * (1 - Math.pow(0.12, dt));
   if (mv > 0.02) { const mc = melodyColor(); ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; glowSpot(W * 0.5, H * (0.6 - mv * 0.2), MIN * (0.18 + mv * 0.25), night ? mc : mc.map(v => v + (255 - v) * 0.3), mv * (night ? 0.55 : 0.45)); ctx.restore(); }
-  bloom(layer, (night ? 0.75 : 0.42) + beatSoft * 0.3);
+  bloom(layer, (night ? 0.75 : 0.42) + beatSoft * 0.3 + Math.max(0, pulse.x) * 0.5);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -4965,7 +4965,7 @@ function drawInfinity(dt) {
     glow += drawInfinity.flash * 0.8;
     vg = Math.min(1, vg);
     const p = tunnelPath(z), [sx, sy, sc] = project(p[0], p[1], z);
-    const R = sc * tunnelRadius(z) * (0.95 + v * 0.2 + P * 0.1 * (1 - dz / FAR));   // el túnel entero late con el golpe
+    const R = sc * tunnelRadius(z) * (0.95 + v * 0.2 + P * 0.17 * (1 - dz / FAR));   // el túnel entero late con el golpe
     const hue = (A.hue * (1 - f) + B.hue * f + k * 0.085) % 2;   // los anillos recorren los colores de la paleta: de cerca a lejos se ve el degradado entero
     // de día el color va más hondo y la línea más gruesa, para que no se pierda en el blanco
     const lc = mix(1 - Math.abs(hue - 1)).map((c_, j) => c_ + (melC[j] - c_) * vg * 0.85);
@@ -5025,7 +5025,7 @@ function drawInfinity(dt) {
     lctx.beginPath(); lctx.moveTo(P[0], P[1]); lctx.lineTo(Q[0], Q[1]); lctx.stroke();
   }
   ambient();
-  bloom(layer, night ? 0.75 : 0.4);
+  bloom(layer, (night ? 0.75 : 0.4) + Math.max(0, pulse.x) * 0.45);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -10183,7 +10183,7 @@ function drawHarp(dt) {
   const u = harp.u, v = harp.v, NX = HARP_NX, NY = HARP_NY;
   if (pulse.on) {
     harp.dir = -harp.dir; const ph = Math.random() * 6.28;
-    for (let y = 1; y < NY; y++) { const ty = (y + 0.5) / NY; for (let x = 0; x < NX; x++) v[y * NX + x] += harp.dir * (0.035 + 0.05 * pulse.k) * ty * ty * (0.6 + 0.4 * Math.sin(x / NX * 9 + ph)); }
+    for (let y = 1; y < NY; y++) { const ty = (y + 0.5) / NY; for (let x = 0; x < NX; x++) v[y * NX + x] += harp.dir * (0.07 + 0.09 * pulse.k) * ty * ty * (0.6 + 0.4 * Math.sin(x / NX * 9 + ph)); }
   }
   if (hits.snare) { const g0 = Math.floor(Math.random() * G); for (let j = Math.max(0, g0 - 2); j <= Math.min(G - 1, g0 + 2); j++) harp.vib[j] = Math.max(harp.vib[j], 1 - Math.abs(j - g0) * 0.3); }
   if (dropHit) for (let i = NX; i < NX * NY; i++) v[i] += (Math.random() - 0.5) * 0.25;
@@ -10191,7 +10191,8 @@ function drawHarp(dt) {
   if (hits.voice && melodyConf > 0.3) { harp.sylX = (vox.note + 0.5) / 12; harp.syl = 1; const gi = Math.floor(harp.sylX * G); for (let j = Math.max(0, gi - 1); j <= Math.min(G - 1, gi + 1); j++) harp.vib[j] = Math.max(harp.vib[j], 0.8); }
   harp.syl *= Math.pow(0.08, dt);
   harp.tip = Math.max(harp.tip * Math.pow(0.03, dt), hits.hat ? 0.8 : 0);
-  harp.flow += dt * (0.2 + voice * 1.3 + energy * 0.25);
+  if (pulse.on && !pulse.melo) nudgeAdd('harpF', 0.35 * musicGate);
+  harp.flow += dt * musicGate * (0.08 + voice * 0.9 + energy * 0.15) + nudgeTake('harpF', dt);   // corre con la voz y da un empujón en cada bombo
   if (pulse.on) nudgeAdd('harpHue', 0.025 * pulse.k); harp.hue = (harp.hue || 0) + dt * (0.015 + energy * 0.12) + nudgeTake('harpHue', dt);
   for (let k = 0; k < 12; k++) harp.key[k] += (chromaNow[k] - harp.key[k]) * (1 - Math.pow(0.92, dt));
   // el cursor: con el ratón quieto un rato, los hilos vuelven a su sitio; al levantar el dedo, también
@@ -10881,7 +10882,7 @@ function drawLoop(dt) {
     const centre = 1 - Math.abs(off);
     let col = mix(i / (S - 1));
     if (Math.abs(off) < 0.2) col = col.map((c_, j) => c_ + (melC[j] - c_) * av * 0.85);   // el hilo del centro canta con la voz
-    const a = (night ? 0.06 : 0.16) + Math.pow(lazo.lv[i], 1.3) * (night ? 0.8 : 0.65) + centre * 0.08 + P * 0.18;   // apagado en silencio, encendido con lo suyo
+    const a = (night ? 0.06 : 0.16) + Math.pow(lazo.lv[i], 1.3) * (night ? 0.8 : 0.65) + centre * 0.08 + P * 0.42;   // apagado en silencio, encendido con lo suyo
     lctx.strokeStyle = rgba(night ? col : (() => { const [h_, s_] = hexToHsl(rgbToHex(...col)); return hexToRgb(hsl(h_, Math.max(80, s_), 50)); })(), Math.min(1, a * (night ? 1 : 1.25)));   // de día, color pleno (no apagado)
     lctx.lineWidth = Math.max(DPR * 0.8, MIN * (0.0014 + lazo.lv[i] * 0.0018) * (night ? 1 : 2.2));
     lctx.beginPath();
@@ -10900,7 +10901,7 @@ function drawLoop(dt) {
   }
   lctx.globalAlpha = 1; lctx.globalCompositeOperation = 'source-over';
   ambient();
-  bloom(layer, (night ? 0.7 : 0.35) + P * 0.3);
+  bloom(layer, (night ? 0.7 : 0.35) + P * 0.6);
   ctx.drawImage(layer, 0, 0);
 }
 
@@ -12860,7 +12861,7 @@ function drawLiquid(dt) {
   const night = state.theme === 'dark', gl = GLX.gl, asp = W / H;
   // todo con inercia (como un líquido viscoso): la velocidad del flujo y el tamaño de cada onda siguen la música con suavidad
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
-  liq.spd = ease(liq.spd || 0, musicGate * (0.08 + energy * 0.4 + bandX(10, 26) * 0.25), 0.8); liq.ph += dt * (liq.spd + liq.kick * 0.4);   // fluye despacio (sin tirones: el bombo lo dice la onda que recorre el borde)
+  liq.spd = ease(liq.spd || 0, musicGate * (0.08 + energy * 0.4 + bandX(10, 26) * 0.25), 0.8); liq.ph += dt * (liq.spd + liq.kick * 0.9);   // fluye despacio (sin tirones: el bombo lo dice la onda que recorre el borde)
   liq.m = liq.m || [0, 0, 0];
   const mt = [0.015 + 0.065 * Math.pow(bandX(0, 10), 1.2) * (0.6 + 0.8 * dynL), 0.008 + 0.035 * bandX(10, 26), 0.003 + 0.013 * bandX(26, BANDS)].map(v => v * (0.3 + 0.7 * musicGate));
   for (let k = 0; k < 3; k++) liq.m[k] = ease(liq.m[k], mt[k], 0.45);
@@ -12872,7 +12873,7 @@ function drawLiquid(dt) {
   for (let w = 0; w < 6; w++) if (liq.wv[w * 4] >= 0 && liq.wv[w * 4] < 9) liq.wv[w * 4] += dt * 1.5;
   liq.swT = (liq.swT || 0) * Math.exp(-dt / 0.35); liq.sw = ease(liq.sw || 0, liq.swT, 0.07); liq.swYs = ease(liq.swYs ?? 0.5, liq.swY ?? 0.5, 0.25);
   liq.kick = ease(liq.kick, 0, 0.4);
-  if (pulse.on) liq.kick = Math.min(1, liq.kick + 0.4 + pulse.k * 0.3);
+  if (pulse.on && !pulse.melo) liq.kick = Math.min(1.3, liq.kick + 0.7 + pulse.k * 0.4);
   liq.bass = ease(liq.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.5);
   liq.vo += (Math.min(1, voice * 1.4) - liq.vo) * (1 - Math.pow(0.05, dt));
   liq.film += dt * musicGate * (0.05 + liq.vo * 0.6);                       // la voz desliza los colores de la película
