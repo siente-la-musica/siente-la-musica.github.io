@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 246</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 247</div>
     </div>
   </div>
   <div class="group">
@@ -9308,7 +9308,7 @@ function drawPuffs(dt) {
 // nebulosa de los colores de la portada que fluye sin parar con la música (lo que se siente por dentro); el borde,
 // una luz fina. La voz enciende la cabeza; cada bombo manda desde el rostro ondas suaves de color hacia afuera; cada
 // nota mueve la corriente interior. En silencio, la nebulosa se queda quieta y apagada.
-const BUST_PROF = [[-0.95, -1.3], [-0.88, -0.98], [-0.6, -0.8], [-0.36, -0.68], [-0.29, -0.47], [-0.33, -0.25], [-0.45, -0.05], [-0.52, 0.2], [-0.5, 0.45], [-0.4, 0.66],
+const BUST_PROF = [[-0.95, -1.3], [-0.88, -0.98], [-0.72, -0.84], [-0.7, -0.62], [-0.74, -0.38], [-0.72, -0.12], [-0.66, 0.14], [-0.58, 0.4], [-0.47, 0.62], [-0.34, 0.76],   // la melena cae por detrás hasta los hombros
   [-0.2, 0.8], [0.05, 0.85], [0.25, 0.78], [0.37, 0.62], [0.42, 0.44], [0.445, 0.31], [0.43, 0.25], [0.48, 0.14], [0.555, 0.03], [0.53, -0.015], [0.47, -0.03],
   [0.475, -0.09], [0.445, -0.125], [0.465, -0.165], [0.44, -0.205], [0.43, -0.29], [0.37, -0.355], [0.24, -0.38], [0.18, -0.5], [0.2, -0.67], [0.36, -0.8], [0.66, -0.96], [0.82, -1.3]];
 const BUST_PTS = (() => {   // contorno suavizado (Catmull-Rom): sin esquinas
@@ -9341,9 +9341,9 @@ function bustSetup() {
       float side = smoothstep(-.1, .25, (uv - mouth).x / max(rm, 1e-3));
       float ring = exp(-pow((rm - uWave) / .035, 2.)) * uWaveK * side * smoothstep(0., .05, d);
       float ring2 = exp(-pow((rm - uWave * .62) / .03, 2.)) * uWaveK * .6 * side * smoothstep(0., .05, d);
-      vec3 col = bg + pal(.15 + rm * .8) * (ring + ring2) * .55;
+      vec3 col = bg;
       // el aura: la luz de adentro se escapa por el borde
-      col += pal(.3 + q.y * .2) * exp(-max(d, 0.) / .05) * (.12 + .25 * uGate + .2 * uKick) * (uNight > .5 ? 1. : .6);
+      col += pal(.3 + q.y * .2) * exp(-max(d, 0.) / .05) * (.1 + .2 * uGate + .2 * uKick) * (uNight > .5 ? 1. : .6) * smoothstep(-1.35, -.55, q.y);
       // adentro: la nebulosa que fluye (dos capas de ruido que se arrastran una a otra)
       vec2 z = q * 1.6; float t = uFlow;
       vec2 w1 = vec2(fbm(z + vec2(0., t * .35)), fbm(z * 1.3 + vec2(5.2, -t * .3)));
@@ -9351,13 +9351,27 @@ function bustSetup() {
       vec3 neb = pal(f * 1.3 + w1.x * .6 + t * .04);
       neb *= .35 + 1.15 * smoothstep(.25, .85, f) * (.45 + .55 * uGate);
       neb += pal(f + .5) * pow(smoothstep(.55, .95, f), 3.) * (.5 + .9 * uEn);          // filamentos claros
+      // cabello y rostro: el cabello más hondo y con hebras que fluyen; el rostro y el cuello, más lisos y luminosos
+      float hair = max(smoothstep(.5, .66, q.y + .35 * q.x * step(q.x, 0.) - .15 * q.x), smoothstep(-.12, -.3, q.x)) * smoothstep(-.95, -.65, q.y);
+      vec2 cr = q - vec2(.08, 1.15); float strand = fbm(vec2(atan(cr.x, -cr.y) * 9. + .3 * sin(length(cr) * 5. - t * .6), length(cr) * 2.5 - t * .25));   // las hebras caen desde la coronilla
+      vec3 hairC = pal(.55 + strand * .5 + t * .02) * (.45 + .7 * smoothstep(.35, .75, strand));
+      vec3 skin = pal(f * .6 + .1) * (.75 + .35 * smoothstep(.2, .8, f));
+      neb = mix(mix(neb, skin, .55), hairC, hair);
       float head = smoothstep(-.2, .5, q.y);
       neb = mix(neb, mix(neb, uMel * 1.2, .5), uVo * head * .6) * (1. + uVo * head * .35);  // la voz enciende la cabeza
       neb *= 1. + .35 * uKick;
       float rim = exp(-abs(d) / .004);                            // el filo de luz del contorno
       vec3 inside = neb * (1. + .5 * smoothstep(-.05, 0., d)) + mix(neb, vec3(1.), .35) * rim * .6;   // el borde se aclara (nunca un contorno oscuro)
       float a = smoothstep(px, -px, d);
-      col = mix(col, inside + neb * .0, a);
+      // el cabello: humo de color que nace de la cabeza y fluye hacia atrás con la música (hipnótico, sin bordes)
+      { vec2 hq = q - vec2(-.15, .45); float back = smoothstep(-.2, -.6, q.x) * exp(-max(d, 0.) / .22) * smoothstep(-1., -.4, q.y);   // nace del cabello mismo
+        vec2 sq = vec2(hq.x * 1.6 + t * .9, hq.y * 2.4 + .35 * sin(hq.x * 2.5 + t * .6));
+        float sm = fbm(sq + 1.5 * vec2(fbm(sq * .8 + t * .2), fbm(sq * .7 - 3.)));
+        float dens = smoothstep(.3, .8, sm) * back * smoothstep(0., .02, d);
+        col += pal(sm * 1.2 + .2 + t * .03) * dens * (.25 + .65 * uGate) * (1. + .4 * uKick); }
+      float fadeB = smoothstep(-1.35, -.55, q.y);   // los hombros se disuelven abajo (no un recorte de papel)
+      a *= fadeB; rim *= fadeB;
+      col = mix(col, inside, a);
       col += pal(.6 + q.y * .3) * rim * (.35 + .3 * uKick) * (1. - a);
       if (uNight < .5) col = mix(col, col * .92 + .05, 1. - a);
       col *= 1. - .14 * pow(length(vUv - .5) * 1.3, 2.);
