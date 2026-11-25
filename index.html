@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 230</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 231</div>
     </div>
   </div>
   <div class="group">
@@ -12208,10 +12208,10 @@ function tunnelSetup() {
       // bandas suaves de luz y sombra a lo largo del tubo (sin líneas ni aros: una ondulación de la luz) que pasan hacia la
       // cámara mientras se avanza: dan la profundidad y el viaje hipnótico; una segunda, más lenta, rompe la repetición
       float near = exp(-t * .07);   // el detalle se funde con la distancia (nada de parpadeo al fondo)
-      float bd = .5 + .5 * sin(P.z * 1.5708), seam = pow(bd, 10.);   // una franja de luz por cada tiempo: el viaje avanza cuatro unidades por golpe
+      float bd = .5 + .5 * sin(P.z * 1.5708), seam = pow(bd, 6.);   // una franja de luz por cada tiempo: el viaje avanza cuatro unidades por golpe
       float fl = .5 + .5 * cos(ang * 22.);   // estrías a lo largo del tubo, como vidrio acanalado: las líneas que corren hacia el fondo dan la velocidad
-      c *= mix(1., (.5 + .5 * bd) * (.84 + .16 * fl), .9 * near) * (.9 + .1 * sin(P.z * .31 + 1.7));
-      c += mix(grad(0, P.z * .03 + .5), vec3(1.), .1) * seam * near * (.28 + .9 * uBloom) * (.7 + .3 * fl);   // la costura brilla con su color y se enciende con el bombo
+      c *= mix(1., (.86 + .14 * bd) * (.97 + .03 * fl), near) * (.95 + .05 * sin(P.z * .31 + 1.7));   // sin franjas oscuras: solo una ondulación leve de la luz
+      c += mix(grad(0, P.z * .03 + .5), vec3(1.), .12) * seam * near * (.16 + .7 * uBloom);   // la costura: un resplandor de color, liso, que se enciende con el bombo   // la costura brilla con su color y se enciende con el bombo
             // al fondo, luz: se aclara con la distancia (la voz la tiñe)
       float fog = 1. - exp(-t * .05);   // niebla liviana: las paredes y sus bandas se ven hasta lejos
       vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .25), uMel, uVo * .4);
