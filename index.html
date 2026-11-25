@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 273</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 274</div>
     </div>
   </div>
   <div class="group">
@@ -8495,9 +8495,9 @@ function drawVinyl(dt) {
       const t = k / (RINGS - 1), band = Math.min(BANDS - 1, Math.floor((1 - t) * BANDS * 0.8));
       if (!vinyl.rl) { vinyl.rl = new Float32Array(RINGS); vinyl.rv = new Float32Array(RINGS); }
       vinyl.rv[k] += ((Math.pow(spec[band], 1.2) - vinyl.rl[k]) * 260 - vinyl.rv[k] * 16) * dt; vinyl.rl[k] += vinyl.rv[k] * dt;   // resorte
-      if (pulse.on && k >= RINGS - 3) vinyl.rv[k] += 2.5 * pulse.k;
+      if (pulse.on && !pulse.melo) vinyl.rv[k] += (k >= RINGS - 3 ? 3.5 : 1.4) * (0.5 + pulse.k);   /* el bombo enciende todos los surcos (más los de afuera) */
       const lv = Math.max(0, vinyl.rl[k]), c = mix(t);
-      const a = 0.04 + lv * 0.7 + P * 0.2;
+      const a = 0.04 + lv * 0.7 + P * 0.45;
       const ra = r0 + (r1 - r0) * k / RINGS, rb = r0 + (r1 - r0) * (k + 1) / RINGS;
       // el anillo entero brilla suave con su banda: el disco se ve sonar
       ctx.strokeStyle = rgba(c.map(v => v * 0.7 + 255 * 0.3), Math.min(0.5, lv * 0.32)); ctx.lineWidth = (rb - ra) * 0.55;
@@ -11837,10 +11837,10 @@ function drawBloques(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
   // el sol: su tamaño lo dan los graves y la parte de la canción; cada golpe lo hincha con un empujón (resorte)
   const tR = 0.22 + Math.pow(bandX(0, 10), 1.3) * 0.1 + dynL * 0.06;
-  if (pulse.on) vit2.rv = (vit2.rv || 0) + 0.5 + pulse.k * 0.9;
+  if (pulse.on && !pulse.melo) vit2.rv = (vit2.rv || 0) + 1 + pulse.k * 1.4;
   vit2.rv = (vit2.rv || 0) + ((tR - vit2.R) * 180 - (vit2.rv || 0) * 14) * dt; vit2.R += vit2.rv * dt;
   vit2.y += ((0.46 + dynL * 0.08) - vit2.y) * (1 - Math.pow(0.2, dt));
-  if (pulse.on) vit2.wob = Math.min(2, vit2.wob + 0.8 * pulse.k + 0.4);
+  if (pulse.on && !pulse.melo) vit2.wob = Math.min(2.4, vit2.wob + 1.2 * pulse.k + 0.6);
   vit2.wob *= Math.pow(0.08, dt);
   // cada columna de vidrio es una banda (graves a la izquierda): su luz sube hasta donde llega, con resortes
   if (!vit2.v) { vit2.v = new Float32Array(12); vit2.tg = new Float32Array(12); }
@@ -11853,7 +11853,7 @@ function drawBloques(dt) {
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, vit2.R); gl.uniform1f(p.u.uY, vit2.y); gl.uniform1f(p.u.uWob, vit2.wob * (state.noFlash ? 0.5 : 1));
-  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); vit2.sx = (vit2.sx || 0) + dt * musicGate * (0.06 + energy * 0.25); gl.uniform1f(p.u.uSx, Math.sin(vit2.sx) * 0.28);
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); if (pulse.on && !pulse.melo) nudgeAdd('bq', 0.14 * musicGate); vit2.sx = (vit2.sx || 0) + dt * musicGate * 0.025 + nudgeTake('bq', dt);   /* el sol avanza a empujones, con cada bombo */ gl.uniform1f(p.u.uSx, Math.sin(vit2.sx) * 0.28);
   gl.uniform1f(p.u.uX0, asp * (asp > 1 ? 0.38 : 0.3));
   gl.uniform3fv(p.u.uSun, sat(warm, 92, night ? 55 : 56)); gl.uniform3fv(p.u.uSun2, sat(warm, 88, night ? 34 : 40));
   gl.uniform3fv(p.u.uTop, night ? hexToRgb(hsl(hh + 20, 35, 14)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 30, 42)).map(v => v / 255));
