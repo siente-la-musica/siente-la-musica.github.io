@@ -7,6 +7,22 @@ Reglas de oro, sin fallas. Toda animación nueva o cambiada se revisa contra est
 Videos verticales para TikTok (@sientelamusicaco) que atrapen en los primeros segundos y se vean completos:
 obras dignas de admirar, que **sientan la música** y que **hipnoticen**.
 
+**Lo que dicen los datos:** los clásicos en español y latinos traen más likes, comentarios y seguidores; los primeros
+segundos deciden la retención (la animación arranca encendida, con color y música desde el primer cuadro); funcionan las
+escenas que despiertan curiosidad (preguntaron si Ruta era un videojuego). Sin frase gancho. Navidad basta para diciembre.
+
+## Preferencias del usuario (no se cambian sin preguntar)
+
+- **Letra**: como siempre la ha tenido (posición, estilo, colores, su propio reloj).
+- **Neones**: la primera versión de cristal elegante, no «cápsulas».
+- **Cortina**: cuentas de cristal con destellos, mística, en penumbra.
+- **Ciudad**: casas de 1-2 pisos con tejado y edificios planos con detalles (balcones, tanques); torre del reloj sin techo en
+  punta; sin farolillos; de noche, ventanas muy sensibles a la música.
+- **Luz**: el faro asentado en la roca, el haz a la vista y con la música; inspiración Zelda.
+- **Silueta**: suave, sin contorno marcado; la letra sobre la cabeza, sin tocarla.
+- **Vitral** (rosetón) y **Bloques** (el vitral de antes, mejorado): se quedan los dos.
+- **Programación TikTok**: estructura de 12:00, 16:00 y 20:00; un mes de anticipación; máximo 30 programadas.
+
 ## 1. La música primero
 
 - Todo se mueve **por el sonido**, nunca con un reloj propio. En silencio: quieto y apagado (sin color).
