@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 274</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 275</div>
     </div>
   </div>
   <div class="group">
@@ -4900,14 +4900,14 @@ function drawInfinity(dt) {
   // Velocidad suavizada: acelera con la música sin tirones
   // Avanza solo con la música: en silencio casi se detiene, y cada golpe de graves da un empujón
   // la velocidad la da el volumen REAL de la canción (no el nivelado): en la estrofa pasea, en el estribillo vuela
-  const target = (0.14 + Math.pow(dynL, 1.7) * 1.8 + Math.pow(energy, 1.3) * 0.45) * musicGate;
+  const target = (0.1 + Math.pow(dynL, 1.7) * 1.1 + Math.pow(energy, 1.3) * 0.3) * musicGate;   /* tranquilo entre golpes: el bombo da el empujón */
   // y cada golpe da un empujón que se ve (sube en ~0,05 s y se va en ~0,4 s): el túnel avanza al compás
-  if (pulse.on && !pulse.melo) drawInfinity.kv = (drawInfinity.kv || 0) + 2.6 + 4 * pulse.k;
+  if (pulse.on && !pulse.melo) drawInfinity.kv = (drawInfinity.kv || 0) + 3.4 + 4.6 * pulse.k;
   drawInfinity.kb = (drawInfinity.kb || 0) + ((drawInfinity.kv || 0) - (drawInfinity.kb || 0)) * (1 - Math.pow(0.00002, dt));
   drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.03, dt);   // el empujón, corto: un latido del viaje
   camSpeed += (target - camSpeed) * (1 - Math.pow(0.3, dt));   // los cambios de parte de la canción se notan sin saltos
   camZ += dt * (camSpeed + drawInfinity.kb);
-  if (pulse.on) nudgeAdd('inf', 0.06 * pulse.k); infRot += dt * (0.04 + dynL * 0.5) + nudgeTake('inf', dt);   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
+  if (pulse.on && !pulse.melo) nudgeAdd('inf', 0.12 + 0.12 * pulse.k); infRot += dt * musicGate * (0.02 + dynL * 0.12) + nudgeTake('inf', dt);   /* giran a empujones, con cada bombo */   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
   const P = Math.max(0, pulse.x);
   if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
@@ -12615,8 +12615,8 @@ function drawTunnel(dt) {
   // dentro de cada tiempo la velocidad respira (crece en el golpe y se relaja entre golpes), sin frenar nunca
   const okT = tempo.period > 0.25 && tempo.conf > 0.2, per = okT ? tempo.period : 0.5;
   const ph = okT ? (((performance.now() / 1000 - tempo.phaseRef) / per) % 1 + 1) % 1 : 0;
-  let rate = 4 / per * (1.4 + 1.8 * tun.loud) * (1 + 0.22 * (0.5 + 0.5 * Math.cos(ph * 6.2832))) * (1 + 0.3 * tun.kick);   // cada bombo, un empujón hacia adelante (nunca frena)
-  tun.spd = ease(tun.spd, musicGate * rate, 0.25);
+  let rate = 4 / per * (1.1 + 1.3 * tun.loud) * (0.75 + 1.4 * tun.kick);   /* el viaje bombea: tranquilo entre golpes, un empujón claro en cada bombo (nunca frena del todo) */   // cada bombo, un empujón hacia adelante (nunca frena)
+  tun.spd = ease(tun.spd, musicGate * rate, 0.09);
   tun.z += dt * tun.spd;
   tun.hi = ease(tun.hi || 0, bandX(28, BANDS) * musicGate, 0.15);
   tun.amp += (0.45 + 0.55 * Math.min(1, energy * 1.8) - tun.amp) * (1 - Math.exp(-dt / 2.5)) * musicGate;   // con más energía, curvas más marcadas (cambia despacio)
@@ -14935,14 +14935,14 @@ function autoSetup() {
         float ca = cos(c.z), sa = sin(c.z); vec2 q = p - c.xy; q = vec2(ca * q.x - sa * q.y, sa * q.x + ca * q.y);
         vec2 v = q - vec2(0., hb.y); float wd = hb.x * .6 + max(v.y, 0.) * (.42 + .25 * uP * me);
         float cone = exp(-pow(v.x / wd, 2.)) * exp(-max(v.y, 0.) * (me > .5 ? 4.2 : 7.)) * smoothstep(-.01, .02, v.y);
-        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .9 * uP : .22) * mix(.14, 1., uNight) * inR;
+        col += vec3(1., .95, .82) * cone * (me > .5 ? .5 + .4 * uP : .22) * mix(.14, 1., uNight) * inR;
         vec2 v2 = q + vec2(0., hb.y); float brk = uDim[i].z;
         col += vec3(1., .06, .04) * exp(-dot(v2, v2) / (.0009 + .0014 * brk)) * (.22 + .6 * brk) * mix(.3, 1., uNight);
         if (i == 0) {
           for (int k = 0; k < 2; k++) { float xs = v2.x + (k == 0 ? -1. : 1.) * hb.x * .62;
             col += vec3(1., .1, .06) * exp(-pow(xs / .0045, 2.)) * exp(v2.y / (.05 + uTrail * .34)) * step(v2.y, 0.) * (.45 + .5 * uTrail) * mix(.55, 1., uNight); }
           float sdm = sdBox(q, hb, hb.x * .64);
-          col += uMel * exp(-max(sdm, 0.) / (.012 + .02 * uGlow)) * (.25 + .9 * uGlow) * inR * mix(.6, 1., uNight); } }
+          col += uMel * exp(-max(sdm, 0.) / (.01 + .012 * uGlow)) * (.22 + .5 * uGlow) * inR * mix(.6, 1., uNight); } }
       col *= 1. - .3 * smoothstep(.4, 1.1, length((vUv - .5) * vec2(1., .9)) * 1.25);
       o = vec4(col, 1.);
     }`);
@@ -15064,8 +15064,8 @@ function drawAuto(dt) {
   // el cambio de carril: un resorte ágil (más rápido cuanto más rápida la canción) y el carro se inclina hacia donde va
   const per = Math.max(0.3, tempo.period || 0.5), om = Math.max(11, Math.min(20, 6.6 / per)), tx = laneX(auto.lane);
   auto.xv += ((tx - auto.x) * om * om - auto.xv * 1.7 * om) * dt * (db > 0 ? 1 : 0); auto.x += auto.xv * dt * (db > 0 ? 1 : 0);
-  if (pulse.on && musicGate > 0.3) auto.sg = 1; auto.sg = (auto.sg || 0) * Math.exp(-dt * 7);   // cada bombo empuja el carro: un tirón suave y luego afloja
-  auto.dist += db * 0.5 * (0.8 + 0.75 * auto.sg);   // la vía corre pareja en promedio (aunque tu carro espere a que haya paso)
+  if (pulse.on && musicGate > 0.3) auto.sg = 1; auto.sg = (auto.sg || 0) * Math.exp(-dt * 9);   // cada bombo empuja el carro: un tirón suave y luego afloja
+  auto.dist += db * 0.5 * (0.55 + 1.9 * auto.sg);   // la vía corre pareja en promedio (aunque tu carro espere a que haya paso)
   auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
   auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
   { const h = attHit(8, 40); if (h > 0) auto.glow = Math.min(1.4, auto.glow + 0.35 + 0.3 * h); }   // cada nota enciende las luces del camino
