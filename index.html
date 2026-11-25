@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 270</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 271</div>
     </div>
   </div>
   <div class="group">
@@ -2010,8 +2010,9 @@ function drawMountains(dt) {
     const r = ridges[li], pts = [];
     for (let p = 0; p < P; p++) { const t_ = Math.max(0, (Math.pow(specAt((((p / (P - 1)) + L.shift) % 1 + 1) % 1), 1.3) - 0.14) * 1.6); ridgeT[p] = t_ < 1 ? t_ : 1 + 0.2 * (1 - Math.exp(-(t_ - 1) / 0.2)); }   // valles hondos, picos altos (solo lo que pasa del tope se redondea)
     smoothProfile(ridgeT, 1);
-    if (hits.bass && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += hits.bass * (2.5 + li * 1.5) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
-    springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.45);
+    const kb = Math.max(hits.bass, pulse.on && !pulse.melo ? 0.5 + 0.5 * pulse.k : 0);   /* el bombo o el pulso de la percusión */
+    if (kb && li >= 1) for (let p = 0; p < P; p++) ridgeV[li][p] += kb * (3.5 + li * 2) * Math.exp(-Math.pow((p / (P - 1) - 0.5) * 2.4, 2));
+    springTo(r, ridgeV[li], ridgeT, dt, L.k, 0.7);   /* amortiguado: el salto cae en el golpe, sin rebote tardío */
     for (let p = 0; p < P; p++) {
       const x = p / (P - 1);
       const wob = Math.sin(x * 6 + time * (0.3 + li * 0.15) + li) * 0.01;
@@ -5459,11 +5460,11 @@ function drawSkyClouds(dt) {
   const cw = Math.round(Math.min(W, 1600) / 2), ch = Math.round(cw * H / W);
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
   sky.lvT[0] = Math.pow(bass, 0.8); sky.lvT[1] = Math.pow(mid, 0.8); sky.lvT[2] = Math.pow(high, 0.8);
-  springTo(sky.lv, sky.lvV, sky.lvT, dt, 200, 0.5);
+  springTo(sky.lv, sky.lvV, sky.lvT, dt, 320, 0.7);
   // cada golpe empuja las nubes (se transforman a tirones, al compás) y luego siguen al ritmo de la energía
   if (pulse.on) sky.kick = (sky.kick || 0) + 0.9 + pulse.k * 1.4;
   sky.kick = (sky.kick || 0) * Math.pow(0.02, dt);
-  sky.t += dt * (0.03 + Math.min(1, energy * 2.5) * 0.6 + energy * 0.8 + sky.kick);   // en silencio quietas
+  sky.t += dt * musicGate * (0.03 + Math.min(1, energy * 2.5) * 0.35 + energy * 0.4 + sky.kick * 1.7);   /* en silencio quietas; el golpe las empuja */   // en silencio quietas
   const fk = state.noFlash ? 0.35 : 1;
   const flash = (x, y, k) => { sky.flashes.push({ x, y, k, c: Math.floor(Math.random() * 3) }); if (sky.flashes.length > 3) sky.flashes.shift(); };
   if (pulse.on) flash(0.15 + Math.random() * 0.7, 0.35 + Math.random() * 0.45, (0.9 + 1.2 * pulse.k) * fk);   // el golpe enciende una nube por dentro
@@ -10076,7 +10077,7 @@ function harpSetup() {
         }
       }
       if (uNight > .5) {
-        col += add * (1. + uP * .7);   // los hilos se encienden con cada bombo
+        col += add * (1. + uP * 1.5);   // los hilos se encienden con cada bombo, al instante
         float eg = (t - lenH) / .014; col += mix(pal(hueX), vec3(1.), .25) * exp(-eg * eg) * (.1 + uTip * .1 + uP * .08) * sheet;   // el borde, una línea de luz de color
       } else {   // un resplandor de color por el borde de la cortina, como luz sobre el papel
         float eg = (t - lenH) / .07; col = mix(col, mix(pal(hueX), vec3(1.), .35), exp(-eg * eg) * (.18 + uP * .1));
@@ -10188,7 +10189,7 @@ function drawHarp(dt) {
     harp.vib[g] *= Math.pow(0.12, dt);
   }
   for (let pass = 0, np = W < H ? 4 : 2; pass < np; pass++) { let prev = harp.lvT[0]; for (let g = 0; g < G; g++) { const cur = harp.lvT[g], nx = harp.lvT[Math.min(G - 1, g + 1)]; harp.lvT[g] = prev * 0.25 + cur * 0.5 + nx * 0.25; prev = cur; } }   // el borde fluye, sin escalones
-  springTo(harp.lv, harp.lvV, harp.lvT, dt, 200, 0.55);
+  springTo(harp.lv, harp.lvV, harp.lvT, dt, 420, 0.7);
   // el bombo hace ondear la cortina (cada golpe hacia un lado), la caja pulsa unas cuerdas
   const u = harp.u, v = harp.v, NX = HARP_NX, NY = HARP_NY;
   if (pulse.on) {
@@ -12842,7 +12843,7 @@ function liqSetup() {
         c = mix(c, vec3(.3, .82, .3), smoothstep(.15, .3, k));                           // verde (ancho)
         c = mix(c, vec3(0., .55, .66), smoothstep(.3, .52, k));                          // turquesa, difuso
         c = mix(c, vec3(.03, .2, .7), smoothstep(.52, .85, k));                          // y el azul
-        col = mix(c * (1. + .45 * uKick), deep, smoothstep(.85, 1.2, k));   // la película se enciende con el golpe
+        col = mix(c * (1. + .95 * uKick), deep, smoothstep(.85, 1.2, k));   // la película se enciende con el golpe
         // burbujitas finas
         vec2 gp = p * 80.; vec2 id = floor(gp); float r = h(id);
         float b = step(.982, r) * smoothstep(.14, .02, length(fract(gp) - .5 - (vec2(h(id + 2.), h(id + 5.)) - .5) * .5));
@@ -12852,7 +12853,7 @@ function liqSetup() {
       // el filo: un hilo nítido rojo-rosado
       col += vec3(1., .25, .45) * exp(-abs(d) / .0018) * (.9 + uKick * .8) + vec3(1., .2, .4) * exp(-abs(d) / .01) * .2 * step(0., d);
       // afuera, tras un hueco oscuro, una cinta de luz azul con orillas magenta que sigue el borde (la nota la tiñe)
-      float d2 = d - (.055 + .015 * sin(p.y * 3. + uPh * .7) + .008 * uKick), a2 = abs(d2);   // la cinta se aleja con el golpe
+      float d2 = d - (.055 + .015 * sin(p.y * 3. + uPh * .7) + .028 * uKick), a2 = abs(d2);   // la cinta se aleja con el golpe
       vec3 c2 = mix(vec3(.2, .45, 1.), uMel, .3);
       vec3 rib = mix(c2 * 1.2, vec3(1., .2, .75), smoothstep(.004, .011, a2)) * smoothstep(.0145, .011, a2);
       col = mix(col, rib * (1. + .5 * uKick), smoothstep(.0145, .0115, a2) * (.85 + .15 * uHi));
