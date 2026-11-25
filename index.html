@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 238</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 239</div>
     </div>
   </div>
   <div class="group">
@@ -4483,7 +4483,8 @@ function drawRecOverlay() {
     // ¿qué hay detrás del título? Si el fondo no deja leerlo (claro con letra clara, u oscuro con letra oscura), un velo suave detrás
     const tn = performance.now(); if (!recording) hdrBg.rd = false; if (!hdrBg.t || hdrBg.m !== state.mode || (recording ? !hdrBg.rd : tn - hdrBg.t > 4000)) { hdrBg.rd = recording;   /* al grabar se mide una sola vez (leer la imagen frena a la tarjeta gráfica: daba un tirón cada 4 s) */ try { const d = ctx.getImageData(x0 | 0, Math.max(0, y0 - 60 * u) | 0, Math.max(8, W * 0.5) | 0, Math.max(8, 120 * u) | 0).data; let sL = 0, n = 0;
       for (let i = 0; i < d.length; i += 4 * 41) { sL += 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; n++; } hdrBg.L = sL / n / 255; } catch (e) { hdrBg.L = 0.3; } hdrBg.t = tn; hdrBg.m = state.mode; }
-    const lightText = state.theme === 'dark', need = lightText ? Math.max(0, (hdrBg.L - 0.42) / 0.4) : Math.max(0, (0.55 - hdrBg.L) / 0.4);
+    const lightText = state.theme === 'dark' || hdrBg.L < 0.45, need = lightText ? Math.max(0, (hdrBg.L - 0.42) / 0.4) : Math.max(0, (0.55 - hdrBg.L) / 0.4);   // de día sobre un fondo oscuro: letra clara (no un óvalo blanco)
+    hdrBg.light = lightText; fgOnDark = lightText; ctx.shadowColor = lightText ? 'rgba(0,0,0,.6)' : 'rgba(255,255,255,.7)';
     if (need > 0.02) {
       ctx.save(); ctx.shadowBlur = 0; const cx = x0 + W * 0.22, rw = W * 0.42, rh = 130 * u;
       const g = ctx.createRadialGradient(cx, y0, 0, cx, y0, rw); const vc = lightText ? '8,6,14' : '250,248,252';
@@ -4501,6 +4502,7 @@ function drawRecOverlay() {
     marqueeText(ctx, it.name || '', tx, y0 - 22 * u, maxW, 44 * u);   // si el nombre no cabe, se desliza para que se lea entero
     ctx.fillStyle = textFg(0.7); ctx.font = `500 ${34 * u}px ${FONT_UI}`;
     ctx.fillText(fit((it.artists || []).map(a => a.name).join(', ')), tx, y0 + 26 * u);
+    fgOnDark = null;
   }
   ctx.textAlign = 'left';
   const ly = currentLyric();
@@ -4565,9 +4567,10 @@ function drawRecOverlay() {
     const y = inCar ? H * 0.548 : vertical ? H * 0.165 + 116 * u : H * 0.94,   // en vertical, pegada bajo el título (un solo bloque arriba a la izquierda, sin tapar la figura)
       x0 = vertical ? W * 0.07 : W / 2 - (lr * 2 + gap + tw) / 2, xc = vertical ? x0 + (lr * 2 + gap + tw) / 2 : W / 2;   // en vertical, dentro de la zona segura (bajo el título)
     ctx.save(); ctx.beginPath(); ctx.arc(x0 + lr, y, lr, 0, 7); ctx.clip(); ctx.drawImage(logo.cv, x0, y - lr, lr * 2, lr * 2); ctx.restore();
+    if (vertical && !inCar && hdrBg.light !== undefined) fgOnDark = hdrBg.light;   // la firma va pegada al título: la misma letra
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillStyle = textFg(0.75); ctx.fillText(tag, x0 + lr * 2 + gap, y);
     // y la página, debajo y más discreta, para quien quiera la app
-    ctx.textAlign = 'center'; ctx.font = `700 ${23 * u * fk}px ${FONT_UI}`; ctx.fillStyle = textFg(0.8); ctx.fillText("siente-la-musica.github.io", xc, y + lr + 22 * u * fk); }
+    ctx.textAlign = 'center'; ctx.font = `700 ${23 * u * fk}px ${FONT_UI}`; ctx.fillStyle = textFg(0.8); ctx.fillText("siente-la-musica.github.io", xc, y + lr + 22 * u * fk); fgOnDark = null; }
   ctx.restore();
 }
 const artistClean = new Map();
@@ -6057,11 +6060,51 @@ function starsInit() {
   });
   starSky.key = W + 'x' + H;
 }
+// la Vía Láctea: una banda de nebulosa pintada (colores de la portada) que cruza el cielo en diagonal, con polvo
+// oscuro de su color, gira muy despacio con la música y respira con la energía; cada golpe la aviva un instante
+const milky = { prog: null, rot: 0, kk: 0, en: 0 };
+function milkySetup() {
+  milky.prog = glProgram(`uniform vec2 uRes; uniform float uRot, uKick, uEn, uGate, uNight; uniform vec3 uC0, uC1, uC2, uBg;
+    ${GLSL_NOISE}
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = (vUv - .5) * vec2(asp, 1.);
+      float a = .55 + uRot, c = cos(a), s = sin(a); vec2 q = mat2(c, -s, s, c) * p;
+      float wv = fbm(q * 1.4 + 3.) - .5;
+      float band = exp(-pow((q.y + wv * .35) / (.17 + .06 * uEn), 2.));
+      vec2 z = q * 3. + vec2(uRot * 2., 0.);
+      float f = fbm(z + 1.7 * vec2(fbm(z * .7 + 9.), fbm(z * .9 - 4.)));
+      float dust = smoothstep(.45, .7, fbm(z * 1.8 + 20.)) * smoothstep(.0, .8, band);   // franjas de polvo oscuro (de su color)
+      vec3 neb = mix(uC0, uC1, smoothstep(.3, .7, f)); neb = mix(neb, uC2, smoothstep(.6, .9, fbm(z * 1.3 - 7.)));
+      float I = band * (.25 + .75 * f) * (.35 + .65 * uGate) * (.55 + .45 * uEn + .5 * uKick);
+      vec3 col = uBg + neb * I * (uNight > .5 ? .55 : .45) * (1. - .6 * dust);
+      col += mix(neb, vec3(1.), .5) * pow(band, 3.) * pow(f, 3.) * .25 * (.5 + .5 * uGate);   // el corazón claro de la galaxia
+      o = vec4(col, 1.);
+    }`);
+}
+function drawMilky(dt) {
+  if (!glInit()) return false;
+  if (!milky.prog) milkySetup();
+  const night = state.theme === 'dark', gl = GLX.gl;
+  if (pulse.on && !pulse.melo) { milky.kk = 1; nudgeAdd('milky', 0.012 * musicGate); }
+  milky.kk *= Math.exp(-dt * 4); milky.en += (Math.min(1, energy * 2 + dynL * 0.4) - milky.en) * (1 - Math.pow(0.2, dt));
+  milky.rot += dt * musicGate * (0.004 + energy * 0.01) + nudgeTake('milky', dt);
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(65, Math.min(92, s_ * 1.1)), l)).map(v => v / 255); };
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(0.6), p = milky.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uRot, milky.rot); gl.uniform1f(p.u.uKick, milky.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uEn, milky.en); gl.uniform1f(p.u.uGate, musicGate); gl.uniform1f(p.u.uNight, night ? 1 : 0);
+  gl.uniform3fv(p.u.uC0, sat(RGB[0], 50)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 58)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 52));
+  gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 40, night ? 4 : 16)).map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  return true;
+}
 function drawStars(dt) {
   const night = state.theme === 'dark';
   if (!starSky.list || starSky.key !== W + 'x' + H) starsInit();
-  if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
-  ambient();
+  if (!drawMilky(dt)) { if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
+    ambient(); }
   // como Infinito: la parte de la canción marca la velocidad del viaje (pasea en la estrofa, vuela en el coro)
   // y cada golpe da un empujón que se ve (sube al instante y se va en ~0,4 s)
   if (pulse.on && !pulse.melo) starSky.kv = (starSky.kv || 0) + 0.008 + 0.018 * pulse.k;
