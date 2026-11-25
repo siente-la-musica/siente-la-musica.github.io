@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 239</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 240</div>
     </div>
   </div>
   <div class="group">
@@ -6377,30 +6377,33 @@ function drawPuntosSuave(dt) {
 // de blanco, los medios avivan el color y la voz baña de luz el espacio de abajo. ----------
 PAI.ring = { rot: 0 };
 const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2;
-  ${GLSL_NOISE}
   void main() {
-    float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, asp < 1. ? .58 : .55);
+    float asp = uRes.x / uRes.y, px = 1. / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, asp < 1. ? .58 : .55);
     vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., uv.y)); float al = .62;
-    float R = min(asp, 1.) * .31 * (1. + .04 * uP + .035 * uLv.x), d = length(p - c), a = atan(p.y - c.y, p.x - c.x);
-    if (d < R) { float k = smoothstep(R, R * .88, d); sky = mix(sky, uSky0 * .7, k * .5); al = mix(al, .82, k); }   // adentro, más hondo
+    float R = min(asp, 1.) * (asp < 1. ? .38 : .3) * (1. + .03 * uLv.x), d = length(p - c), a = atan(p.y - c.y, p.x - c.x);
+    if (d < R) { float k = smoothstep(R, R * .7, d); sky = mix(sky, uSky0 * .7, k * .5); al = mix(al, .8, k); }
     vec3 L = vec3(0.);
-    L += mix(uC1, vec3(1.), .5) * exp(-pow((p.y - c.y + R * 1.1) / (R * .9), 2.)) * exp(-pow((p.x - c.x) / (R * .9), 2.)) * (.08 + .45 * uVo);   // la luz que cae abajo
-    float t = fract((a + uRot) / 6.2832);
-    vec3 rb = t < .33 ? mix(uC0, uC1, t * 3.) : t < .66 ? mix(uC1, uC2, (t - .33) * 3.) : mix(uC2, uC0, (t - .66) * 3.);
-    float side = .45 + .55 * smoothstep(.3, -.9, sin(a) * .8 + cos(a) * -.4);
-    float gw = .016 + .018 * uLv.x + .014 * uP;   // fino, como te gustaba                                                         // el resplandor se abre con los graves
-    L += mix(rb, vec3(1.), .2) * exp(-pow((d - R) / (R * gw), 2.)) * side * (.4 + .7 * uP + .55 * uLv.y + .25 * uEn);
-    L += mix(rb, vec3(1.), .45) * exp(-max(d - R, 0.) / (R * (.2 + .25 * uLv.x))) * step(R, d) * side * (.1 + .25 * uP);
-    L += vec3(1.) * exp(-pow((d - R) / ((1.2 + 0.9 * uP) * px), 2.)) * (.6 + .8 * uP);                // el filo blanco, que se engrosa en el golpe
-    L += vec3(1.) * exp(-pow((d - R * .985) / (1.2 * px), 2.)) * .2;
+    // veinte hebras de luz: cada una gira a su ritmo y ondula con su parte del sonido; el golpe las abre y vuelven a juntarse
+    for (int i = 0; i < 20; i++) {
+      float fi = float(i), u = fi / 19.;
+      float k1 = 2. + mod(fi, 3.), k2 = 3. + mod(fi * 7., 4.);
+      float lv = u < .34 ? uLv.x : u < .67 ? uLv.y : uLv.z;
+      float amp = (.025 + .05 * lv + .05 * uP) * (.55 + .45 * sin(fi * 1.7));
+      float r = R * (1. + (u - .5) * (.16 + .16 * uP + .06 * uEn) + amp * sin(k1 * a + uRot * (1. + .3 * fi) + fi * 2.1) + amp * .6 * sin(k2 * a - uRot * (.7 + .2 * fi) + fi));
+      float w = R * (.0035 + .002 * lv) + px * .8;
+      vec3 cc = u < .5 ? mix(uC0, uC1, u * 2.) : mix(uC1, uC2, u * 2. - 1.);
+      float g = exp(-pow((d - r) / w, 2.)), halo = exp(-abs(d - r) / (R * .05));
+      L += cc * (g * .42 + halo * .025) * (.55 + .5 * lv + .45 * uP + .2 * uEn);
+    }
+    L += mix(uC1, uC0, .5) * exp(-pow((p.y - c.y + R * 1.1) / (R * .9), 2.)) * exp(-pow((p.x - c.x) / (R * .9), 2.)) * (.05 + .35 * uVo);   // la voz: luz que cae abajo
+    L = L / (1. + .35 * L);                                       // las hebras se suman sin quemarse a blanco
     vec3 col = sky * al + L;
-    col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .02 * al;
-    o = vec4(col, al);
+    o = vec4(col, clamp(al + dot(L, vec3(.33)) * .5, 0., 1.));
   }`;
 function drawAnillo(dt) {
   if (!glInit()) { drawEclipse(dt); return; }
   const S = PAI.ring, night = state.theme === 'dark'; paiLevels(S, dt);
-  S.rot += dt * (0.05 + 0.9 * S.en + 0.4 * Math.min(1, S.lv[1])) * S.go; S.k = Math.max((S.k || 0) * Math.pow(0.02, dt), pulse.on ? Math.max(0.6, pulse.k || 1) : 0);
+  if (pulse.on && !pulse.melo) nudgeAdd('ring', 0.35 * S.go); S.rot += dt * (0.08 + 0.7 * S.en + 0.3 * Math.min(1, S.lv[1])) * S.go + nudgeTake('ring', dt); S.k = Math.max((S.k || 0) * Math.pow(0.02, dt), pulse.on ? Math.max(0.6, pulse.k || 1) : 0);
   const sky = night ? [[0.05, 0.1, 0.28], [0.02, 0.03, 0.1]] : [[0.12, 0.42, 0.76], [0.45, 0.7, 0.9]];
   const c = k => paiTone(mix([0.1, 0.5, 0.9][k]), 64, 75, 100);
   paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(sky[0], paiTone(mix(0.4), night ? 20 : 45), 0.3)); gl.uniform3fv(p.u.uSky1, paiBl(sky[1], paiTone(mix(0.7), night ? 10 : 70), 0.3));
