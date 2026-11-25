@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 261</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 262</div>
     </div>
   </div>
   <div class="group">
@@ -7211,13 +7211,13 @@ function lk3Setup() {
     float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
     float fbm(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 5; i++) { s += a * vn(p); p = p * 2.03 + vec2(1.7, 9.2); a *= .5; } return s; }
-    float rid(vec2 p) { float s = 0., a = .55; for (int i = 0; i < 5; i++) { s += a * (1. - abs(vn(p) * 2. - 1.)); p = p * 2.1 + vec2(3.1, 1.7); a *= .5; } return s; }
+    float rid(vec2 p) { float s = 0., a = .55; for (int i = 0; i < 3; i++) { s += a * (1. - abs(vn(p) * 2. - 1.)); p = p * 2.1 + vec2(3.1, 1.7); a *= .5; } return s; }
     // el terreno: el lago al centro, orillas bajas a los lados y montañas al fondo (con su bosque como un relieve fino)
     float terr(vec2 xz, out float forest) {
       float back = smoothstep(50., 95., -xz.y), side = smoothstep(26., 48., abs(xz.x + 4. * sin(xz.y * .04)));
       float rr_ = rid(xz * .016 + vec2(2.3, 0.)); float m = back * (1.5 + 15. * rr_ * rr_) + side * (1.5 + 7. * fbm(xz * .045));   // picos y valles marcados
       forest = smoothstep(12., 2., m) * smoothstep(.3, 1.2, m);
-      return m - 1.1 + forest * (.35 * vn(xz * 1.2) + .12 * vn(xz * 3.));
+      return m - 1.1 + forest * (.32 * vn(xz * .55) + .22 * vn(xz * 1.25 + 4.));   // el bosque en copas redondas y suaves   // el bosque en copas redondas (racimos), no en franja
     }
     vec3 Ldir() { return normalize(vec3(-.18, uNight > .5 ? .2 : .085, -1.)); }   // la luna (o el sol bajo) al fondo: su camino de luz cruza el lago
     vec3 sky(vec3 rd) {
@@ -7238,17 +7238,19 @@ function lk3Setup() {
       // el casco: dos esferas grandes que se cruzan (proa y popa en punta, costados curvos), con fondo y hueco por dentro
       float Rb = 2.6, lens = max(length(q - vec3(0., .2, Rb - .5)) - Rb, length(q + vec3(0., -.2, Rb - .5)) - Rb);
       float inner = max(length(q - vec3(0., .25, Rb - .42)) - Rb, length(q + vec3(0., -.25, Rb - .42)) - Rb);
-      float hull = max(max(lens, -q.y - .32), q.y - .16); hull = max(hull, -max(inner, -q.y - .2));
+      float sheer = .16 + .16 * pow(clamp(abs(q.x) / 1.5, 0., 1.), 2.);   // la borda sube hacia la proa y la popa, como un bote de remos
+      float hull = max(max(lens, -q.y - .32), q.y - sheer); hull = max(hull, -max(inner, -q.y - .2));
       float pole = length(vec2(q.x - .95, q.z)) - .025; pole = max(pole, max(-q.y, q.y - .85));
       float lamp = length(q - vec3(.95, .92, 0.)) - .085;
+      float seat = max(abs(q.x + .2) - .07, max(abs(q.y - .02) - .025, abs(q.z) - .32)); hull = min(hull, seat);   // la banca
       m = 1.; float d = hull; if (pole < d) { d = pole; m = 2.; } if (lamp < d) { d = lamp; m = 3.; }
       return d;
     }
     vec3 shadeTerr(vec3 p, vec3 rd, float t, float forest) {
-      vec2 e = vec2(.06, 0.); float f_; vec3 n = normalize(vec3(terr(p.xz - e.xy, f_) - terr(p.xz + e.xy, f_), 2. * e.x, terr(p.xz - e.yx, f_) - terr(p.xz + e.yx, f_)));
+      vec2 e = vec2(.28, 0.); float f_; vec3 n = normalize(vec3(terr(p.xz - e.xy, f_) - terr(p.xz + e.xy, f_), 2. * e.x, terr(p.xz - e.yx, f_) - terr(p.xz + e.yx, f_)));
       vec3 L = Ldir(); float dr = dot(n, normalize(vec3(L.x + .5, .55, L.z + .3))), dif = smoothstep(.05, .35, dr) * .75 + .25 * smoothstep(-.4, .8, dr);   // planos de luz y sombra definidos, como pinceladas
-      float snow = smoothstep(6.5, 8., p.y + 1.5 * vn(p.xz * .3)) * smoothstep(.45, .8, n.y);
-      vec3 rock = mix(uMtn * .8, uMtn * 1.15, vn(p.xz * .5 + p.y));
+      float snow = smoothstep(6.6, 6.9, p.y + 1.2 * vn(p.xz * .25)) * smoothstep(.5, .6, n.y);   // la nieve con borde limpio, como pintada
+      vec3 rock = mix(uMtn * .85, uMtn * 1.1, vn(p.xz * .15 + p.y * .3));   // la roca en masas grandes
       float tn = vn(p.xz * .7) * .6 + vn(p.xz * 2.) * .4;   // el bosque en manchas (no en grano fino)
       vec3 alb = mix(rock, mix(uFor * .7, uFor * 1.2, tn), forest);
       alb = mix(alb, vec3(.92, .94, 1.), snow);
@@ -7271,7 +7273,7 @@ function lk3Setup() {
         vec3 p = ro + rd * tB; float m_; vec2 e = vec2(.002, 0.);
         vec3 n = normalize(vec3(boat(p + e.xyy, m_) - boat(p - e.xyy, m_), boat(p + e.yxy, m_) - boat(p - e.yxy, m_), boat(p + e.yyx, m_) - boat(p - e.yyx, m_)));
         float dif = smoothstep(-.2, .6, dot(n, normalize(vec3(-.3, .5, -1.))));
-        vec3 wood = vec3(.42, .26, .16) * (.8 + .3 * step(.5, fract(p.y * 18.)));
+        vec3 wood = vec3(.42, .26, .16) * (.82 + .25 * smoothstep(.45, .55, fract(p.y * 14.))); if (p.y > .36) wood = vec3(.62, .44, .3);   // tablas del casco y la borda más clara
         col = bm > 2.5 ? mix(uWarm, vec3(1., .95, .8), .35) * (.8 + .5 * uLamp) : wood * ((uNight > .5 ? vec3(.18, .2, .36) : vec3(.5, .5, .7)) + (uNight > .5 ? vec3(.4, .45, .7) : vec3(1., .8, .6)) * dif * .7);
         if (bm < 2.5) col += (uNight > .5 ? vec3(.45, .55, .9) : vec3(1., .8, .55)) * pow(1. - max(dot(n, -rd), 0.), 3.) * .35;   // el filo de luz de la luna (o del sol) en la madera
         col += uWarm * uLamp * .6 * exp(-length(p - vec3(2.05, 1.18, -4.6)) * 2.5) * (bm < 1.5 ? 1. : 0.);   // el farol ilumina el casco
