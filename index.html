@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 233</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 234</div>
     </div>
   </div>
   <div class="group">
@@ -11425,92 +11425,92 @@ function drawSakura(dt) {
 
 
 // ================= Escena: Vitral =================
-// Un sol de la canción detrás de un panel de vidrio en cuadrícula, como en un cartel de diseño: a la izquierda
-// se ve nítido; detrás del vidrio cada cuadro lo deforma y lo difumina a su manera. El sol respira con los
-// graves y se alza con la energía; cada golpe hace vibrar el vidrio; cada columna del panel brilla en su
-// canto con su parte del sonido. Detrás de todo, la portada en el cielo del atardecer.
-const vit = { prog: null, R: 0.3, y: 0.5, wob: 0, lv: new Float32Array(12) };
+// Un rosetón de catedral: vidrio de colores (los de la portada) con la luz de la canción detrás. El dibujo es simétrico
+// como un caleidoscopio y gira muy despacio con la música (cada bombo le da un empujón suave). Cada anillo de vidrio
+// escucha su parte del sonido: los graves en el centro, los agudos en el borde; cada golpe manda una onda de luz del
+// centro hacia afuera que enciende los vidrios a su paso; la voz tiñe el corazón. El plomo es hondo de su color
+// (nunca negro plano) y el vidrio tiene su textura: burbujas, vetas y un brillo que se mueve. En silencio, quieto.
+const vit = { prog: null, rot: 0, wave: 9, waveK: 0, vo: 0, lv: new Float32Array(12), v: null, tg: null, P: new Float32Array(15) };
 function vitSetup() {
-  vit.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uY, uWob, uNight, uP, uCell, uX0; uniform vec3 uSun, uSun2, uTop, uBot; uniform float uLv[12];
+  vit.prog = glProgram(`uniform vec2 uRes; uniform float uRot, uT, uP, uWave, uWaveK, uNight, uVo, uGate; uniform float uLv[12]; uniform vec3 uPal[5], uBg, uMel;
     ${GLSL_COVER}
-    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    vec3 scene(vec2 p, vec2 uv) {
-      vec3 sky = mix(uBot, uTop, smoothstep(0., 1., uv.y));
-      sky = mix(sky, withCover(sky), .4);   // la portada, detrás del vidrio
-      vec2 c = vec2(.42 * uRes.x / uRes.y, uY); float d = length(p - c) / uR;
-      vec3 sun = mix(uSun, uSun2, smoothstep(.2, 1., (c.y - p.y) / uR * .5 + .5));   // más hondo abajo
-      sun *= .8 + .28 * sqrt(max(0., 1. - d * d));
-      sun = mix(sun, mix(uSun, vec3(1., .96, .86), .55), exp(-dot((p - c) / uR - vec2(-.25, .3), (p - c) / uR - vec2(-.25, .3)) * 2.2) * .55);   // el sol tiene un corazón claro, no es un disco plano
-      float a = smoothstep(1., .985, d);
-      sky += uSun * (exp(-max(0., d - 1.) * 2.5) * .4 + exp(-max(0., d - 1.) * .9) * .12) * (.4 + uP * 1.1);   // su halo late con el golpe (uno cercano y otro amplio)
-      return mix(sky, sun, a);
-    }
+    float hs(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
+    float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f);
+      return mix(mix(hs(i), hs(i + vec2(1, 0)), f.x), mix(hs(i + vec2(0, 1)), hs(i + vec2(1, 1)), f.x), f.y); }
+    vec3 pal(float t) { t = fract(t) * 5.; int i = int(t); float f = smoothstep(.2, .8, fract(t)); vec3 a = uPal[0], b = uPal[1];
+      for (int k = 0; k < 5; k++) if (k == i) { a = uPal[k]; b = uPal[k == 4 ? 0 : k + 1]; } return mix(a, b, f); }
     void main() {
-      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
-      vec3 col;
-      if (p.x < uX0) col = scene(p, vUv);
-      else {
-        // el vidrio: cada cuadro es una lente que deforma y difumina lo de atrás
-        vec2 cell = floor((p - vec2(uX0, 0.)) / uCell), lc = (p - vec2(uX0, 0.)) / uCell - cell - .5;
-        int ci = int(clamp(cell.x, 0., 11.)); float lv = uLv[ci];
-        // cada cuadro amplía e invierte lo de atrás (como una gota de vidrio) y lo difumina
-        // cada cuadro muestra lo de atrás ampliado y muy difuminado (una mancha de luz suave, como vidrio esmerilado)
-        float tj = h(cell * 1.3 + 2.), tk = h(cell * 2.1 + 7.);                    // cada vidrio está cortado un poco distinto: dobla la luz a su manera
-        vec2 off = -lc * uCell * (1.1 + uWob * .35 + (tj - .5) * .7) + (vec2(tj, tk) - .5) * uCell * .55 + vec2(0., sin(cell.x * 1.7 + uTime * 2.) * uWob * .01);
-        vec3 acc = vec3(0.);
-        for (int k = 0; k < 16; k++) { float an = float(k) * 2.399, rr = sqrt(float(k) / 16.) * .05; vec2 o2 = vec2(cos(an), sin(an)) * rr; acc += scene(p + off + o2, vUv + vec2(o2.x / asp, o2.y)); }
-        col = acc / 16.;
-        col = mix(col, vec3(1.), .04) * (.94 + .2 * tk);   // esmerilado, unos vidrios más claros que otros
-        col += vec3(1.) * exp(-dot(lc - vec2(-.3, .32), lc - vec2(-.3, .32)) * 70.) * step(.9, tj) * (.06 + lv * .18) * (uNight > .5 ? 1. : .5);   // algunos atrapan un destello en la esquina
-        // cada bloque de vidrio tiene volumen: más claro arriba, más hondo abajo, y un brillo suave arriba a la izquierda
-        col *= .82 + .32 * (.5 - lc.y * .9);
-        col += exp(-dot(lc - vec2(-.25, .3), lc - vec2(-.25, .3)) * 9.) * .06;
-        // canto del cuadro: filo de luz arriba-izquierda y sombra abajo-derecha (relieve del vidrio)
-        // líneas finas y limpias entre cuadros: claras arriba-izquierda, hondas abajo-derecha
-        float px = 1.5 / uRes.y / uCell;
-        float top = smoothstep(.5 - px * 1.5, .5, lc.y), left = smoothstep(.5 - px * 1.5, .5, -lc.x);
-        float bot = smoothstep(.5 - px * 1.5, .5, -lc.y), right = smoothstep(.5 - px * 1.5, .5, lc.x);
-        col += max(top, left) * (.08 + lv * .25 + uP * .05);
-        col -= max(bot, right) * .06;
-        // detrás del vidrio, la luz de cada columna sube hasta donde llega su sonido (un ecualizador esmerilado)
-        float fill = smoothstep(lv * .95 + .03, lv * .95 - .14, vUv.y);
-        col += mix(uSun, vec3(1.), .25) * fill * (.1 + .32 * clamp(lv, 0., 1.2)) * (uNight > .5 ? 1. : .4);   // de día, menos: que no se lave a blanco
-        col *= .86 + clamp(lv, 0., 1.2) * .22;
-      }
+      float asp = uRes.x / uRes.y; vec2 p = (vUv - vec2(.5, asp < 1. ? .575 : .5)) * vec2(asp, 1.);   // en vertical, un poco arriba: la letra va debajo
+      float R = asp < 1. ? asp * .41 : .45; vec2 q = p / R; float r = length(q);
+      float a = atan(q.y, q.x) + uRot, N = 12., sec = 6.28318 / N;
+      float af = abs(mod(a, sec) - sec * .5);                       // simetría de rosetón: cada pétalo es espejo del vecino
+      vec2 fq = r * vec2(cos(af), sin(af));
+      // los vidrios: celdas de Voronoi en el pétalo, más finas hacia el borde
+      vec2 g = fq * (4.2 + 2.6 * r); vec2 gi = floor(g), gf = fract(g); float d1 = 9., d2 = 9.; vec2 id = vec2(0.);
+      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) { vec2 o = vec2(x, y), c = o + .15 + .7 * h2(gi + o) - gf; float d = dot(c, c);
+        if (d < d1) { d2 = d1; d1 = d; id = gi + o; } else if (d < d2) d2 = d; }
+      float e = sqrt(d2) - sqrt(d1), w = fwidth(e) + .002;
+      // los aros de piedra que ordenan el rosetón (centro, medio y borde)
+      float ring = min(min(abs(r - .3), abs(r - .64)), abs(r - 1.)) * (4.2 + 2.6 * r);
+      float lead = 1. - smoothstep(.045, .045 + w * 1.5, min(e, ring * .9));
+      // el color de cada vidrio: de la portada, según su sitio en el rosetón (los anillos cambian de tono)
+      float hh = hs(id + 3.1), band = clamp(r * 12., 0., 11.); int bi = int(band);
+      float lv = uLv[bi];
+      vec3 glass = pal(hh * .55 + floor(r * 3.) * .33 + .08 * sin(uT * .05));
+      glass = mix(glass, uMel, uVo * .5 * smoothstep(.35, 0., r));  // la voz tiñe el corazón
+      // la luz detrás: más fuerte en el centro; cada anillo con su sonido; la onda del golpe
+      float wave = exp(-pow((r - uWave) / .13, 2.)) * uWaveK;
+      float light = (.42 + .5 * smoothstep(1.1, 0., r)) * (.55 + .45 * uGate) + .85 * lv + 1.1 * wave + .25 * uP * smoothstep(.5, 0., r);
+      light *= .82 + .36 * hh;                                       // cada vidrio deja pasar distinta luz
+      // textura del vidrio soplado: vetas, burbujas y un brillo que pasea
+      float tex = vn(fq * 22. + id * 7.) * .6 + vn(fq * 55. + id) * .4;
+      vec3 col = glass * light * (.78 + .38 * tex);
+      col += glass * glass * pow(max(0., 1. - sqrt(d1) * 1.6), 3.) * .35 * light;   // la luz se junta en el centro de cada pieza
+      col += vec3(1.) * pow(vn(fq * 9. + vec2(uT * .08, 0.)), 6.) * .25 * light;    // un destello que pasea por el vidrio
+      // el plomo: hondo, del color de la piedra, con un filo suave de luz
+      vec3 leadC = mix(uBg * .55, glass * .18, .5) + glass * .12 * smoothstep(.0, .045, min(e, ring));
+      col = mix(col, leadC, lead);
+      // fuera del rosetón: la piedra en penumbra, con el resplandor de color que sale del vidrio
+      vec3 bg = mix(uBg, withCover(uBg), .25);
+      float out_ = smoothstep(1.02, 1.05, r);
+      vec3 halo = pal(.1 + a * .05) * (exp(-(r - 1.) * 3.5) * (.32 + .25 * uP + .4 * wave * 0.) * (.5 + .5 * uGate));
+      col = mix(col, bg + halo, out_);
+      col = mix(col, leadC * .8, (1. - smoothstep(.0, .025, abs(r - 1.035))) * .9);   // el marco
+      if (uNight < .5) col = mix(col, col * .85 + .12, out_);
+      col *= 1. - .1 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
 }
 function drawVitral(dt) {
   if (!glInit()) { drawLight(dt); return; }
   if (!vit.prog) vitSetup();
-  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  // el sol: su tamaño lo dan los graves y la parte de la canción; cada golpe lo hincha con un empujón (resorte)
-  const tR = 0.22 + Math.pow(bandX(0, 10), 1.3) * 0.1 + dynL * 0.06;
-  if (pulse.on) vit.rv = (vit.rv || 0) + 0.5 + pulse.k * 0.9;
-  vit.rv = (vit.rv || 0) + ((tR - vit.R) * 180 - (vit.rv || 0) * 14) * dt; vit.R += vit.rv * dt;
-  vit.y += ((0.46 + dynL * 0.08) - vit.y) * (1 - Math.pow(0.2, dt));
-  if (pulse.on) vit.wob = Math.min(2, vit.wob + 0.8 * pulse.k + 0.4);
-  vit.wob *= Math.pow(0.08, dt);
-  // cada columna de vidrio es una banda (graves a la izquierda): su luz sube hasta donde llega, con resortes
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  // gira con la canción: muy despacio en lo suave, más en lo fuerte; cada bombo, un empujón que se reparte (nunca un salto)
+  if (pulse.on && !pulse.melo) { nudgeAdd('vit', (0.05 + 0.05 * pulse.k) * musicGate); vit.wave = 0; vit.waveK = 0.55 + 0.5 * pulse.k; }
+  vit.rot += dt * musicGate * (0.02 + energy * 0.09) + nudgeTake('vit', dt);
+  vit.wave += dt * 1.5; vit.waveK *= Math.pow(0.3, dt);
+  vit.vo += (Math.min(1, voice * 1.4) - vit.vo) * (1 - Math.pow(0.05, dt));
+  // cada anillo es una banda (graves al centro): sube rápido con su sonido y baja con resorte; cada nota le da un toque
   if (!vit.v) { vit.v = new Float32Array(12); vit.tg = new Float32Array(12); }
-  for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.92); vit.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 4)), 1.1); }
-  springTo(vit.lv, vit.v, vit.tg, dt, 240, 0.6);
-  const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];   // el tono más cálido de la portada es el sol
-  const sat = (c, s_, l) => { const [h_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, s_, l)).map(v => v / 255); };
+  for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.92), k1 = Math.min(BANDS, k0 + 4); vit.tg[i] = Math.pow(bandX(k0, k1), 1.2) * 0.8 * musicGate; const h = attHit(k0, k1); if (h > 0) vit.v[i] += 2.2 * h; }
+  springTo(vit.lv, vit.v, vit.tg, dt, 160, 0.6);
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(70, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  const cols = [sat(RGB[0], 52), sat(RGB[1], 56), sat(RGB[2], 50), sat(mix(0.25), 60), sat(mix(0.75), 46)];
+  cols.forEach((c, k) => vit.P.set(c, k * 3));
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const [cw, ch] = glCanvas(1), p = vit.prog;
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, vit.R); gl.uniform1f(p.u.uY, vit.y); gl.uniform1f(p.u.uWob, vit.wob * (state.noFlash ? 0.5 : 1));
-  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); gl.uniform1f(p.u.uX0, asp * (asp > 1 ? 0.38 : 0.3));
-  gl.uniform3fv(p.u.uSun, sat(warm, 92, night ? 55 : 56)); gl.uniform3fv(p.u.uSun2, sat(warm, 88, night ? 34 : 40));
-  gl.uniform3fv(p.u.uTop, night ? hexToRgb(hsl(hh + 20, 35, 14)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 30, 42)).map(v => v / 255));
-  gl.uniform3fv(p.u.uBot, night ? hexToRgb(hsl(hh - 20, 40, 36)).map(v => v / 255) : hexToRgb(hsl(hh - 20, 45, 72)).map(v => v / 255));
-  gl.uniform1fv(p.u['uLv[0]'], vit.lv);
+  gl.uniform1f(p.u.uT, time % 1000); gl.uniform1f(p.u.uRot, vit.rot); gl.uniform1f(p.u.uP, P * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uWave, vit.wave); gl.uniform1f(p.u.uWaveK, vit.waveK * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uVo, vit.vo); gl.uniform1f(p.u.uGate, musicGate);
+  gl.uniform1fv(p.u['uLv[0]'], vit.lv); gl.uniform3fv(p.u['uPal[0]'], vit.P); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, night ? 30 : 22, night ? 7 : 62)).map(v => v / 255));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  bloom(GLX.c, 0.3 + P * 0.25);   // la luz que atraviesa el vidrio se esparce un poco
 }
 
 // ================= Escena: Lentes =================
