@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 245</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 246</div>
     </div>
   </div>
   <div class="group">
@@ -4551,14 +4551,12 @@ function drawRecOverlay() {
       // aparece un óvalo blanco como de niebla; se mide cada medio segundo, en pocos puntos
       const tn = performance.now(); if (!recording) lyrBg.rd = false; if (!lyrBg.t || lyrBg.m !== state.mode || (recording ? !lyrBg.rd : tn - lyrBg.t > 4000)) { lyrBg.rd = recording;   /* al grabar, una sola vez */ try { const sw = Math.max(8, W * 0.4 | 0), sh = Math.max(8, 50 * u | 0), d = ctx.getImageData(Math.max(0, lx - sw / 2 | 0), Math.max(0, ly_ - sh / 2 | 0), sw, sh).data; let s = 0, n = 0;
         for (let i = 0; i < d.length; i += 4 * 37) { s += 0.3 * d[i] + 0.59 * d[i + 1] + 0.11 * d[i + 2]; n++; } lyrBg.L = s / n / 255; } catch (e) { lyrBg.L = 0.5; } lyrBg.t = tn; lyrBg.m = state.mode; }
-      const dk = state.theme === 'dark' || lyrBg.L < 0.56, soft = state.theme !== 'dark' && dk; lyrBg.dk = dk;   // de día, solo sobre un fondo claro de verdad va la letra oscura   // de día sobre algo oscuro: velo oscuro y más leve
+      const dk = state.theme === 'dark' || lyrBg.L < 0.42, soft = state.theme !== 'dark' && dk;   // de día sobre algo oscuro: velo oscuro y más leve   // de día sobre algo oscuro: velo oscuro y más leve
       ctx.save(); ctx.shadowBlur = 0; ctx.translate(lx, ly_); ctx.scale(1, rh_ / rw_); const g = ctx.createRadialGradient(0, 0, 0, 0, 0, rw_);
       g.addColorStop(0, dk ? `rgba(0,0,0,${soft ? 0.3 : 0.5})` : 'rgba(255,255,255,.55)'); g.addColorStop(0.55, dk ? `rgba(0,0,0,${soft ? 0.16 : 0.28})` : 'rgba(255,255,255,.3)'); g.addColorStop(1, dk ? 'rgba(0,0,0,0)' : 'rgba(255,255,255,0)');
       ctx.fillStyle = g; ctx.fillRect(-rw_, -rw_, rw_ * 2, rw_ * 2); ctx.restore(); }
-    fgOnDark = lyrBg.dk ?? state.theme === 'dark';
-    ctx.shadowColor = fgOnDark ? 'rgba(0,0,0,.92)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 11 * u;   // sombra corta y densa: hace de contorno suave
+    ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.92)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 11 * u;   // sombra corta y densa: hace de contorno suave
     drawLyricStyled(ly, (vertical ? 64 : 58) * u, W / 2, H * (vertical ? yV : yH), vertical ? W * 0.66 : W * 0.8);
-    fgOnDark = null;
   }
   // Firma discreta
   ctx.textAlign = 'center'; ctx.shadowBlur = 0;
@@ -7358,7 +7356,8 @@ function fr3Setup() {
     float tower(vec3 p, out float m) {
       vec3 q = p - LH; q.y -= 4.4;
       float H = 4.2, r = .62 - .1 * clamp(q.y / H, 0., 1.);
-      float body = max(length(q.xz) - r, max(-q.y, q.y - H));
+      float body = max(length(q.xz) - r, max(-(q.y + 3.), q.y - H));   // la torre se hunde en la roca: nunca flota
+      body = min(body, max(length(q.xz) - (.98 - .12 * clamp(q.y + .4, 0., 1.)), max(-(q.y + 3.), q.y - .3)) - .02);   // un zócalo de piedra ancho asentado en el acantilado
       float gal = max(length(q.xz) - .78, abs(q.y - H - .05) - .06);                   // el balcón
       float rail = max(abs(length(q.xz) - .76) - .02, abs(q.y - H - .3) - .2);         // la baranda
       float room = max(length(q.xz) - .42, abs(q.y - H - .45) - .38);                   // el cuarto de la linterna
