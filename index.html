@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 231</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 232</div>
     </div>
   </div>
   <div class="group">
@@ -12203,25 +12203,27 @@ function tunnelSetup() {
       vec3 P = cam + rd * t; vec2 q = P.xy - axis(P.z); float ang = atan(q.y, q.x);
       vec3 c = wallCol(ang, P.z);
       vec3 n = normalize(vec3(-q, 0.));
-      vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .26 + .62 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .22 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
-      c *= lit * (1. + 1.1 * uBloom) * (.85 + .3 * uLoud);   // el golpe ilumina suave; lo fuerte, más luz
+      vec3 Ld = normalize(vec3(-.6, .8, .2)); float lit = .78 + .22 * clamp(dot(n, -Ld) * .5 + .5, 0., 1.) + .08 * clamp(dot(n, -rd), 0., 1.);   // luz de un lado (volumen del tubo) y un poco desde la cámara
+      c *= lit * (1. + .45 * uBloom) * (.85 + .3 * uLoud);   // el golpe ilumina suave; lo fuerte, más luz
       // bandas suaves de luz y sombra a lo largo del tubo (sin líneas ni aros: una ondulación de la luz) que pasan hacia la
       // cámara mientras se avanza: dan la profundidad y el viaje hipnótico; una segunda, más lenta, rompe la repetición
+      c = mix(c, c * c * 1.35, smoothstep(1.5, 13., t) * .75);   // profundidad con color: hacia adentro el mismo tono se vuelve más hondo y saturado (nunca gris ni negro)
       float near = exp(-t * .07);   // el detalle se funde con la distancia (nada de parpadeo al fondo)
       float bd = .5 + .5 * sin(P.z * 1.5708), seam = pow(bd, 6.);   // una franja de luz por cada tiempo: el viaje avanza cuatro unidades por golpe
       float fl = .5 + .5 * cos(ang * 22.);   // estrías a lo largo del tubo, como vidrio acanalado: las líneas que corren hacia el fondo dan la velocidad
       c *= mix(1., (.86 + .14 * bd) * (.97 + .03 * fl), near) * (.95 + .05 * sin(P.z * .31 + 1.7));   // sin franjas oscuras: solo una ondulación leve de la luz
-      c += mix(grad(0, P.z * .03 + .5), vec3(1.), .12) * seam * near * (.16 + .7 * uBloom);   // la costura: un resplandor de color, liso, que se enciende con el bombo   // la costura brilla con su color y se enciende con el bombo
+      c = mix(c, grad(0, P.z * .03 + .5) * 1.15, seam * near * (.22 + .55 * uBloom));   // la costura: un resplandor de color, liso, que se enciende con el bombo   // la costura brilla con su color y se enciende con el bombo
             // al fondo, luz: se aclara con la distancia (la voz la tiñe)
       float fog = 1. - exp(-t * .05);   // niebla liviana: las paredes y sus bandas se ven hasta lejos
-      vec3 endL = mix(mix(wallCol(ang + 1.2, P.z + 8.) * 1.3, vec3(1.), .25), uMel, uVo * .4);
+      vec3 endL = min(mix(wallCol(ang + 1.2, P.z + 8.) * 1.12, uMel, uVo * .4), vec3(.97));   // la boca de luz: brillante pero con color (no se quema a blanco)
       return mix(c, endL * (1. + .2 * uBloom), smoothstep(.3, .98, fog));   // la boca de luz del fondo, grande (las paredes cercanas conservan su color)
     }
     void main() {
       vec3 col = shade(vUv);
-      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.3), 0., 1.);
+      col = col * 1.2 / (1. + .2 * col);   // las luces altas se comprimen sin quemarse a blanco
+      float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.3), 0., .97);
       if (uNight > .5) col *= .92; else col = mix(col, vec3(1.), .05);
-      col *= 1. - .25 * pow(length(vUv - .5) * 1.3, 2.);
+      col *= 1. - .08 * pow(length(vUv - .5) * 1.3, 2.);   // viñeta apenas perceptible: nada de sombras negras
       o = vec4(col, 1.);
     }`);
 }
