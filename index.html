@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 292</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 293</div>
     </div>
   </div>
   <div class="group">
@@ -4698,6 +4698,55 @@ function spawnLight(size, strength) {
     c: Math.floor(Math.random() * 3), strength
   });
   if (lights.length > 90) lights.shift();
+}
+// Focos: un viaje a través de luces fuera de foco (como luces de ciudad desenfocadas): seis capas de luces que se abren
+// desde el centro y se acercan; las de lejos pequeñas y nítidas, las de cerca grandes y desenfocadas con su borde de lente.
+// Avanzan con la música y el bombo da un empujón; cada luz brilla con su parte del sonido. En silencio, quietas.
+const foc = { prog: null, z: 0, kk: 0, C: new Float32Array(12), lv: new Float32Array(4) };
+function focSetup() {
+  foc.prog = glProgram(`uniform vec2 uRes; uniform float uZ, uKick, uNight, uGate; uniform vec3 uC[4], uBg; uniform float uLv[4];
+    float hs(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = (vUv - .5) * vec2(asp, 1.);
+      vec3 col = uBg * (.7 + .5 * (1. - length(p)));
+      for (int L = 0; L < 6; L++) {
+        float z = fract(uZ + float(L) / 6.), sc = mix(.25, 3.2, z * z);   /* la capa se acerca: crece desde el centro */
+        float fade = smoothstep(0., .25, z) * smoothstep(1., .75, z);
+        vec2 g = p / sc * 5. + float(L) * 7.3; vec2 gi = floor(g), gf = fract(g) - .5;
+        for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+          vec2 id = gi + vec2(x, y); float h = hs(id + float(L) * 3.1); if (h < .55) continue;
+          vec2 o = (vec2(hs(id + 1.7), hs(id + 4.3)) - .5) * .7; vec2 d = gf - vec2(x, y) - o;
+          float rad = .12 + .22 * hs(id + 9.1), blur = .02 + .5 * z * z;   /* de cerca, desenfocadas */
+          float dl = length(d), disc = smoothstep(rad, rad - blur * rad - .01, dl), rim = exp(-pow((dl - rad * .86) / (rad * .1 + .01), 2.)) * (1. - blur);
+          int ci = int(mod(h * 40., 4.)); vec3 c = uC[0]; float lv = uLv[0];
+          for (int k = 1; k < 4; k++) if (k == ci) { c = uC[k]; lv = uLv[k]; }
+          col += c * (disc * (.25 + .35 * (1. - blur)) + rim * .25) * fade * (.5 + .8 * lv + .5 * uKick) * (.35 + .65 * uGate);
+        }
+      }
+      col = col / (1. + .3 * col);
+      if (uNight < .5) col = mix(col, col * .9 + .1, .3);
+      o = vec4(col, 1.);
+    }`);
+}
+function drawFocos(dt) {
+  if (!glInit()) return drawBokeh(dt);
+  if (!foc.prog) focSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  if (pulse.on && !pulse.melo) { nudgeAdd('foc', 0.05 * musicGate); foc.kk = 1; }
+  foc.kk *= Math.exp(-dt * 5);
+  foc.z += dt * musicGate * (0.02 + energy * 0.06 + dynL * 0.02) + nudgeTake('foc', dt);
+  [[0, 10], [10, 24], [24, 38], [38, BANDS]].forEach(([a, b], k) => { const v = Math.pow(bandX(a, b), 1.2) * musicGate; foc.lv[k] += (v - foc.lv[k]) * (1 - Math.pow(v > foc.lv[k] ? 0.001 : 0.05, dt)); });
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], 58), sat(RGB[1], 62), sat(RGB[2], 56), sat(mix(0.5), 66)].forEach((c, k) => foc.C.set(c, k * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(0.8), p = foc.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uZ, foc.z); gl.uniform1f(p.u.uKick, foc.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uGate, musicGate);
+  gl.uniform3fv(p.u['uC[0]'], foc.C); gl.uniform1fv(p.u['uLv[0]'], foc.lv); gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 35, night ? 6 : 82)).map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.3 + P * 0.2);
 }
 function drawBokeh(dt) {
   const night = state.theme === 'dark';
@@ -15187,7 +15236,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawFocos, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
