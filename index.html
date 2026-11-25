@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 293</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 294</div>
     </div>
   </div>
   <div class="group">
@@ -9034,7 +9034,7 @@ function glCoverBind(p, unit = 5) {
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0, recDropped = false;
 const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'bloques', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
-const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust', 'tubes']);
+const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust', 'tubes', 'bokeh']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; recDropped = false; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
