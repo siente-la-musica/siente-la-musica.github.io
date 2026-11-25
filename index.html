@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 281</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 282</div>
     </div>
   </div>
   <div class="group">
@@ -7204,7 +7204,7 @@ function drawLago(dt) {
 // agudos hacen titilar las estrellas; la voz tiñe la luna. La cámara se desliza despacio, al ritmo. En silencio, quieto.
 const lk = { prog: null, t: 0, rings: [], R: new Float32Array(16), lamp: 0.5, fl: 0, mist: 0, rock: 0, rockV: 0 };
 function lk3Setup() {
-  lk.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uT, uLamp, uFl, uMist, uHi, uVo, uRock, uKick; uniform vec4 uRing[4];
+  lk.prog = glProgram(`uniform vec2 uRes; uniform float uGray, uNight, uT, uLamp, uFl, uMist, uHi, uVo, uRock, uKick; uniform vec4 uRing[4];
     uniform vec3 uSkyT, uSkyH, uCloud, uMtn, uFor, uWarm, uMel, uFog, uDeep;
     float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
@@ -7309,6 +7309,7 @@ function lk3Setup() {
       // la bruma sobre el agua (los graves la levantan)
       col = mix(col, uFog * 1.05, (.12 + .22 * uMist) * exp(-max((ro + rd * min(min(tH, tW), 60.)).y, 0.) * 1.2) * smoothstep(0., .2, -rd.y + .12));
       col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
+      col = mix(col, vec3(dot(col, vec3(.3, .59, .11))), uGray * .92);   /* en silencio, en blanco y negro (como todo) */
       o = vec4(clamp(col, 0., 1.), 1.);
     }`);
 }
@@ -7335,7 +7336,7 @@ function drawLago3D(dt) {
     ? { skyT: bl([0.02, 0.04, 0.14], tone(RGB[1], 10), 0.3), skyH: bl([0.2, 0.25, 0.48], tone(RGB[0], 34), 0.3), cloud: [0.32, 0.36, 0.55], mtn: [0.2, 0.24, 0.38], forC: [0.08, 0.17, 0.16], warm: [1, 0.72, 0.38], fog: bl([0.2, 0.25, 0.45], tone(RGB[1], 32), 0.25), deep: [0.03, 0.05, 0.12] }
     : { skyT: bl([0.32, 0.5, 0.86], tone(RGB[1], 58), 0.2), skyH: bl([1, 0.8, 0.6], tone(RGB[0], 80), 0.25), cloud: [1, 0.95, 0.9], mtn: [0.5, 0.48, 0.6], forC: [0.2, 0.36, 0.26], warm: [1, 0.78, 0.45], fog: bl([0.85, 0.8, 0.86], tone(RGB[0], 82), 0.2), deep: [0.14, 0.24, 0.36] };
   const [cw, ch] = glCanvas(0.75), p = lk.prog;
-  gl.useProgram(p.pr);
+  gl.useProgram(p.pr); gl.uniform1f(p.u.uGray, Math.min(1, colorTick.gray || 0));
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uT, lk.t);
   gl.uniform1f(p.u.uLamp, lk.lamp); gl.uniform1f(p.u.uFl, lk.fl); gl.uniform1f(p.u.uMist, lk.mist); gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uRock, lk.rock); gl.uniform1f(p.u.uKick, (lk.kk || 0) * (state.noFlash ? 0.5 : 1));
   gl.uniform4fv(p.u['uRing[0]'], lk.R);
@@ -7357,7 +7358,7 @@ function drawLago3D(dt) {
 // agudos hacen titilar las estrellas; la voz tiñe la luna. En silencio, quieto.
 const fr3 = { prog: null, t: 0, ph: 0, pw: 0.5, kk: 0, fl: 0, foam: 0 };
 function fr3Setup() {
-  fr3.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uT, uPh, uPw, uKick, uFl, uHi, uVo, uFoam;
+  fr3.prog = glProgram(`uniform vec2 uRes; uniform float uGray, uNight, uT, uPh, uPw, uKick, uFl, uHi, uVo, uFoam;
     uniform vec3 uSkyT, uSkyH, uCloud, uRock, uGrass, uWarm, uMel, uFog, uDeep, uAcc;
     float h2(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3. - 2. * f); return mix(mix(h2(i), h2(i + vec2(1., 0.)), f.x), mix(h2(i + vec2(0., 1.)), h2(i + vec2(1., 1.)), f.x), f.y); }
@@ -7454,6 +7455,7 @@ function fr3Setup() {
       // el halo de la linterna
       { vec3 lp = lamp - ro; float al = dot(lp, rd), dl = length(lp - rd * al); if (al > 0.) col += uWarm * (.6 + 1.6 * uKick) * (exp(-dl * (5. - 2. * uKick)) * .5 + exp(-dl * (1.2 - .5 * uKick)) * .14) * (uNight > .5 ? 1. : .5); }
       col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
+      col = mix(col, vec3(dot(col, vec3(.3, .59, .11))), uGray * .92);   /* en silencio, en blanco y negro (como todo) */
       o = vec4(clamp(col, 0., 1.), 1.);
     }`);
 }
@@ -7476,7 +7478,7 @@ function drawLuz3D(dt) {
     ? { skyT: bl([0.02, 0.04, 0.13], tone(RGB[1], 10), 0.3), skyH: bl([0.18, 0.24, 0.46], tone(RGB[0], 32), 0.3), cloud: [0.3, 0.34, 0.52], rock: [0.3, 0.3, 0.36], grass: [0.16, 0.28, 0.2], warm: [1, 0.74, 0.4], fog: bl([0.17, 0.22, 0.42], tone(RGB[1], 30), 0.25), deep: [0.02, 0.05, 0.12] }
     : { skyT: bl([0.3, 0.5, 0.86], tone(RGB[1], 58), 0.2), skyH: bl([1, 0.8, 0.6], tone(RGB[0], 80), 0.25), cloud: [1, 0.95, 0.9], rock: [0.62, 0.54, 0.48], grass: [0.36, 0.54, 0.28], warm: [1, 0.8, 0.5], fog: bl([0.86, 0.82, 0.86], tone(RGB[0], 82), 0.2), deep: [0.1, 0.22, 0.34] };
   const [cw, ch] = glCanvas(0.75), p = fr3.prog;
-  gl.useProgram(p.pr);
+  gl.useProgram(p.pr); gl.uniform1f(p.u.uGray, Math.min(1, colorTick.gray || 0));
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uT, fr3.t);
   gl.uniform1f(p.u.uPh, fr3.ph); gl.uniform1f(p.u.uPw, fr3.pw); gl.uniform1f(p.u.uKick, fr3.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uFl, fr3.fl); gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uFoam, fr3.foam);
   gl.uniform3fv(p.u.uSkyT, U.skyT); gl.uniform3fv(p.u.uSkyH, U.skyH); gl.uniform3fv(p.u.uCloud, U.cloud); gl.uniform3fv(p.u.uRock, U.rock); gl.uniform3fv(p.u.uGrass, U.grass);
@@ -12180,7 +12182,7 @@ function drawIcons(dt) {
 // de luz que recorre la ciudad; el vuelo va al ritmo de la canción y la voz tiñe la luna. En silencio, quieta.
 const city = { prog: null, t: 0, lv: new Float32Array(6), fl: new Float32Array(6), wave: -9, wk: 0, bank: 0, glow: 0, lan: [], birds: [], beats: 0 };
 function citySetup() {
-  city.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uT, uKick, uWave, uHi, uVo, uBank, uGlow; uniform float uLv[6]; uniform float uFl[6];
+  city.prog = glProgram(`uniform vec2 uRes; uniform float uGray, uNight, uT, uKick, uWave, uHi, uVo, uBank, uGlow; uniform float uLv[6]; uniform float uFl[6];
     uniform vec3 uSkyT, uSkyH, uCloud, uR0, uR1, uR2, uWall, uWarm, uMel, uFog;
     const float S = 5.;
     float h1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
@@ -12371,6 +12373,7 @@ function citySetup() {
       }
       float lu = dot(col, vec3(.3, .59, .11)); col = mix(vec3(lu), col, 1.08);
       col *= 1. - .2 * pow(length(vUv - .5) * 1.25, 2.);
+      col = mix(col, vec3(dot(col, vec3(.3, .59, .11))), uGray * .92);   /* en silencio, en blanco y negro (como todo) */
       o = vec4(clamp(col, 0., 1.), 1.);
     }`);
 }
@@ -12400,7 +12403,7 @@ function drawCity(dt) {
         r0: bl([0.8, 0.36, 0.24], tone(RGB[0], 46), 0.2), r1: bl([0.24, 0.54, 0.56], tone(RGB[1], 44), 0.2), r2: bl([0.66, 0.3, 0.26], tone(RGB[2], 44), 0.15),
         wall: [0.96, 0.9, 0.8], warm: [1, 0.82, 0.5], fog: bl([0.8, 0.84, 0.92], tone(RGB[1], 84), 0.2) };
   const [cw, ch] = glCanvas(0.78), p = city.prog;   /* con el suavizado al ampliar no se nota y va más fluida */
-  gl.useProgram(p.pr);
+  gl.useProgram(p.pr); gl.uniform1f(p.u.uGray, Math.min(1, colorTick.gray || 0));
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
   gl.uniform1f(p.u.uT, city.t); gl.uniform1f(p.u.uKick, city.wk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uWave, city.wave);
   gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uBank, city.bank); gl.uniform1f(p.u.uGlow, city.glow);
@@ -12438,9 +12441,16 @@ function cityLife(dt, night) {
       city.birds.push({ x: dir > 0 ? -60 * u : W + 60 * u, y: y0, dir, n, s: (10 + 6 * Math.random()) * u, ph: Math.random() * 6, off: Array.from({ length: n }, (_, i) => [(-Math.abs(i - (n - 1) / 2) * 26 - Math.random() * 10) * u, (i - (n - 1) / 2) * 16 * u + (Math.random() - 0.5) * 8 * u]) }); }
     for (const f of city.birds) { f.x += f.dir * dt * (90 + 60 * energy) * u * musicGate; f.y += Math.sin(time * 0.5 + f.ph) * 6 * u * dt; f.ph += dt * Math.PI * 2 / per; }
     city.birds = city.birds.filter(f => f.x > -400 * u && f.x < W + 400 * u);
-    ctx.save(); ctx.strokeStyle = 'rgba(48,56,78,.75)'; ctx.lineCap = 'round';
-    for (const f of city.birds) f.off.forEach(([ox, oy], i) => { const x = f.x + ox * f.dir, y = f.y + oy, w = f.s, flap = Math.sin(f.ph + i * 0.7) * 0.6;   // aletean al ritmo de la canción
-      ctx.lineWidth = Math.max(1.2, w * 0.18); ctx.beginPath(); ctx.moveTo(x - w, y - w * flap * 0.8); ctx.quadraticCurveTo(x - w * 0.45, y - w * (0.35 + flap * 0.4), x, y); ctx.quadraticCurveTo(x + w * 0.45, y - w * (0.35 + flap * 0.4), x + w, y - w * flap * 0.8); ctx.stroke(); });
+    // los pájaros: siluetas rellenas (cuerpo y dos alas curvas que se afinan), no trazos; aletean al ritmo; los de atrás, más tenues
+    ctx.save();
+    for (const f of city.birds) f.off.forEach(([ox, oy], i) => { const x = f.x + ox * f.dir, y = f.y + oy, w = f.s * (0.85 + 0.3 * ((i * 37) % 10) / 10), flap = Math.sin(f.ph + i * 0.7);
+      const fade = 0.55 + 0.35 * (1 - Math.abs(i - (f.n - 1) / 2) / f.n);
+      ctx.fillStyle = `rgba(52,58,82,${fade.toFixed(2)})`;
+      const tipY = -w * (0.15 + 0.75 * flap), midY = -w * (0.05 + 0.3 * flap);
+      ctx.beginPath(); ctx.moveTo(x, y + w * 0.06);
+      for (const sd of [-1, 1]) { ctx.quadraticCurveTo(x + sd * w * 0.45, y + midY - w * 0.12, x + sd * w * 1.05, y + tipY); ctx.quadraticCurveTo(x + sd * w * 0.5, y + midY + w * 0.1, x, y + w * 0.12); }
+      ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + f.dir * w * 0.08, y + w * 0.06, w * 0.2, w * 0.08, 0, 0, Math.PI * 2); ctx.fill(); });
     ctx.restore();
   }
 }
