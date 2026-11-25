@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 279</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 280</div>
     </div>
   </div>
   <div class="group">
@@ -12218,12 +12218,7 @@ function citySetup() {
           roof = sdBox(q - vec3(0., hh + .06, 0.), vec3(hb.x + .08, .07, hb.y + .08));
           // en la azotea: un tanque de agua o el cuartito de la escalera
           vec2 rc = vec2((r.y - .5) * hb.x, (r.z - .5) * hb.y) * .8;
-          roof = min(roof, r2.z > .5 ? length(vec2(length(q.xz - rc) - .28, 0.)) * 0. + max(length(q.xz - rc) - .28, abs(q.y - hh - .5) - .3) : sdBox(q - vec3(rc.x, hh + .35, rc.y), vec3(.38, .3, .3)));
-          // balcones en la fachada de adelante y de atrás, uno por piso, con su baranda
-          if (tw < .5) { float fy = clamp(floor((q.y - .45) / .92 + .5), 1., floor((hh - .6) / .92)); float yb = q.y - (.45 + fy * .92) + .06;
-            vec3 bq = vec3(q.x - (h2(id + fy) - .5) * hb.x * .7, yb, abs(q.z) - hb.y - .14);
-            float bal = min(sdBox(bq, vec3(.42, .035, .14)), sdBox(bq - vec3(0., .14, .13), vec3(.42, .12, .012)));
-            if (bal < res.x) res = vec2(bal, 2.); }
+          roof = min(roof, r2.z > .5 ? length(vec2(length(q.xz - rc) - .28, 0.)) * 0. + max(length(q.xz - rc) - .2, abs(q.y - hh - .38) - .22) : sdBox(q - vec3(rc.x, hh + .24, rc.y), vec3(.26, .2, .22)));
           if (roof < res.x) res = vec2(roof, 2.); roof = 1e3;
         } else if (tw > .5) {   // techo en punta de cuatro aguas
           roof = max(sdBox(rq - vec3(0., hh + rf * .5, 0.), vec3(rb.x, rf * .5, rb.y)), (max(abs(rq.x) / rb.x, abs(rq.z) / rb.y) * rf + rq.y - hh - rf) / sqrt(1. + rf * rf / (rb.x * rb.x)));
@@ -12237,9 +12232,9 @@ function citySetup() {
         if (body < res.x) res = vec2(body, 2.);
         if (roof < res.x) res = vec2(roof, 3.);
       } else {
-        vec3 tq = vec3(l.x - (r.y - .5) * 1.2, p.y - base - 1.5, l.y - (r.z - .5) * 1.2);
+        vec3 tq = vec3(l.x - (r.y - .5) * .6, p.y - base - 1.5, l.y - (r.z - .5) * .6);   /* el árbol cabe siempre en su manzana (no sale recortado) */
         // el árbol, como en la animación pintada: una copa de racimos redondos (no una bola) y su tronco
-        float tr = length(tq) - 2.1; if (tr < res.x + .3) { tr = 1e3; for (int k = 0; k < 4; k++) { float fk = float(k); vec3 off = vec3(cos(fk * 2.1 + r.y * 6.) * .55, .15 + .35 * fract(fk * .37 + r.z), sin(fk * 2.1 + r.y * 6.) * .55) * (k == 0 ? 0. : 1.);
+        float tr = length(tq) - 2.1; if (tr < res.x + .3) { tr = 1e3; for (int k = 0; k < 4; k++) { float fk = float(k); vec3 off = vec3(cos(fk * 2.1 + r.y * 6.) * .45, .15 + .3 * fract(fk * .37 + r.z), sin(fk * 2.1 + r.y * 6.) * .45) * (k == 0 ? 0. : 1.);
           float lr = (k == 0 ? 1.05 : .72 + .18 * h2(id + fk)); tr = min(tr, length(tq - off - vec3(0., k == 0 ? .25 : 0., 0.)) - lr); }
         tr += .05 * (vn(tq.xz * 1.6 + tq.y * 1.2 + id * 3.) - .5); }   // apenas ondulada: silueta lisa, nada de papel arrugado (los racimos solo si el rayo pasa cerca)
         if (tr < res.x) res = vec2(tr * .8, 4.);
@@ -12278,7 +12273,7 @@ function citySetup() {
       // se avanza por la ciudad celda a celda: el paso nunca cruza el borde de una manzana (así no se salta la casa de la
       // vecina ni se queda pegado en el borde)
       float t = .1; vec2 h = vec2(0.); bool hit = false; vec2 sgn = sign(rd.xz + 1e-6);
-      for (int i = 0; i < 120; i++) { vec3 q = ro + rd * t; h = map(q); if (h.x < .0045 * t) { hit = true; break; } if (t > 125.) break;   /* a lo lejos, la bruma tapa el detalle: menos precisión */
+      for (int i = 0; i < 120; i++) { vec3 q = ro + rd * t; h = map(q); if (h.x < .0035 * t) { hit = true; break; } if (t > 125.) break;   /* a lo lejos, la bruma tapa el detalle: menos precisión */
         vec2 l = mod(q.xz, S) - S * .5, te = (sgn * S * .5 - l) / (rd.xz + sgn * 1e-6); t += min(h.x * .9, min(te.x, te.y) + .03); }
       vec3 col;
       if (!hit) col = mix(sky(rd), mix(uFog, uSkyH, .6), (1. - smoothstep(-.02, .12, rd.y)) * .9);
@@ -12339,6 +12334,8 @@ function citySetup() {
           float shut = step(.2, wx) * step(wx, .3) * smoothstep(.27, .25, wy) * rowOk * hasW * step(.45, h2(id + 5.));
           float box = smoothstep(.21, .19, wx) * step(.29, -(wf.y - .5)) * step(-(wf.y - .5), .36) * rowOk * hasW * step(.4, h2(wid + id + 11.)) * (1. - uNight * .6);
           col = mix(col, col * 1.25 + .05, frame * .8);                                  // el marco, claro
+          float sill = smoothstep(.21, .19, wx) * step(.26, -(wf.y - .5)) * step(-(wf.y - .5), .31) * rowOk * hasW;   /* el alféizar bajo la ventana */
+          col = mix(col, col * 1.35 + .06, sill * .9); col *= 1. - .25 * smoothstep(.21, .19, wx) * step(.31, -(wf.y - .5)) * step(-(wf.y - .5), .38) * rowOk * hasW;   /* y su sombra */
           col = mix(col, roofC * (.55 + .45 * dif), shut * .9);                           // contraventanas del color del tejado
           col = mix(col, mix(vec3(.85, .25, .35), vec3(1., .75, .3), step(.5, fract(u * 9.))) * (.5 + .5 * dif), box * step(.5, fract(u * 18.)));   // la matera con flores
           if (tw > 1.5 && n.z > .5) {   // la esfera del reloj, que de noche se enciende; las agujas avanzan con la música
