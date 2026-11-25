@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 232</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 233</div>
     </div>
   </div>
   <div class="group">
@@ -5311,7 +5311,7 @@ function glWarmup() {
   if (glWarmup.done) return; glWarmup.done = true;
   if (!GLX.gl && !glInit()) return;
   try { GLX.gl.getExtension('KHR_parallel_shader_compile'); } catch (e) {}
-  const jobs = [() => { if (!ruta.prog) rutaSetup(); if (!ruta.treeAtlas) ruta.treeAtlas = rutaTreeAtlas(); }, () => { if (!mir.prog) miradorSetup(); }, () => { if (!lago.prog) lagoSetup(); }, () => { if (!faro.prog) faroSetup(); if (!faro.cliffCanvas) faro.cliffCanvas = faroCliff(); },
+  const jobs = [() => { if (!ruta.prog) rutaSetup(); if (!ruta.treeAtlas) ruta.treeAtlas = rutaTreeAtlas(); }, () => { if (!mir.prog) miradorSetup(); }, () => { if (!city.prog) citySetup(); }, () => { if (!lk.prog) lk3Setup(); }, () => { if (!fr3.prog) fr3Setup(); },   // las escenas 3D nuevas (Ciudad, Lago, Luz) se preparan en segundo plano: al abrirlas ya están listas
     () => { if (!auto.prog) autoSetup(); }, () => { if (!aur.prog) auroraSetup(); }];
   const next = () => { const j = jobs.shift(); if (!j) return; GL_DEFER = true; try { j(); } catch (e) { console.warn(e); } GL_DEFER = false; (window.requestIdleCallback || (f => setTimeout(f, 400)))(next, { timeout: 1500 }); };
   setTimeout(next, 1200);
