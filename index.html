@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 289</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 290</div>
     </div>
   </div>
   <div class="group">
@@ -11649,7 +11649,7 @@ function drawCapsules(dt) {
 // los graves, cada golpe manda una onda de luz hacia fuera, y la melodía hace girar despacio los colores.
 const sak = { prog: null, R: 0.5, wave: 9, waveK: 0, rot: 0 };
 function sakuraSetup() {
-  sak.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uWave, uWaveK, uRot, uNight, uCell, uP; uniform vec3 uC0, uC1, uC2, uDeep, uOut;
+  sak.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uWave, uWaveK, uRot, uNight, uCell, uP, uFl; uniform vec3 uC0, uC1, uC2, uDeep, uOut;
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 field(vec2 p) {   // el degradado que nace del centro
@@ -11669,11 +11669,12 @@ function sakuraSetup() {
       // al pasar la onda del golpe cada círculo se infla un instante
       float rc = length((cell + .5) * uCell - vec2(.5 * uRes.x / uRes.y, .5)) / uR;
       float pop = exp(-pow((rc - uWave) * 4., 2.)) * uWaveK;
-      float rad = .38 + pop * .1 + uP * .03;
+      float ripple = .5 + .5 * sin(rc * 8.5 - uFl * 2.2 + .6 * sin(atan((cell.y + .5) * uCell - .5, (cell.x + .5) * uCell - .5 * uRes.x / uRes.y) * 3. + uFl * .3));   /* ondas que salen del centro: los puntos crecen y encogen (trama hipnótica) */
+      float rad = .1 + .32 * ripple + pop * .1 + uP * .03;
       float rr = length(lc), fw = max(fwidth(rr) * 1.2, .004), a = smoothstep(rad + fw, rad - fw, rr);
       vec3 fu = field(p) * (uNight > .5 ? .7 : 1.) + (uNight > .5 ? 0. : .06);
       vec3 under = mix(fu, withCover(fu), .3);   // entre círculos: el mismo degradado, apenas más hondo
-      vec3 dotC = field((cell + .5) * uCell + lc * uCell * .55);                                 // dentro: el degradado, algo más vivo
+      vec3 dotC = field((cell + .5) * uCell + lc * uCell * .55) * (.8 + .35 * ripple);                                 // dentro: el degradado, algo más vivo
       // relieve: luz arriba a la izquierda, sombra abajo a la derecha, y un filo fino
       float lit = dot(normalize(lc + 1e-4), normalize(vec2(-.6, .65))) * smoothstep(.2, .46, rr);
       dotC *= 1. + lit * .12;
@@ -11694,7 +11695,8 @@ function drawSakura(dt) {
   sak.rot += dt * (0.02 + voice * 0.4 + energy * 0.1);
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(75, s_), l)).map(v => v / 255); };
   const [cw, ch] = glCanvas(1), p = sak.prog;
-  gl.useProgram(p.pr); glCoverBind(p);
+  if (pulse.on && !pulse.melo) nudgeAdd('sak', 0.6 * musicGate); sak.fl = (sak.fl || 0) + dt * musicGate * (0.5 + energy * 1.4) + nudgeTake('sak', dt);
+  gl.useProgram(p.pr); gl.uniform1f(p.u.uFl, sak.fl); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, sak.R); gl.uniform1f(p.u.uWave, sak.wave); gl.uniform1f(p.u.uWaveK, sak.waveK * (state.noFlash ? 0.4 : 1));
   gl.uniform1f(p.u.uRot, sak.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uCell, 1 / (H > W ? 22 : 15)); gl.uniform1f(p.u.uP, P);
