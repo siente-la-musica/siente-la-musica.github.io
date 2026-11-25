@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 235</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 236</div>
     </div>
   </div>
   <div class="group">
@@ -4539,7 +4539,7 @@ function drawRecOverlay() {
     if (state.mode === 'lago') { yV = 0.34; yH = 0.9; }   // en vertical, en el cielo despejado (abajo la tapaba TikTok y más arriba, la barca)
     if (state.mode === 'mirador') { yV = 0.4; yH = 0.87; }   // en vertical, en el cielo, sobre el horizonte (no sobre la persona)   // la letra sobre el lomo oscuro de la colina, bajo la persona: el cielo queda libre
     if (state.mode === 'navidad') { yV = 0.395; yH = 0.92; }   // en la Navidad (vertical), en la franja de pared lisa entre el alféizar y el televisor
-    if (state.mode === 'bust') { yV = 0.76; yH = 0.86; }
+    if (state.mode === 'bust') { yV = 0.33; yH = 0.86; }   // en vertical, sobre la cabeza
     // en vertical, la letra siempre en la franja segura de TikTok: abajo van el usuario, la descripción y quiénes dieron like; a la derecha,
     // la columna de botones; arriba, el encabezado y nuestro título. Centrada y con margen a los dos lados
     if (vertical) yV = Math.max(0.33, Math.min(0.72, yV));   // la letra queda fija desde el primer cuadro en el sitio pensado para cada animación (nunca se mueve sola)
@@ -8869,7 +8869,7 @@ function glCoverBind(p, unit = 5) {
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0, recDropped = false;
 const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
-const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco']);
+const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; recDropped = false; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
@@ -9282,128 +9282,92 @@ function drawPuffs(dt) {
 }
 
 // ================= Escena: Silueta =================
-// Como una foto desenfocada: una figura de pecho hacia arriba, de un solo color intenso, más honda por
-// dentro y luminosa en el borde, que se deshace hacia abajo. La música la enfoca: cuando entra la voz
-// la figura se aclara (sale de la niebla) y una luz le sube del pecho a la cabeza; cada sílaba la
-// enciende un instante, el bombo la hace respirar y enfocar, la caja abre un leve arcoíris en el borde
-// (como una lente), los platillos dan grano y su color sigue la nota que se canta.
-// proporciones de una persona de verdad: cabeza redonda, mandíbula que se recoge, cuello corto y firme, trapecios y hombros llenos
-const BUST_HALF = [[0, 0.9], [0.045, 0.896], [0.082, 0.882], [0.11, 0.86], [0.128, 0.832], [0.137, 0.8], [0.139, 0.765], [0.136, 0.73], [0.128, 0.697],
-  [0.117, 0.668], [0.105, 0.645], [0.097, 0.625], [0.093, 0.605], [0.094, 0.585], [0.102, 0.566], [0.125, 0.55], [0.16, 0.535], [0.2, 0.52],
-  [0.238, 0.503], [0.27, 0.482], [0.294, 0.455], [0.31, 0.42], [0.318, 0.378], [0.322, 0.33], [0.322, 0.27], [0.318, 0.2], [0.312, 0.12], [0.305, 0.04], [0.296, -0.05]];
-const BUST_PTS = (() => { const r = BUST_HALF.slice(1), l = BUST_HALF.slice(1).reverse().map(([x, y]) => [-x, y]); return new Float32Array([BUST_HALF[0], ...r, [0.296, -0.06], [-0.296, -0.06], ...l.slice(1)].flat()); })();
-const bust = { prog: null, sway: 0, swayV: 0, nod: 0, nodV: 0, tilt: 0, tiltV: 0, sig: 0.023, rise: 0, syl: 0, fr: 0, gr: 0, col: null };
+// Un perfil humano (frente, nariz, labios, mentón, cuello y hombros), como en un cartel de diseño: por dentro, una
+// nebulosa de los colores de la portada que fluye sin parar con la música (lo que se siente por dentro); el borde,
+// una luz fina. La voz enciende la cabeza; cada bombo manda desde el rostro ondas suaves de color hacia afuera; cada
+// nota mueve la corriente interior. En silencio, la nebulosa se queda quieta y apagada.
+const BUST_PROF = [[-0.95, -1.3], [-0.88, -0.98], [-0.6, -0.8], [-0.36, -0.68], [-0.29, -0.47], [-0.33, -0.25], [-0.45, -0.05], [-0.52, 0.2], [-0.5, 0.45], [-0.4, 0.66],
+  [-0.2, 0.8], [0.05, 0.85], [0.25, 0.78], [0.37, 0.62], [0.42, 0.44], [0.445, 0.31], [0.43, 0.25], [0.48, 0.14], [0.555, 0.03], [0.53, -0.015], [0.47, -0.03],
+  [0.475, -0.09], [0.445, -0.125], [0.465, -0.165], [0.44, -0.205], [0.43, -0.29], [0.37, -0.355], [0.24, -0.38], [0.18, -0.5], [0.2, -0.67], [0.36, -0.8], [0.66, -0.96], [0.82, -1.3]];
+const BUST_PTS = (() => {   // contorno suavizado (Catmull-Rom): sin esquinas
+  const P = BUST_PROF, n = P.length, out = [];
+  for (let i = 0; i < n - 1; i++) { const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(n - 1, i + 2)];
+    for (let t = 0; t < 1; t += 0.5) { const t2 = t * t, t3 = t2 * t; out.push([0, 1].map(k => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3))); } }
+  out.push(P[n - 1]); return new Float32Array(out.flat()); })();
+const BUST_N = BUST_PTS.length / 2;
+const bust = { prog: null, flow: 0, vo: 0, wave: 9, waveK: 0, kk: 0, en: 0, P: new Float32Array(12) };
 function bustSetup() {
-  bust.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uSway, uBreath, uS, uSig, uVoice, uRise, uSyl, uFr, uGr, uNod, uTilt;
-    uniform vec3 uCol, uCol2, uDeep, uMel, uBg0, uBg1;
-    uniform vec2 uPts[64]; uniform int uNP;
-    ${GLSL_NOISE} ${GLSL_COVER}
-    float figure(vec2 q) {
-      float c = cos(uSway), s = sin(uSway);
-      q = mat2(c, s, -s, c) * q; q.y /= 1. + uBreath;
-      // la cabeza se mueve sola desde el cuello: cabecea con el ritmo y se ladea con la melodía
-      float hw = smoothstep(.5, .64, q.y), an = (uNod + uTilt) * hw, cn = cos(an), sn = sin(an);
-      vec2 nk = vec2(0., .56); q = mix(q, nk + mat2(cn, sn, -sn, cn) * (q - nk) + vec2(uTilt * .1, uNod * .03) * hw, hw);
-      float d = dot(q - uPts[0], q - uPts[0]), sg = 1.;
-      for (int i = 0; i < 64; i++) {
-        if (i >= uNP) break;
-        vec2 a = uPts[i], b = uPts[i + 1 < uNP ? i + 1 : 0], e = b - a, w = q - a;
-        vec2 pb = w - e * clamp(dot(w, e) / dot(e, e), 0., 1.);
-        d = min(d, dot(pb, pb));
-        bvec3 cond = bvec3(q.y >= a.y, q.y < b.y, e.x * w.y > e.y * w.x);
-        if (all(cond) || all(not(cond))) sg = -sg;
-      }
-      return sg * sqrt(d);
-    }
-    // cuánto cubre la figura desenfocada: el borde de una forma vista con una lente fuera de foco
-    vec3 cov(vec3 d, float sg) { return 1. / (1. + exp(1.702 * d / sg)); }
+  bust.prog = glProgram(`uniform vec2 uRes; uniform float uFlow, uVo, uWave, uWaveK, uKick, uNight, uGate, uEn; uniform vec2 uPts[${BUST_N}]; uniform vec3 uPal[4], uBg, uMel;
+    ${GLSL_COVER}
+    ${GLSL_NOISE}
+    vec3 pal(float t) { t = fract(t) * 4.; int i = int(t); float f = smoothstep(0., 1., fract(t)); vec3 a = uPal[0], b = uPal[1];
+      for (int k = 0; k < 4; k++) if (k == i) { a = uPal[k]; b = uPal[k == 3 ? 0 : k + 1]; } return mix(a, b, f); }
     void main() {
-      float asp = uRes.x / uRes.y;
-      vec2 p = vec2(vUv.x * asp, vUv.y), q = (p - vec2(asp * .5, 0.)) / uS;
-      float d = figure(q) * uS;
-      // más desenfocada abajo, donde se deshace; la caja separa un poco los colores en el borde
-      float low = smoothstep(.34, -.04, q.y), sg = uSig * (1. + 1.7 * low);
-      float f = (.0012 + uFr * .0045) * (1. + low);
-      vec3 a = cov(vec3(d - f, d, d + f), sg) * (1. - .55 * smoothstep(.16, -.06, q.y));
-      // calor por dentro, como una cámara térmica: tres capas de color que fluyen despacio hacia arriba con la música
-      float flow = fbm(q * 3.2 + vec2(0., -uTime * .12)) - .5;
-      float core = cov(vec3(d + .028 + flow * .018), sg * 1.8 + .015).x;   // hondura: más color hacia dentro (sin adelgazar el cuello)
-      float core2 = cov(vec3(d + .085 + flow * .035), sg * 2.4 + .02).x;   // y el corazón, lo más caliente
-      vec3 bg = withCover(mix(uBg1, uBg0, vUv.y));
-      bg *= 1. - .1 * smoothstep(.45, 1.1, length(vUv - .5) * 1.6);   // viñeta suave
-      // la luz de la voz: sube del pecho a la cabeza mientras se canta; cada sílaba la aviva
-      vec2 lp = (q - vec2(0., mix(.2, .66, uRise))) / vec2(.15, .13);
-      float L = exp(-dot(lp, lp)) * (uVoice * .55 + uSyl * .4) + exp(-dot(lp, lp) * .25) * uSyl * .15;
-      vec2 hp = (q - vec2(.0, .3)) / vec2(.16, .12); L += exp(-dot(hp, hp)) * uP * .55;   // con cada golpe, una luz que late en el pecho
-      vec3 fig;
-      if (uNight > .5) {
-        fig = mix(uCol * .6, uCol2 * .92, core * .9);                      // borde de un color, dentro de otro
-        fig = mix(fig, mix(uCol2, vec3(1., .94, .84), .5), core2 * (.55 + uP * .3));   // y el corazón caliente, que late con el golpe
-        fig *= 1. + uP * .18;
-        fig += mix(uMel, vec3(1.), .15) * L * .7;
-      } else {
-        fig = mix(mix(uCol, vec3(1.), .12), uDeep, core * .9);
-        fig = mix(fig, uCol2, core2 * (.45 + uP * .25));
-        fig = mix(fig, mix(uMel, vec3(1.), .55), clamp(L * .8, 0., .85));
-        fig *= 1. + uP * .06;
-      }
-      vec3 col = mix(bg, fig, a);
-      // aura: la luz de la figura se abre en el aire (más con el bombo y la energía)
-      float od = max(d, 0.), aura = exp(-od / (.05 + uP * .025)) * (1. - a.y);
-      col += (uNight > .5 ? uCol * .32 : (mix(uCol, vec3(1.), .5) - bg) * .2) * aura * (.7 + uP * .8);
+      float asp = uRes.x / uRes.y; vec2 uv = (vUv - vec2(.5, asp < 1. ? .5 : .46)) * vec2(asp, 1.);
+      float S = asp < 1. ? .3 : .44; vec2 q = uv / S + vec2(asp < 1. ? .06 : .0, asp < 1. ? .42 : 0.);   // la figura, un poco a la izquierda: mira hacia el aire donde suenan las ondas
+      // distancia con signo al contorno (cerrado por abajo, fuera de cuadro)
+      float d = 9.; bool ins = false;
+      for (int i = 0; i < ${BUST_N - 1}; i++) { vec2 a = uPts[i], b = uPts[i + 1], e = b - a, w = q - a;
+        vec2 pr = w - e * clamp(dot(w, e) / dot(e, e), 0., 1.); d = min(d, dot(pr, pr));
+        if ((a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) * e.x / e.y) ins = !ins; }
+      { vec2 a = uPts[${BUST_N - 1}], b = uPts[0]; if ((a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) * (b.x - a.x) / (b.y - a.y)) ins = !ins; }
+      d = sqrt(d) * (ins ? -1. : 1.) * S;                        // en altos de pantalla
+      float px = 1.5 / uRes.y;
+      vec3 bg = mix(uBg, withCover(uBg), .3);
+      // las ondas de sonido que salen del rostro (a la derecha), suaves y de color
+      vec2 mouth = (vec2(.47, -.05) - vec2(asp < 1. ? .06 : 0., asp < 1. ? .42 : 0.)) * S; float rm = length(uv - mouth);
+      float side = smoothstep(-.1, .25, (uv - mouth).x / max(rm, 1e-3));
+      float ring = exp(-pow((rm - uWave) / .035, 2.)) * uWaveK * side * smoothstep(0., .05, d);
+      float ring2 = exp(-pow((rm - uWave * .62) / .03, 2.)) * uWaveK * .6 * side * smoothstep(0., .05, d);
+      vec3 col = bg + pal(.15 + rm * .8) * (ring + ring2) * .55;
+      // el aura: la luz de adentro se escapa por el borde
+      col += pal(.3 + q.y * .2) * exp(-max(d, 0.) / .05) * (.12 + .25 * uGate + .2 * uKick) * (uNight > .5 ? 1. : .6);
+      // adentro: la nebulosa que fluye (dos capas de ruido que se arrastran una a otra)
+      vec2 z = q * 1.6; float t = uFlow;
+      vec2 w1 = vec2(fbm(z + vec2(0., t * .35)), fbm(z * 1.3 + vec2(5.2, -t * .3)));
+      float f = fbm(z * 1.2 + 2.6 * w1 + vec2(t * .2, -t * .12));
+      vec3 neb = pal(f * 1.3 + w1.x * .6 + t * .04);
+      neb *= .35 + 1.15 * smoothstep(.25, .85, f) * (.45 + .55 * uGate);
+      neb += pal(f + .5) * pow(smoothstep(.55, .95, f), 3.) * (.5 + .9 * uEn);          // filamentos claros
+      float head = smoothstep(-.2, .5, q.y);
+      neb = mix(neb, mix(neb, uMel * 1.2, .5), uVo * head * .6) * (1. + uVo * head * .35);  // la voz enciende la cabeza
+      neb *= 1. + .35 * uKick;
+      float rim = exp(-abs(d) / .004);                            // el filo de luz del contorno
+      vec3 inside = neb * (1. + .5 * smoothstep(-.05, 0., d)) + mix(neb, vec3(1.), .35) * rim * .6;   // el borde se aclara (nunca un contorno oscuro)
+      float a = smoothstep(px, -px, d);
+      col = mix(col, inside + neb * .0, a);
+      col += pal(.6 + q.y * .3) * rim * (.35 + .3 * uKick) * (1. - a);
+      if (uNight < .5) col = mix(col, col * .92 + .05, 1. - a);
+      col *= 1. - .14 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
 }
 function drawBust(dt) {
   if (!glInit()) { drawAura(dt); return; }
   if (!bust.prog) bustSetup();
-  const night = state.theme === 'dark', P = Math.max(0, pulse.x), asp = W / H;
-  // se mece apenas con el compás y respira
-  if (pulse.on) { bust.swayV += (pulse.count % 2 ? 1 : -1) * 0.03 * pulse.k; bust.nodV += 3.2 + 3 * pulse.k; }
-  // la cabeza: cabecea con cada golpe (y un poco con la caja y los platillos) y se ladea con la nota que se canta
-  if (hits.snare || hits.perc > 0.3) bust.nodV -= 1.6;
-  if (hits.voice) bust.tiltV += (Math.random() - 0.5) * 0.6;
-  bust.nodV += (-bust.nod * 160 - bust.nodV * 14) * dt; bust.nod += bust.nodV * dt;
-  const tiltT = voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.12 : 0;
-  bust.tiltV += ((tiltT - bust.tilt) * 30 - bust.tiltV * 7) * dt; bust.tilt += bust.tiltV * dt;
-  bust.swayV += (-bust.sway * 14 - bust.swayV * 4) * dt; bust.sway += bust.swayV * dt;
-  // el foco: la voz la saca de la niebla; sin voz se queda soñando; cada bombo la enfoca un instante
-  const vx_ = bandX(10, 40), lx_ = bandX(0, 10);   // lo que suena en la voz y en los graves, con sus altos y bajos
-  const focus = Math.min(1, voice * 1.6 + vx_ * 0.45 + (dropHit ? 1 : 0));
-  bust.sig += (0.023 - 0.012 * focus - bust.sig) * (1 - Math.pow(focus > 0.5 ? 0.02 : 0.25, dt));
-  bust.rise += (Math.min(1, voice * 1.5) - bust.rise) * (1 - Math.pow(0.15, dt));
-  bust.syl = Math.max(bust.syl * Math.pow(0.03, dt), hits.voice ? Math.min(1, 0.5 + hits.voice * 0.5) : 0);
-  bust.fr = Math.max(bust.fr * Math.pow(0.04, dt), hits.snare ? 1 : 0);
-  bust.gr = Math.max(bust.gr * Math.pow(0.02, dt), hits.hat ? 1 : 0);
-  // el color: el más intenso de la portada, que se va hacia el de la nota mientras se canta
-  const sat = c => Math.max(...c) - Math.min(...c);
-  const byS = RGB.slice().sort((x, y) => sat(y) - sat(x)), base = byS[0].map(v => v / 255), deep2 = byS[1].map(v => v / 255);
-  const mel = melodyColor().map(v => v / 255), wM = Math.min(1, melodyConf * 1.3) * Math.min(1, voice * 2) * 0.6;
-  const target = base.map((v, i) => v + (mel[i] - v) * wM);
-  if (!bust.col) bust.col = target.slice();
-  for (let i = 0; i < 3; i++) bust.col[i] += (target[i] - bust.col[i]) * (1 - Math.pow(0.3, dt));
-  const deep = bust.col.map((v, i) => (v * 0.75 + deep2[i] * 0.25) * (night ? 0.6 : 0.58));
-  const [hh] = hexToHsl(rgbToHex(...bust.col.map(v => v * 255)));
-  const bg0 = night ? hexToRgb(hsl(hh, 30, 5)).map(v => v / 255) : hexToRgb(hsl(hh, 14, 97)).map(v => v / 255);
-  const bg1 = night ? hexToRgb(hsl(hh + 20, 34, 10)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 18, 92)).map(v => v / 255);
-  const [cw, ch] = glCanvas(0.5), gl = GLX.gl;   // va desenfocada: media resolución basta y se ve igual de suave
-  const p = bust.prog; gl.useProgram(p.pr); glCoverBind(p);
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
+  // la corriente de adentro: quieta en silencio, más viva con la energía; cada nota le da un empujón suave
+  { const h = attHit(10, 40); if (h > 0) nudgeAdd('bust', 0.12 * h * musicGate); }
+  if (pulse.on && !pulse.melo) { nudgeAdd('bust', 0.18 * musicGate); bust.wave = 0; bust.waveK = 0.6 + 0.5 * pulse.k; bust.kk = 1; }
+  bust.flow += dt * musicGate * (0.06 + energy * 0.5 + dynL * 0.2) + nudgeTake('bust', dt);
+  bust.wave += dt * 0.55; bust.waveK *= Math.pow(0.35, dt); bust.kk *= Math.exp(-dt * 5);
+  bust.vo += (Math.min(1, voice * 1.4) - bust.vo) * (1 - Math.pow(0.04, dt));
+  bust.en += (Math.min(1, energy * 2) - bust.en) * (1 - Math.pow(0.1, dt));
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], 50), sat(RGB[1], 58), sat(RGB[2], 48), sat(mix(0.5), 64)].forEach((c, k) => bust.P.set(c, k * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = bust.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uSway, bust.sway); gl.uniform1f(p.u.uNod, Math.max(-0.2, Math.min(0.25, bust.nod * 0.12))); gl.uniform1f(p.u.uTilt, bust.tilt); gl.uniform1f(p.u.uBreath, (0.002 + energy * 0.006) * Math.sin(time * 1.3) + P * 0.02 + lx_ * 0.012);
-  gl.uniform1f(p.u.uS, Math.min(1, asp / 0.75));
-  gl.uniform1f(p.u.uSig, bust.sig * (1 - 0.5 * Math.min(1, P))); gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.3 + vx_ * 0.35));
-  gl.uniform1f(p.u.uRise, bust.rise); gl.uniform1f(p.u.uSyl, bust.syl); gl.uniform1f(p.u.uFr, bust.fr); gl.uniform1f(p.u.uGr, bust.gr);
-  // de noche los tonos se llevan a un color pleno (borde hondo, interior vivo): con paletas pastel la figura se lavaba
-  const tone = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(v => Math.round(v * 255)))); return hexToRgb(hsl(h_, Math.max(78, s_), l)).map(v => v / 255); };
-  gl.uniform3fv(p.u.uCol, night ? tone(bust.col, 46) : bust.col); gl.uniform3fv(p.u.uCol2, night ? tone(deep2, 62) : deep2); gl.uniform3fv(p.u.uDeep, deep); gl.uniform3fv(p.u.uMel, mel);
-  gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
-  gl.uniform2fv(p.u['uPts[0]'], BUST_PTS); gl.uniform1i(p.u.uNP, BUST_PTS.length / 2);
+  gl.uniform1f(p.u.uFlow, bust.flow); gl.uniform1f(p.u.uVo, bust.vo); gl.uniform1f(p.u.uWave, bust.wave); gl.uniform1f(p.u.uWaveK, bust.waveK * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uKick, bust.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uGate, musicGate); gl.uniform1f(p.u.uEn, bust.en);
+  gl.uniform2fv(p.u['uPts[0]'], BUST_PTS); gl.uniform3fv(p.u['uPal[0]'], bust.P); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, night ? 32 : 28, night ? 6 : 86)).map(v => v / 255));
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
   gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
-  if (night) bloom(GLX.c, 0.18 + P * 0.25);
+  if (night) bloom(GLX.c, 0.25 + P * 0.2);
 }
 
 // ================= Escena: Gatos =================
