@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 287</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 288</div>
     </div>
   </div>
   <div class="group">
@@ -11900,52 +11900,42 @@ function drawBloques(dt) {
 // y el resto de cada círculo es vidrio oscuro tintado. Detrás, un resplandor del color de la canción sobre la
 // portada. Cada lente escucha una parte del sonido y se enciende con ella; cada golpe cruza el panel con una
 // ola de luz desde el centro; los colores giran despacio con la melodía.
-const lens = { prog: null, wave: 9, waveK: 0, rot: 0, lv: new Float32Array(16) };
+const lens = { prog: null, t: 0, kk: 0, lv: new Float32Array(7), v: new Float32Array(7), L: new Float32Array(28), C: new Float32Array(15) };
+// Lentes de cristal que flotan sobre un campo de color vivo (los colores de la portada, fluyendo): cada lente amplía lo
+// que tiene detrás, separa los colores en el borde como un prisma y lleva el reflejo de una ventana. Orbitan despacio;
+// cada una crece con su parte del sonido; el bombo las hace latir y empuja el flujo del color.
 function lensSetup() {
-  lens.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uD, uWave, uWaveK, uRot, uNight, uP, uDyn; uniform vec3 uC0, uC1, uC2, uGlow, uBg; uniform float uLv[16]; uniform vec2 uN;
-    ${GLSL_COVER}
-    float h1(float n) { return fract(sin(n * 91.3) * 43758.5453); }
-    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
-    vec3 pal(float t) { t = fract(t) * 3.; return t < 1. ? mix(uC0, uC1, t) : t < 2. ? mix(uC1, uC2, t - 1.) : mix(uC2, uC0, t - 2.); }
+  lens.prog = glProgram(`uniform vec2 uRes; uniform float uT, uKick, uNight, uGate; uniform vec4 uL[7]; uniform vec3 uC[5];
+    vec3 field(vec2 p) {   // el campo de color que fluye detrás (tela de luz)
+      vec2 q = p; for (int k = 0; k < 3; k++) { float fk = float(k) + 1.; q += .12 / fk * vec2(sin(q.y * 2.6 * fk + uT * (.5 + .1 * fk)), cos(q.x * 2.3 * fk - uT * (.4 + .1 * fk))); }
+      float a = .5 + .5 * sin(q.x * 2.2 + uT * .3), b = .5 + .5 * sin(q.y * 2.7 - uT * .25 + 1.), c = .5 + .5 * sin((q.x + q.y) * 1.8 + 2.);
+      vec3 col = mix(mix(uC[0], uC[1], a), mix(uC[2], uC[3], b), c);
+      col += uC[4] * pow(.5 + .5 * sin(q.x * 6. - q.y * 4. + uT * .8), 8.) * .5;   // vetas de luz que corren
+      float ln = pow(.5 + .5 * cos((q.x * .8 + q.y) * 42.), 12.);   /* curvas y fluidas: siguen la tela de color */   /* líneas finas de luz: las lentes las amplían y las curvan (se lee el cristal) */
+      col += mix(col, vec3(1.), .35) * ln * .38;
+      return col;
+    }
     void main() {
-      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y), c0 = vec2(asp, 1.) * .5 - (uN - 1.) * uD * .5;
-      vec2 g = (p - c0) / uD;
-      // los dos círculos más cercanos que cubren el punto
-      float d1 = 9., d2 = 9.; vec2 i1 = vec2(-9.), i2 = vec2(-9.);
-      for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
-        vec2 id = floor(g + .5) + vec2(x, y);
-        if (id.x < 0. || id.y < 0. || id.x > uN.x - 1. || id.y > uN.y - 1.) continue;
-        float d = length(p - (c0 + id * uD));
-        if (d < d1) { d2 = d1; i2 = i1; d1 = d; i1 = id; } else if (d < d2) { d2 = d; i2 = id; }
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col = field(p) * (uNight > .5 ? .55 : .85) * (.6 + .4 * uGate);
+      float shadow = 0.;
+      for (int i = 0; i < 7; i++) { vec4 L = uL[i]; vec2 d = p - L.xy; float r = L.z, dl = length(d);
+        shadow += exp(-max(dl - r, 0.) / (r * .35)) * step(r, dl) * .25;   // la sombra suave de la lente sobre el color
+        if (dl < r) {
+          vec2 n = d / r; float z = sqrt(max(0., 1. - dot(n, n)));
+          float mag = .45 + .15 * L.w;                                         // amplía lo de atrás (más con su sonido)
+          vec2 s0 = L.xy + d * mag;
+          vec3 inside = vec3(field(s0 + n * .012 * (1. - z)).r, field(s0).g, field(s0 - n * .012 * (1. - z)).b);   // el borde separa los colores (prisma)
+          inside *= (.92 + .15 * z) * (1. + .3 * L.w + .3 * uKick);
+          float fres = pow(1. - z, 3.);
+          inside += inside * fres * .6;                                       // el canto de cristal, del color de lo que refracta (transparente, no lechoso)
+          inside += vec3(1.) * pow(max(0., dot(normalize(vec3(n, z)), normalize(vec3(-.5, .6, .65)))), 60.) * .55;   // el reflejo de una ventana
+          float edge = smoothstep(r, r - 1.5 / uRes.y, dl);
+          col = mix(col, inside, edge);
+        }
       }
-      vec2 cc = vec2(asp, 1.) * .5; float rc = length(p - cc);
-      vec3 col = mix(uBg, withCover(uBg), .45);
-      // detrás, una gran luz de colores (como en la referencia): tres focos de la canción que se mezclan
-      for (int k = 0; k < 3; k++) { float an = uRot * 2. + float(k) * 2.094; vec2 fp = cc + vec2(cos(an), sin(an)) * .16; float fd = length(p - fp);
-        col += pal(float(k) / 3.) * exp(-fd * fd * 7.) * (.18 + uDyn * .35 + uP * .35) * (uNight > .5 ? 1. : .35); }   // la luz de atrás crece con la parte de la canción
-      float in1 = smoothstep(uR, uR - .003, d1), in2 = smoothstep(uR, uR - .003, d2);
-      if (in1 > 0.) {
-        // vidrio oscuro tintado del círculo
-        vec3 tint = pal(h1(i1.x * 7. + i1.y * 13.) + uRot);
-        col = mix(col, uNight > .5 ? col * .5 + tint * .05 : mix(col, vec3(1.), .14) + tint * .05, in1 * .9);   // de noche, vidrio ahumado; de día, vidrio claro esmerilado
-        col += mix(tint, vec3(1.), .3) * exp(-(uR - d1) / uR * 60.) * .22 * in1;   // su canto fino
-      }
-      if (in2 > 0.) {
-        // la lente: donde se cruzan dos círculos, encendida con su parte del sonido
-        float id = min(i1.x + i1.y * uN.x, i2.x + i2.y * uN.x) * 2. + max(i1.x + i1.y * uN.x, i2.x + i2.y * uN.x);
-        float lv = uLv[int(mod(id, 16.))];
-        vec3 k = pal(h1(id) + uRot);
-        vec2 mid = (c0 + i1 * uD + c0 + i2 * uD) * .5; float rr = length(p - mid) / (uR * .5);
-        float wv = uWaveK * exp(-pow((length(mid - cc) - uWave) * 6., 2.));
-        float edge = min(uR - d1, uR - d2) / uR;                            // cerca del filo de la lente
-        // como en la referencia: un filo casi blanco, una franja de color saturado y el centro más tenue
-        float I = .1 + lv * 1.4 + wv * .6 + uP * .3;   // callada, casi apagada; con lo suyo, plena
-        vec3 lensC = uNight > .5 ? col * .35 + k * .18 * I : mix(col, k, .35 + .4 * min(I, 1.));   // de día la lente es color pleno, no sombra
-        lensC += mix(k, vec3(1.), .45) * exp(-edge * 80.) * .8 * min(I, 1.3);            // filo claro encendido (sin quemarse)
-        lensC += k * exp(-pow((edge - .07) * 22., 2.)) * 1.2 * I;                        // franja de color
-        lensC += k * smoothstep(.3, .0, edge) * .55 * I;   // el color llena la lente
-        col = mix(col, lensC, in2);
-      }
+      col *= 1. - min(shadow, .45) * (1. - step(.0, 0.));
+      col *= 1. - .18 * pow(length(vUv - .5) * 1.3, 2.);
       o = vec4(col, 1.);
     }`);
 }
@@ -11953,29 +11943,25 @@ function drawLenses(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!lens.prog) lensSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  // cada lente sigue su banda con un resorte rápido, y la parte de la canción marca cuánto se encienden
-  // (en el piano, suaves; en el coro, plenas), como Montañas
-  if (!lens.v) { lens.v = new Float32Array(16); lens.tg = new Float32Array(16); }
-  for (let i = 0; i < 16; i++) { const k0 = Math.floor(((i * 5) % 16) / 16 * BANDS * 0.9); lens.tg[i] = bandX(k0, Math.min(BANDS, k0 + 4)) * (0.3 + 0.7 * dynL); }
-  springTo(lens.lv, lens.v, lens.tg, dt, 240, 0.55);
-  if (pulse.on) { lens.wave = 0; lens.waveK = 0.7 + pulse.k * 0.8; }
-  lens.wave += dt * 1.1; lens.waveK *= Math.pow(0.2, dt);
-  lens.rot += dt * (voice * 0.1 + dynL * 0.08) * musicGate;
-  const nx = asp > 1 ? 5 : 4, ny = asp > 1 ? 4 : 6, D = Math.min(asp * 0.8 / nx, 0.86 / ny), R = D * 0.72;
-  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(80, s_), l)).map(v => v / 255); };
-  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  if (pulse.on && !pulse.melo) { nudgeAdd('lens', 0.45 * musicGate); lens.kk = 1; for (let i = 0; i < 7; i++) lens.v[i] += 1.6 + pulse.k; }
+  lens.kk *= Math.exp(-dt * 5);
+  lens.t += dt * musicGate * (0.25 + energy * 0.8) + nudgeTake('lens', dt);
+  for (let i = 0; i < 7; i++) { const k0 = Math.floor(i / 7 * BANDS * 0.9), k1 = Math.min(BANDS, k0 + 5), h = attHit(k0, k1); if (h > 0) lens.v[i] += 2.5 * h;
+    lens.v[i] += ((Math.pow(bandX(k0, k1), 1.2) * musicGate - lens.lv[i]) * 140 - lens.v[i] * 14) * dt; lens.lv[i] += lens.v[i] * dt; }
+  const T = lens.t * 0.35, sc = Math.min(asp, 1);
+  for (let i = 0; i < 7; i++) { const a = T * (0.5 + 0.12 * i) + i * 0.9, rr = (0.16 + 0.3 * ((i * 37) % 10) / 10) * (asp < 1 ? 0.8 : 1);   /* órbitas más abiertas: las lentes se reparten */
+    const x = asp * 0.5 + Math.cos(a) * rr * Math.max(asp, 0.9) * 0.9, y = (asp < 1 ? 0.46 : 0.5) + Math.sin(a * 1.2) * rr * (asp < 1 ? 0.95 : 0.9);   /* en vertical, sin subir al título */
+    lens.L.set([x, y, sc * (0.13 + 0.05 * ((i * 53) % 10) / 10) * (1 + 0.12 * Math.max(0, lens.lv[i]) + 0.06 * lens.kk), Math.max(0, Math.min(1.2, lens.lv[i]))], i * 4); }
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(72, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], 50), sat(RGB[1], 56), sat(RGB[2], 48), sat(mix(0.5), 58), sat(mix(0.25), 70)].forEach((c, k) => lens.C.set(c, k * 3));
   const [cw, ch] = glCanvas(1), p = lens.prog;
-  gl.useProgram(p.pr); glCoverBind(p); gl.uniform1f(p.u.uDyn, dynL * musicGate);
-  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
-  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, R); gl.uniform1f(p.u.uD, D); gl.uniform2f(p.u.uN, nx, ny);
-  gl.uniform1f(p.u.uWave, lens.wave); gl.uniform1f(p.u.uWaveK, lens.waveK * (state.noFlash ? 0.4 : 1)); gl.uniform1f(p.u.uRot, lens.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform3fv(p.u.uC0, sat(RGB[0], 60)); gl.uniform3fv(p.u.uC1, sat(RGB[1], 62)); gl.uniform3fv(p.u.uC2, sat(RGB[2], 60)); gl.uniform3fv(p.u.uGlow, sat(mix(0.5), night ? 45 : 70));
-  gl.uniform3fv(p.u.uBg, night ? hexToRgb(hsl(hh, 25, 6)).map(v => v / 255) : hexToRgb(hsl(hh, 18, 84)).map(v => v / 255));
-  gl.uniform1fv(p.u['uLv[0]'], lens.lv);
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, lens.t); gl.uniform1f(p.u.uKick, lens.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uGate, musicGate);
+  gl.uniform4fv(p.u['uL[0]'], lens.L); gl.uniform3fv(p.u['uC[0]'], lens.C);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
-  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+  if (night) bloom(GLX.c, 0.2 + P * 0.2);
 }
 
 
