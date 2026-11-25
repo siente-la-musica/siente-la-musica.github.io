@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 297</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 298</div>
     </div>
   </div>
   <div class="group">
@@ -12209,7 +12209,7 @@ function drawGlobes(dt) {
 // grano de puntitos muy fino les da textura de pantalla.
 const icn = { prog: null, lv: new Float32Array(12), kick: 0 };
 function iconsSetup() {
-  icn.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uP, uNight, uKick; uniform vec3 uC0, uC1, uC2, uBg; uniform float uLv[12]; uniform vec2 uGrid; uniform float uSize, uGap;
+  icn.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uP, uNight, uKick, uFl; uniform vec3 uC0, uC1, uC2, uBg; uniform float uLv[12]; uniform vec2 uGrid; uniform float uSize, uGap;
     ${GLSL_COVER}
     float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec3 pal(float t) { t = fract(t) * 3.; return t < 1. ? mix(uC0, uC1, t) : t < 2. ? mix(uC1, uC2, t - 1.) : mix(uC2, uC0, t - 2.); }
@@ -12242,6 +12242,7 @@ function iconsSetup() {
         vec2 dg = fract(gl_FragCoord.xy / 4.) - .5; inside *= 1. - .05 * smoothstep(.12, .2, length(dg));   // retícula de puntitos muy fina (pantalla)
         float rim = exp(-(1. - sq) * 70.) * a;                                  // canto fino de luz
         inside += mix(c1, vec3(1.), .5) * rim * (.25 + lv * .5);
+        inside += mix(c1, vec3(1.), .45) * pow(.5 + .5 * sin((p.x * 1.1 + p.y) * 3.2 - uFl * 2.), 26.) * (.28 + .5 * uKick);   /* un reflejo de luz barre los mosaicos en diagonal (hipnótico) */
         col = mix(col, inside, a);
         col += c1 * exp(-max(0., sq - 1.) * 18.) * (1. - a) * (.08 + lv * .2);    // la tarjeta brilla un poco hacia fuera
       }
@@ -12271,7 +12272,8 @@ function drawIcons(dt) {
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const [cw, ch] = glCanvas(1), p = icn.prog;
-  gl.useProgram(p.pr); glCoverBind(p);
+  if (pulse.on && !pulse.melo) nudgeAdd('icnF', 0.45 * musicGate); icn.fl = (icn.fl || 0) + dt * musicGate * (0.35 + energy * 0.8) + nudgeTake('icnF', dt);
+  gl.useProgram(p.pr); gl.uniform1f(p.u.uFl, icn.fl); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 1000); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uKick, icn.kick * (state.noFlash ? 0.4 : 1));
   gl.uniform2f(p.u.uGrid, gx, gy); gl.uniform1f(p.u.uSize, size * (1 + P * 0.045)); gl.uniform1f(p.u.uGap, size * 0.16);
