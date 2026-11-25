@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 301</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 302</div>
     </div>
   </div>
   <div class="group">
@@ -9742,7 +9742,7 @@ function catsSetup() {
         // volumen: lomo y cabeza con luz, barriga y patas algo más hondas, y el cuerpo más claro por dentro
         float belly = smoothstep(.45, .3, lp.y);
         vec3 fur = mix(mix(base, vec3(1.), .18), mix(base, vec3(1.), .42), top * .8) * (.84 + .16 * inner) * (1. - belly * .14);
-        fur *= 1. + uP * .65 + uVoice * .15 + uCatL[i] * .45;   // cada gato brilla con su parte de la canción
+        fur *= 1. + uP * 1.1 + uVoice * .15 + uCatL[i] * .45;   // cada gato brilla con su parte de la canción
         float fuzz = exp(-max(d0, 0.) / (.045 * c.z)) * (1. - a) * (.55 + .45 * fbm(lp * 70. + c.w));   // pelusa fuera del cuerpo
         float glow = exp(-max(d, 0.) / (.07 * c.z + .02)) * (1. - a) * uGlow;
         col = mix(col, mix(fur, col, c2.w * .35), a);
@@ -9795,7 +9795,7 @@ function drawCats(dt) {
     // segundo la caja y la percusión, el tercero los platillos. La cola va de lado a lado al compás
     // la cabeza marca el golpe: baja de golpe justo en el «pam» y sube suave (sin rebote, que confunde el
     // tiempo). Todos cabecean con el pulso; las orejas, con los platillos
-    if (pulse.on) { c.nodE = Math.max(c.nodE || 0, 0.55 + 0.45 * pulse.k); c.bobV -= 0.7 + 0.5 * pulse.k; c.tlV += (pulse.count % 2 ? 1 : -1) * (2.6 + 1.6 * pulse.k); }
+    if (pulse.on) { c.nodE = Math.max(c.nodE || 0, 0.55 + 0.45 * pulse.k); c.bobV -= 1.5 + 1.1 * pulse.k; c.tlV += (pulse.count % 2 ? 1 : -1) * (2.6 + 1.6 * pulse.k); }
     if (hits.hat && i === 2) c.ear = 1;
     if ((hits.snare || hits.perc > 0.3) && i === 1) c.ear = 1;
     c.nodE = (c.nodE || 0) * Math.pow(0.004, dt);   // vuelve arriba en ~0,25 s
