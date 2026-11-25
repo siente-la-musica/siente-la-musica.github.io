@@ -866,7 +866,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 241</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 242</div>
     </div>
   </div>
   <div class="group">
@@ -4748,7 +4748,59 @@ function glowSpot(x, y, r, col, a) {
   for (let i = 0; i <= 8; i++) { const t = i / 8; g.addColorStop(t, rgba(col, a * Math.exp(-4.2 * t * t) * (1 - t))); }
   ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
 }
+// ---------- Aura: un degradado de malla vivo, como los fondos de Apple: cinco manchas grandes de los colores de la
+// portada que se mueven despacio y se funden entre sí sin bordes; la tela de color se ondula en vetas suaves que
+// fluyen (hipnótico). Cada mancha escucha su parte del sonido (crece y se aviva); cada bombo empuja el flujo y da
+// una ola de luz; la voz tiñe la mancha del centro con su nota. En silencio, quieto y apagado. ----------
+const auraG = { prog: null, t: 0, kk: 0, lv: new Float32Array(5), v: new Float32Array(5), B: new Float32Array(20), C: new Float32Array(15), vo: 0 };
+function auraGSetup() {
+  auraG.prog = glProgram(`uniform vec2 uRes; uniform float uT, uKick, uGate, uNight, uVo; uniform vec4 uB[5]; uniform vec3 uC[5], uBg, uMel;
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      // la tela se ondula: el punto se desplaza en vetas suaves que fluyen (nunca quieto mientras suena)
+      vec2 q = p;
+      for (int k = 0; k < 4; k++) { float fk = float(k) + 1.; q += .045 / fk * vec2(sin(q.y * 3.1 * fk + uT * (.6 + .15 * fk) + fk), cos(q.x * 2.7 * fk - uT * (.5 + .12 * fk) + 2. * fk)); }
+      vec3 acc = vec3(0.); float ws = 0.;
+      for (int i = 0; i < 5; i++) { vec4 b = uB[i]; vec2 d = (q - b.xy) / b.z; float w = exp(-dot(d, d) * 1.6) * (.35 + b.w);
+        vec3 c = uC[i]; if (i == 2) c = mix(c, uMel, uVo * .55);
+        acc += c * w; ws += w; }
+      vec3 col = acc / (ws + .06);
+      col = mix(uBg, col, clamp(ws * 1.3, 0., 1.) * (.45 + .55 * uGate));
+      // vetas de luz muy suaves a lo largo de la tela (dan el brillo de seda) y la ola del golpe
+      float sh = .5 + .5 * sin((q.x * 1.3 + q.y) * 9. + uT * .8);
+      col *= .92 + .14 * sh * (.4 + .6 * uGate) + .18 * uKick * sh;
+      float l = dot(col, vec3(.3, .59, .11)); col = mix(vec3(l), col, 1.15);
+      if (uNight < .5) col = mix(col, col * .85 + .2, .35);
+      o = vec4(col, 1.);
+    }`);
+}
 function drawAura(dt) {
+  if (!glInit()) return drawAura2D(dt);
+  if (!auraG.prog) auraGSetup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  if (pulse.on && !pulse.melo) { nudgeAdd('aura', 0.5 * musicGate); auraG.kk = 1; }
+  auraG.kk *= Math.exp(-dt * 4);
+  auraG.t += dt * musicGate * (0.12 + energy * 0.7 + dynL * 0.2) + nudgeTake('aura', dt);
+  auraG.vo += (Math.min(1, voice * 1.4) - auraG.vo) * (1 - Math.pow(0.05, dt));
+  const bands = [[0, 8], [8, 16], [16, 26], [26, 36], [36, BANDS]];
+  for (let i = 0; i < 5; i++) { const [a, b] = bands[i], h = attHit(a, b); if (h > 0) auraG.v[i] += 2.5 * h;
+    auraG.v[i] += ((Math.pow(bandX(a, b), 1.1) * musicGate - auraG.lv[i]) * 70 - auraG.v[i] * 10) * dt; auraG.lv[i] += auraG.v[i] * dt; }
+  const T = auraG.t;
+  for (let i = 0; i < 5; i++) { const ph = i * 1.257, rx = asp * (0.5 + 0.32 * Math.sin(T * (0.21 + 0.03 * i) + ph)), ry = 0.5 + 0.34 * Math.cos(T * (0.17 + 0.04 * i) + ph * 1.3);
+    auraG.B.set([rx, ry, Math.min(asp, 1) * (0.38 + 0.1 * Math.max(0, auraG.lv[i])) + 0.12, Math.max(0, auraG.lv[i]) * 1.2 + (i === 0 ? P * 0.5 : 0)], i * 4); }
+  const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(70, Math.min(95, s_ * 1.2)), l)).map(v => v / 255); };
+  [sat(RGB[0], night ? 46 : 60), sat(RGB[1], night ? 54 : 66), sat(RGB[2], night ? 44 : 58), sat(mix(0.3), night ? 50 : 64), sat(mix(0.8), night ? 40 : 62)].forEach((c, k) => auraG.C.set(c, k * 3));
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(0.6), p = auraG.prog;
+  gl.useProgram(p.pr);
+  gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uT, T); gl.uniform1f(p.u.uKick, auraG.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uGate, musicGate); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uVo, auraG.vo);
+  gl.uniform4fv(p.u['uB[0]'], auraG.B); gl.uniform3fv(p.u['uC[0]'], auraG.C); gl.uniform3fv(p.u.uMel, melodyColor().map(v => v / 255));
+  gl.uniform3fv(p.u.uBg, hexToRgb(hsl(hh, 30, night ? 6 : 88)).map(v => v / 255));
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
+}
+function drawAura2D(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x);
   // de día, como la Luz: manchas de color luminoso pintadas encima del blanco (no 'multiply', que las
   // dejaba pálidas) y luego un velo de tinta que les da profundidad
@@ -6427,12 +6479,10 @@ const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, u
     a *= 1. + (.05 + .2 * uLv.y) * sin((d * 3. - uPh) * 6.2832) * smoothstep(1., .3, d);   // las ondas de luz se marcan más con los medios                          // ondas de luz suaves, no de color
     a += warm * exp(-d * d * 6.) * (.06 + .35 * uVo + .35 * uP);   // el centro se enciende con la voz y el golpe
     float m = smoothstep(1.03, .8, d);
-    a += vec3(1.) * exp(-pow((d - .97) / (.02 + .02 * uP), 2.)) * (.15 + .5 * uP + .45 * uLv.z);   // el borde brilla con los agudos y el golpe                // un borde de luz fino que lo dibuja
+    a += mix(uC1, warm, .35) * exp(-pow((d - .97) / (.025 + .02 * uP), 2.)) * (.15 + .5 * uP + .45 * uLv.z);   // el borde, luz de su color   // el borde brilla con los agudos y el golpe                // un borde de luz fino que lo dibuja
     float rg = exp(-pow((d - uRing) / .14, 2.)) * max(0., 1. - uRing) * uP;                          // el velo de luz del golpe
-    vec3 col = a + vec3(1.) * rg * .45;
+    vec3 col = a + warm * rg * .4;
     float al = clamp(m * (.9 + .1 * uLv.x) + rg * .15, 0., 1.);
-    col += (h(gl_FragCoord.xy + floor(uT * 10.)) - .5) * .02;
-    { float L_ = dot(col, vec3(.3, .59, .11)), g1 = h(floor(gl_FragCoord.xy / 1.6)); col *= 1. + (g1 - .5) * .08 * (1.25 - L_); }
     o = vec4(col * al, al);
   }`;
 function drawArco(dt) {
