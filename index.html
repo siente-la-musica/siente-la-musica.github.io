@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 283</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 284</div>
     </div>
   </div>
   <div class="group">
@@ -7335,7 +7335,7 @@ function drawLago3D(dt) {
   const U = night
     ? { skyT: bl([0.02, 0.04, 0.14], tone(RGB[1], 10), 0.3), skyH: bl([0.2, 0.25, 0.48], tone(RGB[0], 34), 0.3), cloud: [0.32, 0.36, 0.55], mtn: [0.2, 0.24, 0.38], forC: [0.08, 0.17, 0.16], warm: [1, 0.72, 0.38], fog: bl([0.2, 0.25, 0.45], tone(RGB[1], 32), 0.25), deep: [0.03, 0.05, 0.12] }
     : { skyT: bl([0.32, 0.5, 0.86], tone(RGB[1], 58), 0.2), skyH: bl([1, 0.8, 0.6], tone(RGB[0], 80), 0.25), cloud: [1, 0.95, 0.9], mtn: [0.5, 0.48, 0.6], forC: [0.2, 0.36, 0.26], warm: [1, 0.78, 0.45], fog: bl([0.85, 0.8, 0.86], tone(RGB[0], 82), 0.2), deep: [0.14, 0.24, 0.36] };
-  const [cw, ch] = glCanvas(0.75), p = lk.prog;
+  const [cw, ch] = glCanvas(0.9), p = lk.prog;
   gl.useProgram(p.pr); gl.uniform1f(p.u.uGray, Math.min(1, colorTick.gray || 0));
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uT, lk.t);
   gl.uniform1f(p.u.uLamp, lk.lamp); gl.uniform1f(p.u.uFl, lk.fl); gl.uniform1f(p.u.uMist, lk.mist); gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uRock, lk.rock); gl.uniform1f(p.u.uKick, (lk.kk || 0) * (state.noFlash ? 0.5 : 1));
@@ -7477,7 +7477,7 @@ function drawLuz3D(dt) {
   const U = night
     ? { skyT: bl([0.02, 0.04, 0.13], tone(RGB[1], 10), 0.3), skyH: bl([0.18, 0.24, 0.46], tone(RGB[0], 32), 0.3), cloud: [0.3, 0.34, 0.52], rock: [0.3, 0.3, 0.36], grass: [0.16, 0.28, 0.2], warm: [1, 0.74, 0.4], fog: bl([0.17, 0.22, 0.42], tone(RGB[1], 30), 0.25), deep: [0.02, 0.05, 0.12] }
     : { skyT: bl([0.3, 0.5, 0.86], tone(RGB[1], 58), 0.2), skyH: bl([1, 0.8, 0.6], tone(RGB[0], 80), 0.25), cloud: [1, 0.95, 0.9], rock: [0.62, 0.54, 0.48], grass: [0.36, 0.54, 0.28], warm: [1, 0.8, 0.5], fog: bl([0.86, 0.82, 0.86], tone(RGB[0], 82), 0.2), deep: [0.1, 0.22, 0.34] };
-  const [cw, ch] = glCanvas(0.75), p = fr3.prog;
+  const [cw, ch] = glCanvas(0.9), p = fr3.prog;
   gl.useProgram(p.pr); gl.uniform1f(p.u.uGray, Math.min(1, colorTick.gray || 0));
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uT, fr3.t);
   gl.uniform1f(p.u.uPh, fr3.ph); gl.uniform1f(p.u.uPw, fr3.pw); gl.uniform1f(p.u.uKick, fr3.kk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uFl, fr3.fl); gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uFoam, fr3.foam);
@@ -9010,7 +9010,7 @@ function glCanvas(q) {
   // de 1080x1920, a menudo el doble que la ventana): se ven igual que en pantalla y no se traban. El texto va aparte, nítido
   const pxM = GLX.scrPx || (GLX.scrPx = {});
   if (!recording && !recSize) pxM[state.mode] = cw * cw * H / W;
-  else if (REC_HEAVY.has(state.mode) && pxM[state.mode]) { const lim = pxM[state.mode] * 1.05; if (cw * cw * H / W > lim) cw = Math.round(Math.sqrt(lim * W / H)); }
+  else if (REC_HEAVY.has(state.mode) && pxM[state.mode]) { const lim = Math.max(pxM[state.mode] * 1.05, 4.2e5);   /* con un piso: el video nunca sale de una imagen demasiado chica (se veía pixelado) */ if (cw * cw * H / W > lim) cw = Math.round(Math.sqrt(lim * W / H)); }
   const ch = Math.max(2, Math.round(cw * H / W));
   if (GLX.c.width !== cw || GLX.c.height !== ch) { GLX.c.width = cw; GLX.c.height = ch; fluid.key = ''; }
   return [cw, ch];
