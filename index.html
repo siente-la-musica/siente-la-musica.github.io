@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 276</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 277</div>
     </div>
   </div>
   <div class="group">
@@ -12230,9 +12230,9 @@ function citySetup() {
       } else {
         vec3 tq = vec3(l.x - (r.y - .5) * 1.2, p.y - base - 1.5, l.y - (r.z - .5) * 1.2);
         // el árbol, como en la animación pintada: una copa de racimos redondos (no una bola) y su tronco
-        float tr = 1e3; for (int k = 0; k < 4; k++) { float fk = float(k); vec3 off = vec3(cos(fk * 2.1 + r.y * 6.) * .55, .15 + .35 * fract(fk * .37 + r.z), sin(fk * 2.1 + r.y * 6.) * .55) * (k == 0 ? 0. : 1.);
+        float tr = length(tq) - 2.1; if (tr < res.x + .3) { tr = 1e3; for (int k = 0; k < 4; k++) { float fk = float(k); vec3 off = vec3(cos(fk * 2.1 + r.y * 6.) * .55, .15 + .35 * fract(fk * .37 + r.z), sin(fk * 2.1 + r.y * 6.) * .55) * (k == 0 ? 0. : 1.);
           float lr = (k == 0 ? 1.05 : .72 + .18 * h2(id + fk)); tr = min(tr, length(tq - off - vec3(0., k == 0 ? .25 : 0., 0.)) - lr); }
-        tr += .05 * (vn(tq.xz * 1.6 + tq.y * 1.2 + id * 3.) - .5);   // apenas ondulada: silueta lisa, nada de papel arrugado
+        tr += .05 * (vn(tq.xz * 1.6 + tq.y * 1.2 + id * 3.) - .5); }   // apenas ondulada: silueta lisa, nada de papel arrugado (los racimos solo si el rayo pasa cerca)
         if (tr < res.x) res = vec2(tr * .8, 4.);
         float trunk = max(length(tq.xz) - .13, max(-(tq.y + 1.6), tq.y + .2)); if (trunk < res.x) res = vec2(trunk, 6.);
       }
@@ -12269,7 +12269,7 @@ function citySetup() {
       // se avanza por la ciudad celda a celda: el paso nunca cruza el borde de una manzana (así no se salta la casa de la
       // vecina ni se queda pegado en el borde)
       float t = .1; vec2 h = vec2(0.); bool hit = false; vec2 sgn = sign(rd.xz + 1e-6);
-      for (int i = 0; i < 140; i++) { vec3 q = ro + rd * t; h = map(q); if (h.x < .003 * t) { hit = true; break; } if (t > 160.) break;
+      for (int i = 0; i < 120; i++) { vec3 q = ro + rd * t; h = map(q); if (h.x < .0045 * t) { hit = true; break; } if (t > 125.) break;   /* a lo lejos, la bruma tapa el detalle: menos precisión */
         vec2 l = mod(q.xz, S) - S * .5, te = (sgn * S * .5 - l) / (rd.xz + sgn * 1e-6); t += min(h.x * .9, min(te.x, te.y) + .03); }
       vec3 col;
       if (!hit) col = mix(sky(rd), mix(uFog, uSkyH, .6), (1. - smoothstep(-.02, .12, rd.y)) * .9);
@@ -12288,7 +12288,8 @@ function citySetup() {
           else { float gn = vn(p.xz * 1.3) * .6 + vn(p.xz * 5.) * .4; alb = mix(vec3(.22, .42, .2), vec3(.4, .58, .26), gn);   // el jardín, con flores sueltas
             float fl_ = step(.93, h2(floor(p.xz * 6.))); alb = mix(alb, mix(uR0, vec3(1., .9, .5), step(.5, h2(floor(p.xz * 6.) + 3.))) * 1.2, fl_ * .8); }
         } else if (mat < 2.5) {
-          alb = uWall * (.82 + .3 * r.z) * (.92 + .12 * vn(vec2(q.x + q.z, q.y) * 4.));
+          vec3 tint = r2.x < .2 ? vec3(1., .82, .5) : r2.x < .4 ? vec3(.95, .62, .5) : r2.x < .6 ? vec3(.62, .78, .95) : r2.x < .8 ? vec3(.66, .9, .78) : vec3(1., .72, .78);   /* fachadas de colores, como un barrio colonial latino */
+          alb = mix(uWall, uWall * tint * 1.08, .55) * (.86 + .22 * r.z) * (.92 + .12 * vn(vec2(q.x + q.z, q.y) * 4.));
           if (q.y < .32) alb *= .62;                                                     // zócalo de piedra
           if (n.y > .6) alb = mix(uWall * .5, uFog * .4, .3) * (.85 + .2 * vn(p.xz * 3.));   // la azotea de los edificios: concreto, más hondo
           if (rf < .01 && abs(n.y) < .3) alb *= .9 + .1 * smoothstep(.0, .04, abs(fract((q.y - .4) / .92) - .02));   // la franja que marca cada piso
@@ -12303,8 +12304,8 @@ function citySetup() {
         vec3 Ld = normalize(vec3(.65, uNight > .5 ? .7 : .55, .55));   // el sol (o la luna) desde atrás y a un lado: las fachadas que vemos brillan
         float dif = smoothstep(-.1, .45, dot(n, Ld)), sky_ = .5 + .5 * n.y;
         // sombras suaves: cada casa y cada árbol proyecta la suya (la luz de la tarde se siente)
-        if (dif > .01) { float sh = 1., st = .06; for (int k = 0; k < 22; k++) { float dd = map(p + n * .03 + Ld * st).x; sh = min(sh, 7. * dd / st); st += clamp(dd, .08, .6); if (sh < .02 || st > 18.) break; } dif *= clamp(sh, 0., 1.); }
-        vec3 sunC = uNight > .5 ? vec3(.55, .62, .95) * .9 : vec3(1., .86, .66), shC = uNight > .5 ? vec3(.13, .15, .34) : mix(vec3(.38, .45, .7), uSkyT, .3);
+        if (dif > .01) { float sh = 1., st = .06; for (int k = 0; k < 12; k++) { float dd = map(p + n * .03 + Ld * st).x; sh = min(sh, 7. * dd / st); st += clamp(dd, .14, .9); if (sh < .02 || st > 14.) break; } dif *= clamp(sh, 0., 1.); }
+        vec3 sunC = uNight > .5 ? vec3(.55, .62, .95) * .7 : vec3(1., .86, .66), shC = uNight > .5 ? vec3(.13, .15, .34) : mix(vec3(.38, .45, .7), uSkyT, .3);
         float ao = clamp((p.y - ground(p.xz)) * .35 + .45, 0., 1.);
         col = alb * (shC * sky_ * ao + sunC * dif);
         if (mat > 3.5 && mat < 4.5) {   // los árboles, pintados: la copa en manchas de luz y sombra, como pinceladas
@@ -12386,13 +12387,13 @@ function drawCity(dt) {
   const tone = (c, l, sMin = 30, sMax = 70) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, Math.min(sMax, s_)), l)).map(v => v / 255); };
   const bl = (a, b, k) => a.map((v, j) => v * (1 - k) + b[j] * k);
   const U = night
-    ? { skyT: bl([0.03, 0.05, 0.15], tone(RGB[1], 12), 0.35), skyH: bl([0.32, 0.22, 0.42], tone(RGB[0], 34), 0.35), cloud: bl([0.3, 0.33, 0.48], tone(RGB[1], 42), 0.3),
+    ? { skyT: bl([0.03, 0.05, 0.15], tone(RGB[1], 12), 0.35), skyH: bl([0.22, 0.15, 0.32], tone(RGB[0], 26), 0.35), cloud: bl([0.3, 0.33, 0.48], tone(RGB[1], 42), 0.3),
         r0: bl([0.3, 0.17, 0.2], tone(RGB[0], 24, 20, 40), 0.3), r1: bl([0.16, 0.22, 0.26], tone(RGB[1], 22, 20, 40), 0.3), r2: bl([0.24, 0.2, 0.26], tone(RGB[2], 22, 20, 40), 0.3),   // de noche, tejados más neutros: así se lee el cálido de las ventanas contra el frío de la luna
-        wall: [0.46, 0.44, 0.54], warm: [1, 0.7, 0.36], fog: bl([0.17, 0.17, 0.34], tone(RGB[1], 26), 0.3) }
+        wall: [0.38, 0.36, 0.46], warm: [1, 0.7, 0.36], fog: bl([0.1, 0.1, 0.22], tone(RGB[1], 18), 0.3) }   /* la noche, honda: así brillan las ventanas */
     : { skyT: bl([0.3, 0.52, 0.88], tone(RGB[1], 58), 0.2), skyH: bl([0.98, 0.88, 0.74], tone(RGB[0], 84), 0.2), cloud: [1, 0.97, 0.94],
         r0: bl([0.8, 0.36, 0.24], tone(RGB[0], 46), 0.2), r1: bl([0.24, 0.54, 0.56], tone(RGB[1], 44), 0.2), r2: bl([0.66, 0.3, 0.26], tone(RGB[2], 44), 0.15),
         wall: [0.96, 0.9, 0.8], warm: [1, 0.82, 0.5], fog: bl([0.8, 0.84, 0.92], tone(RGB[1], 84), 0.2) };
-  const [cw, ch] = glCanvas(0.9), p = city.prog;
+  const [cw, ch] = glCanvas(0.78), p = city.prog;   /* con el suavizado al ampliar no se nota y va más fluida */
   gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
   gl.uniform1f(p.u.uT, city.t); gl.uniform1f(p.u.uKick, city.wk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uWave, city.wave);
