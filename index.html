@@ -783,6 +783,7 @@
         <button data-mode="infinity">Infinito</button>
         <button data-mode="sphere">Esfera</button>
         <button data-mode="vitral">Vitral</button>
+        <button data-mode="bloques">Bloques</button>
         <button data-mode="lenses">Lentes</button>
         <button data-mode="disco">Disco</button>
         <button data-mode="globes">Globos</button>
@@ -866,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 249</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 250</div>
     </div>
   </div>
   <div class="group">
@@ -1167,7 +1168,7 @@ document.getElementById('introSp').onclick = e => { e.stopPropagation(); documen
 // en un celular o tableta (pantalla táctil sin ratón) no se puede capturar el audio del equipo: Spotify va primero y el micrófono como alternativa
 if ((matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) || !('getDisplayMedia' in (navigator.mediaDevices || {}))) { document.getElementById('introAudio').hidden = true; document.getElementById('introSp').classList.add('main'); document.getElementById('introHint').hidden = true; document.getElementById('introMic').hidden = false; }
 { const CATS = { esc: ['navidad', 'ruta', 'ciudad', 'autopista', 'light', 'lago', 'dunas', 'mirador', 'aurora', 'mountains', 'rain', 'stars', 'clouds'],
-    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
+    luz: ['anillo', 'arco', 'cuencos', 'vitral', 'bloques', 'lenses', 'disco', 'globes', 'icons', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'sphere', 'glass', 'bokeh', 'curtain', 'harp', 'eclipse', 'crystal'],
     por: ['cover', 'livecover', 'lyrics', 'artist', 'strobe', 'vinyl'] };
   const inCat = (m, c) => c === 'all' || (c === 'abs' ? !CATS.esc.includes(m) && !CATS.luz.includes(m) && !CATS.por.includes(m) : CATS[c].includes(m));
   document.querySelectorAll('.mode-cats button').forEach(b => b.onclick = e => { e.stopPropagation(); const c = b.dataset.cat;
@@ -4580,7 +4581,7 @@ const LYRIC_HIGH = new Set(['arco', 'autopista', 'bars', 'fire', 'mountains', 't
 // de los últimos segundos, cuántos golpes hay y el tempo. Cambia cuando la canción cambia de
 // carácter (con margen, para no saltar a cada rato), en los drops, o tras un rato en la misma.
 const MOODS = {
-  calm:   { name: 'tranquila', modes: ['ciudad', 'globes', 'vitral', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
+  calm:   { name: 'tranquila', modes: ['ciudad', 'globes', 'vitral', 'bloques', 'lenses', 'sphere', 'reeds', 'halos', 'beam', 'liquid', 'layers', 'portal', 'tunnel', 'pills', 'loop', 'light', 'aura', 'clouds', 'stars', 'bokeh', 'flowers', 'vinyl', 'glass', 'lava', 'puffs', 'bust', 'curtain', 'eclipse', 'harp', 'fire', 'crystal'] },
   medium: { name: 'media',     modes: ['icons', 'reeds', 'traces', 'loop', 'mountains', 'ink', 'fluid', 'magnet', 'rain', 'infinity', 'vinyl', 'flowers', 'tubes', 'lava', 'dots', 'cats', 'harp', 'paint', 'fire', 'crystal'] },
   high:   { name: 'enérgica',  modes: ['disco', 'bars', 'infinity', 'magnet', 'rain', 'fluid', 'mountains', 'tubes', 'paint', 'fire'] },
 };
@@ -8891,7 +8892,7 @@ function glCoverBind(p, unit = 5) {
 // al grabar: si el equipo no llega a 30 cuadros por segundo, las capas de luz suave (que no tienen bordes nítidos)
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0, recDropped = false;
-const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
+const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'bloques', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
 const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; recDropped = false; return; }
@@ -11664,6 +11665,100 @@ function drawVitral(dt) {
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
   bloom(GLX.c, 0.3 + P * 0.25);   // la luz que atraviesa el vidrio se esparce un poco
+}
+
+// ================= Escena: Bloques (el vitral de antes, mejorado) =================
+// Un sol de la canción detrás de un panel de vidrio en cuadrícula, como en un cartel de diseño: a la izquierda
+// se ve nítido; detrás del vidrio cada cuadro lo deforma y lo difumina a su manera. El sol respira con los
+// graves y se alza con la energía; cada golpe hace vibrar el vidrio; cada columna del panel brilla en su
+// canto con su parte del sonido. Detrás de todo, la portada en el cielo del atardecer.
+const vit2 = { prog: null, R: 0.3, y: 0.5, wob: 0, lv: new Float32Array(12) };
+function vit2Setup() {
+  vit2.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uR, uY, uWob, uNight, uP, uCell, uX0, uSx; uniform vec3 uSun, uSun2, uTop, uBot; uniform float uLv[12];
+    ${GLSL_COVER}
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    vec3 scene(vec2 p, vec2 uv) {
+      vec3 sky = mix(uBot, uTop, smoothstep(0., 1., uv.y));
+      sky = mix(sky, withCover(sky), .4);   // la portada, detrás del vidrio
+      vec2 c = vec2(uX0 + uSx * .5 * uRes.x / uRes.y, uY); /* el sol pasea detrás del vidrio con la música */ float d = length(p - c) / uR;
+      vec3 sun = mix(uSun, uSun2, smoothstep(.2, 1., (c.y - p.y) / uR * .5 + .5));   // más hondo abajo
+      sun *= .8 + .28 * sqrt(max(0., 1. - d * d));
+      sun = mix(sun, mix(uSun, vec3(1., .96, .86), .55), exp(-dot((p - c) / uR - vec2(-.25, .3), (p - c) / uR - vec2(-.25, .3)) * 2.2) * .55);   // el sol tiene un corazón claro, no es un disco plano
+      float a = smoothstep(1., .985, d);
+      sky += uSun * (exp(-max(0., d - 1.) * 2.5) * .4 + exp(-max(0., d - 1.) * .9) * .12) * (.4 + uP * 1.1);   // su halo late con el golpe (uno cercano y otro amplio)
+      return mix(sky, sun, a);
+    }
+    void main() {
+      float asp = uRes.x / uRes.y; vec2 p = vec2(vUv.x * asp, vUv.y);
+      vec3 col;
+      if (p.x < uX0) col = scene(p, vUv);
+      else {
+        // el vidrio: cada cuadro es una lente que deforma y difumina lo de atrás
+        vec2 cell = floor((p - vec2(uX0, 0.)) / uCell), lc = (p - vec2(uX0, 0.)) / uCell - cell - .5;
+        int ci = int(clamp(cell.x, 0., 11.)); float lv = uLv[ci];
+        // cada cuadro amplía e invierte lo de atrás (como una gota de vidrio) y lo difumina
+        // cada cuadro muestra lo de atrás ampliado y muy difuminado (una mancha de luz suave, como vidrio esmerilado)
+        float tj = h(cell * 1.3 + 2.), tk = h(cell * 2.1 + 7.);                    // cada vidrio está cortado un poco distinto: dobla la luz a su manera
+        vec2 off = -lc * uCell * (1.1 + uWob * .35 + (tj - .5) * .7) + (vec2(tj, tk) - .5) * uCell * .55 + vec2(0., sin(cell.x * 1.7 + uTime * 2.) * uWob * .01);
+        vec3 acc = vec3(0.);
+        // cada bloque es una lente de vidrio abombada: invierte y amplía lo de atrás (el sol se ve dentro de cada pieza), con un desenfoque leve
+        float rl = length(lc), bulge = 1. - rl * rl * 1.6;
+        vec2 lens = -lc * uCell * (1.6 + uWob * .3) * (1. + .6 * bulge);
+        for (int k = 0; k < 8; k++) { float an = float(k) * 2.399, rr = sqrt(float(k) / 8.) * .012; vec2 o2 = vec2(cos(an), sin(an)) * rr; acc += scene(p + off * .35 + lens + o2, vUv + vec2(o2.x / asp, o2.y)); }
+        col = acc / 8.;
+        col += vec3(1.) * pow(max(0., 1. - length(lc - vec2(-.18, .2)) * 3.2), 3.) * .18 * (uNight > .5 ? 1. : .6);   // el brillo del vidrio abombado
+        col = mix(col, vec3(1.), .04) * (.94 + .2 * tk);   // esmerilado, unos vidrios más claros que otros
+        col += vec3(1.) * exp(-dot(lc - vec2(-.3, .32), lc - vec2(-.3, .32)) * 70.) * step(.9, tj) * (.06 + lv * .18) * (uNight > .5 ? 1. : .5);   // algunos atrapan un destello en la esquina
+        // cada bloque de vidrio tiene volumen: más claro arriba, más hondo abajo, y un brillo suave arriba a la izquierda
+        col *= .82 + .32 * (.5 - lc.y * .9);
+        col += exp(-dot(lc - vec2(-.25, .3), lc - vec2(-.25, .3)) * 9.) * .06;
+        // canto del cuadro: filo de luz arriba-izquierda y sombra abajo-derecha (relieve del vidrio)
+        // líneas finas y limpias entre cuadros: claras arriba-izquierda, hondas abajo-derecha
+        float px = 1.5 / uRes.y / uCell;
+        float top = smoothstep(.5 - px * 1.5, .5, lc.y), left = smoothstep(.5 - px * 1.5, .5, -lc.x);
+        float bot = smoothstep(.5 - px * 1.5, .5, -lc.y), right = smoothstep(.5 - px * 1.5, .5, lc.x);
+        col += max(top, left) * (.08 + lv * .25 + uP * .05);
+        col -= max(bot, right) * .06;
+        // detrás del vidrio, la luz de cada columna sube hasta donde llega su sonido (un ecualizador esmerilado)
+        float fill = smoothstep(lv * .95 + .03, lv * .95 - .14, vUv.y);
+        col += mix(uSun, vec3(1.), .25) * fill * (.1 + .32 * clamp(lv, 0., 1.2)) * (uNight > .5 ? 1. : .4);   // de día, menos: que no se lave a blanco
+        col *= .86 + clamp(lv, 0., 1.2) * .22;
+      }
+      o = vec4(col, 1.);
+    }`);
+}
+function drawBloques(dt) {
+  if (!glInit()) { drawLight(dt); return; }
+  if (!vit2.prog) vit2Setup();
+  const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
+  // el sol: su tamaño lo dan los graves y la parte de la canción; cada golpe lo hincha con un empujón (resorte)
+  const tR = 0.22 + Math.pow(bandX(0, 10), 1.3) * 0.1 + dynL * 0.06;
+  if (pulse.on) vit2.rv = (vit2.rv || 0) + 0.5 + pulse.k * 0.9;
+  vit2.rv = (vit2.rv || 0) + ((tR - vit2.R) * 180 - (vit2.rv || 0) * 14) * dt; vit2.R += vit2.rv * dt;
+  vit2.y += ((0.46 + dynL * 0.08) - vit2.y) * (1 - Math.pow(0.2, dt));
+  if (pulse.on) vit2.wob = Math.min(2, vit2.wob + 0.8 * pulse.k + 0.4);
+  vit2.wob *= Math.pow(0.08, dt);
+  // cada columna de vidrio es una banda (graves a la izquierda): su luz sube hasta donde llega, con resortes
+  if (!vit2.v) { vit2.v = new Float32Array(12); vit2.tg = new Float32Array(12); }
+  for (let i = 0; i < 12; i++) { const k0 = Math.floor(i / 12 * BANDS * 0.92); vit2.tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + 4)), 1.1); }
+  springTo(vit2.lv, vit2.v, vit2.tg, dt, 240, 0.6);
+  const warm = RGB.slice().sort((a, b) => (b[0] - b[2]) - (a[0] - a[2]))[0];   // el tono más cálido de la portada es el sol
+  const sat = (c, s_, l) => { const [h_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, s_, l)).map(v => v / 255); };
+  const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
+  const [cw, ch] = glCanvas(1), p = vit2.prog;
+  gl.useProgram(p.pr); glCoverBind(p);
+  gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
+  gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, vit2.R); gl.uniform1f(p.u.uY, vit2.y); gl.uniform1f(p.u.uWob, vit2.wob * (state.noFlash ? 0.5 : 1));
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); vit2.sx = (vit2.sx || 0) + dt * musicGate * (0.06 + energy * 0.25); gl.uniform1f(p.u.uSx, Math.sin(vit2.sx) * 0.28);
+  gl.uniform1f(p.u.uX0, asp * (asp > 1 ? 0.38 : 0.3));
+  gl.uniform3fv(p.u.uSun, sat(warm, 92, night ? 55 : 56)); gl.uniform3fv(p.u.uSun2, sat(warm, 88, night ? 34 : 40));
+  gl.uniform3fv(p.u.uTop, night ? hexToRgb(hsl(hh + 20, 35, 14)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 30, 42)).map(v => v / 255));
+  gl.uniform3fv(p.u.uBot, night ? hexToRgb(hsl(hh - 20, 40, 36)).map(v => v / 255) : hexToRgb(hsl(hh - 20, 45, 72)).map(v => v / 255));
+  gl.uniform1fv(p.u['uLv[0]'], vit2.lv);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.viewport(0, 0, cw, ch);
+  gl.disable(gl.BLEND); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  ctx.save(); ctx.imageSmoothingQuality = 'high'; ctx.drawImage(GLX.c, 0, 0, W, H); ctx.restore();
 }
 
 // ================= Escena: Lentes =================
@@ -14923,7 +15018,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
+const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
