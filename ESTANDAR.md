@@ -49,7 +49,17 @@ Que el ojo no se quiera ir. Una animación es hipnotizante cuando:
 - Grabación fluida y nítida; liviana en el PC (las escenas pesadas van en la lista de ajuste al grabar).
 - Llamativa en un teléfono: se entiende en un segundo.
 
-## 6. Proceso
+## 6. Errores que no se repiten
+
+- **Reloj propio**: nada en un shader se mueve con el tiempo real; se usa el reloj musical (`time`, que solo corre con música y sigue la intensidad) o una fase que empuja el golpe.
+- **Golpe tardío**: resortes blandos u ondas lentas reparten el golpe por todo el compás. El golpe debe verse en el primer cuarto del tiempo.
+- **Escalones al grabar**: los bordes duros (`step`) se ven en escalones cuando la escena se amplía; usar bordes suaves (`smoothstep` con `fwidth`).
+- **Comentarios que se tragan código**: nunca un `//` en medio de una línea con más instrucciones (revisa `check.sh`).
+- **Formas de juego de los 2000**: nada de ruido fino en formas grandes (árboles como papel arrugado, montañas rugosas). Formas lisas, luz en masas pintadas.
+- **La esencia**: al mejorar una animación, se conserva lo que la hacía especial (Cortina: cuentas de cristal con destellos); se pule, no se reemplaza.
+- **Medición con patrones que se repiten** (túneles, carreteras): la diferencia entre cuadros se satura; se juzga con video real.
+
+## 7. Proceso
 
 - Auditorías medidas con cuadros y video reales, en vertical y horizontal, en modo oscuro y claro.
 - Comparar con las referencias del usuario. Mejorar antes de quitar. No repetir errores.
