@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 323</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 324</div>
     </div>
   </div>
   <div class="group">
@@ -5605,6 +5605,8 @@ function fluidSetup() {
           o = vec4(col * al, al); return;
         }
         if (light > 0.5) {   // de noche: luz de color que se suma, con un tono suave que no se quema
+          { vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 1.5; vec3 sm = vec3(0.); float ws = 0.;   /* la tinta suavizada: sin bordes rasgados */
+            for (int i = -2; i <= 2; i++) for (int j = -2; j <= 2; j++) { float w = exp(-float(i * i + j * j) * .3); sm += texture(uTexture, vUv + vec2(i, j) * tx).rgb * w; ws += w; } c = sm / ws; }
           c = c / (1. + c * 0.35); float a = clamp(max(c.r, max(c.g, c.b)) * 1.4, 0., 1.);
           o = vec4(c * 1.5 * a, a);
         } else {   // de día: tinta con su color pleno sobre el papel (antes casi no se veía)
@@ -5652,7 +5654,7 @@ function fluidStep(dt) {
   u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(0, v.read));
   gl.uniform1f(u.dt, dt); gl.uniform1f(u.dissipation, 0.5 + (1 - energy) * 1.6); glBlit(v.write); v.swap();   // en lo suave el movimiento se calma rápido
   u = use(P.advect, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uSource, glBind(1, fluid.dye.read));
-  gl.uniform1f(u.dissipation, 0.45 + (1 - energy) * 0.7); glBlit(fluid.dye.write); fluid.dye.swap();   // el color dura más: la pantalla se ve más colorida
+  gl.uniform1f(u.dissipation, 0.95 + (1 - energy) * 0.9); glBlit(fluid.dye.write); fluid.dye.swap();   // el color dura más: la pantalla se ve más colorida
 }
 const fluidColor = (c, k) => c.map(x => x / 255 * k);
 addEventListener('pointermove', e => {
@@ -12897,7 +12899,8 @@ function drawTunnel(dt) {
   tun.vo = ease(tun.vo, Math.min(1, voice * 1.4), 0.4);
   tun.bloom = Math.max(tun.kick * 0.9, ease(tun.bloom, 0, 0.12));   // el golpe solo ilumina, suave
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(70, Math.min(95, hs[0][1] * 1.3 + 20));
-  const segCols = n => { const o = [0, 1, 2].map(k => hs[(k + n) % 3]); return [hexToRgb(hsl(o[0][0], sat, 55)), hexToRgb(hsl(o[1][0], sat, 60)), hexToRgb(hsl(o[2][0], sat, 50)), hexToRgb(hsl(o[0][0], sat * 0.9, 70))].map(c => c.map(v => v / 255)); };   // solo los colores de la portada, en distinto orden en cada tramo
+  const segCols = n => { const o = [0, 1, 2].map(k => hs[(k + n) % 3]); const nl = state.theme === 'dark' ? [40, 46, 34, 58] : [55, 60, 50, 70];   /* de noche, paredes hondas y saturadas (no celeste lavado) */
+    return [hexToRgb(hsl(o[0][0], sat, nl[0])), hexToRgb(hsl(o[1][0], sat, nl[1])), hexToRgb(hsl(o[2][0], sat, nl[2])), hexToRgb(hsl(o[0][0], sat * 0.9, nl[3]))].map(c => c.map(v => v / 255)); };   // solo los colores de la portada, en distinto orden en cada tramo
   [segCols(0), segCols(1), segCols(2)].forEach((cs, j) => cs.forEach((c, k) => tun.P.set(c, (j * 4 + k) * 3)));
   const [cw, ch] = glCanvas(0.75), p = tun.prog;
   gl.useProgram(p.pr);
