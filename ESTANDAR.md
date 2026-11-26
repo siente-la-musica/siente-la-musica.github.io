@@ -75,6 +75,14 @@ Que el ojo no se quiera ir. Una animación es hipnotizante cuando:
 - **La esencia**: al mejorar una animación, se conserva lo que la hacía especial (Cortina: cuentas de cristal con destellos); se pule, no se reemplaza.
 - **Medición con patrones que se repiten** (túneles, carreteras): la diferencia entre cuadros se satura; se juzga con video real.
 
+- **Optimizar la medición en contra del estándar**: la prueba de ritmo premia moverse mucho en el golpe y poco entre
+  golpes; perseguir ese número lleva al «arranca y para» (prohibido). El movimiento es continuo; el golpe es un acento.
+  La medición es una guía, nunca la meta; se juzga viendo el video.
+- **Quitar la portada de fondo**: toda animación deja ver el fondo vivo con la portada (salvo escenas completas como
+  Ciudad, Ruta, Lago o Luz).
+- **Reemplazar lo que funcionaba**: si una versión anterior gustaba, se mejora sobre ella; no se sustituye por otra idea.
+- **Cambios globales** (relojes, curvas compartidas): afectan a todas las escenas; se revisan todas antes de publicar.
+
 ## 7. Proceso
 
 - Auditorías medidas con cuadros y video reales, en vertical y horizontal, en modo oscuro y claro.

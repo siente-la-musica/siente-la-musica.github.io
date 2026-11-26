@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 305</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 306</div>
     </div>
   </div>
   <div class="group">
@@ -4506,7 +4506,7 @@ function drawRecOverlay() { const time = ltime;
   ctx.textAlign = 'left';
   const ly = currentLyric();
   if (state.mode === 'lyrics' && it) {
-    if (ly) drawLyricStyled(ly, (vertical ? 92 : 104) * u, vertical ? W * 0.46 : W / 2, H * 0.5, vertical ? W * 0.74 : W * 0.84);
+    if (ly) { ctx.shadowColor = state.theme === 'dark' ? 'rgba(0,0,0,.9)' : 'rgba(255,255,255,.95)'; ctx.shadowBlur = 16 * u; drawLyricStyled(ly, (vertical ? 92 : 104) * u, vertical ? W * 0.46 : W / 2, H * 0.5, vertical ? W * 0.74 : W * 0.84); }   /* sombra firme: hace de contorno */
     else drawWordLines([lyricsMessage() || '♪'], undefined, 56 * u, W / 2, H * 0.5, W * 0.84, 600);
   } else if (state.mode === 'artist' && it && arCenter) {
     const a = it.artists[0];
@@ -8504,7 +8504,7 @@ function drawLyricsScene(dt) { const time = ltime;
   const night = state.theme === 'dark', R = Math.max(W, H) * 0.4;
   const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, R);
   const bgc = night ? [0, 0, 0] : [255, 255, 255];
-  for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.5 : 0.55) * Math.exp(-3 * t * t) * (1 - t))); }
+  for (let i = 0; i <= 6; i++) { const t = i / 6; g.addColorStop(t, rgba(bgc, (night ? 0.68 : 0.7) * Math.exp(-3 * t * t) * (1 - t))); }   /* velo más hondo: la letra contrasta con las ondas de su mismo color */
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 }
 
