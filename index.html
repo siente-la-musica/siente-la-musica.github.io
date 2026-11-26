@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 314</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 315</div>
     </div>
   </div>
   <div class="group">
@@ -12710,7 +12710,8 @@ function pillsSetup() {
           float lv = B.y, body = smoothstep(A.w * .07, -A.w * .12, d);                      // bordes definidos, apenas suaves
           float core = exp(-pow(q.x / (A.w * .45), 2.)) * smoothstep(1., .55, abs(t - .5) * 2.) * (.25 + .6 * lv) * B.z;
           vec3 cc = mix(c, mix(uMel, vec3(1.), .5), core * uVo * .5);
-          light += (cc * (1.1 + .9 * lv) + mix(cc, vec3(1., .96, .9), .55) * core * 1.1) * body;   // el núcleo, claro pero de su color (no crema)
+          float fil = exp(-pow(q.x / (A.w * .1), 2.)) * smoothstep(A.w * .2, -A.w * .5, d) * (.35 + .65 * lv);   /* el filamento: un tubo fino y nítido dentro de la barra */
+          light += (cc * (1.1 + .9 * lv) + mix(cc, vec3(1., .96, .9), .55) * core * 1.1) * body + mix(cc, vec3(1.), .45) * fil * .9;   // el núcleo, claro pero de su color (no crema)
           glow += c * (exp(-max(d, 0.) / (A.w * (.9 + .8 * uBr))) * .8 + exp(-max(d, 0.) / (A.w * 3.5)) * .06) * (.35 + .6 * lv) * (1. - body);   // el resplandor: intenso cerca de la barra, se apaga pronto (el fondo queda oscuro)
           // de día: capas de color pleno, una sobre otra (como la referencia clara), con un halo de su color
           dayC = mix(dayC, c, exp(-max(d, 0.) / (A.w * 1.2)) * .22 * (1. - body));
@@ -12721,15 +12722,16 @@ function pillsSetup() {
           gin = max(gin, exp(-abs(d) / (A.w * .22)) * m);   // el borde de adentro del vidrio, donde se junta la luz
         }
       }
-      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .06) : uBg, col;
+      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg) * .55, .35) : uBg, col;   /* la portada se ve detrás */
       if (uNight > .5) {
         col = bg + light + glow;
         // el vidrio: recoge la luz que tiene detrás (la aclara y la satura apenas), con un brillo largo a un costado y
         // los bordes teñidos del color de la luz cercana (como un vidrio de verdad, no un contorno vacío)
         vec3 lc = (light + glow) / (max(max(light.r + glow.r, light.g + glow.g), light.b + glow.b) + .08), tint = mix(lc, vec3(1.), .35);
         // el vidrio esmerilado: difumina y aclara la luz que tiene detrás (como en las fotos de referencia), no un contorno vacío
-        if (inGlass > .01) { float rr_ = .028; vec3 fr = (lightAt(p + vec2(rr_, 0.)) + lightAt(p - vec2(rr_, 0.)) + lightAt(p + vec2(0., rr_ * 1.6)) + lightAt(p - vec2(0., rr_ * 1.6))) * .25;
-          col = mix(col, bg + fr * 1.15 + lc * .06, inGlass * .9); }
+        if (inGlass > .01) { float rr_ = .038; vec3 fr = (lightAt(p + vec2(rr_, 0.)) + lightAt(p - vec2(rr_, 0.)) + lightAt(p + vec2(0., rr_ * 1.6)) + lightAt(p - vec2(0., rr_ * 1.6))) * .25;
+          col = mix(col, bg + fr * 1.1 + lc * .09 + vec3(.025), inGlass * .92);   /* esmerilado: la luz detrás, difusa y algo lechosa */
+          col += mix(lc, vec3(1.), .4) * smoothstep(.6, 1., gt) * .06 * inGlass; }   /* la luz se junta arriba del vidrio */
         col += tint * gin * (.12 + .25 * clamp(dot(light + glow, vec3(.33)), 0., 1.) + .15 * uBr) * inGlass;
         col += mix(tint, vec3(1.), .5) * exp(-pow((gnx + .55) / .13, 2.)) * smoothstep(.05, .25, gt) * smoothstep(.95, .75, gt) * inGlass * (.1 + .18 * uBr);
         col += tint * rim * (.3 + .55 * clamp(dot(col, vec3(.33)), 0., 1.));
@@ -12757,7 +12759,8 @@ function drawPills(dt) {
       const per = night ? (rnd() < 0.55 ? 2 : 1) : 2;
       for (let k = 0; k < per && pil.base.length < 28; k++) {
         const h = (night ? 0.16 + 0.12 * rnd() : 0.24 + 0.06 * rnd()), cy = night ? 0.5 + (k ? -1 : 1) * (0.12 + 0.12 * rnd()) * (per > 1 ? 1 : 0) + (rnd() - 0.5) * 0.12 : (k ? 0.24 : 0.74) + (rnd() - 0.5) * 0.14;
-        pil.base.push({ x: x0 + (c + 0.5) * wv + (rnd() - 0.5) * wv * 0.35, y: cy, h, w: wv * (night ? 0.42 + 0.06 * rnd() : 0.5), glass: night && rnd() < 0.28 ? 1 : 0, ci: Math.floor(rnd() * 5), cj: Math.floor(rnd() * 5), band: c / cols, core: 0.6 + 0.4 * rnd() });
+        const gl_ = night && rnd() < 0.3 ? 1 : 0;
+        pil.base.push({ x: x0 + (c + 0.5) * wv + (rnd() - 0.5) * wv * 0.35 + gl_ * wv * 0.3, y: cy, h: h * (gl_ ? 1.15 : 1), w: wv * (night ? 0.42 + 0.06 * rnd() : 0.5) * (gl_ ? 1.5 : 1), glass: gl_, ci: Math.floor(rnd() * 5), cj: Math.floor(rnd() * 5), band: c / cols, core: 0.6 + 0.4 * rnd() });
       }
     }
     // de día, los contornos de vidrio van encima de las barras de color (como en la referencia clara)
