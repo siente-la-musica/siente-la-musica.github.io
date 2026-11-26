@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 324</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 325</div>
     </div>
   </div>
   <div class="group">
@@ -10398,7 +10398,7 @@ function drawHarp(dt) {
   gl.uniform1i(p.u.uDisp, 0);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uN, Math.max(180, Math.min(860, cw / 2.7)));
+  gl.uniform1f(p.u.uVoice, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uN, Math.max(90, Math.min(420, cw / 6)));   /* hilos separados: se leen como hilos, no como ruido */
   gl.uniform1f(p.u.uTip, harp.tip); gl.uniform1f(p.u.uFlow, harp.flow); gl.uniform1f(p.u.uSyl, harp.syl); gl.uniform1f(p.u.uSylX, harp.sylX); gl.uniform1f(p.u.uHueT, harp.hue);
   gl.uniform3fv(p.u.uC0, RGB[0].map(x => x / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(x => x / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(x => x / 255));
   gl.uniform3fv(p.u.uMel, melodyColor().map(x => x / 255)); gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
