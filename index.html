@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 313</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 314</div>
     </div>
   </div>
   <div class="group">
@@ -9545,9 +9545,9 @@ function drawPuffs(dt) {
 // nebulosa de los colores de la portada que fluye sin parar con la música (lo que se siente por dentro); el borde,
 // una luz fina. La voz enciende la cabeza; cada bombo manda desde el rostro ondas suaves de color hacia afuera; cada
 // nota mueve la corriente interior. En silencio, la nebulosa se queda quieta y apagada.
-const BUST_PROF = [[-0.95, -1.3], [-0.88, -0.98], [-0.72, -0.84], [-0.7, -0.62], [-0.74, -0.38], [-0.72, -0.12], [-0.66, 0.14], [-0.58, 0.4], [-0.47, 0.62], [-0.34, 0.76],   // la melena cae por detrás hasta los hombros
-  [-0.2, 0.8], [0.05, 0.85], [0.25, 0.78], [0.37, 0.62], [0.42, 0.44], [0.445, 0.31], [0.43, 0.25], [0.48, 0.14], [0.555, 0.03], [0.53, -0.015], [0.47, -0.03],
-  [0.475, -0.09], [0.445, -0.125], [0.465, -0.165], [0.44, -0.205], [0.43, -0.29], [0.37, -0.355], [0.24, -0.38], [0.18, -0.5], [0.2, -0.67], [0.36, -0.8], [0.66, -0.96], [0.82, -1.3]];
+const BUST_PROF = [[-0.95, -1.3], [-0.84, -1.0], [-0.56, -0.8], [-0.44, -0.56], [-0.48, -0.3], [-0.56, -0.04], [-0.55, 0.24], [-0.46, 0.48], [-0.3, 0.66], [-0.1, 0.76],   /* cráneo redondo, nuca y cuello naturales */
+  [0.1, 0.77], [0.26, 0.7], [0.37, 0.56], [0.42, 0.42], [0.435, 0.31], [0.418, 0.245], [0.47, 0.13], [0.54, 0.03], [0.52, -0.01], [0.47, -0.03],
+  [0.48, -0.085], [0.455, -0.12], [0.47, -0.16], [0.44, -0.205], [0.43, -0.285], [0.38, -0.345], [0.26, -0.375], [0.2, -0.46], [0.19, -0.62], [0.3, -0.78], [0.62, -0.95], [0.82, -1.3]];
 const BUST_PTS = (() => {   // contorno suavizado (Catmull-Rom): sin esquinas
   const P = BUST_PROF, n = P.length, out = [];
   for (let i = 0; i < n - 1; i++) { const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(n - 1, i + 2)];
@@ -9605,17 +9605,17 @@ function bustSetup() {
       { vec2 hq = q - vec2(-.15, .45); float back = smoothstep(-.2, -.6, q.x) * exp(-max(d, 0.) / .22) * smoothstep(-1., -.4, q.y);   // nace del cabello mismo
         vec2 sq = vec2(hq.x * 1.6 + t * .9, hq.y * 2.4 + .35 * sin(hq.x * 2.5 + t * .6));
         float sm = fbm(sq + 1.5 * vec2(fbm(sq * .8 + t * .2), fbm(sq * .7 - 3.)));
-        float dens = smoothstep(.3, .8, sm) * back * smoothstep(0., .02, d); hairD = smoothstep(-.1, -.45, q.x) * exp(-max(d, 0.) / .09) * smoothstep(-1., -.3, q.y) * smoothstep(0., .03, d) * (.35 + .65 * smoothstep(.3, .7, sm));   /* la melena: sale de la cabeza y se deshace cerca */
-        col += pal(sm * 1.2 + .2 + t * .03) * dens * (.25 + .65 * uGate) * (1. + .4 * uKick); }
+        float dens = smoothstep(.3, .8, sm) * back * smoothstep(0., .02, d); hairD = smoothstep(-.1, -.45, q.x) * exp(-max(d, 0.) / .035) * smoothstep(-1., -.3, q.y) * smoothstep(0., .03, d) * (.35 + .65 * smoothstep(.3, .7, sm));   /* la melena: sale de la cabeza y se deshace cerca */
+        col += pal(sm * 1.2 + .2 + t * .03) * dens * (.15 + .4 * uGate) * (1. + .4 * uKick); }
       float fadeB = smoothstep(-1.35, -.55, q.y);   // los hombros se disuelven abajo (no un recorte de papel)
       a *= fadeB; rim *= fadeB;
       // el retrato de líneas: líneas horizontales finas de luz que ondulan con la música por dentro de la figura (como un
       // póster de música); siguen hacia atrás en el cabello y se deshacen en el aire. Un relleno muy tenue da el volumen.
       float inner_ = smoothstep(.02, -.12, d);
       float amp = (.008 + .022 * uEn + .035 * uKick + .02 * uVo * head) * (.35 + .65 * inner_);   /* ondulan sin volverse caos */
-      float disp = (fbm(vec2(q.x * 2.4 + t * .45, q.y * 2.2 - t * .2)) - .5) * amp * 7.;
-      float lf = (q.y + disp) * 30., fw = fwidth(lf), dl = abs(fract(lf) - .5);
-      float ln = smoothstep(.5 - fw * 1.6 - .045, .5, dl);
+      float disp = (sin(q.x * 3.2 - t * 2.2 + q.y * 1.5) * .6 + sin(q.x * 5.1 + t * 1.3 - q.y * 2.3) * .3) * amp * 2.2;   /* olas lisas que corren por el rostro (el ruido fino temblaba) */
+      float lf = (q.y + disp) * 22., fw = fwidth(lf), dl = abs(fract(lf) - .5);
+      float ln = smoothstep(.5 - fw * 1.6 - .07, .5, dl);
       vec3 lc = pal(q.y * .35 + .25 + t * .02) * (1. + .5 * uKick);
       float hairLines = hairD;   /* las líneas del cabello que fluyen hacia atrás */
       vec3 fig = neb * .18 * (.6 + .4 * uGate) + lc * ln * (.75 + .35 * uGate);
