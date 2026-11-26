@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 309</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 310</div>
     </div>
   </div>
   <div class="group">
@@ -6336,10 +6336,12 @@ const PAI_GRAIN = `{ float L_ = dot(col, vec3(.3, .59, .11)), g1 = h(floor(gl_Fr
 PAI.dun = {};
 const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uFlow, uPh, uBeat; uniform vec3 uLv, uSky0, uSky1, uSun, uW0, uW1, uW2; uniform float uL[9];
   ${GLSL_NOISE}
+  ${GLSL_COVER}
   float H_(vec2 q) { return .5 * sin(q.x * 2.1 + q.y * 1.3 + uPh * .9) + .35 * sin(q.x * 3.7 - q.y * 2.2 - uPh * .65) + .25 * (n(q * 1.6 + vec2(uPh * .2, 0.)) - .5) * 2.; }   // solo avanzan con la música
   void main() {
     float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y);
     vec3 col = mix(uSky0, uSky1, smoothstep(.4, 1., uv.y));
+    col = mix(col, withCover(col), .6);   /* la portada viva en el cielo */
     vec2 sc = vec2(asp * .5, .76); float R = .17 * min(1., asp * 1.4), sd = length(p - sc);
     R *= 1. + .04 * uLv.x + .03 * uP;
     col += uSun * exp(-sd * sd / (R * R * 3.)) * (.25 + .45 * uVo + .2 * uP);
@@ -6356,12 +6358,12 @@ const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uF
       c += mix(uW2, vec3(1.), .4) * exp(-d * 45.) * (.12 + .7 * hit) * (.3 + lk);
       c *= 1. + .3 * hit * smoothstep(.0, .06, d) * (1. - .5 * uNight * 0.);   // el golpe enciende la ola entera al pasar, no solo su cresta
       c = mix(c, uSun * .9 + .1, exp(-d * 60.) * exp(-pow((p.x - sc.x) / (asp * .25), 2.)) * (.5 - fk * .05) * smoothstep(5., 0., fk));   // la cresta de atrás, encendida por el sol
-      float lv_ = d * (140. - fk * 8.) - uPh * .9, fw = fwidth(lv_), lines = abs(fract(lv_) - .5);
-      c += vec3(.9, .95, 1.) * smoothstep(fw * 1.2, 0., lines - .5 + fw * 1.5) * (.04 + .14 * uLv.z + .1 * hit) * clamp(1. - d * 3., 0., 1.);
+      float lv_ = d * (34. - fk * 2.) - uPh * .9, ln = .5 + .5 * cos(lv_ * 6.2832);   /* vetas anchas y suaves que corren con la música (las finas hacían moiré) */
+      c += mix(uW2, vec3(1.), .5) * ln * ln * ln * (.03 + .12 * uLv.z + .1 * hit) * clamp(1. - d * 4., 0., 1.);
+      c = mix(c, withCover(c), .22 * (1. - fk / 9.) * exp(-d * 6.));   /* la portada asoma en el brillo de cada ola */
       col = c; }
     col *= 1. - .2 * smoothstep(.55, 1.15, length((vUv - .5) * vec2(1., .9)) * 1.25);
-    ${PAI_GRAIN}
-    o = vec4(col, 1.);
+    o = vec4(col, 1.);   /* sin punteado: la textura rara */
   }`;
 function drawDunas(dt) {
   if (!glInit()) { drawInfinity(dt); return; }
@@ -6373,7 +6375,7 @@ function drawDunas(dt) {
   S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); const h = attHit(a, a + Math.ceil(BANDS / 10)); if (h > 0) S.L[k] = Math.min(1.4, S.L[k] + 0.35 + 0.35 * h); }   // cada nota de su parte (piano, sinte, voz) levanta su ola
   const pal = night ? { s0: [0.06, 0.08, 0.18], s1: [0.02, 0.03, 0.09], sun: [0.95, 0.42, 0.25], w0: [0.3, 0.42, 0.7], w1: [0.04, 0.07, 0.2] }
     : { s0: [0.93, 0.9, 0.92], s1: [0.86, 0.9, 0.96], sun: [1, 0.55, 0.28], w0: [0.62, 0.74, 0.92], w1: [0.12, 0.2, 0.48] };
-  paiRun(S, DUNAS_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(pal.s0, cov(.8, night ? 14 : 86), 0.35)); gl.uniform3fv(p.u.uSky1, paiBl(pal.s1, cov(.3, night ? 10 : 90), 0.3)); gl.uniform3fv(p.u.uSun, paiBl(pal.sun, cov(.9, 62), 0.55));
+  paiRun(S, DUNAS_FS, (gl, p) => { glCoverBind(p); gl.uniform3fv(p.u.uSky0, paiBl(pal.s0, cov(.8, night ? 14 : 86), 0.35)); gl.uniform3fv(p.u.uSky1, paiBl(pal.s1, cov(.3, night ? 10 : 90), 0.3)); gl.uniform3fv(p.u.uSun, paiBl(pal.sun, cov(.9, 62), 0.55));
     gl.uniform3fv(p.u.uW0, paiBl(pal.w0, cov(.5, night ? 42 : 70), 0.6)); gl.uniform3fv(p.u.uW1, paiBl(pal.w1, cov(.2, night ? 12 : 28), 0.6)); gl.uniform3fv(p.u.uW2, paiBl(pal.w0, cov(.15, night ? 45 : 66), 0.7));
     gl.uniform1fv(p.u['uL[0]'], S.L); gl.uniform1f(p.u.uPh, S.ph); gl.uniform1f(p.u.uBeat, S.beat);
     gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uFlow, 0.5 + S.en); });
@@ -7878,10 +7880,27 @@ function auroraSetup() {
         fg = max(fg, smoothstep(px, -px, abs(p.x - x0 - sway) - w)); }
       vec3 fgc = vec3(.008, .014, .026) + glow * .03;
       col = mix(col, fgc, fg);
-      { vec2 cb = vec2(.66 * asp, uHy - .012), q = p - cb; float body = smoothstep(px, -px, max(abs(q.x) - .03, abs(q.y - .012) - .012)), roof = smoothstep(px, -px, (q.y - .024) + abs(q.x) * .55 - .02) * step(.022, q.y);
-        col = mix(col, vec3(.012, .018, .03), max(body, roof)); float win = smoothstep(px, -px, max(abs(q.x + .008) - .0055, abs(q.y - .012) - .006));
-        vec3 wc = vec3(1., .72, .36) * (.8 + .5 * uP); col = mix(col, wc, win); col += wc * exp(-dot(q - vec2(-.008, .012), q - vec2(-.008, .012)) / .0006) * .35;
-        col += wc * exp(-pow((p.x - cb.x + .008) / .012, 2.)) * exp(-max(uHy - .014 - uv.y, 0.) * 22.) * step(uv.y, uHy - .014) * .25 * (.6 + .4 * n(vec2(p.x * 40., uv.y * 200. - uT * 2.))) * (1. - fg); }
+      { // la cabaña en la orilla de enfrente: sobre su lengua de tierra con pinos, cuerpo de troncos, techo a dos aguas con alero,
+        // chimenea, dos ventanas con su marco y una luz cálida que respira con la voz y se refleja en el lago
+        vec2 cb = vec2(.66 * asp, uHy + .002), q = p - cb; float sc = .8;
+        vec3 sil = vec3(.012, .018, .032) + glow * .025;
+        float land = smoothstep(px, -px, uv.y - (uHy + .004 + .006 * (1. - pow(abs(q.x) / .16, 2.)) * step(abs(q.x), .16))) * step(uHy - .002, uv.y);   // la lengua de tierra
+        for (int j = 0; j < 4; j++) { float fj = float(j), tx = (j < 2 ? -.058 - fj * .022 : .056 + (fj - 2.) * .024) * sc, th = (.045 + .02 * h1(fj + 30.)) * sc, ky = (q.y - .004) / th;   // pinitos junto a la casa
+          if (ky > 0. && ky < 1.) land = max(land, smoothstep(px, -px, abs(q.x - tx) - (.013 * (1. - ky) * (.6 + .4 * fract(-ky * 5.)) + .0015) * sc)); }
+        float bw = .034 * sc, bh = .02 * sc, by = .004;
+        float body = smoothstep(px, -px, max(abs(q.x) - bw, abs(q.y - by - bh * .5) - bh * .5));
+        float ry = q.y - by - bh, roof = smoothstep(px, -px, max(ry - (.026 * sc - abs(q.x) * .62), -ry)) * step(abs(q.x), bw + .008 * sc);   // con alero
+        float chim = smoothstep(px, -px, max(abs(q.x - .018 * sc) - .0035 * sc, abs(ry - .02 * sc) - .011 * sc));
+        col = mix(col, sil, max(max(land, body), max(roof, chim)));
+        float br = .75 + .25 * uVo + .1 * sin(uT * 1.7) * .3;   // la luz de adentro: cálida y estable, respira con la voz
+        vec3 wc = vec3(1., .7, .36) * br;
+        for (int j = 0; j < 2; j++) { vec2 wq = q - vec2((j == 0 ? -.016 : .012) * sc, by + bh * .52); float wf = max(abs(wq.x) - .0052 * sc, abs(wq.y) - .0046 * sc);
+          float win = smoothstep(px * .7, -px * .7, wf) * (1. - .7 * smoothstep(px * .8, 0., min(abs(wq.x), abs(wq.y)) - .0005));   // con su cruz de madera
+          col = mix(col, wc * (.85 + .15 * h1(float(j) + 3.)), win); col += wc * exp(-dot(wq, wq) / .0004) * .22; }
+        float smk = smoothstep(.0, .05, q.y - by - bh - .03 * sc) * exp(-pow((q.x - .018 * sc - (q.y - .05) * .25 - .01 * sin(q.y * 60. - uT * .8)) / (.004 + (q.y - .05) * .12), 2.)) * smoothstep(.2, .07, q.y) * n(vec2(q.x * 80., q.y * 60. - uT * .5));   // humo de la chimenea, lento
+        col = mix(col, vec3(.35, .4, .5) * (.3 + uNight * .2) + glow * .2, clamp(smk, 0., 1.) * .35);
+        float rfl = step(uv.y, uHy - .002) * (1. - fg);   // el reflejo de las ventanas, alargado y rizado en el agua
+        col += wc * exp(-pow((p.x - cb.x + .002) / (.028 * sc), 2.)) * exp(-max(uHy - uv.y, 0.) * 14.) * rfl * .3 * (.5 + .5 * smoothstep(.35, .75, n(vec2(p.x * 60., uv.y * 260. - uT * 1.4)))); }
       col *= 1. - .36 * smoothstep(.45, 1.1, length((vUv - vec2(.5, .52)) * vec2(1., .9)) * 1.25);
       col += (h(gl_FragCoord.xy) - .5) * .022;
       o = vec4(col, 1.);
