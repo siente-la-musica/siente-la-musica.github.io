@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 327</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 328</div>
     </div>
   </div>
   <div class="group">
@@ -2516,6 +2516,10 @@ function spCorner() {
   setImg(lvMeta.querySelector('.av'), artistImageOf(it));
 }
 const ICON = {
+  refresh: '<svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 0 1 6.4 3.2V5h2v6h-6V9h3.08A6 6 0 1 0 18 14h2.02A8 8 0 1 1 12 4z"/></svg>',
+  early: '<svg viewBox="0 0 24 24"><path d="M11.5 6.2v11.6a.8.8 0 0 1-1.25.66L2.6 12.66a.8.8 0 0 1 0-1.32l7.65-5.8a.8.8 0 0 1 1.25.66zm9.5 0v11.6a.8.8 0 0 1-1.25.66l-7.65-5.8a.8.8 0 0 1 0-1.32l7.65-5.8A.8.8 0 0 1 21 6.2z"/></svg>',
+  late: '<svg viewBox="0 0 24 24"><path d="M12.5 6.2v11.6a.8.8 0 0 0 1.25.66l7.65-5.8a.8.8 0 0 0 0-1.32l-7.65-5.8a.8.8 0 0 0-1.25.66zM3 6.2v11.6a.8.8 0 0 0 1.25.66l7.65-5.8a.8.8 0 0 0 0-1.32l-7.65-5.8A.8.8 0 0 0 3 6.2z"/></svg>',
+  note: '<svg viewBox="0 0 24 24"><path d="M19 3v12.5a3 3 0 1 1-2-2.83V7.3l-7 1.4v8.8a3 3 0 1 1-2-2.83V5.4z"/></svg>',
   play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z"/></svg>',
   pause: '<svg viewBox="0 0 24 24"><rect x="6" y="5" width="4" height="14" rx="1.2"/><rect x="14" y="5" width="4" height="14" rx="1.2"/></svg>',
   prev: '<svg viewBox="0 0 24 24"><rect x="5" y="6" width="2.4" height="12" rx="1"/><path d="M19 6.9v10.2a.9.9 0 0 1-1.4.75L10 12.75a.9.9 0 0 1 0-1.5l7.6-5.1A.9.9 0 0 1 19 6.9z"/></svg>',
@@ -2563,10 +2567,10 @@ function spRender() {
       `<div class="prog"><div class="bar"><i id="spBar"></i></div></div>` +
       `<div class="more">` +
         (canVol ? `<label class="vol">${ICON.vol}<input type="range" id="spVol" min="0" max="100" step="1" value="${Math.round(spVolume())}" aria-label="Volumen"></label>` : '') +
-        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="lyFix" title="Borra lo guardado de esta canción y la vuelve a buscar">↻ Arreglar la letra de esta canción</button><button id="lyEarly" title="La letra sale tarde">Letra antes (−0,25 s)</button><button id="lyLate" title="La letra sale adelantada">Letra después (+0,25 s)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
-        (!analyser ? `<button id="spTap"><span style="width:16px;text-align:center">♩</span>Marcar el ritmo (tocando)</button>` : '') +
+        (src === 'spotify' ? `<button id="spLib">${ICON.lib}Buscar y reproducir</button><button id="spLikeM">${ICON.heart}${sp.liked ? 'Quitar de Me gusta' : 'Guardar en Me gusta'}</button><button id="spAddPl">${ICON.plus}Añadir a una playlist</button><button id="spQueue">${ICON.queue}A continuación</button>${it.artists?.[0]?.id ? `<button id="spGoAr">${ICON.person}Ir al artista</button>` : ''}${it.album?.id ? `<button id="spGoAl">${ICON.disc}Ir al álbum</button>` : ''}<button id="spRadio">${ICON.radio}Radio de esta canción</button><button id="lyFix" title="Borra lo guardado de esta canción y la vuelve a buscar">${ICON.refresh}Arreglar la letra</button><button id="lyEarly" title="La letra sale tarde">${ICON.early}Letra antes (−0,25 s)</button><button id="lyLate" title="La letra sale adelantada">${ICON.late}Letra después (+0,25 s)</button><button class="mob" data-sp="shuffle" aria-pressed="${!!sp.shuffle}">${ICON.shuffle}Aleatorio: ${sp.shuffle ? 'sí' : 'no'}</button><button class="mob" data-sp="repeat" aria-pressed="${!!sp.repeat && sp.repeat !== 'off'}">${ICON.repeat}${sp.repeat === 'track' ? 'Repetir: esta canción' : sp.repeat === 'context' ? 'Repetir: la lista' : 'Repetir: no'}</button>` : '') +
+        (!analyser ? `<button id="spTap">${ICON.note}Marcar el ritmo (tocando)</button>` : '') +
         (link ? `<a href="${esc(link)}" target="_blank" rel="noopener">${ICON.open}${linkName}</a>` : '') +
-        (src === 'lastfm' ? '<button id="lfEarly" title="La letra va tarde">Letra −0,5 s</button><button id="lfLate" title="La letra va adelantada">+0,5 s</button>' : '') +
+        (src === 'lastfm' ? `<button id="lfEarly" title="La letra va tarde">${ICON.early}Letra antes (−0,5 s)</button><button id="lfLate" title="La letra va adelantada">${ICON.late}Letra después (+0,5 s)</button>` : '') +
         `<button id="spOut">${ICON.power}Desconectar</button>` +
       `</div>`,
       true
@@ -3366,6 +3370,7 @@ document.getElementById('btnSpConnect').onclick = () => {
   spLogin();
 };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && spotifyOn()) spLoop(); });
+addEventListener('online', () => { if (spotifyOn()) spLoop(); });   /* al volver internet, Spotify se pone al día enseguida (no espera 15 s) */
 
 // ================= Last.fm: gratis y sin límite de personas =================
 // Cada persona conecta una vez su Spotify (o Apple Music, YouTube Music…) a Last.fm y aquí
@@ -9138,7 +9143,7 @@ function glCoverBind(p, unit = 5) {
 // se calculan algo más pequeñas; el texto, la letra y lo dibujado a mano siguen a resolución completa
 let recGL = 1, recSlow = 0, recFast = 0, recDropped = false;
 const REC_SHARP = new Set(['cuencos', 'anillo', 'arco', 'dunas', 'lago', 'ruta', 'autopista', 'light', 'aurora', 'mirador', 'disco', 'vitral', 'bloques', 'lenses', 'globes', 'reeds', 'icons', 'tubos', 'circles']);
-const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust', 'tubes', 'bokeh']);
+const REC_HEAVY = new Set(['ciudad', 'ruta', 'lago', 'autopista', 'aurora', 'light', 'mirador', 'disco', 'bust', 'tubes', 'bokeh', 'fluid', 'eclipse']);
 function recPerf(ms, dt) {
   if (!recording) { recGL = 1; recSlow = recFast = 0; recDropped = false; return; }
   const budget = 1000 / recFps;   // lo que puede tardar un cuadro para no retrasar el siguiente
@@ -9565,7 +9570,7 @@ const BUST_PROF = [[-0.95, -1.3], [-0.84, -1.0], [-0.56, -0.8], [-0.44, -0.56], 
 const BUST_PTS = (() => {   // contorno suavizado (Catmull-Rom): sin esquinas
   const P = BUST_PROF, n = P.length, out = [];
   for (let i = 0; i < n - 1; i++) { const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(n - 1, i + 2)];
-    for (let t = 0; t < 1; t += 0.25) {   /* cuatro puntos por tramo: el contorno es una curva fluida, sin esquinas */ const t2 = t * t, t3 = t2 * t; out.push([0, 1].map(k => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3))); } }
+    for (let t = 0; t < 0.999; t += 1 / 3) {   /* tres puntos por tramo (más liviano): el contorno es una curva fluida, sin esquinas */ const t2 = t * t, t3 = t2 * t; out.push([0, 1].map(k => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3))); } }
   out.push(P[n - 1]); return new Float32Array(out.flat()); })();
 const BUST_N = BUST_PTS.length / 2;
 const bust = { prog: null, flow: 0, vo: 0, wave: 9, waveK: 0, kk: 0, en: 0, P: new Float32Array(12) };
