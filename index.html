@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 317</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 318</div>
     </div>
   </div>
   <div class="group">
@@ -4824,9 +4824,9 @@ function auraGSetup() {
       col = mix(col, withCover(col), .22);   /* la portada se asoma bajo la tela de color */
       // vetas de luz muy suaves a lo largo de la tela (dan el brillo de seda) y la ola del golpe
       // pliegues de satén: la tela de color se dobla en ondas amplias con su brillo (volumen, no un degradado plano)
-      float fh = sin(q.x * 5.5 + 2.2 * sin(q.y * 2.6 + uT * .35) + uT * .4) * .65 + sin(q.y * 7. - q.x * 2.5 + uT * .3) * .35;
-      float sheen = pow(.5 + .5 * fh, 6.), shade = .5 + .6 * smoothstep(-.9, .9, fh);   /* pliegues marcados: se lee la tela */
-      col *= shade; col += mix(col, vec3(1.), .35) * sheen * (.3 + .3 * uGate + .45 * uKick);
+      float fh = sin(q.x * 22. + 4. * sin(q.y * 5. + uT * .35) + q.y * 6. + uT * .4) * .65 + sin(q.y * 13. - q.x * 7. + uT * .3) * .35;   /* más pliegues: se lee la seda */
+      float sheen = pow(.5 + .5 * fh, 10.), shade = .35 + .8 * smoothstep(-.95, .95, fh);   /* pliegues marcados: se lee la tela */
+      col *= shade; col += mix(col, vec3(1.), .3) * sheen * (.45 + .35 * uGate + .6 * uKick);
       float l = dot(col, vec3(.3, .59, .11)); col = mix(vec3(l), col, 1.15);
       if (uNight < .5) col = mix(col, col * .85 + .2, .35);
       o = vec4(col, 1.);
@@ -11668,9 +11668,10 @@ function sphereSetup() {
       float ang = acos(clamp(p.y / max(r, 1e-4), -1., 1.)) / 3.14159;   // 0 arriba, 1 abajo
       float fi = ang * 23.; int i0 = int(floor(fi)); float f_ = smoothstep(0., 1., fract(fi));
       float sv = mix(uSp[i0], uSp[min(23, i0 + 1)], f_) * .6 + mix(uSp[max(0, i0 - 1)] + uSp[i0], uSp[min(23, i0 + 1)] + uSp[min(23, i0 + 2)], f_) * .2;   // continua entre bandas (antes saltaba: parecía un engranaje)   // suavizado entre vecinas: una curva, no dientes
-      float rr = 1.1 + sv * .12, ln = exp(-pow((r - rr) * uR * uRes.y / 2.2, 2.));
-      ln = exp(-pow((r - rr) * uR * uRes.y / 5., 2.));
-      col += mix(uK1, uMel, .4) * .75 * (ln * (.06 + sv * .9) + exp(-abs(r - rr) * 26.) * sv * .2) * step(.9, r);
+      float sw_ = 0.; for (int k = 0; k < 24; k += 3) sw_ += uSp[k]; sw_ /= 8.;   /* el aro entero respira con el sonido; su forma es una ola lenta, no dientes */
+      float th = atan(p.y, p.x), rr = 1.1 + sw_ * .06 + (.012 + .03 * sv) * sin(th * 3. + uSw * 1.3) + .008 * sin(th * 5. - uSw * .9);
+      float ln = exp(-pow((r - rr) * uR * uRes.y / 7., 2.));
+      col += mix(uK1, uMel, .4) * .7 * (ln * (.08 + sv * .7) + exp(-abs(r - rr) * 18.) * (.05 + sv * .2)) * smoothstep(.88, .98, r);
       o = vec4(col, 1.);
     }`);
 }
@@ -12933,10 +12934,13 @@ function portalSetup() {
       float outer = mix(exp(-xo / lobe), exp(-xo * 1.1), .2) * (1. + .5 * exp(-max(r - 1., 0.) * 3.));   // borde exterior siempre difuminado (también del lado con menos luz)   // la luz más intensa junto al hueco; se extiende más hacia el lóbulo y respira con cada tiempo
       vec3 hc = mix(ring, uDeep, smoothstep(1.1, 2.4, r)), halo = hc * outer;
       halo *= .4 + .5 * lobe;
-      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .08) : uBg, col;
+      vec3 bg = uNight > .5 ? mix(uBg, withCover(uBg), .3) : uBg, col;
       if (uNight > .5) {
         col = bg + halo * inner * (.4 + .35 * uEn + .15 * uGlow + .55 * uBeat) + hc * exp(-max(r - 1., 0.) * .5 / lobe) * .16 * inner;   // con la música crece la luz, no el tamaño
         col = mix(col, vec3(.015, .01, .03), (1. - inner) * .92);                    // el hueco, oscuro y hondo
+        float ray = pow(.5 + .5 * sin(an * 34. + sin(an * 7. + uPh * .5) * 2. + uRot * 6.2832), 6.) * pow(.5 + .5 * sin(an * 13. - uPh * .7), 2.);   /* la corona: rayos finos que salen del hueco y giran con la música */
+        col += ring * ray * exp(-max(r - .95, 0.) * (3.2 - 1.2 * uBeat)) * smoothstep(.82, 1., r) * (.18 + .3 * uEn + .4 * uBeat);
+        col += ring * 1.1 * exp(-pow((r - .97) / .035, 2.)) * (.35 + .35 * uEn + .5 * uBeat);   /* el filo de luz en la orilla del hueco, nítido */
       } else { col = mix(bg, hc + halo * .15, clamp(inner * outer * 1.25, 0., 1.)); col = mix(col, vec3(.07, .03, .12), (1. - inner) * .95); }
       float mx = max(col.r, max(col.g, col.b)); if (uNight > .5) col *= (1. - exp(-mx * 1.5)) / max(mx, 1e-4); else if (mx > 1.) col /= mx;   // curva suave que conserva el color: la luz nunca se aplana (sin bordes) ni se lava a blanco
       float lu = dot(col, vec3(.3, .59, .11)); col = clamp(mix(vec3(lu), col, 1.2), 0., 1.);
@@ -13091,7 +13095,7 @@ function liqSetup() {
       for (int j = -6; j <= 6; j++) { if (j == 0) continue; float oy = float(j) * .012; dm = min(dm, length(vec2(p.x - edge(p.y + oy), oy))); }
       float d = sign(p.x - e) * dm;                              // distancia de verdad al borde (negativa: dentro): la película no se deforma en las curvas
       float night = uNight;
-      vec3 bg = night > .5 ? vec3(.008, .008, .012) : uBg;
+      vec3 bg = night > .5 ? mix(vec3(.01, .01, .016), withCover(vec3(.01, .01, .016)) * .6, .7) : uBg;   /* la portada, en penumbra, detrás (no un negro plano) */
       vec3 col = bg;
       // por dentro: azul hondo y saturado; hacia el borde, la película se abre en un degradado ancho de arcoíris
       float W = .22 + .04 * sin(uFilm) + .12 * uBass;   // la película se ensancha con los graves
