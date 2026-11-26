@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 318</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 319</div>
     </div>
   </div>
   <div class="group">
@@ -12080,12 +12080,12 @@ function lensSetup() {
       float shadow = 0.;
       for (int i = 0; i < 7; i++) { vec4 L = uL[i]; vec2 d = p - L.xy; float r = L.z, dl = length(d);
         shadow += exp(-max(dl - r, 0.) / (r * .35)) * step(r, dl) * .25;   // la sombra suave de la lente sobre el color
+        { vec2 cq = d - vec2(r * .18, -r * .22); col += field(L.xy) * exp(-dot(cq, cq) / (r * r * .12)) * step(r, dl) * (.25 + .4 * L.w + .3 * uKick); }   /* la luz que la lente concentra cae a su lado (cáustica) */
         if (dl < r) {
           vec2 n = d / r; float z = sqrt(max(0., 1. - dot(n, n)));
-          float mag = .45 + .15 * L.w;                                         // amplía lo de atrás (más con su sonido)
-          vec2 s0 = L.xy + d * mag;
+          vec2 s0 = L.xy - d * (1.7 + .5 * L.w) / (.35 + .65 * z);   /* como una bola de cristal: muestra lo de atrás invertido y curvado (más con su sonido) */
           vec3 inside = vec3(field(s0 + n * .012 * (1. - z)).r, field(s0).g, field(s0 - n * .012 * (1. - z)).b);   // el borde separa los colores (prisma)
-          inside *= (.92 + .15 * z) * (1. + .3 * L.w + .3 * uKick);
+          inside *= (.92 + .15 * z) * (1. + .3 * L.w + .3 * uKick) * (uNight > .5 ? .72 : .95);   /* transparente: lo de adentro es lo de atrás ampliado, no una bola lechosa */
           float fres = pow(1. - z, 3.);
           inside += inside * fres * .6;                                       // el canto de cristal, del color de lo que refracta (transparente, no lechoso)
           inside += vec3(1.) * pow(max(0., dot(normalize(vec3(n, z)), normalize(vec3(-.5, .6, .65)))), 60.) * .55;   // el reflejo de una ventana
@@ -13384,10 +13384,10 @@ function reedSetup() {
     vec3 back(vec2 uv, float asp) {
       float y = uv.y + .1 * sin(uv.x * 3. + uPh * .7);
       vec3 g = y < .5 ? mix(uG0, uG1, smoothstep(0., .5, y)) : mix(uG1, uG2, smoothstep(.5, 1., y));
-      vec3 c = mix(g, cov(uv), .1) * (uNight > .5 ? .09 : .42);   // de noche el fondo casi oscuro: la luz la ponen los focos
+      vec3 c = mix(g, cov(uv), .35) * (uNight > .5 ? .14 : .42);   /* la portada se ve detrás del vidrio */   // de noche el fondo casi oscuro: la luz la ponen los focos
       vec2 p = vec2(uv.x * asp, uv.y);
       for (int i = 0; i < 6; i++) { vec4 L = uL[i]; vec2 d = (p - L.xy) * vec2(1., .6); float r2 = dot(d, d) / (L.z * L.z);
-        c += uLC[i] * (exp(-r2) * .7 + exp(-r2 * 6.) * 1.3) * L.w + mix(uLC[i], vec3(1.), .6) * exp(-r2 * 30.) * L.w * L.w * .5; }   // cada foco: halo de color, centro intenso y un punto caliente que se aclara cuando suena fuerte
+        c += uLC[i] * (exp(-r2) * .7 + exp(-r2 * 6.) * 1.3) * L.w + mix(uLC[i], vec3(1.), .25) * exp(-r2 * 30.) * L.w * L.w * .3; }   /* el punto caliente, de su color (no blanco quemado) */   // cada foco: halo de color, centro intenso y un punto caliente que se aclara cuando suena fuerte
       return c;
     }
     vec3 reedAt(float ux) {
@@ -13412,7 +13412,7 @@ function reedSetup() {
       vec3 col = (reedAt(vUv.x - px * .33) + reedAt(vUv.x) + reedAt(vUv.x + px * .33)) / 3.;
       col += back(vUv, uRes.x / uRes.y) * .16;                                          // la luz se derrama de una estría a la otra
       col *= 1. + (uNight > .5 ? .3 : .12) * uKick;                                      // el bombo enciende el vidrio entero
-      col = 1. - exp(-col * (uNight > .5 ? 2.1 : 1.6));
+      col = 1. - exp(-col * (uNight > .5 ? 1.6 : 1.4));
       float lu = dot(col, vec3(.3, .59, .11));
       col = clamp(mix(vec3(lu), col, 1.28), 0., 1.);                                    // color limpio y vivo: sin zonas apagadas donde se cruzan los focos                                  // la luz se suma como luz: aclara hacia el blanco sin quemarse
       if (uNight > .5) col *= 1. - .3 * pow(length(vUv - .5) * 1.3, 2.);
