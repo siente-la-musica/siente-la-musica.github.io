@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 308</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 309</div>
     </div>
   </div>
   <div class="group">
@@ -6015,7 +6015,7 @@ function magGSetup() {
       for (int i = 0; i < 4; i++) { vec2 d = p - uPo[i].xy; float q = i < 2 ? 1. : -1., r2 = dot(d, d) + 1e-4;
         psi += q * atan(d.y, d.x); phi += q * .5 * log(r2); gr += q * vec2(-d.y, d.x) / r2;
         float w = 1. / (r2 * r2 + .0004); tint += uC[i] * w; wsum += w;
-        glow += uPo[i].z * (.006 / (r2 + .004)); }
+        glow += uPo[i].z * (.006 / (r2 + .004)) * (1. + 1.2 * uKick); }   /* los polos destellan con el bombo */
       tint /= wsum;                                             // cada línea toma el color de los polos que la tocan
       float K = 18., f = psi * K / 6.28318;                       // K líneas por polo (el corte de atan cae siempre en un entero: sin costuras)
       float fw = length(gr) * K / 6.28318 * fwidth(p.x) * 1.3, dl = abs(fract(f) - .5) * 2.;         // 1 en el centro de la línea
@@ -6023,7 +6023,7 @@ function magGSetup() {
       float fade = smoothstep(.45, .1, fw);                      // junto a los polos las líneas se juntan: se funden en luz (nada de moiré)
       // la energía corre por las líneas de un polo al otro: pulsos que viajan a lo largo de la equipotencial
       float run = max(pow(.5 + .5 * sin(phi * 3.2 - uFlow), 6.), .6 * pow(.5 + .5 * sin(phi * 5.1 + uFlow * .62 + f * .35), 10.));   // dos corrientes de luz, a distinto paso y en sentidos contrarios
-      float lit = (.35 + .65 * uGate) * (.45 + 1.2 * run * (.4 + .6 * uGate) + .8 * uKick * run);
+      float lit = (.35 + .65 * uGate) * (.45 + 1.2 * run * (.4 + .6 * uGate) + 1.8 * uKick * run + .35 * uKick);   /* el golpe se siente en todas las líneas */
       vec3 bg = mix(uBg, withCover(uBg), .3);
       vec3 col = bg;
       if (uNight > .5) {
@@ -6534,7 +6534,7 @@ const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, u
     float wv = fract(d * 4.5 - uPh * 1.6), band_ = floor(d * 4.5 - uPh * 1.6);
     vec3 rc = mod(band_, 3.) < 1. ? uC0 : mod(band_, 3.) < 2. ? uC1 : uC2;
     float ringL = smoothstep(.0, .25, wv) * smoothstep(1., .55, wv);
-    a = mix(a, mix(a, rc * 1.15, .55), ringL * smoothstep(1.02, .15, d) * (.55 + .45 * uLv.y));
+    a = mix(a, mix(a, rc * (1.15 + .6 * uP), .55 + .3 * uP), ringL * smoothstep(1.02, .15, d) * (.55 + .45 * uLv.y + .4 * uP));   /* los anillos se encienden con cada golpe */
     a *= 1. + (.12 + .25 * uLv.y + .3 * uP) * sin((d * 4.5 - uPh * 1.6) * 6.2832) * smoothstep(1., .2, d);   // las ondas de luz se marcan más con los medios                          // ondas de luz suaves, no de color
     a += warm * exp(-d * d * 6.) * (.06 + .35 * uVo + .35 * uP);   // el centro se enciende con la voz y el golpe
     float m = smoothstep(1.03, .8, d);
@@ -9251,13 +9251,13 @@ function drawLava(dt) {
   const [cw, ch] = glCanvas(0.75), gl = GLX.gl;
   // cada gota escucha su tramo del espectro: se infla con lo suyo (y lo suyo la calienta)
   B.forEach((b, i) => { const k0 = Math.floor(i / n * BANDS * 0.75), lv = bandX(k0, Math.min(BANDS, k0 + 6)); b.lv = (b.lv || 0) + (lv - (b.lv || 0)) * (1 - Math.pow(lv > (b.lv || 0) ? 0.0005 : 0.03, dt)); b.heat = Math.min(1.5, b.heat + b.lv * dt * 0.25);
-    const k = i * 4; lava.B[k] = b.x; lava.B[k + 1] = b.y; lava.B[k + 2] = b.r * (0.86 + P * 0.2 + b.lv * 0.38 + (lava.wob || 0) * 0.06 * Math.sin(lava.t * 9 + i * 1.7)); lava.B[k + 3] = b.c; });
+    const k = i * 4; lava.B[k] = b.x; lava.B[k + 1] = b.y; lava.B[k + 2] = b.r * (0.84 + P * 0.36 + b.lv * 0.42 + (lava.wob || 0) * 0.06 * Math.sin(lava.t * 9 + i * 1.7)); lava.B[k + 3] = b.c; });
   lava.t += dt * (0.35 + energy * 0.5);
   lava.wob = (lava.wob || 0) * Math.pow(0.08, dt);   // el golpe las hace temblar como gelatina y se calman
   const p = lava.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, lava.t); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uShim, lava.shim); gl.uniform1f(p.u.uGlow, (night ? 0.6 : 0.75) + P * 0.5 + beatSoft * 0.15); gl.uniform1f(p.u.uHue, time * 0.02);
+  gl.uniform1f(p.u.uShim, lava.shim); gl.uniform1f(p.u.uGlow, (night ? 0.6 : 0.75) + P * 0.9 + beatSoft * 0.2);   /* la lava se enciende con el bombo */ gl.uniform1f(p.u.uHue, time * 0.02);
   gl.uniform1i(p.u.uN, n);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform4fv(p.u['uB[0]'], lava.B);
@@ -9472,6 +9472,7 @@ function drawPuffs(dt) {
   puffs.lvT[0] = bandX(0, 10); puffs.lvT[1] = bandX(10, 38); puffs.lvT[2] = bandX(38, BANDS);   // cada bulto escucha su parte, con sus altos y bajos
   springTo(puffs.lv, puffs.lvV, puffs.lvT, dt, 260, 0.55);
   // con cada golpe, una nube distinta se ilumina por dentro (cantan por turnos); en un drop, todas
+  if (pulse.on) puffs.clouds.forEach(c => { c.glow = Math.max(c.glow || 0, 0.3 * pulse.k); });   /* todas las nubes se encienden un poco con el golpe */
   if (pulse.on) { const big = puffs.clouds.filter(c => c.w > 0.4); const c = big[(puffs.seq = (puffs.seq || 0) + 1) % big.length]; c.glow = Math.max(c.glow, 0.45 + 0.55 * pulse.k); }
   if (dropHit) puffs.clouds.forEach(c => c.glow = 1);
   if (hits.voice) { const sm = puffs.clouds.filter(c => c.w <= 0.4); const c = sm.length ? sm[Math.floor(Math.random() * sm.length)] : null; if (c) c.glow = Math.max(c.glow, 0.5); }   // cada sílaba enciende una nube pequeña
@@ -9940,7 +9941,7 @@ function drawCurtain2D(dt) {
   curtain.fields.forEach((f, k) => {
     const x = W * (0.5 + 0.45 * Math.sin(curtain.fph * f.sp + f.ph)), y = H * (0.5 + 0.4 * Math.sin(curtain.fph * f.sp * 1.3 + f.ph * 2));
     const col = night ? RGB[f.c] : RGB[f.c].map(v => v + (255 - v) * 0.45);
-    glowSpot(x, y, MIN * f.s * (1 + P * 0.06), col, (night ? 0.08 : 0.38) + energy * 0.06 + P * 0.05);
+    glowSpot(x, y, MIN * f.s * (1 + P * 0.1), col, (night ? 0.08 : 0.38) + energy * 0.08 + P * 0.16);
   });
   if (!night) glowSpot(W * (0.5 + 0.3 * Math.sin(time * 0.03)), H * 0.45, MIN * 0.6, [255, 255, 255], 0.55);   // un claro de luz
   // hilos desenfocados (como en una foto con poca profundidad de campo): franjas de luz anchas y suaves
@@ -9984,7 +9985,7 @@ function drawCurtain2D(dt) {
       b.v = b.v * Math.pow(0.3, dt) + 0.004 * dt; b.y += (b.v + 0.006) * dt;
       b.glow *= Math.pow(0.18, dt); b.flare *= Math.pow(0.6, dt); if (b.spark) b.spark *= Math.pow(0.05, dt);
       if (b.y > t.len) { b.a -= dt * 2; if (b.a <= 0) { t.beads.splice(i, 1); continue; } }
-      const y = b.y * H, x = xAt(y), u = MIN / 700, r = b.r * u * 2.4 * (0.8 + P * 0.25 + t.lv * 0.6);
+      const y = b.y * H, x = xAt(y), u = MIN / 700, r = b.r * u * 2.4 * (0.8 + P * 0.6 + t.lv * 0.8);   /* las cuentas laten con el bombo */
       const col = b.c === 3 ? [255, 238, 205] : RGB[b.c], hot = col.map(v => v + (255 - v) * (0.45 + b.glow * 0.4));
       // destello vertical: una luz alargada arriba y abajo de la cuenta (como en una foto de exposición)
       const fl = b.flare + b.glow * 0.6;
@@ -10827,7 +10828,7 @@ function drawPaint(dt) {
   }
   ctx.restore();
   // toda la pared late con el golpe: de noche la pintura brilla más en cada golpe; de día se aviva
-  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? Math.min(1, 0.45 + bandX(0, BANDS) * 0.35 + P * 0.5 + voice * 0.15) : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
+  ctx.save(); if (night) ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = night ? Math.min(1, 0.4 + bandX(0, BANDS) * 0.4 + P * 0.75 + voice * 0.15) : 1; ctx.drawImage(paint.layer, 0, 0); ctx.restore();
   if (!night && P > 0.02) { ctx.save(); ctx.globalCompositeOperation = 'multiply'; ctx.globalAlpha = Math.min(0.35, P * 0.45); ctx.drawImage(paint.layer, 0, 0); ctx.restore(); }
   // el impacto: un anillo de luz que se abre y se apaga
   ctx.save(); ctx.globalCompositeOperation = night ? 'lighter' : 'source-over';
@@ -11786,7 +11787,7 @@ function sakuraSetup() {
       float rc = length((cell + .5) * uCell - vec2(.5 * uRes.x / uRes.y, .5)) / uR;
       float pop = exp(-pow((rc - uWave) * 4., 2.)) * uWaveK;
       float ripple = .5 + .5 * sin(rc * 8.5 - uFl * 2.2 + .6 * sin(atan((cell.y + .5) * uCell - .5, (cell.x + .5) * uCell - .5 * uRes.x / uRes.y) * 3. + uFl * .3));   /* ondas que salen del centro: los puntos crecen y encogen (trama hipnótica) */
-      float rad = .1 + .32 * ripple + pop * .1 + uP * .03;
+      float rad = .1 + .3 * ripple + pop * .12 + uP * .1;   /* el bombo hace saltar los puntos */
       float rr = length(lc), fw = max(fwidth(rr) * 1.2, .004), a = smoothstep(rad + fw, rad - fw, rr);
       vec3 fu = field(p) * (uNight > .5 ? .7 : 1.) + (uNight > .5 ? 0. : .06);
       vec3 under = mix(fu, withCover(fu), .3);   // entre círculos: el mismo degradado, apenas más hondo
@@ -12484,7 +12485,7 @@ function citySetup() {
           for (int k = 1; k < 6; k++) if (k == bi) { lv = uLv[k]; fl = uFl[k]; }
           float rr = h2(wid + id * 7.3), lit = step(rr, (uNight > .5 ? .16 : .04) + (uNight > .5 ? 1.1 : .6) * lv);   // de noche, las ventanas se encienden con su parte de la música (mucho más marcado)
           float wv = uKick * exp(-pow((p.z - uWave) / (uNight > .5 ? 9. : 6.), 2.)) * step(h2(wid + id + 3.), .85) * (uNight > .5 ? 1.8 : 1.);   // la ola del bombo, más ancha y fuerte de noche
-          float on = clamp(lit * (.8 + .2 * sin(uT * 2. + rr * 50.)) + fl * step(h2(wid + id + 9.), .55) * 1.3 + wv, 0., 1.8);
+          float on = clamp(lit * (.8 + .2 * sin(uT * 2. + rr * 50.)) * (1. + .7 * uKick * uNight) + fl * step(h2(wid + id + 9.), .55) * 1.3 + wv, 0., 1.8);   /* todas las ventanas respiran con el bombo */
           vec3 glass = uNight > .5 ? vec3(.05, .06, .12) : mix(uSkyT, vec3(1.), .3) * (.55 + .3 * wf.y);
           col = mix(col, mix(glass, uNight > .5 ? uWarm * (1.1 + .9 * on) : mix(uWarm, vec3(1.), .5) * 1.5, min(on, 1.)), win);   // de día, destellos de sol en los vidrios
           col += uWarm * min(on, 1.5) * (1. - win) * smoothstep(.5, .2, length(vec2(wx, wy * .8))) * .45 * uNight;   // la luz de la ventana se derrama en la fachada
