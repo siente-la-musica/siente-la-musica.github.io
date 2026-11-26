@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 322</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 323</div>
     </div>
   </div>
   <div class="group">
@@ -14557,7 +14557,7 @@ function rutaSetup() {
         col = ty < .32 ? mix(hazeC, mid, smoothstep(0., .32, ty)) : mix(mid, uTop, smoothstep(.32, 1., ty));
         vec2 sp = vec2((uv.x - .42) * asp, dy0 - .05); float sdn = length(sp);
         col += uSun * mix(uC0, vec3(1., .8, .5), .65) * (exp(-sdn * sdn * 26.) * .6 + exp(-sdn * sdn * 4.) * .3);
-        col += uSun * vec3(1., .82, .5) * pow(n(vec2(atan(sp.y, sp.x) * 2.6, 3.)), 2.) * exp(-sdn * 3.) * .24 * smoothstep(.07, .16, sdn);   // rayos de sol
+        col += uSun * vec3(1., .82, .5) * pow(n(normalize(sp + 1e-5) * 2.6 + vec2(3.)), 2.) * exp(-sdn * 3.) * .24 * smoothstep(.07, .16, sdn);   // rayos de sol
         col = mix(col, mix(vec3(1., .72, .42), vec3(1., .98, .82), smoothstep(-.07, .07, sp.y)), uSun * smoothstep(.084, .08, sdn));
         // la estela de un avión y, de noche, una estrella fugaz de vez en cuando
         { vec2 pq = vec2(uv.x * asp, dy0), a = vec2(.12 * asp, .2), b = vec2(.8 * asp, .37); float tt = clamp(dot(pq - a, b - a) / dot(b - a, b - a), 0., 1.);
