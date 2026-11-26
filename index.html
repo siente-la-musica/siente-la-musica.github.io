@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 304</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 305</div>
     </div>
   </div>
   <div class="group">
@@ -2003,7 +2003,7 @@ function drawMountains(dt) {
     { hMax: 0.58, base: 0.12, alpha: 0.7,  color: 0.35, k: 330, shift: 0.03 },
     { hMax: 0.46, base: 0.07, alpha: 0.95, color: 0.1,  k: 460, shift: 0 },
   ];
-  if (pulse.on && !pulse.melo) nudgeAdd('mtn', 0.012 * musicGate); drawMountains.t = (drawMountains.t || 0) + dt * musicGate * (0.005 + energy * 0.012) + nudgeTake('mtn', dt);   /* el viaje: la cordillera se desliza */
+  drawMountains.t = (drawMountains.t || 0) + dt * musicGate * (0.005 + energy * 0.012) + nudgeTake('mtn', dt);   /* el viaje: la cordillera se desliza */
   cfg.forEach((L, li) => {
     const r = ridges[li], pts = [], shf = L.shift + drawMountains.t * (0.35 + li * 0.35);   /* paralaje: lo lejano lento, lo cercano rápido */
     for (let p = 0; p < P; p++) { const t_ = Math.max(0, (Math.pow(specAt((((p / (P - 1)) + shf) % 1 + 1) % 1), 1.3) - 0.14) * 1.6); ridgeT[p] = t_ < 1 ? t_ : 1 + 0.2 * (1 - Math.exp(-(t_ - 1) / 0.2)); }   // valles hondos, picos altos (solo lo que pasa del tope se redondea)
@@ -4825,7 +4825,7 @@ function drawAura(dt) {
   if (!glInit()) return drawAura2D(dt);
   if (!auraG.prog) auraGSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  if (pulse.on && !pulse.melo) { nudgeAdd('aura', 0.5 * musicGate); auraG.kk = 1; }
+  if (pulse.on && !pulse.melo) { nudgeAdd('aura', 0.22 * musicGate); auraG.kk = 1; }
   auraG.kk *= Math.exp(-dt * 4);
   auraG.t += dt * musicGate * (0.12 + energy * 0.7 + dynL * 0.2) + nudgeTake('aura', dt);
   auraG.vo += (Math.min(1, voice * 1.4) - auraG.vo) * (1 - Math.pow(0.05, dt));
@@ -4947,14 +4947,14 @@ function drawInfinity(dt) {
   // Velocidad suavizada: acelera con la música sin tirones
   // Avanza solo con la música: en silencio casi se detiene, y cada golpe de graves da un empujón
   // la velocidad la da el volumen REAL de la canción (no el nivelado): en la estrofa pasea, en el estribillo vuela
-  const target = (0.1 + Math.pow(dynL, 1.7) * 1.1 + Math.pow(energy, 1.3) * 0.3) * musicGate;   /* tranquilo entre golpes: el bombo da el empujón */
+  const target = 0.18 + Math.pow(dynL, 1.7) * 2.8 + Math.pow(energy, 1.3) * 0.7;
   // y cada golpe da un empujón que se ve (sube en ~0,05 s y se va en ~0,4 s): el túnel avanza al compás
-  if (pulse.on && !pulse.melo) drawInfinity.kv = (drawInfinity.kv || 0) + 3.4 + 4.6 * pulse.k;
+  if (pulse.on && !pulse.melo) drawInfinity.kv = (drawInfinity.kv || 0) + 1.6 + 2.8 * pulse.k;
   drawInfinity.kb = (drawInfinity.kb || 0) + ((drawInfinity.kv || 0) - (drawInfinity.kb || 0)) * (1 - Math.pow(0.00002, dt));
-  drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.03, dt);   // el empujón, corto: un latido del viaje
+  drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.12, dt);
   camSpeed += (target - camSpeed) * (1 - Math.pow(0.3, dt));   // los cambios de parte de la canción se notan sin saltos
   camZ += dt * (camSpeed + drawInfinity.kb);
-  if (pulse.on && !pulse.melo) nudgeAdd('inf', 0.12 + 0.12 * pulse.k); infRot += dt * musicGate * (0.02 + dynL * 0.12) + nudgeTake('inf', dt);   /* giran a empujones, con cada bombo */   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
+  if (pulse.on) nudgeAdd('inf', 0.06 * pulse.k); infRot += dt * (0.04 + dynL * 0.5) + nudgeTake('inf', dt);   // giran con la canción y dan un pasito en cada golpe   // los anillos giran despacio en lo tranquilo y rápido en lo fuerte
   const P = Math.max(0, pulse.x);
   if (pulse.on) pulses.push(camZ + 0.5);   // onda de luz que recorre el túnel en cada golpe
   for (let i = pulses.length - 1; i >= 0; i--) { pulses[i] += dt * 14; if (pulses[i] > camZ + 40) pulses.splice(i, 1); }
@@ -6204,19 +6204,19 @@ function drawMilky(dt) {
 function drawStars(dt) {
   const night = state.theme === 'dark';
   if (!starSky.list || starSky.key !== W + 'x' + H) starsInit();
-  if (!drawMilky(dt)) { if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
+  if (true) {   /* el fondo de siempre, con la portada (la Vía Láctea la tapaba) */ if (!night) { const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, rgba(mix(0.5).map(v => v * 0.25), 1)); g.addColorStop(1, rgba(mix(0.5).map(v => v * 0.12), 1)); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); drawBackdrop(0); }
     ambient(); }
   // como Infinito: la parte de la canción marca la velocidad del viaje (pasea en la estrofa, vuela en el coro)
   // y cada golpe da un empujón que se ve (sube al instante y se va en ~0,4 s)
-  if (pulse.on && !pulse.melo) starSky.kv = (starSky.kv || 0) + 0.014 + 0.026 * pulse.k;
+  if (pulse.on && !pulse.melo) starSky.kv = (starSky.kv || 0) + 0.008 + 0.018 * pulse.k;
   starSky.kb = (starSky.kb || 0) + ((starSky.kv || 0) - (starSky.kb || 0)) * (1 - Math.pow(0.00002, dt));
-  starSky.kv = (starSky.kv || 0) * Math.pow(0.03, dt);   /* el empujón, corto: cae en el golpe */
-  starSky.sp = (starSky.sp || 0) + ((0.0015 + Math.pow(dynL, 1.6) * 0.005 * Math.min(1, energy * 5)) * musicGate - (starSky.sp || 0)) * (1 - Math.pow(0.3, dt));
+  starSky.kv = (starSky.kv || 0) * Math.pow(0.12, dt);
+  starSky.sp = (starSky.sp || 0) + ((0.002 + Math.pow(dynL, 1.6) * 0.016 * Math.min(1, energy * 5)) - (starSky.sp || 0)) * (1 - Math.pow(0.3, dt));
   const speed = starSky.sp + starSky.kb;
   // Onda que recorre el cielo desde el centro en cada golpe, encendiendo las estrellas a su paso
   // Solo con golpes reales de la canción (nada de latido propio) y muy tenue
-  if (pulse.on && !pulse.melo) starSky.waves.push({ r: 0, k: 0.6 + pulse.k * 0.6 });
-  starSky.waves.forEach(w => { w.r += dt * 2.6; w.k *= Math.pow(0.08, dt); });   /* la onda del golpe cruza rápido y se apaga en su tiempo */
+  if (pulse.on && !pulse.melo) starSky.waves.push({ r: 0, k: 0.45 + pulse.k * 0.55 });
+  starSky.waves.forEach(w => { w.r += dt * 1.8; w.k *= Math.pow(0.25, dt); });
   starSky.waves = starSky.waves.filter(w => w.r < 1.3 && w.k > 0.03);
   // Constelaciones reales: de vez en cuando aparece una (con un golpe de medios o en un drop), sus
   // líneas se trazan una a una con cada golpe, se queda un rato y se desvanece
@@ -6462,7 +6462,7 @@ function drawPuntosSuave(dt) {
   S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.3) * S.go; S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.03, dt)); }
   if (pulse.on && !pulse.melo) S.wave = 0; S.wave += dt * 2.4;   /* la ola del golpe cruza rápido: cae en su tiempo */
   S.hi = Math.max((S.hi || 0) * Math.pow(0.02, dt), hits.hat ? 1 : 0, Math.min(1, S.lv[2]) * 0.6);
-  if (pulse.on && !pulse.melo) nudgeAdd('dotIr', 0.13); S.ir = (S.ir || 0) + dt * S.go * (0.01 + 0.08 * S.en) + nudgeTake('dotIr', dt);   /* los colores giran a empujones con el bombo */
+  if (pulse.on) nudgeAdd('dotIr', 0.05); S.ir = (S.ir || 0) + dt * S.go * (0.03 + 0.3 * S.en) + nudgeTake('dotIr', dt);
   if (pulse.on && S.go > 0.3) { S.bn = Math.floor(S.bn || 0) + 1; S.bt = 0; } S.bt = Math.min(1, (S.bt ?? 1) + dt / (S.per * 0.2));   // la luz de adentro salta en cada golpe   // los colores giran con la canción (quietos en silencio)
   // la paleta nace de la portada (cada canción tiene la suya), pero con las reglas que la hacen elegante, como en la referencia:
   // cada tono con su propia luz y saturación (verdes y turquesas profundos, rojos y azules intensos, nada neón), un vecino por
@@ -8967,7 +8967,7 @@ function drawTubes(dt) {
   if (!glInit()) return drawTubes2D(dt);
   if (!rib.prog) ribSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  if (pulse.on && !pulse.melo) { nudgeAdd('rib', 0.5 * musicGate); rib.kk = 1; }
+  if (pulse.on && !pulse.melo) { nudgeAdd('rib', 0.22 * musicGate); rib.kk = 1; }
   rib.kk *= Math.exp(-dt * 5);
   rib.t += dt * musicGate * (0.5 + energy * 1.6 + dynL * 0.4) + nudgeTake('rib', dt);
   const bands = [[0, 10], [10, 20], [20, 32], [32, BANDS]];
@@ -11808,7 +11808,7 @@ function drawSakura(dt) {
   sak.rot += dt * (0.02 + voice * 0.4 + energy * 0.1);
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(75, s_), l)).map(v => v / 255); };
   const [cw, ch] = glCanvas(1), p = sak.prog;
-  if (pulse.on && !pulse.melo) nudgeAdd('sak', 0.6 * musicGate); sak.fl = (sak.fl || 0) + dt * musicGate * (0.5 + energy * 1.4) + nudgeTake('sak', dt);
+  if (pulse.on && !pulse.melo) nudgeAdd('sak', 0.28 * musicGate); sak.fl = (sak.fl || 0) + dt * musicGate * (0.5 + energy * 1.4) + nudgeTake('sak', dt);
   gl.useProgram(p.pr); gl.uniform1f(p.u.uFl, sak.fl); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, sak.R); gl.uniform1f(p.u.uWave, sak.wave); gl.uniform1f(p.u.uWaveK, sak.waveK * (state.noFlash ? 0.4 : 1));
@@ -11999,7 +11999,7 @@ function drawBloques(dt) {
   gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, vit2.R); gl.uniform1f(p.u.uY, vit2.y); gl.uniform1f(p.u.uWob, vit2.wob * (state.noFlash ? 0.5 : 1));
-  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); if (pulse.on && !pulse.melo) nudgeAdd('bq', 0.14 * musicGate); vit2.sx = (vit2.sx || 0) + dt * musicGate * 0.025 + nudgeTake('bq', dt);   /* el sol avanza a empujones, con cada bombo */ gl.uniform1f(p.u.uSx, Math.sin(vit2.sx) * 0.28);
+  gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uCell, 1 / 13); vit2.sx = (vit2.sx || 0) + dt * musicGate * (0.06 + energy * 0.25);   /* el sol pasea parejo detrás del vidrio */ gl.uniform1f(p.u.uSx, Math.sin(vit2.sx) * 0.28);
   gl.uniform1f(p.u.uX0, asp * (asp > 1 ? 0.38 : 0.3));
   gl.uniform3fv(p.u.uSun, sat(warm, 92, night ? 55 : 56)); gl.uniform3fv(p.u.uSun2, sat(warm, 88, night ? 34 : 40));
   gl.uniform3fv(p.u.uTop, night ? hexToRgb(hsl(hh + 20, 35, 14)).map(v => v / 255) : hexToRgb(hsl(hh + 20, 30, 42)).map(v => v / 255));
@@ -12059,7 +12059,7 @@ function drawLenses(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!lens.prog) lensSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  if (pulse.on && !pulse.melo) { nudgeAdd('lens', 0.45 * musicGate); lens.kk = 1; for (let i = 0; i < 7; i++) lens.v[i] += 1.6 + pulse.k; }
+  if (pulse.on && !pulse.melo) { nudgeAdd('lens', 0.2 * musicGate); lens.kk = 1; for (let i = 0; i < 7; i++) lens.v[i] += 1.6 + pulse.k; }
   lens.kk *= Math.exp(-dt * 5);
   lens.t += dt * musicGate * (0.25 + energy * 0.8) + nudgeTake('lens', dt);
   for (let i = 0; i < 7; i++) { const k0 = Math.floor(i / 7 * BANDS * 0.9), k1 = Math.min(BANDS, k0 + 5), h = attHit(k0, k1); if (h > 0) lens.v[i] += 2.5 * h;
@@ -12278,7 +12278,7 @@ function drawIcons(dt) {
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const [cw, ch] = glCanvas(1), p = icn.prog;
-  if (pulse.on && !pulse.melo) nudgeAdd('icnF', 0.45 * musicGate); icn.fl = (icn.fl || 0) + dt * musicGate * (0.35 + energy * 0.8) + nudgeTake('icnF', dt);
+  if (pulse.on && !pulse.melo) nudgeAdd('icnF', 0.2 * musicGate); icn.fl = (icn.fl || 0) + dt * musicGate * (0.35 + energy * 0.8) + nudgeTake('icnF', dt);
   gl.useProgram(p.pr); gl.uniform1f(p.u.uFl, icn.fl); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 1000); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uKick, icn.kick * (state.noFlash ? 0.4 : 1));
@@ -12588,7 +12588,7 @@ function cityLife(dt, night) {
 // los agudos hacen brillar los bordes de vidrio. En silencio, quieto.
 const pil = { prog: null, n: 0, key: '', A: new Float32Array(112), B: new Float32Array(112), CA: new Float32Array(84), CB: new Float32Array(84), lv: new Float32Array(28), v: new Float32Array(28), tg: new Float32Array(28), base: [], br: 0, hi: 0, vo: 0 };
 function pillsSetup() {
-  pil.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uBr, uHi, uVo, uFlow; uniform int uN; uniform vec4 uA[28]; uniform vec4 uB[28]; uniform vec3 uCA[28], uCB[28]; uniform vec3 uMel, uBg;
+  pil.prog = glProgram(`uniform vec2 uRes; uniform float uNight, uBr, uHi, uVo; uniform int uN; uniform vec4 uA[28]; uniform vec4 uB[28]; uniform vec3 uCA[28], uCB[28]; uniform vec3 uMel, uBg;
     ${GLSL_COVER}
     float sdCap(vec2 p, float h, float r) { p.y -= clamp(p.y, -h, h); return length(p) - r; }
     void main() {
@@ -12599,12 +12599,10 @@ function pillsSetup() {
         vec2 q = p - A.xy; float d = sdCap(q, A.z, A.w), t = clamp(q.y / A.z * .5 + .5, 0., 1.);
         if (B.x < .5) {
           vec3 c = mix(uCB[i], uCA[i], smoothstep(0., 1., t));
-          float dep = fract(float(i) * .37 + .13);                                          /* profundidad: unas barras atrás, desenfocadas */
-          float lv = B.y, body = smoothstep(A.w * (.07 + .55 * dep * dep), -A.w * (.12 + .3 * dep * dep), d) * (1. - .3 * dep * dep);
-          float run = pow(.5 + .5 * sin((t * 1.6 - uFlow - float(i) * .37) * 6.2832), 2.);   /* la luz corre hacia arriba por la barra, al ritmo */
-          float core = exp(-pow(q.x / (A.w * .45), 2.) - pow(max(0., abs(q.y) - A.z * .55) / (A.w * .6), 2.)) * (.25 + .6 * lv + .45 * run) * B.z;   /* núcleo con forma de cápsula suave (no un huso en punta) */
+          float lv = B.y, body = smoothstep(A.w * .07, -A.w * .12, d);                      // bordes definidos, apenas suaves
+          float core = exp(-pow(q.x / (A.w * .45), 2.)) * smoothstep(1., .55, abs(t - .5) * 2.) * (.25 + .6 * lv) * B.z;
           vec3 cc = mix(c, mix(uMel, vec3(1.), .5), core * uVo * .5);
-          light += (cc * (1.1 + .9 * lv) + mix(cc, vec3(1., .96, .9), .3) * core * 1.1 + cc * run * .35 * exp(-pow(q.x / (A.w * .6), 2.))) * body;   /* la luz que corre, del color de la barra */   // el núcleo, claro pero de su color (no crema)
+          light += (cc * (1.1 + .9 * lv) + mix(cc, vec3(1., .96, .9), .55) * core * 1.1) * body;   // el núcleo, claro pero de su color (no crema)
           glow += c * (exp(-max(d, 0.) / (A.w * (.9 + .8 * uBr))) * .8 + exp(-max(d, 0.) / (A.w * 3.5)) * .06) * (.35 + .6 * lv) * (1. - body);   // el resplandor: intenso cerca de la barra, se apaga pronto (el fondo queda oscuro)
           // de día: capas de color pleno, una sobre otra (como la referencia clara), con un halo de su color
           dayC = mix(dayC, c, exp(-max(d, 0.) / (A.w * 1.2)) * .22 * (1. - body));
@@ -12621,20 +12619,14 @@ function pillsSetup() {
         // el vidrio: recoge la luz que tiene detrás (la aclara y la satura apenas), con un brillo largo a un costado y
         // los bordes teñidos del color de la luz cercana (como un vidrio de verdad, no un contorno vacío)
         vec3 lc = (light + glow) / (max(max(light.r + glow.r, light.g + glow.g), light.b + glow.b) + .08), tint = mix(lc, vec3(1.), .35);
-        // el vidrio refracta: lo de atrás se ve corrido y ampliado dentro de la cápsula (como un lente), no solo un contorno
-        if (inGlass > .01) { vec2 rp = p + vec2(-gnx * .035 * (1. - gnx * gnx * .5), 0.); vec3 rl = vec3(0.);
-          for (int i = 0; i < 28; i++) { if (i >= uN) break; vec4 A = uA[i], B = uB[i]; if (B.x > .5) continue;
-            vec2 q = rp - A.xy; float d = sdCap(q, A.z, A.w), t = clamp(q.y / A.z * .5 + .5, 0., 1.);
-            rl += mix(uCB[i], uCA[i], t) * (smoothstep(A.w * .2, -A.w * .3, d) * (1.1 + .9 * B.y) + exp(-max(d, 0.) / (A.w * 1.2)) * .5); }
-          col = mix(col, bg + rl * 1.15 + lc * .05, inGlass * .85); }
+        col = mix(col, col * 1.3 + lc * .05, inGlass);
         col += tint * gin * (.12 + .25 * clamp(dot(light + glow, vec3(.33)), 0., 1.) + .15 * uBr) * inGlass;
         col += mix(tint, vec3(1.), .5) * exp(-pow((gnx + .55) / .13, 2.)) * smoothstep(.05, .25, gt) * smoothstep(.95, .75, gt) * inGlass * (.1 + .18 * uBr);
         col += tint * rim * (.3 + .55 * clamp(dot(col, vec3(.33)), 0., 1.));
         float mx = max(col.r, max(col.g, col.b)); col *= (1. - exp(-mx * 1.15)) / max(mx, 1e-4);   // la luz se suma sin aplanarse
         col = mix(col, vec3(1.), clamp(dot(light, vec3(.33)) - 1.6, 0., .2));   // solo lo más intenso tira apenas a blanco: cada barra conserva su color
       } else {
-        vec3 lcD = (light + glow) / (max(max(light.r + glow.r, light.g + glow.g), light.b + glow.b) + .08);
-        col = dayC * (1. + .06 * inGlass); col = mix(col, mix(lcD, vec3(1.), .45), clamp(rim, 0., 1.) * .8);   /* de día, el borde del vidrio toma el color de la luz (no blanco) */
+        col = dayC * (1. + .06 * inGlass); col = mix(col, vec3(1.), clamp(rim, 0., 1.) * .85);
         col = clamp(col, 0., 1.);
       }
       if (uNight > .5) col *= 1. - .25 * pow(length(vUv - .5) * 1.25, 2.);
@@ -12682,8 +12674,7 @@ function drawPills(dt) {
   }
   const bg = night ? [0.035, 0.02, 0.05] : [0.96, 0.95, 0.97];
   const [cw, ch] = glCanvas(1), p = pil.prog;
-  pil.flow = (pil.flow || 0) + dt * musicGate * (0.25 + energy * 0.9) + nudgeTake('pil', dt); if (pulse.on && !pulse.melo) nudgeAdd('pil', 0.3 * musicGate);
-  gl.useProgram(p.pr); gl.uniform1f(p.u.uFlow, pil.flow); glCoverBind(p);
+  gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1i(p.u.uN, pil.n);
   gl.uniform1f(p.u.uBr, pil.br * 0.7 + pil.kick * 0.8); gl.uniform1f(p.u.uHi, pil.hi); gl.uniform1f(p.u.uVo, pil.vo);
   gl.uniform4fv(p.u['uA[0]'], pil.A); gl.uniform4fv(p.u['uB[0]'], pil.B); gl.uniform3fv(p.u['uCA[0]'], pil.CA); gl.uniform3fv(p.u['uCB[0]'], pil.CB);
@@ -12768,8 +12759,8 @@ function drawTunnel(dt) {
   // dentro de cada tiempo la velocidad respira (crece en el golpe y se relaja entre golpes), sin frenar nunca
   const okT = tempo.period > 0.25 && tempo.conf > 0.2, per = okT ? tempo.period : 0.5;
   const ph = okT ? (((performance.now() / 1000 - tempo.phaseRef) / per) % 1 + 1) % 1 : 0;
-  let rate = 4 / per * (1.1 + 1.3 * tun.loud) * (0.75 + 1.4 * tun.kick);   /* el viaje bombea: tranquilo entre golpes, un empujón claro en cada bombo (nunca frena del todo) */   // cada bombo, un empujón hacia adelante (nunca frena)
-  tun.spd = ease(tun.spd, musicGate * rate, 0.09);
+  let rate = 4 / per * (1.4 + 1.8 * tun.loud) * (1 + 0.22 * (0.5 + 0.5 * Math.cos(ph * 6.2832))) * (1 + 0.3 * tun.kick);   // cada bombo, un empujón suave hacia adelante (nunca frena)   // cada bombo, un empujón hacia adelante (nunca frena)
+  tun.spd = ease(tun.spd, musicGate * rate, 0.25);
   tun.z += dt * tun.spd;
   tun.hi = ease(tun.hi || 0, bandX(28, BANDS) * musicGate, 0.15);
   tun.amp += (0.45 + 0.55 * Math.min(1, energy * 1.8) - tun.amp) * (1 - Math.exp(-dt / 2.5)) * musicGate;   // con más energía, curvas más marcadas (cambia despacio)
@@ -13497,7 +13488,7 @@ function drawTraces(dt) {
   const ox = (W - cols * cell) / 2, oy = (H - rows * cell) / 2, lw = cell * 0.04, tw = cell * 0.14;   // tw: medio ancho del tubo
   ctx.lineCap = 'round'; ctx.lineWidth = lw;
   trz.t = (trz.t || 0) + dt * (0.02 + energy * 0.12);
-  if (pulse.on && !pulse.melo) nudgeAdd('trz', cell * (1.1 + pulse.k) * musicGate);
+  if (pulse.on && !pulse.melo) nudgeAdd('trz', cell * (0.35 + 0.3 * pulse.k) * musicGate);
   trz.flow = (trz.flow || 0) + dt * cell * musicGate * (0.3 + energy * 1.6 + dynL * 0.5) + nudgeTake('trz', dt);   // la luz corre por los tubos con la música
   // el color de cada pieza sale de un campo suave: los vecinos se parecen y los tubos se ven de un color seguido
   const colAt = (x, y) => { const f = (Math.sin(x * 0.42 + trz.t) + Math.sin(y * 0.37 - trz.t * 0.8) + Math.sin((x + y) * 0.21 + 1.3)) / 3 * 0.5 + 0.5, i = Math.min(3.999, f * 4), k = Math.floor(i), u = i - k;
@@ -15221,7 +15212,7 @@ function drawAuto(dt) {
   const per = Math.max(0.3, tempo.period || 0.5), om = Math.max(11, Math.min(20, 6.6 / per)), tx = laneX(auto.lane);
   auto.xv += ((tx - auto.x) * om * om - auto.xv * 1.7 * om) * dt * (db > 0 ? 1 : 0); auto.x += auto.xv * dt * (db > 0 ? 1 : 0);
   if (pulse.on && musicGate > 0.3) auto.sg = 1; auto.sg = (auto.sg || 0) * Math.exp(-dt * 9);   // cada bombo empuja el carro: un tirón suave y luego afloja
-  auto.dist += db * 0.5 * (0.55 + 1.9 * auto.sg);   // la vía corre pareja en promedio (aunque tu carro espere a que haya paso)
+  auto.dist += db * 0.5;   // la vía corre siempre pareja (sin arranca y para)   // la vía corre pareja en promedio (aunque tu carro espere a que haya paso)
   auto.trail += ((0.15 + dynL * 0.85) * musicGate - auto.trail) * (1 - Math.pow(0.2, dt));
   auto.glow += ((Math.min(1, voice * 1.3) * 0.7 + P * 0.5 + bandX(10, 36) * 0.3) - auto.glow) * (1 - Math.pow(0.05, dt));
   { const h = attHit(8, 40); if (h > 0) auto.glow = Math.min(1.4, auto.glow + 0.35 + 0.3 * h); }   // cada nota enciende las luces del camino
@@ -15301,7 +15292,7 @@ function drawAuto(dt) {
   ctx.restore();
 }
 
-const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawWindow, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawFocos, aura: drawAura, infinity: drawInfinity };
+const scenes = { bloques: drawBloques, ciudad: drawCity, pills: drawPills, tunnel: drawTunnel, portal: drawPortal, layers: drawLayers, liquid: drawLiquid, beam: drawBeam, halos: drawHalos, reeds: drawReeds, navidad: drawNavidad, dunas: drawDunas, anillo: drawAnillo, arco: drawArco, cuencos: drawPuntosSuave, lago: drawLago3D, mirador: drawMirador, aurora: drawAurora, autopista: drawAuto, ruta: drawRuta, circles: drawCircles, tubos: drawTubos, gallery: drawGallery, pixels: drawPixels, corales: drawCorales, nudo: drawNudo, iris: drawIris, vidrios: drawVidrios, disco: drawDisco, icons: drawIcons, columns: drawColumns, traces: drawTraces, fan: drawFan, globes: drawGlobes, vitral: drawVitral, lenses: drawLenses, sphere: drawSphere, capsules: drawCapsules, livecover: drawLiveCover, loop: drawLoop, comet: drawComet, silk: drawSilk, crystal: drawCrystal, fire: drawFire, paint: drawPaint, harp: drawHarp, eclipse: drawEclipse, orbs: drawDrops, curtain: drawCurtain, cats: drawCats, bust: drawBust, puffs: drawPuffs, dots: drawSakura, lava: drawLava, glass: drawGlass, tubes: drawTubes, tiles: drawTilesMosaic, vinyl: drawVinyl, stars: drawStars, magnet: drawMagnet, cover: drawCover, fluid: drawFluid, light: drawLuz3D, rain: drawRain, strobe: drawStrobe, artist: drawArtistScene, flowers: drawFlowers, clouds: drawClouds, lyrics: drawLyricsScene, bars: drawBars, mountains: drawMountains, ink: drawInk, bokeh: drawBokeh, aura: drawAura, infinity: drawInfinity };
 let last = performance.now();
 // Ruido muy leve encima de todo: evita las "bandas" que se ven en los degradados
 // oscuros de las pantallas de 8 bits y hace que se vean continuos.
@@ -15364,7 +15355,7 @@ function render(now) {
   musicGate += ((audible ? Math.min(1, 0.55 + energy * 10) : 0) - musicGate) * (1 - Math.pow(0.05, dt));
   // y su paso sigue la intensidad: en lo suave las derivas van lentas, en el coro corren (la estrofa y el coro se distinguen)
   timeK += ((0.55 + 0.45 * Math.min(1, energy * 2.5)) - timeK) * (1 - Math.pow(0.3, dt));   // solo frena en lo suave: en lo fuerte no acelera (si no, el movimiento continuo tapa el golpe)
-  time += dt * musicGate * timeK;
+  time += dt * musicGate;   // el reloj corre parejo mientras suena (como siempre)
   ltime += dt * musicGate;   // la letra conserva su reloj de siempre (no sigue la intensidad)
   if (!document.hidden && !recording) adapt(dt);
   keepAudioAlive(dt);
