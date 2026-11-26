@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 312</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 313</div>
     </div>
   </div>
   <div class="group">
@@ -9663,7 +9663,7 @@ function drawBust(dt) {
 // el tempo). Cada gato lleva un color de la portada.
 const cats = { prog: null, list: null, asp: 0, U: new Float32Array(48), U3: new Float32Array(12), L: new Float32Array(3) };
 function catsSetup() {
-  cats.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uMid, uHigh, uGlow;
+  cats.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uMid, uHigh, uGlow, uWv;
     uniform vec3 uC0, uC1, uC2, uBg0, uBg1;
     uniform vec4 uCat[3];   // x, y del suelo, escala, fase del paso
     uniform vec4 uCat2[3];  // salto, mirada (0 derecha), color, bruma
@@ -9751,6 +9751,8 @@ function catsSetup() {
         vec2 lp = (p - c.xy) / c.z; lp.x *= c2.y;                 // espejo si mira a la izquierda
         lp.y -= c2.x + .01 * sin(c.w * 12.566);                    // salto y el leve vaivén del paso
         vec3 base = pal(c2.z);
+        { vec2 gq = (p - vec2(c.x + .02 * c.z, c.y - .01 * c.z)) / c.z * vec2(1., 5.); float gr = length(gq), wr = .25 + 1.1 * uWv;   /* el bombo: un charco de luz que se abre bajo sus patas */
+          col += mix(base, vec3(1.), .3) * (exp(-pow((gr - wr) / (.06 + .12 * uWv), 2.)) * pow(1. - uWv, 1.6) * .45 + exp(-gr * gr * 3.) * (.06 + .12 * uCatL[i] + .1 * uP)) * (1. - c2.w * .5) * (uNight > .5 ? 1. : .6); }
         // la estela: lucecitas que se desprenden detrás del gato y suben despacio en el aire (más con cada golpe)
         if (lp.x < -.25 && lp.x > -1.9 && lp.y > -.1 && lp.y < 1.3) {
           vec2 mq = lp * 7. + vec2(0., -uTime * .5), mi = floor(mq), mf = fract(mq) - .5;
@@ -9847,7 +9849,8 @@ function drawCats(dt) {
   const p = cats.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uMid, mid); gl.uniform1f(p.u.uHigh, hits.high ? 1 : Math.max(0, high - 0.3)); gl.uniform1f(p.u.uGlow, (night ? 0.8 : 0.5) + P * 0.5);
+  if (pulse.on && musicGate > 0.3) cats.wv = 0; cats.wv = Math.min(1, (cats.wv ?? 1) + dt / (per * 1.2));
+  gl.uniform1f(p.u.uWv, cats.wv); gl.uniform1f(p.u.uMid, mid); gl.uniform1f(p.u.uHigh, hits.high ? 1 : Math.max(0, high - 0.3)); gl.uniform1f(p.u.uGlow, (night ? 0.8 : 0.5) + P * 0.8);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.uniform4fv(p.u['uCat[0]'], cats.U.subarray(0, 12)); gl.uniform4fv(p.u['uCat2[0]'], cats.U.subarray(12, 24)); gl.uniform4fv(p.u['uCat3[0]'], cats.U3); gl.uniform1fv(p.u['uCatL[0]'], cats.L);
