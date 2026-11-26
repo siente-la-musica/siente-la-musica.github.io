@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 316</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 317</div>
     </div>
   </div>
   <div class="group">
@@ -1350,7 +1350,7 @@ function attackTick(dt) {
     const f = Math.max(0, v - attPrev[i]); attPrev[i] += (v - attPrev[i]) * (1 - Math.pow(0.0005, dt));   // lo que sube sobre lo reciente
     attPk[i] = Math.max(attPk[i] * Math.pow(0.6, dt), f, 0.04);
     const k = f / attPk[i]; attRest[i] = Math.max(0, attRest[i] - dt);
-    attNew[i] = k > 0.6 && f > 0.05 && attRest[i] <= 0 ? Math.min(1, k) * musicGate : 0;   // cada nota cuenta una vez (descanso de 0,15 s por banda)
+    attNew[i] = k > 0.6 && f > (i < BANDS * 0.25 ? 0.05 : 0.05 - 0.03 * (i / BANDS)) && attRest[i] <= 0 ? Math.min(1, k) * musicGate : 0;   /* lo agudo (arpa, guitarra, piano alto) suena más débil: se le pide menos para contar */   // cada nota cuenta una vez (descanso de 0,15 s por banda)
     if (attNew[i] > 0) attRest[i] = 0.15;
     att[i] = Math.max(att[i] * Math.exp(-dt / 0.15), attNew[i]);
   }
@@ -1592,12 +1592,21 @@ function analyse(dt) {
   // piano, cada sílaba cantada y la caja marcan el pulso, más suave. Así nada se congela cuando la batería calla.
   const melo = !real && !fill && analyser && nowP - lastBassHit > 1500 && nowP - pulse.at > 230 && (hits.mid > 0.22 || hits.voice > 0.2 || hits.snare > 0);
   if (real || fill || melo) {
-    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.melo = !!melo; pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : melo ? 0.3 + Math.max(hits.mid, hits.voice, hits.snare ? 0.5 : 0) * 0.4 : 0.5;
+    pulse.on = true; pulse.at = nowP; pulse.count++; pulse.melo = !!melo; pulse.w = melo ? 0.4 : 1;   /* (partes sin batería: la nota manda más) */ pulse.k = hits.bass ? 0.55 + hits.bass * 0.45 : percP ? 0.45 + hits.perc * 0.4 : melo ? 0.3 + Math.max(hits.mid, hits.voice, hits.snare ? 0.5 : 0) * 0.4 : 0.5;
     pulse.k = Math.min(1, pulse.k * (0.5 + (melo ? bandX(10, 40) : bandX(0, 12)) * 0.65));   // (una nota de piano se mide en su registro, no en los graves)   // el mismo bombo pega menos en la estrofa que en el estribillo
     // ataque al instante (en el mismo fotograma del golpe), sin esperar a que un muelle se estire
     const amp = pulse.k * (state.noFlash ? 0.3 : 0.6);
     if (amp > pulse.x) { pulse.x = amp; pulse.v = 0; }
   }
+  // Ningún sonido se ignora: cada nota (piano, guitarra, arpa, sinte, voz) también da su acento, aunque suene la batería.
+  // Es más suave que el bombo (el golpe sigue mandando) y se limita a ~8 por segundo (un arpegio no parpadea).
+  pulse.note = 0;
+  { const nh = Math.max(attHit(8, BANDS), hits.voice ? 0.6 : 0);
+    if (!pulse.on && nh > 0 && analyser && nowP - pulse.at > 100 && nowP - (pulse.nAt || 0) > 120) {
+      pulse.nAt = nowP; pulse.note = nh;
+      if (nh > 0.4 && nowP - pulse.at > 190) { pulse.on = true; pulse.melo = true; pulse.w = 0.2; pulse.k = 0.25 + 0.3 * nh; }   /* con batería, la nota es un acento leve: el bombo sigue mandando */   /* una nota clara entre bombos es un golpe suave (como en las partes sin batería) */
+      const a = (0.1 + 0.12 * nh) * (state.noFlash ? 0.3 : 0.6) * (0.7 + 0.6 * Math.min(1, bandX(8, BANDS) * 1.5));
+      if (a > pulse.x) { pulse.x = a; pulse.v = 0; } } }
   // y vuelve con un muelle: cae en ~0,17 s con un leve rebote, como un parche de tambor
   pulse.v += (-pulse.x * 120 - pulse.v * 12) * dt; pulse.x = Math.max(-0.2, Math.min(1.2, pulse.x + pulse.v * dt));
 }
@@ -1786,7 +1795,7 @@ function updateMusicStatus() {
 }
 // Pulso común de toda la página: lo usan las animaciones, la barra y el reproductor, así todo late a la vez.
 // on: hay golpe en este fotograma · count: cuántos van · k: su fuerza · x: el «empujón» (muelle) que sigue al golpe
-const pulse = { on: false, at: 0, due: 0, count: 0, k: 0, x: 0, v: 0 };
+const pulse = { on: false, at: 0, due: 0, count: 0, k: 0, x: 0, v: 0, w: 1 };   /* w: peso del golpe (1 bombo, 0,4 una nota) */
 // Empujones suaves: un salto que llega con el golpe (fase, giro, recorrido) no se da de una vez en un cuadro, se reparte
 // en ~0,2 s. Se siente igual el golpe, pero sin el «tropiezo» que en un video a 30 cuadros se ve como un salto.
 const NUDGE = {};
@@ -2079,7 +2088,7 @@ function drawInk(dt, flowerMode = false) {
   // Detecta golpes y decide cuántos círculos aparecen
   const ob = hits.bass, om = hits.mid, oh = hits.high;
   if (ob) spawnBlob('big', ob, flowerMode);
-  else if (pulse.on && !pulse.melo) spawnBlob('big', 0.6 + 0.4 * pulse.k, flowerMode);   // cada bombo abre una mancha grande
+  else if (pulse.on) spawnBlob('big', (0.6 + 0.4 * pulse.k) * pulse.w, flowerMode);   // cada bombo abre una mancha grande
   if (om) for (let k = 0; k < 1 + Math.floor(om * 2); k++) spawnBlob('mid', om, flowerMode);
   if (oh) for (let k = 0; k < 1 + Math.floor(oh * (flowerMode ? 2 : 3)); k++) spawnBlob('small', oh, flowerMode);
   { const h = attHit(10, 40); if (h > 0 && !om) spawnBlob(h > 0.7 ? 'mid' : 'small', 0.4 + 0.4 * h, flowerMode); }   // cada nota (piano, sinte) abre una mancha o una flor
@@ -4730,7 +4739,7 @@ function drawFocos(dt) {
   if (!glInit()) return drawBokeh(dt);
   if (!foc.prog) focSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  if (pulse.on && !pulse.melo) { nudgeAdd('foc', 0.05 * musicGate); foc.kk = 1; }
+  if (pulse.on) { nudgeAdd('foc', (0.05 * musicGate) * pulse.w); foc.kk = Math.max(foc.kk || 0, pulse.w); }
   foc.kk *= Math.exp(-dt * 5);
   foc.z += dt * musicGate * (0.02 + energy * 0.06 + dynL * 0.02) + nudgeTake('foc', dt);
   [[0, 10], [10, 24], [24, 38], [38, BANDS]].forEach(([a, b], k) => { const v = Math.pow(bandX(a, b), 1.2) * musicGate; foc.lv[k] += (v - foc.lv[k]) * (1 - Math.pow(v > foc.lv[k] ? 0.001 : 0.05, dt)); });
@@ -4827,7 +4836,7 @@ function drawAura(dt) {
   if (!glInit()) return drawAura2D(dt);
   if (!auraG.prog) auraGSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  if (pulse.on && !pulse.melo) { nudgeAdd('aura', 0.22 * musicGate); auraG.kk = 1; }
+  if (pulse.on) { nudgeAdd('aura', (0.22 * musicGate) * pulse.w); auraG.kk = Math.max(auraG.kk || 0, pulse.w); }
   auraG.kk *= Math.exp(-dt * 4);
   auraG.t += dt * musicGate * (0.12 + energy * 0.7 + dynL * 0.2) + nudgeTake('aura', dt);
   auraG.vo += (Math.min(1, voice * 1.4) - auraG.vo) * (1 - Math.pow(0.05, dt));
@@ -4951,7 +4960,7 @@ function drawInfinity(dt) {
   // la velocidad la da el volumen REAL de la canción (no el nivelado): en la estrofa pasea, en el estribillo vuela
   const target = 0.18 + Math.pow(dynL, 1.7) * 2.8 + Math.pow(energy, 1.3) * 0.7;
   // y cada golpe da un empujón que se ve (sube en ~0,05 s y se va en ~0,4 s): el túnel avanza al compás
-  if (pulse.on && !pulse.melo) drawInfinity.kv = (drawInfinity.kv || 0) + 1.6 + 2.8 * pulse.k;
+  if (pulse.on) drawInfinity.kv = (drawInfinity.kv || 0) + (1.6 + 2.8 * pulse.k) * pulse.w;
   drawInfinity.kb = (drawInfinity.kb || 0) + ((drawInfinity.kv || 0) - (drawInfinity.kb || 0)) * (1 - Math.pow(0.00002, dt));
   drawInfinity.kv = (drawInfinity.kv || 0) * Math.pow(0.12, dt);
   camSpeed += (target - camSpeed) * (1 - Math.pow(0.3, dt));   // los cambios de parte de la canción se notan sin saltos
@@ -6047,7 +6056,7 @@ function drawMagnetGL(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
   // las órbitas: despacio, más amplias y rápidas con la energía; los polos de signo contrario giran al revés
   magG.ph += dt * musicGate * (0.05 + energy * 0.3);
-  if (pulse.on && !pulse.melo) { nudgeAdd('mag', (1.4 + 1.2 * pulse.k) * musicGate); magG.kk = 1; }
+  if (pulse.on) { nudgeAdd('mag', ((1.4 + 1.2 * pulse.k) * pulse.w) * musicGate); magG.kk = Math.max(magG.kk || 0, pulse.w); }
   { const hn = attHit(10, BANDS); if (hn > 0) { nudgeAdd('mag', 1.1 * hn * musicGate); magG.kk = Math.max(magG.kk, 0.7 * hn); } }   // cada nota también empuja la luz
   magG.kk *= Math.exp(-dt * 4.5);
   magG.flow += dt * musicGate * (0.6 + energy * 2.2 + dynL) + nudgeTake('mag', dt);   // la luz corre al ritmo; el bombo la empuja
@@ -6188,7 +6197,7 @@ function drawMilky(dt) {
   if (!glInit()) return false;
   if (!milky.prog) milkySetup();
   const night = state.theme === 'dark', gl = GLX.gl;
-  if (pulse.on && !pulse.melo) { milky.kk = 1; nudgeAdd('milky', 0.012 * musicGate); }
+  if (pulse.on) { milky.kk = Math.max(milky.kk || 0, pulse.w); nudgeAdd('milky', (0.012 * musicGate) * pulse.w); }
   milky.kk *= Math.exp(-dt * 6); milky.en += (Math.min(1, energy * 2 + dynL * 0.4) - milky.en) * (1 - Math.pow(0.2, dt));
   milky.rot += dt * musicGate * (0.004 + energy * 0.01) + nudgeTake('milky', dt);
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(65, Math.min(92, s_ * 1.1)), l)).map(v => v / 255); };
@@ -6210,14 +6219,14 @@ function drawStars(dt) {
     ambient(); }
   // como Infinito: la parte de la canción marca la velocidad del viaje (pasea en la estrofa, vuela en el coro)
   // y cada golpe da un empujón que se ve (sube al instante y se va en ~0,4 s)
-  if (pulse.on && !pulse.melo) starSky.kv = (starSky.kv || 0) + 0.008 + 0.018 * pulse.k;
+  if (pulse.on) starSky.kv = (starSky.kv || 0) + (0.008 + 0.018 * pulse.k) * pulse.w;
   starSky.kb = (starSky.kb || 0) + ((starSky.kv || 0) - (starSky.kb || 0)) * (1 - Math.pow(0.00002, dt));
   starSky.kv = (starSky.kv || 0) * Math.pow(0.12, dt);
   starSky.sp = (starSky.sp || 0) + ((0.002 + Math.pow(dynL, 1.6) * 0.016 * Math.min(1, energy * 5)) - (starSky.sp || 0)) * (1 - Math.pow(0.3, dt));
   const speed = starSky.sp + starSky.kb;
   // Onda que recorre el cielo desde el centro en cada golpe, encendiendo las estrellas a su paso
   // Solo con golpes reales de la canción (nada de latido propio) y muy tenue
-  if (pulse.on && !pulse.melo) starSky.waves.push({ r: 0, k: 0.45 + pulse.k * 0.55 });
+  if (pulse.on) starSky.waves.push({ r: 0, k: (0.45 + pulse.k * 0.55 ) * pulse.w });
   starSky.waves.forEach(w => { w.r += dt * 1.8; w.k *= Math.pow(0.25, dt); });
   starSky.waves = starSky.waves.filter(w => w.r < 1.3 && w.k > 0.03);
   // Constelaciones reales: de vez en cuando aparece una (con un golpe de medios o en un drop), sus
@@ -6464,7 +6473,7 @@ function drawPuntosSuave(dt) {
   if (!glInit()) { drawSakura(dt); return; }
   const S = PAI.dot, night = state.theme === 'dark'; paiLevels(S, dt);
   S.bl = S.bl || new Float32Array(24); for (let i = 0; i < 24; i++) { const k0 = Math.floor(i / 24 * BANDS * 0.9), v = Math.min(1.2, bandX(k0, k0 + 3) * 1.3) * S.go; S.bl[i] += (v - S.bl[i]) * (1 - Math.pow(v > S.bl[i] ? 0.0005 : 0.03, dt)); }
-  if (pulse.on && !pulse.melo) S.wave = 0; S.wave += dt * 2.4;   /* la ola del golpe cruza rápido: cae en su tiempo */
+  if (pulse.on) S.wave = 0; S.wave += dt * 2.4;   /* la ola del golpe cruza rápido: cae en su tiempo */
   S.hi = Math.max((S.hi || 0) * Math.pow(0.02, dt), hits.hat ? 1 : 0, Math.min(1, S.lv[2]) * 0.6);
   if (pulse.on) nudgeAdd('dotIr', 0.05); S.ir = (S.ir || 0) + dt * S.go * (0.03 + 0.3 * S.en) + nudgeTake('dotIr', dt);
   if (pulse.on && S.go > 0.3) { S.bn = Math.floor(S.bn || 0) + 1; S.bt = 0; } S.bt = Math.min(1, (S.bt ?? 1) + dt / (S.per * 0.2));   // la luz de adentro salta en cada golpe   // los colores giran con la canción (quietos en silencio)
@@ -6481,7 +6490,7 @@ function drawPuntosSuave(dt) {
 // Su borde se enciende en arcoíris (con los colores de la portada): con los graves el resplandor se abre, cada golpe lo enciende
 // de blanco, los medios avivan el color y la voz baña de luz el espacio de abajo. ----------
 PAI.ring = { rot: 0 };
-const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn, uRun, uWv; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2; uniform float uB[20];
+const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn, uRun, uWv, uWk; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2; uniform float uB[20];
   void main() {
     float asp = uRes.x / uRes.y, px = 1. / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, asp < 1. ? .58 : .55);
     vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., uv.y)); float al = .62;
@@ -6502,7 +6511,7 @@ const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, u
       L += cc * (g * .42 + halo * .025) * (.35 + .9 * lv + .8 * uP + .2 * uEn) * (1. + (2. + 2. * lv) * run * (.45 + .55 * uEn));
     }
     { float wr = R * (1.02 + .75 * uWv), ww = R * (.012 + .05 * uWv);   /* el bombo: una onda de luz que sale del anillo y se apaga */
-      L += mix(mix(uC0, uC2, .5 + .5 * sin(a * 2. + uRot)), vec3(1.), .15) * exp(-pow((d - wr) / ww, 2.)) * pow(1. - uWv, 2.) * .55; }
+      L += mix(mix(uC0, uC2, .5 + .5 * sin(a * 2. + uRot)), vec3(1.), .15) * exp(-pow((d - wr) / ww, 2.)) * pow(1. - uWv, 2.) * .55 * uWk; }
     L += mix(uC1, uC0, .5) * exp(-pow((p.y - c.y + R * 1.1) / (R * .9), 2.)) * exp(-pow((p.x - c.x) / (R * .9), 2.)) * (.05 + .35 * uVo);   // la voz: luz que cae abajo
     L = L / (1. + .35 * L);                                       // las hebras se suman sin quemarse a blanco
     vec3 col = sky * al + L;
@@ -6514,13 +6523,13 @@ function drawAnillo(dt) {
   S.bb = S.bb || new Float32Array(20); S.bv = S.bv || new Float32Array(20); S.bt = S.bt || new Float32Array(20);
   for (let i = 0; i < 20; i++) { const k0 = Math.floor(i / 20 * BANDS * 0.9), k1 = Math.min(BANDS, k0 + 3), h = attHit(k0, k1); S.bt[i] = Math.pow(bandX(k0, k1), 1.3) * S.go; if (h > 0) S.bv[i] += 4 * h; }
   springTo(S.bb, S.bv, S.bt, dt, 380, 0.6);
-  if (pulse.on && !pulse.melo) nudgeAdd('ring', 0.35 * S.go); S.rot += dt * (0.08 + 0.7 * S.en + 0.3 * Math.min(1, S.lv[1])) * S.go + nudgeTake('ring', dt); S.k = Math.max((S.k || 0) * Math.pow(0.02, dt), pulse.on ? Math.max(0.6, pulse.k || 1) : 0);
+  if (pulse.on) nudgeAdd('ring', (0.35 * S.go) * pulse.w); S.rot += dt * (0.08 + 0.7 * S.en + 0.3 * Math.min(1, S.lv[1])) * S.go + nudgeTake('ring', dt); S.k = Math.max((S.k || 0) * Math.pow(0.02, dt), pulse.on ? Math.max(0.6, pulse.k || 1) * pulse.w : 0);
   const sky = night ? [[0.05, 0.1, 0.28], [0.02, 0.03, 0.1]] : [[0.12, 0.42, 0.76], [0.45, 0.7, 0.9]];
   const c = k => paiTone(mix([0.1, 0.5, 0.9][k]), 64, 75, 100);
-  if (pulse.on && musicGate > 0.3) S.wv = 0; S.wv = Math.min(1, (S.wv ?? 1) + dt / (S.per * 1.3));
+  if (pulse.on && musicGate > 0.3 && (pulse.w > 0.5 || (S.wv ?? 1) > 0.5)) { S.wv = 0; S.wk = pulse.w; } S.wv = Math.min(1, (S.wv ?? 1) + dt / (S.per * 1.3));   /* una nota da una onda más tenue */
   paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(sky[0], paiTone(mix(0.4), night ? 20 : 45), 0.3)); gl.uniform3fv(p.u.uSky1, paiBl(sky[1], paiTone(mix(0.7), night ? 10 : 70), 0.3));
     gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform1f(p.u.uP, S.k * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uEn, S.en);
-    gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uRun, (S.b * Math.PI / 4 + S.rot * 0.3) % 1000); gl.uniform1f(p.u.uWv, S.wv); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1fv(p.u['uB[0]'], S.bb.map(v => Math.max(0, Math.min(1.3, v)))); });
+    gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uRun, (S.b * Math.PI / 4 + S.rot * 0.3) % 1000); gl.uniform1f(p.u.uWv, S.wv); gl.uniform1f(p.u.uWk, S.wk ?? 1); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1fv(p.u['uB[0]'], S.bb.map(v => Math.max(0, Math.min(1.3, v)))); });
 }
 
 // ---------- Arco: un arco de luz que nace abajo, sobre la portada, en un degradado largo y sereno (claro y cálido en el centro,
@@ -6553,7 +6562,7 @@ const ARCO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uRing, u
 function drawArco(dt) {
   if (!glInit()) { drawAura(dt); return; }
   const S = PAI.arc, night = state.theme === 'dark'; paiLevels(S, dt);
-  if (pulse.on && !pulse.melo) S.ring = 0.02; S.ring += dt / (S.per * 0.55);   // el destello del golpe, corto: cae justo en el bombo
+  if (pulse.on) S.ring = 0.02; S.ring += dt / (S.per * 0.55);   // el destello del golpe, corto: cae justo en el bombo
   if (pulse.on) nudgeAdd('arcPh', 0.06); S.ph += dt * S.go * (0.1 + 0.9 * S.en + 0.5 * Math.min(1, S.lv[0])) + nudgeTake('arcPh', dt);
   const gt = Math.min(1, 0.08 + 0.75 * S.lv[0] + 0.35 * S.en) * S.go; S.grow += (gt - S.grow) * (1 - Math.pow(gt > S.grow ? 0.0005 : 0.03, dt));   // sube al instante con los graves y baja rápido: se ve latir
   const c = (k, l) => paiTone(mix(k), l, 55, 90);
@@ -7379,14 +7388,14 @@ function drawLago3D(dt) {
   const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
   lk.t += dt * musicGate * (0.6 + 0.8 * energy) * (0.5 / per);
   // cada bombo: un anillo nace junto al bote, el bote se mece y el farol late
-  if (pulse.on && !pulse.melo) { lk.rings.push({ x: 1.6 + (Math.random() - 0.5) * 2.4, z: -7 + (Math.random() - 0.5) * 1.2, r: 0.05, a: 0.6 + 0.4 * pulse.k }); while (lk.rings.length > 4) lk.rings.shift();
-    lk.rockV += (Math.random() < 0.5 ? -1 : 1) * (0.05 + 0.05 * pulse.k); lk.lamp = Math.min(2.2, lk.lamp + 1.1 + 0.6 * pulse.k); }
+  if (pulse.on) { lk.rings.push({ x: 1.6 + (Math.random() - 0.5) * 2.4, z: -7 + (Math.random() - 0.5) * 1.2, r: 0.05, a: (0.6 + 0.4 * pulse.k) * pulse.w }); while (lk.rings.length > 4) lk.rings.shift();
+    lk.rockV += (Math.random() < 0.5 ? -1 : 1) * (0.05 + 0.05 * pulse.k) * pulse.w; lk.lamp = Math.min(2.2, lk.lamp + (1.1 + 0.6 * pulse.k) * pulse.w); }
   lk.rings.forEach(r => { r.r += dt * (1.3 + r.r * 0.4); r.a *= Math.pow(0.4, dt); }); lk.rings = lk.rings.filter(r => r.a > 0.03);
   lk.R.fill(0); lk.rings.forEach((r, i) => lk.R.set([r.x, r.z, r.r, r.a], i * 4));
   lk.rockV += (-lk.rock * 30 - lk.rockV * 4) * dt; lk.rock += lk.rockV * dt;
   lk.lamp = ease(lk.lamp, (0.45 + 0.35 * Math.min(1, bandX(0, 10))) * (0.4 + 0.6 * musicGate), 0.4);
   const h = attHit(10, 40); lk.fl = Math.max(lk.fl * Math.exp(-dt / 0.3), h);
-  if (pulse.on && !pulse.melo) lk.kk = Math.min(1, (lk.kk || 0) + 0.7 + 0.3 * pulse.k); lk.kk = ease(lk.kk || 0, 0, 0.3);
+  if (pulse.on) lk.kk = Math.min(1, (lk.kk || 0) + (0.7 + 0.3 * pulse.k) * pulse.w); lk.kk = ease(lk.kk || 0, 0, 0.3);
   lk.mist = ease(lk.mist, Math.min(1, bandX(0, 12)) * musicGate, 0.8);
   const tone = (c, l, sMin = 25, sMax = 55) => { const [h_, s_] = hexToHsl(rgbToHex(...c.map(Math.round))); return hexToRgb(hsl(h_, Math.max(sMin, Math.min(sMax, s_)), l)).map(v => v / 255); };
   const bl = (a, b, k) => a.map((v, j) => v * (1 - k) + b[j] * k);
@@ -7526,7 +7535,7 @@ function drawLuz3D(dt) {
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
   const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
   fr3.t += dt * musicGate * (0.6 + 0.6 * energy);
-  if (pulse.on && !pulse.melo) { fr3.kk = Math.min(1, fr3.kk + 0.7 + 0.3 * pulse.k); nudgeAdd('faro', 0.35 + 0.25 * pulse.k); }
+  if (pulse.on) { fr3.kk = Math.min(1, fr3.kk + (0.7 + 0.3 * pulse.k) * pulse.w); nudgeAdd('faro', (0.35 + 0.25 * pulse.k) * pulse.w); }
   fr3.kk = ease(fr3.kk, 0, 0.3);
   fr3.ph += dt * musicGate * (Math.PI * 2 / (per * 8)) + nudgeTake('faro', dt);   // el haz va y viene cada dos compases, con un empujón en cada bombo
   fr3.pw = ease(fr3.pw, (0.35 + 0.65 * Math.min(1, bandX(0, 10) * 1.3)) * musicGate, 0.25);
@@ -8385,7 +8394,7 @@ function drawWindow(dt) {
   if (!glInit()) return drawGlass(dt);
   if (!win_.prog) winSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  if (pulse.on && !pulse.melo) { nudgeAdd('win', 0.35 * musicGate); win_.kk = 1; }
+  if (pulse.on) { nudgeAdd('win', (0.35 * musicGate) * pulse.w); win_.kk = Math.max(win_.kk || 0, pulse.w); }
   win_.kk *= Math.exp(-dt * 5);
   win_.t += dt * musicGate * (0.6 + energy * 1.4) + nudgeTake('win', dt);
   win_.vo += (Math.min(1, voice * 1.4) - win_.vo) * (1 - Math.pow(0.05, dt));
@@ -8647,7 +8656,7 @@ function drawVinyl(dt) {
       const t = k / (RINGS - 1), band = Math.min(BANDS - 1, Math.floor((1 - t) * BANDS * 0.8));
       if (!vinyl.rl) { vinyl.rl = new Float32Array(RINGS); vinyl.rv = new Float32Array(RINGS); }
       vinyl.rv[k] += ((Math.pow(spec[band], 1.2) - vinyl.rl[k]) * 260 - vinyl.rv[k] * 16) * dt; vinyl.rl[k] += vinyl.rv[k] * dt;   // resorte
-      if (pulse.on && !pulse.melo) vinyl.rv[k] += (k >= RINGS - 3 ? 3.5 : 1.4) * (0.5 + pulse.k);   /* el bombo enciende todos los surcos (más los de afuera) */
+      if (pulse.on) vinyl.rv[k] += (k >= RINGS - 3 ? 3.5 : 1.4) * (0.5 + pulse.k) * pulse.w;   /* el bombo enciende todos los surcos (más los de afuera) */
       const lv = Math.max(0, vinyl.rl[k]), c = mix(t);
       const a = 0.04 + lv * 0.7 + P * 0.45;
       const ra = r0 + (r1 - r0) * k / RINGS, rb = r0 + (r1 - r0) * (k + 1) / RINGS;
@@ -8995,7 +9004,7 @@ function drawTubes(dt) {
   if (!glInit()) return drawTubes2D(dt);
   if (!rib.prog) ribSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  if (pulse.on && !pulse.melo) { nudgeAdd('rib', 0.22 * musicGate); rib.kk = 1; }
+  if (pulse.on) { nudgeAdd('rib', (0.22 * musicGate) * pulse.w); rib.kk = Math.max(rib.kk || 0, pulse.w); }
   rib.kk *= Math.exp(-dt * 5);
   rib.t += dt * musicGate * (0.5 + energy * 1.6 + dynL * 0.4) + nudgeTake('rib', dt);
   const bands = [[0, 10], [10, 20], [20, 32], [32, BANDS]];
@@ -9633,7 +9642,7 @@ function drawBust(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
   // la corriente de adentro: quieta en silencio, más viva con la energía; cada nota le da un empujón suave
   { const h = attHit(10, 40); if (h > 0) nudgeAdd('bust', 0.12 * h * musicGate); }
-  if (pulse.on && !pulse.melo) { nudgeAdd('bust', 0.18 * musicGate); bust.wave = 0; bust.waveK = 0.6 + 0.5 * pulse.k; bust.kk = 1; }
+  if (pulse.on) { nudgeAdd('bust', (0.18 * musicGate) * pulse.w); bust.wave = 0; bust.waveK = (0.6 + 0.5 * pulse.k) * pulse.w; bust.kk = Math.max(bust.kk || 0, pulse.w); }
   bust.flow += dt * musicGate * (0.06 + energy * 0.5 + dynL * 0.2) + nudgeTake('bust', dt);
   bust.wave += dt * 0.55; bust.waveK *= Math.pow(0.35, dt); bust.kk *= Math.exp(-dt * 5);
   bust.vo += (Math.min(1, voice * 1.4) - bust.vo) * (1 - Math.pow(0.04, dt));
@@ -9663,7 +9672,7 @@ function drawBust(dt) {
 // el tempo). Cada gato lleva un color de la portada.
 const cats = { prog: null, list: null, asp: 0, U: new Float32Array(48), U3: new Float32Array(12), L: new Float32Array(3) };
 function catsSetup() {
-  cats.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uMid, uHigh, uGlow, uWv;
+  cats.prog = glProgram(`uniform vec2 uRes; uniform float uTime, uNight, uP, uMid, uHigh, uGlow, uWv, uWk;
     uniform vec3 uC0, uC1, uC2, uBg0, uBg1;
     uniform vec4 uCat[3];   // x, y del suelo, escala, fase del paso
     uniform vec4 uCat2[3];  // salto, mirada (0 derecha), color, bruma
@@ -9752,7 +9761,7 @@ function catsSetup() {
         lp.y -= c2.x + .01 * sin(c.w * 12.566);                    // salto y el leve vaivén del paso
         vec3 base = pal(c2.z);
         { vec2 gq = (p - vec2(c.x + .02 * c.z, c.y - .01 * c.z)) / c.z * vec2(1., 5.); float gr = length(gq), wr = .25 + 1.1 * uWv;   /* el bombo: un charco de luz que se abre bajo sus patas */
-          col += mix(base, vec3(1.), .3) * (exp(-pow((gr - wr) / (.06 + .12 * uWv), 2.)) * pow(1. - uWv, 1.6) * .45 + exp(-gr * gr * 3.) * (.06 + .12 * uCatL[i] + .1 * uP)) * (1. - c2.w * .5) * (uNight > .5 ? 1. : .6); }
+          col += mix(base, vec3(1.), .3) * (exp(-pow((gr - wr) / (.06 + .12 * uWv), 2.)) * pow(1. - uWv, 1.6) * .45 * uWk + exp(-gr * gr * 3.) * (.06 + .12 * uCatL[i] + .1 * uP)) * (1. - c2.w * .5) * (uNight > .5 ? 1. : .6); }
         // la estela: lucecitas que se desprenden detrás del gato y suben despacio en el aire (más con cada golpe)
         if (lp.x < -.25 && lp.x > -1.9 && lp.y > -.1 && lp.y < 1.3) {
           vec2 mq = lp * 7. + vec2(0., -uTime * .5), mi = floor(mq), mf = fract(mq) - .5;
@@ -9849,8 +9858,8 @@ function drawCats(dt) {
   const p = cats.prog; gl.useProgram(p.pr); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  if (pulse.on && musicGate > 0.3) cats.wv = 0; cats.wv = Math.min(1, (cats.wv ?? 1) + dt / (per * 1.2));
-  gl.uniform1f(p.u.uWv, cats.wv); gl.uniform1f(p.u.uMid, mid); gl.uniform1f(p.u.uHigh, hits.high ? 1 : Math.max(0, high - 0.3)); gl.uniform1f(p.u.uGlow, (night ? 0.8 : 0.5) + P * 0.8);
+  if (pulse.on && musicGate > 0.3 && (pulse.w > 0.5 || (cats.wv ?? 1) > 0.5)) { cats.wv = 0; cats.wk = pulse.w; } cats.wv = Math.min(1, (cats.wv ?? 1) + dt / (per * 1.2));
+  gl.uniform1f(p.u.uWv, cats.wv); gl.uniform1f(p.u.uWk, cats.wk ?? 1); gl.uniform1f(p.u.uMid, mid); gl.uniform1f(p.u.uHigh, hits.high ? 1 : Math.max(0, high - 0.3)); gl.uniform1f(p.u.uGlow, (night ? 0.8 : 0.5) + P * 0.8);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform3fv(p.u.uBg0, bg0); gl.uniform3fv(p.u.uBg1, bg1);
   gl.uniform4fv(p.u['uCat[0]'], cats.U.subarray(0, 12)); gl.uniform4fv(p.u['uCat2[0]'], cats.U.subarray(12, 24)); gl.uniform4fv(p.u['uCat3[0]'], cats.U3); gl.uniform1fv(p.u['uCatL[0]'], cats.L);
@@ -9937,7 +9946,7 @@ function drawCurtain(dt) {
   if (!glInit()) return drawCurtain2D(dt);
   if (!curG.prog) curGSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  if (pulse.on && !pulse.melo) { nudgeAdd('cur', 0.35 * musicGate); curG.wave = -0.1; curG.waveK = 0.7 + 0.5 * pulse.k; }
+  if (pulse.on) { nudgeAdd('cur', (0.35 * musicGate) * pulse.w); curG.wave = -0.1; curG.waveK = (0.7 + 0.5 * pulse.k) * pulse.w; }
   curG.flow += dt * musicGate * (0.25 + energy * 1.1 + dynL * 0.3) + nudgeTake('cur', dt);
   curG.wave += dt * 0.9; curG.waveK *= Math.pow(0.4, dt);
   curG.vo += (Math.min(1, voice * 1.4) - curG.vo) * (1 - Math.pow(0.05, dt));
@@ -10368,7 +10377,7 @@ function drawHarp(dt) {
   if (hits.voice && melodyConf > 0.3) { harp.sylX = (vox.note + 0.5) / 12; harp.syl = 1; const gi = Math.floor(harp.sylX * G); for (let j = Math.max(0, gi - 1); j <= Math.min(G - 1, gi + 1); j++) harp.vib[j] = Math.max(harp.vib[j], 0.8); }
   harp.syl *= Math.pow(0.08, dt);
   harp.tip = Math.max(harp.tip * Math.pow(0.03, dt), hits.hat ? 0.8 : 0);
-  if (pulse.on && !pulse.melo) nudgeAdd('harpF', 0.35 * musicGate);
+  if (pulse.on) nudgeAdd('harpF', (0.35 * musicGate) * pulse.w);
   harp.flow += dt * musicGate * (0.08 + voice * 0.9 + energy * 0.15) + nudgeTake('harpF', dt);   // corre con la voz y da un empujón en cada bombo
   if (pulse.on) nudgeAdd('harpHue', 0.025 * pulse.k); harp.hue = (harp.hue || 0) + dt * (0.015 + energy * 0.12) + nudgeTake('harpHue', dt);
   for (let k = 0; k < 12; k++) harp.key[k] += (chromaNow[k] - harp.key[k]) * (1 - Math.pow(0.92, dt));
@@ -11031,7 +11040,7 @@ function drawLoop(dt) {
   // el vaivén va al compás: cada golpe lo lleva un octavo de vuelta (un vaivén completo cada 8 golpes) y se
   // desliza suave hasta allí; la cinta se retuerce un poco en cada golpe y fluye con la energía
   if (!pulse.on && (hits.snare || hits.voice)) lazo.beatT = (lazo.beatT || 0) + Math.PI / 12;   // sin bombo, la caja y la voz también lo mecen
-  if (pulse.on) { lazo.beatT = (lazo.beatT || 0) + Math.PI / 4; lazo.twK = (lazo.twK || 0) + 0.35 * pulse.k; lazo.breath = 1; }
+  if (pulse.on) { lazo.beatT = (lazo.beatT || 0) + Math.PI / 4 * pulse.w; lazo.twK = (lazo.twK || 0) + 0.35 * pulse.k * pulse.w; lazo.breath = Math.max(lazo.breath || 0, pulse.w); }
   lazo.rot += ((lazo.beatT || 0) - lazo.rot) * (1 - Math.pow(0.004, dt)) + dt * 0.02 * energy;
   lazo.twK = (lazo.twK || 0) * Math.pow(0.05, dt); lazo.breath = (lazo.breath || 0) * Math.pow(0.02, dt);
   lazo.ph += dt * musicGate * (0.03 + energy * 0.4 + dynL * 0.2) + lazo.twK * dt * 10;   // el giro de la cinta lo da sobre todo el golpe
@@ -11686,7 +11695,7 @@ function drawSphere(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!sph.prog) sphereSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  if (pulse.on && !pulse.melo) nudgeAdd('sphSw', 0.55 * (0.5 + pulse.k)); sph.sw += dt * musicGate * (0.02 + energy * 0.6 + voice * 0.8) + nudgeTake('sphSw', dt);   // gira con la voz y da un giro en cada bombo
+  if (pulse.on) nudgeAdd('sphSw', (0.55 * (0.5 + pulse.k)) * pulse.w); sph.sw += dt * musicGate * (0.02 + energy * 0.6 + voice * 0.8) + nudgeTake('sphSw', dt);   // gira con la voz y da un giro en cada bombo
   if (pulse.on) sph.rim = Math.min(1.6, sph.rim + 0.7 + pulse.k * 0.7);
   sph.rim *= Math.pow(0.06, dt);
   const target = 0.86 + Math.pow(bandX(0, 10), 1.3) * 0.22 + P * 0.2 + dynL * 0.06;   // en silencio se encoge; con los graves se infla
@@ -11840,7 +11849,7 @@ function drawSakura(dt) {
   sak.rot += dt * (0.02 + voice * 0.4 + energy * 0.1);
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(75, s_), l)).map(v => v / 255); };
   const [cw, ch] = glCanvas(1), p = sak.prog;
-  if (pulse.on && !pulse.melo) nudgeAdd('sak', 0.28 * musicGate); sak.fl = (sak.fl || 0) + dt * musicGate * (0.5 + energy * 1.4) + nudgeTake('sak', dt);
+  if (pulse.on) nudgeAdd('sak', (0.28 * musicGate) * pulse.w); sak.fl = (sak.fl || 0) + dt * musicGate * (0.5 + energy * 1.4) + nudgeTake('sak', dt);
   gl.useProgram(p.pr); gl.uniform1f(p.u.uFl, sak.fl); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 100); gl.uniform1f(p.u.uR, sak.R); gl.uniform1f(p.u.uWave, sak.wave); gl.uniform1f(p.u.uWaveK, sak.waveK * (state.noFlash ? 0.4 : 1));
@@ -11918,7 +11927,7 @@ function drawVitral(dt) {
   if (!vit.prog) vitSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
   // gira con la canción: muy despacio en lo suave, más en lo fuerte; cada bombo, un empujón que se reparte (nunca un salto)
-  if (pulse.on && !pulse.melo) { nudgeAdd('vit', (0.05 + 0.05 * pulse.k) * musicGate); vit.wave = 0; vit.waveK = 0.55 + 0.5 * pulse.k; }
+  if (pulse.on) { nudgeAdd('vit', ((0.05 + 0.05 * pulse.k) * pulse.w) * musicGate); vit.wave = 0; vit.waveK = (0.55 + 0.5 * pulse.k) * pulse.w; }
   vit.rot += dt * musicGate * (0.02 + energy * 0.09) + nudgeTake('vit', dt);
   vit.wave += dt * 1.5; vit.waveK *= Math.pow(0.3, dt);
   vit.vo += (Math.min(1, voice * 1.4) - vit.vo) * (1 - Math.pow(0.05, dt));
@@ -12015,10 +12024,10 @@ function drawBloques(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
   // el sol: su tamaño lo dan los graves y la parte de la canción; cada golpe lo hincha con un empujón (resorte)
   const tR = 0.22 + Math.pow(bandX(0, 10), 1.3) * 0.1 + dynL * 0.06;
-  if (pulse.on && !pulse.melo) vit2.rv = (vit2.rv || 0) + 1 + pulse.k * 1.4;
+  if (pulse.on) vit2.rv = (vit2.rv || 0) + (1 + pulse.k * 1.4) * pulse.w;
   vit2.rv = (vit2.rv || 0) + ((tR - vit2.R) * 180 - (vit2.rv || 0) * 14) * dt; vit2.R += vit2.rv * dt;
   vit2.y += ((0.46 + dynL * 0.08) - vit2.y) * (1 - Math.pow(0.2, dt));
-  if (pulse.on && !pulse.melo) vit2.wob = Math.min(2.4, vit2.wob + 1.2 * pulse.k + 0.6);
+  if (pulse.on) vit2.wob = Math.min(2.4, vit2.wob + (1.2 * pulse.k + 0.6) * pulse.w);
   vit2.wob *= Math.pow(0.08, dt);
   // cada columna de vidrio es una banda (graves a la izquierda): su luz sube hasta donde llega, con resortes
   if (!vit2.v) { vit2.v = new Float32Array(12); vit2.tg = new Float32Array(12); }
@@ -12092,7 +12101,7 @@ function drawLenses(dt) {
   if (!glInit()) { drawBokeh(dt); return; }
   if (!lens.prog) lensSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl, asp = W / H;
-  if (pulse.on && !pulse.melo) { nudgeAdd('lens', 0.2 * musicGate); lens.kk = 1; for (let i = 0; i < 7; i++) lens.v[i] += 1.6 + pulse.k; }
+  if (pulse.on) { nudgeAdd('lens', (0.2 * musicGate) * pulse.w); lens.kk = Math.max(lens.kk || 0, pulse.w); for (let i = 0; i < 7; i++) lens.v[i] += (1.6 + pulse.k) * pulse.w; }
   lens.kk *= Math.exp(-dt * 5);
   lens.t += dt * musicGate * (0.25 + energy * 0.8) + nudgeTake('lens', dt);
   for (let i = 0; i < 7; i++) { const k0 = Math.floor(i / 7 * BANDS * 0.9), k1 = Math.min(BANDS, k0 + 5), h = attHit(k0, k1); if (h > 0) lens.v[i] += 2.5 * h;
@@ -12301,7 +12310,7 @@ function drawIcons(dt) {
   for (let i = 0; i < gx * gy && i < 12; i++) {
     const cx_ = i % gx, cy_ = Math.floor(i / gx), f = (cx_ + cy_ * 0.33 / gy) / gx, k0 = Math.floor(f * BANDS * 0.9);
     tg[i] = Math.pow(bandX(k0, Math.min(BANDS, k0 + Math.ceil(BANDS / gx / 2))), 1.15);
-    if (pulse.on && !pulse.melo) icn.v[i] += cx_ === 0 ? 5 + pulse.k * 6 : 1.6 + pulse.k * 1.6;   // el bombo: fuerte en la columna de los graves y un saltito en todos
+    if (pulse.on) icn.v[i] += (cx_ === 0 ? 5 + pulse.k * 6 : 1.6 + pulse.k * 1.6) * pulse.w;   // el bombo: fuerte en la columna de los graves y un saltito en todos
     if (hits.snare && cx_ === Math.min(gx - 1, 2)) icn.v[i] += 3;
   }
   springTo(icn.lv, icn.v, tg, dt, 620, 0.6);   // más firme: el salto cae en el golpe
@@ -12311,7 +12320,7 @@ function drawIcons(dt) {
   const sat = (c, l) => { const [h_, s_] = hexToHsl(rgbToHex(...c)); return hexToRgb(hsl(h_, Math.max(85, s_), l)).map(v => v / 255); };
   const [hh] = hexToHsl(rgbToHex(...mix(0.5)));
   const [cw, ch] = glCanvas(1), p = icn.prog;
-  if (pulse.on && !pulse.melo) nudgeAdd('icnF', 0.2 * musicGate); icn.fl = (icn.fl || 0) + dt * musicGate * (0.35 + energy * 0.8) + nudgeTake('icnF', dt);
+  if (pulse.on) nudgeAdd('icnF', (0.2 * musicGate) * pulse.w); icn.fl = (icn.fl || 0) + dt * musicGate * (0.35 + energy * 0.8) + nudgeTake('icnF', dt);
   gl.useProgram(p.pr); gl.uniform1f(p.u.uFl, icn.fl); glCoverBind(p);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, time % 1000); gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uKick, icn.kick * (state.noFlash ? 0.4 : 1));
@@ -12541,7 +12550,7 @@ function drawCity(dt) {
   const ease = (cur, tgt, tau) => cur + (tgt - cur) * (1 - Math.exp(-dt / tau));
   const per = Math.max(0.3, Math.min(1, tempo.period || 0.5));
   // el vuelo va al ritmo de la canción: más rápido en lo fuerte; cada bombo lo empuja (repartido, sin tirones)
-  if (pulse.on && !pulse.melo) { nudgeAdd('city', 0.05 + 0.06 * pulse.k); city.wave = -city.t - 42; city.wk = Math.min(1, city.wk + 0.7 + 0.3 * pulse.k); }   // la ola de luz nace al fondo del pueblo
+  if (pulse.on) { nudgeAdd('city', (0.05 + 0.06 * pulse.k) * pulse.w); city.wave = -city.t - 42; city.wk = Math.min(1, city.wk + (0.7 + 0.3 * pulse.k) * pulse.w); }   // la ola de luz nace al fondo del pueblo
   city.t += dt * musicGate * (0.12 + 0.55 * energy + 0.2 * dynL) * (0.5 / per) + nudgeTake('city', dt);
   city.wave += dt * 48; city.wk = ease(city.wk, 0, 0.6);   // y viaja por las calles hacia la cámara (~1,3 s)
   const bands = [[38, BANDS], [30, 40], [22, 32], [14, 24], [6, 16], [0, 8]];   // de lejos (agudos) a cerca (graves)
@@ -12671,7 +12680,7 @@ function drawNeon(dt) {
   if (!glInit()) return drawPills(dt);
   if (!neo.prog) neoSetup();
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
-  if (pulse.on && !pulse.melo) neo.kk = Math.min(1, neo.kk + 0.6 + 0.4 * pulse.k);
+  if (pulse.on) neo.kk = Math.min(1, neo.kk + (0.6 + 0.4 * pulse.k) * pulse.w);
   neo.kk *= Math.exp(-dt * 4);
   neo.fl += dt * musicGate * (0.35 + energy * 0.7);   // la luz corre pareja (el bombo no la empuja: solo destella)
   for (let i = 0; i < 15; i++) { const k0 = Math.floor(i / 15 * BANDS * 0.9), k1 = Math.min(BANDS, k0 + 4), h = attHit(k0, k1); if (h > 0) neo.v[i] += 2.2 * h;
@@ -12949,7 +12958,7 @@ function drawPortal(dt) {
   const lb = [bandX(0, 6) * 0.5, bandX(4, 16), bandX(16, 32), Math.max(bandX(32, BANDS), voice * 0.9)];   // 0: el bombo (salta con cada golpe), 1: el bajo, 2: los medios, 3: agudos y voz
   if (!portal.Lavg) portal.Lavg = new Float32Array(4);
   for (let i = 0; i < 4; i++) { portal.Lavg[i] = ease(portal.Lavg[i], lb[i], 2.5); portal.LT[i] = Math.min(1.4, i === 0 ? 0.3 * lb[0] : 0.25 * lb[i] + 2.6 * Math.max(0, lb[i] - portal.Lavg[i] * 0.9)) * (0.6 + 0.6 * dynL) * musicGate; }   // cada lengua escucha lo que cambia en su parte (si todo suena fuerte, no se infla todo igual)
-  if (pulse.on && !pulse.melo) for (let i = 0; i < 4; i++) portal.LV[i] += (i === 0 ? 10 : i === 1 ? 2.5 : 1.2) * (0.6 + pulse.k);
+  if (pulse.on) for (let i = 0; i < 4; i++) portal.LV[i] += (i === 0 ? 10 : i === 1 ? 2.5 : 1.2) * (0.6 + pulse.k) * pulse.w;
   [[4, 16], [16, 32], [32, BANDS]].forEach(([a, b], j) => { const h = attHit(a, b); if (h > 0) portal.LV[j + 1] += 3 + 3.5 * h; });   // las notas (piano, sinte, voz) estiran la lengua de su registro
   springTo(portal.L, portal.LV, portal.LT, dt, 280, 0.5);   // rápido: alcanza a seguir cada bombo (también a 128 BPM)
   portal.drift += dt * musicGate * (0.03 + 0.12 * energy) + dt * (portal.av || 0) * 0.05;   // las lenguas también giran despacio con la energía
@@ -13025,7 +13034,7 @@ function drawLayers(dt) {
   for (let i = 0; i < n; i++) { const [a, b] = bands[i]; lay.tg[i] = Math.pow(bandX(a, b), 1.2) * (0.6 + 0.8 * dynL) * musicGate; }
   if (!lay.kx) { lay.kx = new Float32Array(4); lay.kv = new Float32Array(4); lay.k0 = new Float32Array(4); }
   for (let i = 0; i < n; i++) { const [a, b] = bands[i], h = attHit(a, b); if (h > 0 && i > 0) { lay.kv[i] += 5 + 4.5 * h; lay.v[i] += 0.9 * h; } }   // cada forma escucha las notas de su parte (piano, sinte, voz)
-  if (pulse.on && !pulse.melo) { for (let i = 0; i < n; i++) { lay.kv[i] += (i === 0 ? 7 : i === 1 ? 5 : 3) * (0.6 + pulse.k); lay.v[i] += (i === 0 || i === 1 ? 1.5 : 0.7) * (1 + pulse.k); } }
+  if (pulse.on) { for (let i = 0; i < n; i++) { lay.kv[i] += (i === 0 ? 7 : i === 1 ? 5 : 3) * (0.6 + pulse.k) * pulse.w; lay.v[i] += (i === 0 || i === 1 ? 1.5 : 0.7) * (1 + pulse.k) * pulse.w; } }
   springTo(lay.kx, lay.kv, lay.k0, dt, 260, 0.62);
   springTo(lay.lv, lay.v, lay.tg, dt, 130, 0.55);
   lay.ph += dt * musicGate * (0.15 + energy * 0.9 + bandX(10, 26) * 0.6);
@@ -13139,12 +13148,12 @@ function drawLiquid(dt) {
   // ondas por el borde: el bombo desde el centro; cada nota (piano, sinte, voz) desde la altura de su registro (graves abajo, agudos arriba)
   if (!liq.wv) { liq.wv = new Float32Array(24).fill(-9); liq.wj = 0; }
   const addW = (y, a) => { const j = (liq.wj++ % 6) * 4; liq.wv.set([0, y, a, 0], j); };
-  if (pulse.on && !pulse.melo) addW(0.5, 1);
+  if (pulse.on) addW(0.5, pulse.w);
   [[6, 16, 0.28], [16, 28, 0.5], [28, 40, 0.7], [40, BANDS, 0.85]].forEach(([a, b, y]) => { const h = attHit(a, b); if (h > 0) addW(y, 0.45 + 0.4 * h); });
   for (let w = 0; w < 6; w++) if (liq.wv[w * 4] >= 0 && liq.wv[w * 4] < 9) liq.wv[w * 4] += dt * 2.8;   // la onda del golpe recorre rápido (no se arrastra en el compás)
   liq.swT = (liq.swT || 0) * Math.exp(-dt / 0.35); liq.sw = ease(liq.sw || 0, liq.swT, 0.07); liq.swYs = ease(liq.swYs ?? 0.5, liq.swY ?? 0.5, 0.25);
   liq.kick = ease(liq.kick, 0, 0.18);   // corto: el golpe se siente en el golpe
-  if (pulse.on && !pulse.melo) liq.kick = Math.min(1.3, liq.kick + 0.7 + pulse.k * 0.4);
+  if (pulse.on) liq.kick = Math.min(1.3, liq.kick + (0.7 + pulse.k * 0.4) * pulse.w);
   liq.bass = ease(liq.bass, Math.pow(bandX(0, 10), 1.2) * musicGate, 0.5);
   liq.vo += (Math.min(1, voice * 1.4) - liq.vo) * (1 - Math.pow(0.05, dt));
   liq.film += dt * musicGate * (0.05 + liq.vo * 0.6);                       // la voz desliza los colores de la película
@@ -13257,7 +13266,7 @@ function drawBeam(dt) {
   beam.core += (Math.min(1, energy * 2 + P * 0.6) - beam.core) * (1 - Math.pow(0.02, dt));
   beam.vo += (Math.min(1, voice * 1.4) - beam.vo) * (1 - Math.pow(0.05, dt));
   beam.hi += (bandX(28, BANDS) * musicGate - beam.hi) * (1 - Math.pow(0.05, dt));
-  if (pulse.on && !pulse.melo) nudgeAdd('beamPh', 0.35 * musicGate); beam.ph += dt * musicGate * (0.2 + energy * 0.7) + nudgeTake('beamPh', dt);   /* la luz corre por la línea con la música y el bombo la empuja */
+  if (pulse.on) nudgeAdd('beamPh', (0.35 * musicGate) * pulse.w); beam.ph += dt * musicGate * (0.2 + energy * 0.7) + nudgeTake('beamPh', dt);   /* la luz corre por la línea con la música y el bombo la empuja */
   const hs = [0, 1, 2].map(k => hexToHsl(rgbToHex(...RGB[k]))), sat = Math.max(72, Math.min(96, hs[0][1] * 1.3 + 20));
   const viv = (h, l) => hexToRgb(hsl(h, sat, l)).map(v => v / 255);
   const bg = night ? [0.012, 0.01, 0.018] : mix(0.5).map(v => (v + (255 - v) * 0.86) / 255);
@@ -13319,9 +13328,9 @@ function drawHalos(dt) {
   for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5]; halo.tg[i] = Math.pow(bandX(a, b), 1.2) * (0.6 + 0.8 * dynL) * musicGate; }
   // cada halo escucha el ataque de su banda: una nota de piano mueve los halos de los medios, el hat el de los agudos
   for (let i = 0; i < n; i++) { const [a, b] = bands[i % 5], h = attHit(a, b); if (h > 0) { halo.v[i] += (1.6 + 2.4 * h) * (i === 0 ? 0.5 : 1); halo.sqv[i] += 1.6 * h * (state.noFlash ? 0.5 : 1); nudgeAdd('hc' + i, 0.25 * h); halo.fl[i] = Math.max(halo.fl[i], 0.55 * h); } }
-  if (pulse.on && !pulse.melo) {   // el bombo: todas saltan (más las de los graves), se aplastan y el núcleo gira
-    for (let i = 0; i < n; i++) { const w = i === 0 || i === 2 ? 1 : 0.45; halo.v[i] += (3 + pulse.k * 5) * w; halo.sqv[i] += (2.5 + pulse.k * 3) * w * (state.noFlash ? 0.5 : 1); nudgeAdd('hc' + i, 0.35 * w); }
-    halo.kick = Math.min(1, halo.kick + 0.5 + pulse.k * 0.4);
+  if (pulse.on) {   // el bombo: todas saltan (más las de los graves), se aplastan y el núcleo gira
+    for (let i = 0; i < n; i++) { const w = (i === 0 || i === 2 ? 1 : 0.45) * pulse.w; halo.v[i] += (3 + pulse.k * 5) * w; halo.sqv[i] += (2.5 + pulse.k * 3) * w * (state.noFlash ? 0.5 : 1); nudgeAdd('hc' + i, 0.35 * w); }
+    halo.kick = Math.min(1, halo.kick + (0.5 + pulse.k * 0.4) * pulse.w);
   }
   if (hits.snare) for (let i = 1; i < n; i += 2) { halo.fl[i] = 1; nudgeAdd('hc' + i, 0.6); }   // la caja: las del medio destellan en el canto
   springTo(halo.lv, halo.v, halo.tg, dt, 150, 0.45);
@@ -13602,7 +13611,7 @@ function drawTraces(dt) {
   const ox = (W - cols * cell) / 2, oy = (H - rows * cell) / 2, lw = cell * 0.04, tw = cell * 0.14;   // tw: medio ancho del tubo
   ctx.lineCap = 'round'; ctx.lineWidth = lw;
   trz.t = (trz.t || 0) + dt * (0.02 + energy * 0.12);
-  if (pulse.on && !pulse.melo) nudgeAdd('trz', cell * (0.35 + 0.3 * pulse.k) * musicGate);
+  if (pulse.on) nudgeAdd('trz', (cell * (0.35 + 0.3 * pulse.k) * pulse.w) * musicGate);
   trz.flow = (trz.flow || 0) + dt * cell * musicGate * (0.3 + energy * 1.6 + dynL * 0.5) + nudgeTake('trz', dt);   // la luz corre por los tubos con la música
   // el color de cada pieza sale de un campo suave: los vecinos se parecen y los tubos se ven de un color seguido
   const colAt = (x, y) => { const f = (Math.sin(x * 0.42 + trz.t) + Math.sin(y * 0.37 - trz.t * 0.8) + Math.sin((x + y) * 0.21 + 1.3)) / 3 * 0.5 + 0.5, i = Math.min(3.999, f * 4), k = Math.floor(i), u = i - k;
@@ -13819,7 +13828,7 @@ function drawDisco(dt) {
   const night = state.theme === 'dark', P = Math.max(0, pulse.x), gl = GLX.gl;
   // gira al compás: una vuelta cada 16 golpes, y en silencio se detiene despacio
   const per = tempo.conf > 0.3 && tempo.period ? tempo.period : 0.5;
-  if (pulse.on && !pulse.melo) { nudgeAdd('disco', 0.14 + 0.1 * pulse.k); disco.kk = 1; } disco.kk = (disco.kk || 0) * Math.exp(-dt * 6);   // cada bombo: la bola da un tirón y late
+  if (pulse.on) { nudgeAdd('disco', (0.14 + 0.1 * pulse.k) * pulse.w); disco.kk = Math.max(disco.kk || 0, pulse.w); } disco.kk = (disco.kk || 0) * Math.exp(-dt * 6);   // cada bombo: la bola da un tirón y late
   disco.rot += dt * (Math.PI * 2 / (16 * per)) * Math.min(1, energy * 3 + 0.45 * musicGate) + nudgeTake('disco', dt);   // también gira en las partes suaves (piano, voz sola)
   // los focos: cada uno con su parte del sonido, encendidos de golpe y apagándose suave
   const tgt = [bandX(0, 10), bandX(12, 34) * 0.7 + voice * 0.6, bandX(34, BANDS)];
