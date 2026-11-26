@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 325</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 326</div>
     </div>
   </div>
   <div class="group">
@@ -4335,7 +4335,7 @@ function drawWordLines(words, lit, size, cx, cy, maxW, weight = 800) { const tim
     let x = cx - lw / 2; const y = cy - (lines.length - 1) * lh / 2 + li * lh;
     for (const w of ln) {
       const on = lit === undefined || k < lit;
-      ctx.fillStyle = on ? (lit === undefined ? textFg() : COLORS[Math.min(2, Math.floor(k / Math.max(1, words.length) * 3))]) : textFg(0.35);
+      ctx.fillStyle = on ? (lit === undefined ? textFg() : COLORS[Math.min(2, Math.floor(k / Math.max(1, words.length) * 3))]) : textFg((fgOnDark ?? state.theme === 'dark') ? 0.45 : 0.58);   /* lo que falta por cantar se lee (más contraste, mismo estilo) */
       ctx.fillText(w, x, y); x += ctx.measureText(w).width + space; k++;
     }
   });
@@ -5610,6 +5610,8 @@ function fluidSetup() {
           c = c / (1. + c * 0.35); float a = clamp(max(c.r, max(c.g, c.b)) * 1.4, 0., 1.);
           o = vec4(c * 1.5 * a, a);
         } else {   // de día: tinta con su color pleno sobre el papel (antes casi no se veía)
+          { vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 1.5; vec3 sm = vec3(0.); float ws = 0.;   /* suavizada: sin bordes rasgados */
+            for (int i = -2; i <= 2; i++) for (int j = -2; j <= 2; j++) { float w = exp(-float(i * i + j * j) * .3); sm += texture(uTexture, vUv + vec2(i, j) * tx).rgb * w; ws += w; } c = sm / ws; }
           float m = max(c.r, max(c.g, c.b)); vec3 ink = c / max(m, 1e-4);
           ink = mix(ink, ink * ink, .25) * .9;
           float a = (1. - exp(-m * 14.)) * .92;
