@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 321</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 322</div>
     </div>
   </div>
   <div class="group">
@@ -9629,7 +9629,7 @@ function bustSetup() {
       float hairLines = hairD;   /* las líneas del cabello que fluyen hacia atrás */
       vec3 fig = neb * .18 * (.6 + .4 * uGate) + lc * ln * (.75 + .35 * uGate);
       col = mix(col, fig, a);
-      col += lc * ln * hairLines * 1.4 * (1. - a);
+      /* (las rayas que seguían hacia atrás fuera de la cabeza se leían como un bloque, no como pelo: se quitaron) */
       col += pal(.6 + q.y * .3) * rim * (.35 + .3 * uKick) * (1. - a);
       if (uNight < .5) col = mix(col, col * .92 + .05, 1. - a);
       col *= 1. - .14 * pow(length(vUv - .5) * 1.3, 2.);
@@ -11915,7 +11915,7 @@ function vitSetup() {
       // fuera del rosetón: la piedra en penumbra, con el resplandor de color que sale del vidrio
       vec3 bg = mix(uBg, withCover(uBg), .25);
       float out_ = smoothstep(1.02, 1.05, r);
-      vec3 halo = pal(.1 + a * .05) * (exp(-(r - 1.) * 3.5) * (.32 + .25 * uP + .4 * wave * 0.) * (.5 + .5 * uGate));
+      vec3 halo = pal(.1 + .3 * (.5 + .5 * cos(a))) * (exp(-(r - 1.) * 3.5)   /* (el ángulo saltaba a la izquierda y marcaba un corte recto) */ * (.32 + .25 * uP + .4 * wave * 0.) * (.5 + .5 * uGate));
       col = mix(col, bg + halo, out_);
       col = mix(col, leadC * .8, (1. - smoothstep(.0, .025, abs(r - 1.035))) * .9);   // el marco
       if (uNight < .5) col = mix(col, col * .85 + .12, out_);
@@ -12417,12 +12417,13 @@ function citySetup() {
       { float az = atan(rd.x, -rd.z), ridge = .012 + .05 * fbm(vec2(az * 3.2 + 4., 1.3)) + .012 * vn(vec2(az * 40., 2.));
         if (y < ridge) { c = mix(mix(uFog, uSkyH, .3) * (uNight > .5 ? .7 : .82), uSkyH, .25 + .5 * smoothstep(ridge - .05, ridge, y)); } }
       // nubes grandes de borde pintado sobre un plano alto
+      float cm_ = 0.;
       if (y > .02) { vec2 cp = rd.xz / y * 9. + vec2(0., -uT * .15);
-        float n = fbm(cp * .07), sh = fbm(cp * .07 + vec2(.05, -.08)), m = smoothstep(.55, .58, n) * smoothstep(.02, .2, y);
+        float n = fbm(cp * .07), sh = fbm(cp * .07 + vec2(.05, -.08)), ew = .03 + .22 * (1. - smoothstep(.06, .4, y)), m = smoothstep(.55 - ew * .3, .58 + ew, n) * smoothstep(.07, .32, y);   /* lejos, el borde se suaviza (sin escalones) */
         vec3 cc = mix(uCloud * .7, uCloud * 1.08, clamp((n - sh) * 5. + .55, 0., 1.)) + uWarm * (.05 + .25 * uNight) * smoothstep(.35, .05, y);
-        c = mix(c, cc, m * .9); }
+        c = mix(c, cc, m * .9); cm_ = m; }
       if (uNight > .5) { vec2 g = rd.xz / max(y, .05) * 30.; vec2 id = floor(g); float st = step(.985, h2(id)) * smoothstep(.35, 0., length(fract(g) - .5)) * smoothstep(.08, .3, y);
-        c += vec3(1., .95, .85) * st * (.3 + .7 * h2(id + floor(uT * 2.)) * (.4 + uHi)); }
+        c += vec3(1., .95, .85) * st * (.3 + .7 * h2(id + floor(uT * 2.)) * (.4 + uHi)) * (1. - .95 * cm_); }   /* las estrellas, detrás de las nubes */
       // la luna (de noche) o el sol bajo de la tarde
       vec3 md = normalize(vec3(-.42, .15, -1.)); float mdot = max(dot(rd, md), 0.);
       vec3 mc = uNight > .5 ? mix(vec3(1., .96, .86), uMel, uVo * .35) : vec3(1., .9, .7);
