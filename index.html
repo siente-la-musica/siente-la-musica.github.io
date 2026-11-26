@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 320</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 321</div>
     </div>
   </div>
   <div class="group">
@@ -12383,6 +12383,9 @@ function citySetup() {
           // la azotea: un pretil alrededor del borde (terraza) y, en algunas, una jardinera con plantas
           roof = sdBox(q - vec3(0., hh + .05, 0.), vec3(hb.x + .04, .05, hb.y + .04));
           if (r2.z > .45) { float pl = sdBox(q - vec3(0., hh + .2, (r.y > .5 ? 1. : -1.) * (hb.y - .2)), vec3(hb.x - .2, .1, .1)) - .03; if (pl < res.x) res = vec2(pl, 4.); }
+          if (r2.y > .2 && hb.x > .7 && hb.y > .7) { vec2 tc = vec2((r.x > .6 ? 1. : -1.) * (hb.x - .42), (r.z > .5 ? 1. : -1.) * (hb.y - .42));   /* en la azotea: el tanque del agua y el cuarto de la escalera */
+            float tk = max(length(q.xz - tc) - .24, abs(q.y - (hh + .5)) - .28) - .02; if (tk < res.x) res = vec2(tk, 7.);
+            float sb = sdBox(q - vec3(-tc.x * .45, hh + .34, -tc.y * .55), vec3(.3, .26, .34)) - .02; if (sb < res.x) res = vec2(sb, 5.); }
           if (roof < res.x) res = vec2(roof, 2.); roof = 1e3;
         } else if (tw > .5) {   // techo en punta de cuatro aguas
           roof = max(sdBox(rq - vec3(0., hh + rf * .5, 0.), vec3(rb.x, rf * .5, rb.y)), (max(abs(rq.x) / rb.x, abs(rq.z) / rb.y) * rf + rq.y - hh - rf) / sqrt(1. + rf * rf / (rb.x * rb.x)));
@@ -12469,6 +12472,7 @@ function citySetup() {
           alb = roofC * (.82 + .22 * h2(floor(tl) + id)) * mix(.78, 1., smoothstep(.0, .25, fract(tl.y)));   // tejas, cada una con su tono
         } else if (mat < 4.5) { alb = mix(vec3(.13, .3, .17), vec3(.3, .5, .22), vn(p.xz * 3. + p.y * 2.)); }
         else if (mat < 5.5) alb = vec3(.55, .3, .24) * (.85 + .2 * step(.5, fract(p.y * 7.)));          // ladrillo
+        else if (mat > 6.5) alb = mix(vec3(.28, .34, .44), vec3(.5, .56, .64), step(.5, fract(p.y * 5.))) * .9;   /* el tanque del agua, con sus aros */
         else alb = vec3(.32, .22, .16) * (.85 + .2 * vn(vec2(p.y * 6., atan(p.x, p.z) * 3.)));   // el tronco
         // luz al estilo de la animación pintada: lado del sol cálido, sombra azulada, sin degradados duros
         vec3 Ld = normalize(vec3(.65, uNight > .5 ? .7 : .55, .55));   // el sol (o la luna) desde atrás y a un lado: las fachadas que vemos brillan
