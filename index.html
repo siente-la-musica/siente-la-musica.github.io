@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 328</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 329</div>
     </div>
   </div>
   <div class="group">
@@ -5611,12 +5611,12 @@ function fluidSetup() {
           o = vec4(col * al, al); return;
         }
         if (light > 0.5) {   // de noche: luz de color que se suma, con un tono suave que no se quema
-          { vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 1.5; vec3 sm = vec3(0.); float ws = 0.;   /* la tinta suavizada: sin bordes rasgados */
+          { vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 2.6; vec3 sm = vec3(0.); float ws = 0.;   /* la tinta suavizada: sin bordes rasgados */
             for (int i = -2; i <= 2; i++) for (int j = -2; j <= 2; j++) { float w = exp(-float(i * i + j * j) * .3); sm += texture(uTexture, vUv + vec2(i, j) * tx).rgb * w; ws += w; } c = sm / ws; }
           c = c / (1. + c * 0.35); float a = clamp(max(c.r, max(c.g, c.b)) * 1.4, 0., 1.);
           o = vec4(c * 1.5 * a, a);
         } else {   // de día: tinta con su color pleno sobre el papel (antes casi no se veía)
-          { vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 1.5; vec3 sm = vec3(0.); float ws = 0.;   /* suavizada: sin bordes rasgados */
+          { vec2 tx = 1. / vec2(textureSize(uTexture, 0)) * 2.6; vec3 sm = vec3(0.); float ws = 0.;   /* suavizada: sin bordes rasgados */
             for (int i = -2; i <= 2; i++) for (int j = -2; j <= 2; j++) { float w = exp(-float(i * i + j * j) * .3); sm += texture(uTexture, vUv + vec2(i, j) * tx).rgb * w; ws += w; } c = sm / ws; }
           float m = max(c.r, max(c.g, c.b)); vec3 ink = c / max(m, 1e-4);
           ink = mix(ink, ink * ink, .25) * .9;
@@ -5653,7 +5653,7 @@ function fluidStep(dt) {
   const use = (p, texel) => { gl.useProgram(p.pr); gl.uniform2fv(p.u.texel, texel); return p.u; };
   let u = use(P.curl, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); glBlit(fluid.curlF);
   u = use(P.vorticity, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); gl.uniform1i(u.uCurl, glBind(1, fluid.curlF));
-  gl.uniform1f(u.curl, 18 + energy * 30); gl.uniform1f(u.dt, dt); glBlit(v.write); v.swap();
+  gl.uniform1f(u.curl, 8 + energy * 14);   /* remolinos grandes y suaves (los finos granulaban la tinta) */ gl.uniform1f(u.dt, dt); glBlit(v.write); v.swap();
   u = use(P.divergence, v.read.texel); gl.uniform1i(u.uVelocity, glBind(0, v.read)); glBlit(fluid.div);
   u = use(P.clear, v.read.texel); gl.uniform1i(u.uTexture, glBind(0, fluid.pres.read)); gl.uniform1f(u.value, 0.8); glBlit(fluid.pres.write); fluid.pres.swap();
   u = use(P.pressure, v.read.texel); gl.uniform1i(u.uDivergence, glBind(0, fluid.div));
@@ -9301,7 +9301,7 @@ function drawLava(dt) {
   const p = lava.prog; gl.useProgram(p.pr);
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch);
   gl.uniform1f(p.u.uTime, lava.t); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uP, P);
-  gl.uniform1f(p.u.uShim, lava.shim); gl.uniform1f(p.u.uGlow, (night ? 0.6 : 0.75) + P * 0.9 + beatSoft * 0.2);   /* la lava se enciende con el bombo */ gl.uniform1f(p.u.uHue, time * 0.02);
+  gl.uniform1f(p.u.uShim, lava.shim); gl.uniform1f(p.u.uGlow, (night ? 0.45 : 0.7) + P * 0.6 + beatSoft * 0.15);   /* la lava se enciende con el bombo, sin lavar la pantalla */ gl.uniform1f(p.u.uHue, time * 0.02);
   gl.uniform1i(p.u.uN, n);
   gl.uniform3fv(p.u.uC0, RGB[0].map(v => v / 255)); gl.uniform3fv(p.u.uC1, RGB[1].map(v => v / 255)); gl.uniform3fv(p.u.uC2, RGB[2].map(v => v / 255));
   gl.uniform4fv(p.u['uB[0]'], lava.B);
