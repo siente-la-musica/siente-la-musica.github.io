@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 310</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 311</div>
     </div>
   </div>
   <div class="group">
@@ -6481,13 +6481,14 @@ function drawPuntosSuave(dt) {
 // Su borde se enciende en arcoíris (con los colores de la portada): con los graves el resplandor se abre, cada golpe lo enciende
 // de blanco, los medios avivan el color y la voz baña de luz el espacio de abajo. ----------
 PAI.ring = { rot: 0 };
-const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2; uniform float uB[20];
+const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uRot, uEn, uRun, uWv; uniform vec3 uLv, uSky0, uSky1, uC0, uC1, uC2; uniform float uB[20];
   void main() {
     float asp = uRes.x / uRes.y, px = 1. / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y), c = vec2(asp * .5, asp < 1. ? .58 : .55);
     vec3 sky = mix(uSky1, uSky0, smoothstep(0., 1., uv.y)); float al = .62;
     float R = min(asp, 1.) * (asp < 1. ? .34 : .3) * (1. + .05 * uLv.x + .1 * uP), d = length(p - c)   /* el anillo entero se abre con el bombo y vuelve */, a = atan(p.y - c.y, p.x - c.x);
     if (d < R) { float k = smoothstep(R, R * .7, d); sky = mix(sky, uSky0 * .7, k * .5); al = mix(al, .8, k); }
     vec3 L = vec3(0.);
+    float bh = mod(uRun - a, 3.14159), run = exp(-bh * 1.6) + exp(-(3.14159 - bh) * 14.);   /* dos luces que corren por las hebras al tempo, con su estela */
     // veinte hebras de luz: cada una gira a su ritmo y ondula con su parte del sonido; el golpe las abre y vuelven a juntarse
     for (int i = 0; i < 20; i++) {
       float fi = float(i), u = fi / 19.;
@@ -6498,8 +6499,10 @@ const ANILLO_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, u
       float w = R * (.0035 + .002 * lv) + px * .8;
       vec3 cc = u < .5 ? mix(uC0, uC1, u * 2.) : mix(uC1, uC2, u * 2. - 1.);
       float g = exp(-pow((d - r) / w, 2.)), halo = exp(-abs(d - r) / (R * .05));
-      L += cc * (g * .42 + halo * .025) * (.35 + .9 * lv + .8 * uP + .2 * uEn);
+      L += cc * (g * .42 + halo * .025) * (.35 + .9 * lv + .8 * uP + .2 * uEn) * (1. + (2. + 2. * lv) * run * (.45 + .55 * uEn));
     }
+    { float wr = R * (1.02 + .75 * uWv), ww = R * (.012 + .05 * uWv);   /* el bombo: una onda de luz que sale del anillo y se apaga */
+      L += mix(mix(uC0, uC2, .5 + .5 * sin(a * 2. + uRot)), vec3(1.), .15) * exp(-pow((d - wr) / ww, 2.)) * pow(1. - uWv, 2.) * .55; }
     L += mix(uC1, uC0, .5) * exp(-pow((p.y - c.y + R * 1.1) / (R * .9), 2.)) * exp(-pow((p.x - c.x) / (R * .9), 2.)) * (.05 + .35 * uVo);   // la voz: luz que cae abajo
     L = L / (1. + .35 * L);                                       // las hebras se suman sin quemarse a blanco
     vec3 col = sky * al + L;
@@ -6514,9 +6517,10 @@ function drawAnillo(dt) {
   if (pulse.on && !pulse.melo) nudgeAdd('ring', 0.35 * S.go); S.rot += dt * (0.08 + 0.7 * S.en + 0.3 * Math.min(1, S.lv[1])) * S.go + nudgeTake('ring', dt); S.k = Math.max((S.k || 0) * Math.pow(0.02, dt), pulse.on ? Math.max(0.6, pulse.k || 1) : 0);
   const sky = night ? [[0.05, 0.1, 0.28], [0.02, 0.03, 0.1]] : [[0.12, 0.42, 0.76], [0.45, 0.7, 0.9]];
   const c = k => paiTone(mix([0.1, 0.5, 0.9][k]), 64, 75, 100);
+  if (pulse.on && musicGate > 0.3) S.wv = 0; S.wv = Math.min(1, (S.wv ?? 1) + dt / (S.per * 1.3));
   paiRun(S, ANILLO_FS, (gl, p) => { gl.uniform3fv(p.u.uSky0, paiBl(sky[0], paiTone(mix(0.4), night ? 20 : 45), 0.3)); gl.uniform3fv(p.u.uSky1, paiBl(sky[1], paiTone(mix(0.7), night ? 10 : 70), 0.3));
     gl.uniform3fv(p.u.uC0, c(0)); gl.uniform3fv(p.u.uC1, c(1)); gl.uniform3fv(p.u.uC2, c(2)); gl.uniform1f(p.u.uP, S.k * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uEn, S.en);
-    gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1fv(p.u['uB[0]'], S.bb.map(v => Math.max(0, Math.min(1.3, v)))); });
+    gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uRot, S.rot); gl.uniform1f(p.u.uRun, (S.b * Math.PI / 4 + S.rot * 0.3) % 1000); gl.uniform1f(p.u.uWv, S.wv); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1fv(p.u['uB[0]'], S.bb.map(v => Math.max(0, Math.min(1.3, v)))); });
 }
 
 // ---------- Arco: un arco de luz que nace abajo, sobre la portada, en un degradado largo y sereno (claro y cálido en el centro,
@@ -11036,7 +11040,7 @@ function drawLoop(dt) {
   const A = Math.min(W * 0.36, MIN * 0.62) * (1 + lazo.breath * 0.1 + Math.pow(bandX(0, 10), 1.4) * 0.03), D = 3.2;   // respira con el bombo
   // un punto de la cinta: el ocho (lemniscata de Gerono) con la cinta abierta hacia los lados y retorcida
   const pt = (u, off, w) => {
-    const x = Math.cos(u), y = Math.sin(u) * Math.cos(u) * 0.95, tw = 2 * u + lazo.ph * 0.8;
+    const x = Math.cos(u), y = Math.sin(u) * Math.cos(u) * 0.95, tw = 2 * u + lazo.ph * 0.8; w *= 1 + 0.5 * (1 - x * x);   /* en el cruce los hilos se abren: pasan sin amontonarse en un nudo quemado */
     const dy = Math.cos(tw) * off * w * 0.8, dz = Math.sin(tw) * off * w + Math.sin(u) * 0.18;
     let X = x * cr + dz * sr, Z = -x * sr + dz * cr, Y = (y + dy) * ct - Z * st; Z = (y + dy) * st + Z * ct;
     const k = D / (D + Z); return [W / 2 + X * A * k, H / 2 + Y * A * k, k];
@@ -11064,8 +11068,8 @@ function drawLoop(dt) {
     const fade = Math.min(1, (1.15 - h.s) * 4);
     for (let j = 0; j < 26; j++) {
       const u = (h.s - j * 0.006) * Math.PI * 2; if (u < 0) break;
-      const [X, Y, k] = pt(u, 0, 0), r = MIN * 0.05 * k * (1 - j / 26) * (0.6 + h.k * 0.6);
-      lctx.globalAlpha = fade * (1 - j / 26) * (night ? 0.55 : 0.35) * h.k;
+      const [X, Y, k] = pt(u, 0, 0), r = MIN * 0.035 * k * (1 - j / 26) * (0.6 + h.k * 0.6);
+      lctx.globalAlpha = fade * (1 - j / 26) * (night ? 0.35 : 0.3) * h.k * (0.4 + 0.6 * Math.abs(Math.cos(u)));   /* más suave en el cruce */
       lctx.drawImage(SPRITES[j % 3], X - r, Y - r, r * 2, r * 2);
     }
   }
