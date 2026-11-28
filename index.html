@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 332</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 333</div>
     </div>
   </div>
   <div class="group">
@@ -1023,9 +1023,9 @@ function paletteColors() {
 }
 let coverColors = null, coverUrl = '';
 let COLORS = [], RGB = [], SPRITES = [], BOKEH = [];
-function makeSprite(hex) {
-  const s = document.createElement('canvas'); s.width = s.height = 256;
-  const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex);
+function makeSprite(hex, s) {   // (se redibuja sobre el mismo lienzo: crear lienzos nuevos a cada rato congelaba la animación)
+  if (!s) { s = document.createElement('canvas'); s.width = s.height = 256; }
+  const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex); c.clearRect(0, 0, 256, 256);
   const gr = c.createRadialGradient(128, 128, 0, 128, 128, 128);
   gr.addColorStop(0, `rgba(${r},${g},${b},1)`);
   gr.addColorStop(.4, `rgba(${r},${g},${b},.55)`);
@@ -1043,9 +1043,11 @@ function refreshColors() {
 }
 function applyRGB(sprites) {
   COLORS = RGB.map(c => rgbToHex(c[0], c[1], c[2]));
-  document.documentElement.style.setProperty('--c1', COLORS[0]);
-  document.documentElement.style.setProperty('--c2', COLORS[COLORS.length > 2 ? 2 : COLORS.length - 1]);
-  if (sprites) { SPRITES = COLORS.map(makeSprite); BOKEH = COLORS.map(makeBokeh); spriteRGB = RGB.map(c => c.slice()); spriteAt = performance.now(); }
+  // el color de la interfaz: solo si cambió, y como mucho 4 veces por segundo (cambiarlo en cada cuadro recalculaba toda la página)
+  const c1 = COLORS[0], c2 = COLORS[COLORS.length > 2 ? 2 : COLORS.length - 1], nowA = performance.now();
+  if ((c1 !== applyRGB.c1 || c2 !== applyRGB.c2) && (sprites || nowA - (applyRGB.at || 0) > 250)) { applyRGB.c1 = c1; applyRGB.c2 = c2; applyRGB.at = nowA;
+    document.documentElement.style.setProperty('--c1', c1); document.documentElement.style.setProperty('--c2', c2); }
+  if (sprites) { SPRITES = COLORS.map((h, i) => makeSprite(h, SPRITES.length === COLORS.length ? SPRITES[i] : null)); BOKEH = COLORS.map((h, i) => makeBokeh(h, BOKEH.length === COLORS.length ? BOKEH[i] : null)); spriteRGB = RGB.map(c => c.slice()); spriteAt = performance.now(); }
 }
 function colorTick(dt) {
   if (!targetRGB) return;
@@ -4688,9 +4690,9 @@ function liveUI() {
 // ================= Bucle principal =================
 // ================= Escena: Focos (luces desenfocadas a lo lejos) =================
 const lights = [];
-function makeBokeh(hex) {
-  const s = document.createElement('canvas'); s.width = s.height = 512;
-  const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex);
+function makeBokeh(hex, s) {
+  if (!s) { s = document.createElement('canvas'); s.width = s.height = 512; }
+  const c = s.getContext('2d'), [r, g, b] = hexToRgb(hex); c.clearRect(0, 0, 512, 512);
   const gr = c.createRadialGradient(256, 256, 0, 256, 256, 256);
   gr.addColorStop(0, `rgba(${r},${g},${b},.42)`);
   gr.addColorStop(.72, `rgba(${r},${g},${b},.5)`);
@@ -15465,12 +15467,13 @@ let slowFor = 0, fastFor = 0, coolDown = 0, drops_ = 0;
 addEventListener('visibilitychange', () => { slowFor = 0; });   // al volver a la pestaña el primer fotograma es lento: no cuenta
 function adapt(dt) {
   coolDown -= dt;
+  if (recording) { slowFor = fastFor = 0; return; }   // al grabar manda su propio ajuste (más gradual): aquí no se cambia el lienzo
   // Baja la resolución si el equipo no llega, y solo la sube tras mucho rato holgado. Cada cambio se nota
   // un instante, así que tras bajar dos veces seguidas se queda fija (evita el «sube y baja» constante).
   if (dt > 0.026) { slowFor += dt; fastFor = 0; } else if (dt < 0.014) { fastFor += dt; slowFor = 0; } else { fastFor = 0; }
   if (lib.web && sp.deviceId === lib.webId && sp.playing && renderScale > 0.8 && !recording) { renderScale = 0.8; resize(); }   // con el reproductor en el navegador, menos carga
   if (slowFor > 3 && renderScale > 0.55) { renderScale = Math.max(0.55, renderScale - 0.1); slowFor = 0; coolDown = 120; drops_ += 1; resize(); }
-  else if (fastFor > 30 && coolDown <= 0 && drops_ < 2 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
+  else if (fastFor > 30 && coolDown <= 0 && drops_ < 1 && renderScale < 1) { renderScale = Math.min(1, renderScale + 0.1); fastFor = 0; resize(); }
 }
 
 const cam = { z: 0, v: 0, t: 0, g: 0 }, CAM_OFF = new Set(['strobe', 'lyrics', 'artist', 'livecover', 'cover', 'ruta']);   // escenas con encuadre propio o con capas de página encima
