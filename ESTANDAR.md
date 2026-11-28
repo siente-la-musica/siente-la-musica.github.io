@@ -34,16 +34,38 @@ escenas que despiertan curiosidad (preguntaron si Ruta era un videojuego). Sin f
   - bombo solo: **≥ ×1,4**;
   - nota sola (piano o voz sin percusión): **≥ ×1,2**.
 
-## 2. Hipnotizante
+## 2. Hipnotizante (la prioridad: ninguna escena se publica si no cumple)
 
-Que el ojo no se quiera ir. Una animación es hipnotizante cuando:
+Que quien vea el video **no pueda dejar de mirarlo**. Es donde más fallamos. Hipnotizar nunca justifica algo feo
+ni desconectado de la canción: hipnotiza porque se ve hermoso y va con la música.
 
-- **Nunca se detiene** mientras suena: el flujo es continuo (corre, gira, fluye, respira) y cada golpe lo **empuja**, no lo reinicia.
-- Tiene **un centro** que atrae la mirada (un rosetón, un perfil, un túnel, un polo) y el movimiento va hacia él o sale de él.
-- Mueve **varias capas a distintas velocidades** (lo lejano lento, lo cercano rápido; lo grande lento, lo fino rápido).
-- **Se repite con variación**: patrones que vuelven (simetrías, ondas, espirales suaves de flujo), pero nunca idénticos.
-- El movimiento va **al tempo** de la canción: una vuelta, una ola o una franja por tiempo o por compás.
-- La luz **corre** por las formas (por hilos, tubos, vetas o líneas de campo), no solo se prende y se apaga.
+Una animación es hipnotizante cuando:
+
+- **Flujo sin final**: nunca se detiene mientras suena (corre, gira, fluye, respira) y nunca llega a un tope; cada
+  golpe lo **empuja**, no lo reinicia.
+- Tiene **un centro** que atrae la mirada (un rosetón, un perfil, un túnel, un sol) y el movimiento va hacia él o
+  sale de él; el ojo siempre vuelve ahí, no se escapa a los bordes.
+- Va **al tempo**: una vuelta, una ola o una franja por tiempo o por compás; el cuerpo lo siente antes de entenderlo.
+- Mueve **al menos tres capas a distintas velocidades** (lo lejano lento, lo cercano rápido; lo grande lento, lo
+  fino rápido).
+- **Se repite con variación**: patrones que vuelven (simetrías, ondas, ritmo de formas), pero nunca idénticos.
+- La luz **corre** por las formas (hilos, tubos, vetas, crestas), no solo se prende y se apaga.
+- Tiene **tensión y alivio**: crece en la estrofa y la subida y se suelta en el coro o el drop (más luz, más
+  espacio, más color). Se siente que algo está por pasar.
+- Trae **pequeñas sorpresas con sentido**: cada 4 a 8 compases o en un cambio de parte pasa algo nuevo (una
+  estrella fugaz, un destello, un cambio de luz), siempre ligado a la música, nunca al azar.
+- Su movimiento es **satisfactorio**: curvas suaves, formas que encajan en el golpe, inercia y rebote leve; nada
+  brusco, caótico ni de estrobo.
+
+Pruebas (se hacen y se informan con su resultado):
+
+- **3 segundos**: desde el primer cuadro hay color, movimiento, un centro y algo que despierta curiosidad.
+- **Scroll**: ¿detendrías el dedo entre otros videos? Si hay duda, no cumple.
+- **30 segundos**: mirada entera, sin tramos aburridos ni repetidos de más.
+- **Mirada**: segundo a segundo el ojo vuelve al centro.
+- **Sin sonido**: aun muda, se siente el pulso de una canción.
+- **Plan de momentos**: qué hace la escena en estrofa, subida, coro, drop y silencio. Si dos partes se ven igual,
+  falta trabajo.
 
 ## 3. Movimiento elegante y natural
 
@@ -57,6 +79,15 @@ Que el ojo no se quiera ir. Una animación es hipnotizante cuando:
 - Nada infantil: sin caras de caricatura, sin figuras primitivas, sin aspecto de PowerPoint, sin «cápsulas».
 - Escenas como Ruta, Navidad o Ciudad: detalle real, que no parezcan hechas por IA.
 - Los objetos se apoyan en el suelo (nada flota sin razón) y con proporciones creíbles.
+- Referencias: fondos de pantalla de Apple (degradados vivos, vidrio, luz suave), fondos pintados de Studio Ghibli
+  (Kazuo Oga), cielos de Makoto Shinkai (luz dorada, nostalgia), materiales creíbles (vidrio, metal, tela, arena).
+- **Cualquier cuadro quieto es un póster**: sirve de miniatura.
+- Valores bien separados (oscuros, medios, luces): nada plano ni lavado; se lee en un teléfono con poco brillo.
+- Una luz principal creíble que da volumen; resplandor medido, sin quemar a blanco.
+- Profundidad: bruma con la distancia y escala creíble. Mucho detalle donde se mira, calma donde no.
+- Materia creíble con textura fina y quieta (nunca ruido ni grano que titile).
+- Lo que dicen los datos: lo que tiene un lugar o un objeto claro (Ruta) atrae el doble; lo abstracto y borroso es
+  lo que menos gusta.
 
 ## 5. Hecho para el video publicado
 
