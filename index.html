@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 334</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 335</div>
     </div>
   </div>
   <div class="group">
@@ -12559,7 +12559,10 @@ function citySetup() {
         }
         // de noche: faroles en las esquinas, con su charco de luz cálido (laten con el bombo)
         if (uNight > .5) { vec2 lc = abs(l) - S * .5; float ld = length(lc);
-          col += uWarm * exp(-ld * ld * .8) * (.35 + .5 * uGlow + .6 * uKick * exp(-pow((p.z - uWave) / 6., 2.))) * (mat < 1.5 ? 1. : .35); }
+          vec2 cid = floor(p.xz / S + .5); int li = int(h2(cid * 1.7) * 5.99); float llv = uLv[0];   /* cada farol escucha su parte de la música */
+          for (int k = 1; k < 6; k++) if (k == li) llv = uLv[k];
+          float lon = smoothstep(0., .12, .08 + .72 * llv + .12 * uGlow - h2(cid + floor(uBar) * vec2(2.3, 5.1)));   /* en cada compás unos se apagan y otros se prenden */
+          col += uWarm * exp(-ld * ld * .8) * (.06 + lon * (.25 + .8 * llv + .55 * uKick + .9 * uKick * exp(-pow((p.z - uWave) / 9., 2.)))) * (mat < 1.5 ? 1. : .35); }
         // la bruma: profundidad (lo lejano se funde con el cielo del horizonte)
         float fg = 1. - exp(-t * (uNight > .5 ? .02 : .014));
         vec3 fogC = mix(uFog, uSkyH, .6);
