@@ -83,7 +83,8 @@ Que el ojo no se quiera ir. Una animación es hipnotizante cuando:
 - **Reemplazar lo que funcionaba**: si una versión anterior gustaba, se mejora sobre ella; no se sustituye por otra idea.
 - **Ignorar las notas cuando suena la batería**: antes, piano, guitarra, arpa o voz solo movían la escena si no había
   bombo en 1,5 s, y 42 efectos de golpe descartaban las notas. Ahora cada nota da un golpe suave (peso 0,2 con batería,
-  0,4 sin ella; el bombo pesa 1) y lo agudo cuenta aunque suene más débil. Toda escena nueva usa `pulse.w` en su golpe.
+  0,4 sin ella; el bombo pesa 1) y lo agudo cuenta aunque suene más débil. `pulse.on` es solo el golpe (bombo o percusión, y la nota cuando no hay batería): lo que va al ritmo lo usa. Para que una nota también
+  se sienta se usa `pulse.hit` con su peso `pulse.w` (nunca acelerar el ritmo de una escena con las notas: Cuencos se volvió frenético).
 - **Cambios globales** (relojes, curvas compartidas): afectan a todas las escenas; se revisan todas antes de publicar.
 
 ## 7. Proceso
