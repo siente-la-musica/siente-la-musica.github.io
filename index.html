@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 331</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 332</div>
     </div>
   </div>
   <div class="group">
@@ -6426,7 +6426,7 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
     float hs = cell * (.42 + .02 * lv * uGo + .05 * wv), rr = hs * .34, sd = sdRB(f, vec2(hs), rr);   /* crece sin salirse de su lugar (antes se cortaba) */   // cada pieza se hincha con su parte y con la ola del golpe
     // la luz que hay detrás (la portada, muy clara): se ve por las rendijas y entra por los bordes de cada pieza
     vec3 back = uCovK > 0. ? texture(uCov, (vUv - uCovR.xy) / uCovR.zw).rgb : vec3(1.);
-    vec3 bl = uNight > .5 ? mix(vec3(.012, .012, .02), back * .12, .5) : mix(vec3(1., .97, .98), back, .3);   /* de noche, el fondo negro (no blanco) */
+    vec3 bl = uNight > .5 ? mix(vec3(.012, .012, .02), back * .12, .5) : mix(vec3(1.), back, .05);   /* de noche, el fondo negro; de día, blanco limpio (no gris) */
     float bk = .25 + 1.2 * lv * uGo + 1.3 * wv + .25 * uVo;   // en lo suave entra poca luz; con su parte del sonido, se encienden                                          // cuánta luz entra: su parte del sonido y la ola
     // los colores de la pieza: dos o tres tonos vecinos, vivos, en un degradado que se tuerce despacio
     float c0 = hsh + uIr * .2 + float(int(id.x + id.y * 2.)) * .19;
@@ -6468,7 +6468,7 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
           vec3 nc = pal(h(nid * 1.37 + 3.1) + uIr * .2 + float(int(nid.x + nid.y * 2.)) * .19);
           gw += nc * exp(-max(nsd, 0.) / (cell * .07)) * (.14 + .3 * nlv * uGo + .25 * nwv); }
         col = bl + gw;
-      } else col = bl * (.92 + .08 * uLv.x * uGo);
+      } else col = bl;
       al = 1.;
     }
     if (uNight > .5) col *= mix(1., .82, 1. - smoothstep(px, -px, sd) * .3);                       // de noche, todo algo más hondo
