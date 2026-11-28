@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 333</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 334</div>
     </div>
   </div>
   <div class="group">
@@ -12367,7 +12367,7 @@ function drawIcons(dt) {
 // de luz que recorre la ciudad; el vuelo va al ritmo de la canción y la voz tiñe la luna. En silencio, quieta.
 const city = { prog: null, t: 0, lv: new Float32Array(6), fl: new Float32Array(6), wave: -9, wk: 0, bank: 0, glow: 0, lan: [], birds: [], beats: 0 };
 function citySetup() {
-  city.prog = glProgram(`uniform vec2 uRes; uniform float uGray, uNight, uT, uKick, uWave, uHi, uVo, uBank, uGlow; uniform float uLv[6]; uniform float uFl[6];
+  city.prog = glProgram(`uniform vec2 uRes; uniform float uGray, uNight, uT, uKick, uWave, uHi, uVo, uBank, uGlow, uBar; uniform float uLv[6]; uniform float uFl[6];
     uniform vec3 uSkyT, uSkyH, uCloud, uR0, uR1, uR2, uWall, uWarm, uMel, uFog;
     const float S = 5.;
     float h1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
@@ -12549,7 +12549,7 @@ function citySetup() {
           int bi = int(min(5., floor(r.y * 6.)));
           float lv = uLv[0]; float fl = uFl[0];
           for (int k = 1; k < 6; k++) if (k == bi) { lv = uLv[k]; fl = uFl[k]; }
-          float rr = h2(wid + id * 7.3), lit = step(rr, (uNight > .5 ? .16 : .04) + (uNight > .5 ? 1.1 : .6) * lv);   // de noche, las ventanas se encienden con su parte de la música (mucho más marcado)
+          float rr = h2(wid + id * 7.3 + floor(uBar) * vec2(3.17, 1.91)), lit = step(rr, (uNight > .5 ? .08 : .04) + (uNight > .5 ? 1.25 : .6) * lv);   /* en cada compás se reparten de nuevo: unas se apagan y otras se prenden; con lo fuerte, muchas */   // de noche, las ventanas se encienden con su parte de la música (mucho más marcado)
           float wv = uKick * exp(-pow((p.z - uWave) / (uNight > .5 ? 9. : 6.), 2.)) * step(h2(wid + id + 3.), .85) * (uNight > .5 ? 1.8 : 1.);   // la ola del bombo, más ancha y fuerte de noche
           float on = clamp(lit * (.8 + .2 * sin(uT * 2. + rr * 50.)) * (1. + .7 * uKick * uNight) + fl * step(h2(wid + id + 9.), .55) * 1.3 + wv, 0., 1.8);   /* todas las ventanas respiran con el bombo */
           vec3 glass = uNight > .5 ? vec3(.05, .06, .12) : mix(uSkyT, vec3(1.), .3) * (.55 + .3 * wf.y);
@@ -12583,7 +12583,7 @@ function drawCity(dt) {
   city.t += dt * musicGate * (0.12 + 0.55 * energy + 0.2 * dynL) * (0.5 / per) + nudgeTake('city', dt);
   city.wave += dt * 48; city.wk = ease(city.wk, 0, 0.6);   // y viaja por las calles hacia la cámara (~1,3 s)
   const bands = [[38, BANDS], [30, 40], [22, 32], [14, 24], [6, 16], [0, 8]];   // de lejos (agudos) a cerca (graves)
-  for (let i = 0; i < 6; i++) { const [a, b] = bands[i]; city.lv[i] = ease(city.lv[i], Math.min(1, Math.pow(bandX(a, b), 1.2) * (0.5 + 0.8 * dynL)) * musicGate, 0.25);
+  for (let i = 0; i < 6; i++) { const [a, b] = bands[i]; city.lv[i] = ease(city.lv[i], Math.min(1, Math.pow(bandX(a, b), 1.2) * (0.4 + 1.0 * dynL)) * musicGate, 0.15);   /* sigue más de cerca la fuerza de la música */
     const h = attHit(a, b); city.fl[i] = Math.max(city.fl[i] * Math.exp(-dt / 0.3), h); }
   city.glow = ease(city.glow, Math.min(1, energy * 2) * musicGate, 0.6);
   city.bank = ease(city.bank, (voice > 0.12 && melodyConf > 0.3 ? (vox.note / 11 - 0.5) * 0.05 : 0) + Math.sin(groove * Math.PI / 8) * 0.015, 0.8);
@@ -12597,9 +12597,10 @@ function drawCity(dt) {
     : { skyT: bl([0.3, 0.52, 0.88], tone(RGB[1], 58), 0.2), skyH: bl([0.98, 0.88, 0.74], tone(RGB[0], 84), 0.2), cloud: [1, 0.97, 0.94],
         r0: bl([0.8, 0.36, 0.24], tone(RGB[0], 46), 0.2), r1: bl([0.24, 0.54, 0.56], tone(RGB[1], 44), 0.2), r2: bl([0.66, 0.3, 0.26], tone(RGB[2], 44), 0.15),
         wall: [0.96, 0.9, 0.8], warm: [1, 0.82, 0.5], fog: bl([0.8, 0.84, 0.92], tone(RGB[1], 84), 0.2) };
-  const [cw, ch] = glCanvas(0.78), p = city.prog;   /* con el suavizado al ampliar no se nota y va más fluida */
+  const [cw, ch] = glCanvas(state.theme === 'dark' ? 0.78 : 1), p = city.prog;   /* de día, a resolución completa: sin escalones en los bordes */   /* con el suavizado al ampliar no se nota y va más fluida */
   gl.useProgram(p.pr); gl.uniform1f(p.u.uGray, Math.min(1, colorTick.gray || 0));
   gl.uniform2f(p.u.texel, 1 / cw, 1 / ch); gl.uniform2f(p.u.uRes, cw, ch); gl.uniform1f(p.u.uNight, night ? 1 : 0);
+  if (pulse.on && !pulse.melo) city.beats = (city.beats || 0) + 1; gl.uniform1f(p.u.uBar, Math.floor((city.beats || 0) / 4));
   gl.uniform1f(p.u.uT, city.t); gl.uniform1f(p.u.uKick, city.wk * (state.noFlash ? 0.5 : 1)); gl.uniform1f(p.u.uWave, city.wave);
   gl.uniform1f(p.u.uHi, bandX(38, BANDS) * musicGate); gl.uniform1f(p.u.uVo, Math.min(1, voice * 1.4)); gl.uniform1f(p.u.uBank, city.bank); gl.uniform1f(p.u.uGlow, city.glow);
   gl.uniform1fv(p.u['uLv[0]'], city.lv); gl.uniform1fv(p.u['uFl[0]'], city.fl);
