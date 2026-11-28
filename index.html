@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 330</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 331</div>
     </div>
   </div>
   <div class="group">
@@ -6423,7 +6423,7 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
     float hsh = h(id * 1.37 + 3.1), hsh2 = h(id * 2.11 + 7.7);
     int bi = int(mod(id.x * 5. + id.y * 3., 24.)); float lv = uBand[bi], dc = length(cc - vec2(asp * .5, .5));
     float wv = exp(-pow((dc - uWave) / .14, 2.)) * uP;                                             // la ola del golpe
-    float hs = cell * (.43 + .03 * lv * uGo + .09 * wv), rr = hs * .34, sd = sdRB(f, vec2(hs), rr);   // cada pieza se hincha con su parte y con la ola del golpe
+    float hs = cell * (.42 + .02 * lv * uGo + .05 * wv), rr = hs * .34, sd = sdRB(f, vec2(hs), rr);   /* crece sin salirse de su lugar (antes se cortaba) */   // cada pieza se hincha con su parte y con la ola del golpe
     // la luz que hay detrás (la portada, muy clara): se ve por las rendijas y entra por los bordes de cada pieza
     vec3 back = uCovK > 0. ? texture(uCov, (vUv - uCovR.xy) / uCovR.zw).rgb : vec3(1.);
     vec3 bl = uNight > .5 ? mix(vec3(.012, .012, .02), back * .12, .5) : mix(vec3(1., .97, .98), back, .3);   /* de noche, el fondo negro (no blanco) */
@@ -6458,7 +6458,18 @@ const PUNTOS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uWave,
       col = mix(bl, c, a_); al = 1.;
     } else {
       // la rendija: luz clara y continua que viene de atrás (sin teñirla por pieza, que marcaba cuadros)
-      col = uNight > .5 ? bl + vivid * exp(-sd / (hs * .18)) * (.16 + .3 * lv * uGo + .25 * wv) : bl * (.92 + .08 * uLv.x * uGo); al = 1.;   /* de noche: negro, con el resplandor de color de la pieza vecina */
+      if (uNight > .5) {   /* de noche: negro, con el resplandor de color de las piezas de alrededor (todas, sin recuadros) */
+        vec3 gw = vec3(0.);
+        for (int dy = -1; dy <= 1; dy++) for (int dx = -1; dx <= 1; dx++) {
+          vec2 nid = id + vec2(float(dx), float(dy)), ncc = (nid + .5) * cell;
+          int nbi = int(mod(nid.x * 5. + nid.y * 3., 24.)); float nlv = uBand[nbi], ndc = length(ncc - vec2(asp * .5, .5));
+          float nwv = exp(-pow((ndc - uWave) / .14, 2.)) * uP, nhs = cell * (.42 + .02 * nlv * uGo + .05 * nwv);
+          float nsd = sdRB(p - ncc, vec2(nhs), nhs * .34);
+          vec3 nc = pal(h(nid * 1.37 + 3.1) + uIr * .2 + float(int(nid.x + nid.y * 2.)) * .19);
+          gw += nc * exp(-max(nsd, 0.) / (cell * .07)) * (.14 + .3 * nlv * uGo + .25 * nwv); }
+        col = bl + gw;
+      } else col = bl * (.92 + .08 * uLv.x * uGo);
+      al = 1.;
     }
     if (uNight > .5) col *= mix(1., .82, 1. - smoothstep(px, -px, sd) * .3);                       // de noche, todo algo más hondo
     /* sin grano que parpadea */
