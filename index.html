@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 339</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 340</div>
     </div>
   </div>
   <div class="group">
@@ -6355,22 +6355,30 @@ const PAI_GRAIN = `{ float L_ = dot(col, vec3(.3, .59, .11)), g1 = h(floor(gl_Fr
 // ---------- Dunas: un mar de ondas azules hechas de líneas finas, con un sol naranja detrás. Las ondas suben con los graves, el
 // dibujo corre con la energía, las líneas brillan con los agudos y el halo del sol respira con la voz. ----------
 PAI.dun = {};
-const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uFlow, uPh, uBeat; uniform vec3 uLv, uSky0, uSky1, uSun, uW0, uW1, uW2; uniform float uL[9];
+const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uFlow, uPh, uBeat, uProg; uniform vec3 uStar; uniform vec3 uLv, uSky0, uSky1, uSun, uW0, uW1, uW2; uniform float uL[9];
   ${GLSL_NOISE}
   ${GLSL_COVER}
   // el perfil de una duna: ladera larga al viento y cresta suave; avanza solo con la música
   float D_(float x, float fk) { float a = (x + uPh * (.04 + fk * .035)) * (1.1 + fk * .13) + fk * 3.7;   /* las dunas quietas; la vista avanza: las cercanas pasan más rápido (profundidad) */
     return .55 * (1. - pow(abs(sin(a)), 1.6)) + .3 * (1. - pow(abs(sin(a * .53 + 1.3)), 2.)) + .08 * sin(a * 2.3 + fk); }
+  float meteor(vec2 pq, vec2 hd, vec2 dir, float len) { vec2 dn_ = normalize(dir), v_ = pq - hd; float t = clamp(dot(v_, -dn_) / max(len, 1e-4), 0., 1.), dd = length(v_ + dn_ * t * len);
+    return smoothstep(mix(.0042, .0006, t), 0., dd) * pow(1. - t, 1.6) + exp(-dot(v_, v_) / .00003) * 1.2 + exp(-dot(v_, v_) / .0005) * .25; }
   void main() {
     float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y);
+    // de día, el calor del desierto: el aire ondula sobre el horizonte (más con los agudos)
+    { float hb = exp(-pow((uv.y - .6) / .07, 2.)) * (1. - uNight); p.x += hb * (.0016 + .003 * uLv.z) * sin(uv.y * 260. + uT * 7. + sin(p.x * 30.) * 2.); }
     // el cielo: degradado del atardecer (de noche, azul hondo con estrellas) y la portada asomando
     vec3 col = mix(uSky0, uSky1, smoothstep(.45, 1., uv.y));
     col = mix(col, withCover(col), .35);
-    vec2 sc = vec2(asp * .62, .7); float R = .085 * min(1., asp * 1.4) * (1. + .09 * uLv.x + .1 * uP), sd = length(p - sc);   /* el sol late con el bombo y crece con los graves */
+    col = mix(col, col * mix(vec3(1., .78, .82), vec3(.75, .8, 1.), uNight), uProg * .45);   /* con la canción, el cielo pasa del atardecer al anochecer */
+    vec2 sc = vec2(asp * .62, mix(mix(.8, .5, uProg), mix(.6, .8, uProg), uNight));   /* el sol baja hasta ocultarse tras las dunas; de noche, la luna sube */ float R = .085 * min(1., asp * 1.4) * (1. + .09 * uLv.x + .1 * uP), sd = length(p - sc);   /* el sol late con el bombo y crece con los graves */
     col += uSun * (exp(-sd * sd / (R * R * (6. + 5. * uP))) * (.3 + .45 * uVo + .55 * uP + .25 * uLv.x) + exp(-sd / (R * (5. + 3. * uLv.x))) * (.12 + .15 * uP));   // el resplandor: se abre con el golpe y respira con la voz
     { float an = atan(p.y - sc.y, p.x - sc.x), ry = pow(.5 + .5 * sin(an * 9. + uPh * .35), 6.) * .6 + pow(.5 + .5 * sin(an * 14. - uPh * .25 + 1.), 8.) * .4;   /* rayos suaves que giran con la canción */
       col += uSun * ry * exp(-max(sd - R, 0.) / (R * (2.2 + 2. * uP))) * smoothstep(R * .9, R * 1.2, sd) * (.08 + .35 * uP + .15 * uLv.y) * (1. - .6 * uNight); }   /* de noche, la luna con rayos tenues */
     col = mix(col, mix(uSun, vec3(1., .97, .9), .35 + .3 * uNight), smoothstep(R + px, R - px, sd));
+    if (uStar.z > 0.) { vec2 dir = vec2(-.42, -.2); col += vec3(.95, .97, 1.) * meteor(p, uStar.xy + dir * uStar.z, dir, .22 * sin(3.1416 * uStar.z) + .01) * sin(3.1416 * uStar.z) * uNight; }   /* la estrella fugaz del coro */
+    // el destello de calor del bombo: una franja de luz cálida que recorre el horizonte
+    col += mix(uSun, vec3(1.), .25) * exp(-pow((uv.y - .62) / .05, 2.)) * uP * (.35 + .25 * (1. - uNight)) * (.6 + .4 * sin(p.x * 3. - uPh * .3));
     if (uNight > .5) { vec2 g = p * 70.; vec2 id = floor(g); float st = step(.985, h(id)) * smoothstep(.3, 0., length(fract(g) - .5)) * smoothstep(.5, .75, uv.y) * smoothstep(R * 1.3, R * 2., sd);   /* sin estrellas sobre la luna */
       col += vec3(.9, .92, 1.) * st * (.4 + .6 * sin(uT * (1. + h(id + 3.) * 3.) + h(id) * 30.) * .5 + .3 * uLv.z); }
     // las dunas, de adelante hacia atrás: se dibuja solo lo que se ve (la de adelante tapa a las demás) y el viento queda sobre su cresta
@@ -6380,8 +6388,8 @@ const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uF
       float xs = p.x + uPh * (.04 + fk * .035), hz = uv.y - top;
       if (hz > px) {   // por encima de esta cresta: el viento que el bombo levanta de ella (arena como humo dorado)
         float wk = uP * exp(-pow((fk - uBeat) / 1.2, 2.));
-        if (wk > .02 && hz < .12) { float wind = smoothstep(.0, .012, hz) * exp(-hz / (.025 + .015 * fk)) * (.45 + .55 * fbm(vec2(xs * 9. - uPh * 1.2 - hz * 30., hz * 40. + fk)));
-          float wa = clamp(wind * wk * .6 * (1. - far * .5), 0., .8); acc += (1. - al) * wa * mix(uW0, uSun, .35); al += (1. - al) * wa; }
+        if (wk > .02 && hz < .16) { float wind = smoothstep(.0, .012, hz) * exp(-hz / (.035 + .02 * fk)) * (.45 + .55 * fbm(vec2(xs * 9. - uPh * 1.2 - hz * 30., hz * 40. + fk)));
+          float wa = clamp(wind * wk * .95 * (1. - far * .4), 0., .85); acc += (1. - al) * wa * mix(uW0, uSun, .35); al += (1. - al) * wa; }
         continue; }
       float d = -hz, e = .004;
       float sl = (D_(p.x + e, fk) - D_(p.x - e, fk)) / (2. * e) * amp;                 // la pendiente
@@ -6419,10 +6427,16 @@ function drawDunas(dt) {
   S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); const h = attHit(a, a + Math.ceil(BANDS / 10)); if (h > 0) S.L[k] = Math.min(1.4, S.L[k] + 0.35 + 0.35 * h); }   // cada nota de su parte (piano, sinte, voz) levanta su ola
   const pal = night ? { s0: [0.1, 0.12, 0.28], s1: [0.02, 0.03, 0.1], sun: [0.85, 0.88, 1], w0: [0.42, 0.46, 0.72], w1: [0.1, 0.1, 0.26] }   // de noche: desierto azul bajo la luna
     : { s0: [1, 0.72, 0.52], s1: [0.45, 0.6, 0.88], sun: [1, 0.62, 0.3], w0: [0.98, 0.76, 0.5], w1: [0.62, 0.34, 0.36] };   // al atardecer: arena dorada, sombras rosadas
+  // el progreso: en una grabación, el del clip (el sol se oculta al terminar el video); si no, el de la canción
+  const progT = recording && recDur ? (performance.now() - recT0) / 1000 / recDur : sp.item && sp.duration ? spPos() / sp.duration : 0.3;
+  if (recording !== S.recWas) { S.recWas = recording; S.sunP = Math.max(0, Math.min(1, progT)); }   /* al empezar a grabar, el sol ya está en su sitio */
+  S.sunP = (S.sunP ?? progT) + (Math.max(0, Math.min(1, progT)) - (S.sunP ?? progT)) * (1 - Math.pow(0.3, dt));
+  if (pulse.on && night && dynL > 0.72 && !S.star && (S.lastStar ?? -99) < time - 12) { S.star = { x: (0.35 + Math.random() * 0.5) * (W / H), y: 0.88 + Math.random() * 0.08, t: 0.001 }; S.lastStar = time; }
+  if (S.star) { S.star.t += dt / ((S.per || 0.5) * 2) * S.go; if (S.star.t >= 1) S.star = null; }
   const gr = Math.min(1, colorTick.gray || 0), gy = c => { const l = c[0] * 0.3 + c[1] * 0.59 + c[2] * 0.11; return c.map(v => v + (l - v) * gr * 0.92); };   /* en silencio, en blanco y negro */
   paiRun(S, DUNAS_FS, (gl, p) => { glCoverBind(p); gl.uniform3fv(p.u.uSky0, gy(paiBl(pal.s0, cov(.8, night ? 14 : 86), 0.35))); gl.uniform3fv(p.u.uSky1, gy(paiBl(pal.s1, cov(.3, night ? 10 : 90), 0.3))); gl.uniform3fv(p.u.uSun, gy(paiBl(pal.sun, cov(.9, 62), night ? 0.2 : 0.35)));
     gl.uniform3fv(p.u.uW0, gy(paiBl(pal.w0, cov(.5, night ? 50 : 72), 0.22))); gl.uniform3fv(p.u.uW1, gy(paiBl(pal.w1, cov(.2, night ? 16 : 40), 0.3))); gl.uniform3fv(p.u.uW2, gy(paiBl(pal.w1, cov(.8, night ? 12 : 34), 0.4)));   /* arena con un toque de la portada */
-    gl.uniform1fv(p.u['uL[0]'], S.L); gl.uniform1f(p.u.uPh, S.ph); gl.uniform1f(p.u.uBeat, S.beat);
+    gl.uniform1fv(p.u['uL[0]'], S.L); gl.uniform1f(p.u.uPh, S.ph); gl.uniform1f(p.u.uBeat, S.beat); gl.uniform1f(p.u.uProg, S.sunP); gl.uniform3f(p.u.uStar, S.star ? S.star.x : 0, S.star ? S.star.y : 0, S.star ? S.star.t : 0);
     gl.uniform1f(p.u.uP, P); gl.uniform1f(p.u.uNight, night ? 1 : 0); gl.uniform1f(p.u.uVo, S.vo); gl.uniform1f(p.u.uFlow, 0.5 + S.en); });
 }
 
