@@ -867,7 +867,7 @@
         <div class="seg" role="group" aria-label="Color del estrobo"><button data-strobe="bw">Blanco y negro</button><button data-strobe="lime">Lima</button><button data-strobe="palette">Paleta</button></div>
       </div>
       <a class="tt-link" href="https://www.tiktok.com/@sientelamusicaco" target="_blank" rel="noopener"><span class="tt-dot"></span><span>Síguenos en TikTok <small>@sientelamusicaco · canciones que se ven</small></span><span aria-hidden="true">↗</span></a>
-      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 336</div>
+      <div id="verNote" style="text-align:center;font-size:11px;opacity:.5;margin-top:8px">Versión 337</div>
     </div>
   </div>
   <div class="group">
@@ -6359,7 +6359,7 @@ const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uF
   ${GLSL_NOISE}
   ${GLSL_COVER}
   // el perfil de una duna: ladera larga al viento y cresta suave; avanza solo con la música
-  float D_(float x, float fk) { float a = x * (1.1 + fk * .13) + fk * 3.7 + uPh * (.12 + fk * .02);
+  float D_(float x, float fk) { float a = (x + uPh * (.04 + fk * .035)) * (1.1 + fk * .13) + fk * 3.7;   /* las dunas quietas; la vista avanza: las cercanas pasan más rápido (profundidad) */
     return .55 * (1. - pow(abs(sin(a)), 1.6)) + .3 * (1. - pow(abs(sin(a * .53 + 1.3)), 2.)) + .08 * sin(a * 2.3 + fk); }
   void main() {
     float asp = uRes.x / uRes.y, px = 1.5 / uRes.y; vec2 uv = vUv, p = vec2(uv.x * asp, uv.y);
@@ -6373,27 +6373,29 @@ const DUNAS_FS = () => `uniform vec2 uRes; uniform float uT, uP, uNight, uVo, uF
       col += vec3(.9, .92, 1.) * st * (.4 + .6 * sin(uT * (1. + h(id + 3.) * 3.) + h(id) * 30.) * .5 + .3 * uLv.z); }
     // las dunas, de atrás (arriba, lejanas y brumosas) hacia adelante
     for (int k = 0; k < 7; k++) { float fk = float(k), base = .6 - fk * .085, lk = uL[k + 1];
-      float amp = (.075 + .05 * fk) * (.85 + .45 * lk), top = base - amp * .35 + amp * D_(p.x, fk) + .01 * lk;
+      float amp = (.075 + .05 * fk), top = base - amp * .35 + amp * D_(p.x, fk);   /* la arena no sube ni baja con la música */
       if (uv.y > top + px) continue;
       float d = top - uv.y, e = .004;
       float sl = (D_(p.x + e, fk) - D_(p.x - e, fk)) / (2. * e) * amp;                 // la pendiente: hacia el sol o en sombra
-      float lit = smoothstep(-.18, .18, sl * clamp((sc.x - p.x) * 2.5, -1., 1.) + .05);   /* la ladera que mira al sol, iluminada (sin corte bajo el sol) */
+      float lit = smoothstep(-.18, .18, sl * clamp((sc.x - p.x) * 1.1, -1., 1.) + .05);   /* la ladera que mira al sol, iluminada (sin corte bajo el sol) */
       float far = fk / 6.;
       vec3 sand = mix(uW1, uW0, lit);                                                  // lado al sol cálido, lado en sombra de color
       sand = mix(sand, uW2, smoothstep(.0, .25, d) * .5);                              // más abajo, la arena más honda
       // ondulaciones finas de la arena: siguen la ladera y corren con la música (lisas, sin grano)
-      float rp = sin((d * 70. - p.x * (8. + fk) * sign(sl + 1e-4) * .3) - uPh * 1.4 + fk * 2.);
+      float xs = p.x + uPh * (.04 + fk * .035), rp = sin((d * 70. - xs * (8. + fk) * sign(sl + 1e-4) * .3) - uPh * .5 + fk * 2.);
       sand *= 1. + .05 * rp * smoothstep(.0, .02, d) * (1. - far * .7);
+      { vec2 gq_ = vec2(xs, d) * (520. - fk * 40.); float g1 = h(floor(gq_)), g2 = h(floor(gq_ * .5) + 13.);   /* el grano de la arena: pegado a la duna (no parpadea) */
+        sand *= 1. + ((g1 - .5) * .09 + (g2 - .5) * .05) * (.6 + .6 * lit) * (1. - far * .8); }
       // la cresta: un filo de luz que brilla con el bombo; granos que destellan con los agudos
       float crest = exp(-d / (px * 3.)) * (.25 + .5 * lit);
       sand += mix(uSun, vec3(1.), .4) * crest * (.25 + .45 * uP * exp(-pow((fk - uBeat) / .8, 2.)) + .2 * lk);
-      vec2 gq = vec2(p.x * 220., d * 220.), gi = floor(gq); float gr = step(.985, h(gi + fk * 7.)) * smoothstep(.35, .05, length(fract(gq) - .5)) * smoothstep(.012, 0., d) * (.5 + .5 * sin(uT * 6. + h(gi) * 40.));   /* granos redondos, solo en la cresta */
+      vec2 gq = vec2(xs * 220., d * 220.), gi = floor(gq); float gr = step(.985, h(gi + fk * 7.)) * smoothstep(.35, .05, length(fract(gq) - .5)) * smoothstep(.012, 0., d) * (.5 + .5 * sin(uT * 6. + h(gi) * 40.));   /* granos redondos, solo en la cresta */
       sand += uSun * gr * uLv.z * .8;
       // la bruma de la distancia: las lejanas se funden con el cielo
       sand = mix(sand, mix(uSky0, uSun, .2), far * far * .35);
       col = mix(col, sand, smoothstep(px, -px, -d));
       // el viento: cada golpe levanta arena de la cresta, que se va hacia un lado como humo dorado
-      float hz = uv.y - top; float wind = smoothstep(.0, .015, hz) * exp(-hz / (.03 + .02 * fk)) * (.5 + .5 * fbm(vec2(p.x * 9. - uPh * 2. - hz * 30., hz * 40. + fk)));
+      float hz = uv.y - top; float wind = smoothstep(.0, .015, hz) * exp(-hz / (.03 + .02 * fk)) * (.5 + .5 * fbm(vec2(xs * 9. - uPh * 1.2 - hz * 30., hz * 40. + fk)));
       col = mix(col, mix(uW0, uSun, .3), clamp(wind * uP * exp(-pow((fk - uBeat) / 1.2, 2.)) * .55 * (1. - far * .5), 0., 1.));
     }
     col *= 1. - .18 * smoothstep(.55, 1.15, length((vUv - .5) * vec2(1., .9)) * 1.25);
@@ -6404,7 +6406,7 @@ function drawDunas(dt) {
   const S = PAI.dun, night = state.theme === 'dark', P = Math.max(0, pulse.x); paiLevels(S, dt);
   const cov = (t, l) => paiTone(mix(t), l, 50, 85);
   if (pulse.on && musicGate > 0.3) S.sg = 1; S.sg = (S.sg || 0) * Math.exp(-dt * 7);   // cada bombo da un empujón suave al viento de las dunas
-  S.ph = (S.ph || 0) + dt * S.go * (0.15 + 0.6 * S.en + 0.25 * S.lv[0]) * (0.5 + 2.4 * S.sg);
+  S.ph = (S.ph || 0) + dt * S.go * (0.35 + 0.9 * S.en) * (1 + 0.35 * S.sg);   /* avance parejo que sigue la energía; el bombo apenas empuja (sin acelerones) */
   if (pulse.on) S.beat = 9; S.beat = Math.max(-3, (S.beat ?? -3) - dt * 30);   // el golpe cruza las olas en ~0,3 s (cae en su tiempo)
   S.L = S.L || new Float32Array(9); for (let k = 0; k < 9; k++) { const a = Math.floor((8 - k) / 9 * BANDS * 0.85), v = bandX(a, a + Math.ceil(BANDS / 10)); S.L[k] += (v - S.L[k]) * (1 - Math.pow(v > S.L[k] ? 0.001 : 0.05, dt)); const h = attHit(a, a + Math.ceil(BANDS / 10)); if (h > 0) S.L[k] = Math.min(1.4, S.L[k] + 0.35 + 0.35 * h); }   // cada nota de su parte (piano, sinte, voz) levanta su ola
   const pal = night ? { s0: [0.1, 0.12, 0.28], s1: [0.02, 0.03, 0.1], sun: [0.85, 0.88, 1], w0: [0.42, 0.46, 0.72], w1: [0.1, 0.1, 0.26] }   // de noche: desierto azul bajo la luna
